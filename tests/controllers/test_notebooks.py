@@ -1,4 +1,4 @@
-"""Tests for the Jupyter K8s controller."""
+"""Tests for the Jupyter K8s server controller."""
 
 import unittest
 from typing import Any

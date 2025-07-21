@@ -19,7 +19,7 @@ def configure(*_, **__) -> None:
 
 # Define the entry point
 def run() -> None:
-    """Run both kopf operator and FastAPI server in a single process."""
+    """Run the kopf operator."""
     loop = asyncio.get_event_loop()
 
     # Run kopf operator

@@ -95,14 +95,14 @@ After setting up the environment, you can:
 
 4. Check the status:
    ```bash
-   kubectl --kubeconfig=.kubeconfig get JupyterNotebook
-   kubectl --kubeconfig=.kubeconfig get JupyterNotebook sample-notebook
+   kubectl --kubeconfig=.kubeconfig get JupyterServer
+   kubectl --kubeconfig=.kubeconfig get JupyterServer sample-notebook
    ```
 
 5. Delete the notebook instance
    ```bash
-   kubectl --kubeconfig=.kubeconfig delete JupyterNotebook sample-notebook
-   kubectl --kubeconfig=.kubeconfig get JupyterNotebook
+   kubectl --kubeconfig=.kubeconfig delete JupyterServer sample-notebook
+   kubectl --kubeconfig=.kubeconfig get JupyterServer
    ```
 
 ### Apply local changes
