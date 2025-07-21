@@ -53,9 +53,8 @@ local-dev-setup:
 # Build the docker image and push
 .PHONY: build
 build:
-	$(DOCKER) $(BUILD_OPTS) build -t $(IMAGE_NAME):$(IMAGE_TAG) .
+	$(DOCKER) $(BUILD_OPTS) build --no-cache -t $(IMAGE_NAME):$(IMAGE_TAG) .
 	$(DOCKER) push $(IMAGE_NAME):$(IMAGE_TAG)
-# $(LOCAL_K8) load docker-image $(IMAGE_NAME) --name $(CLUSTER)
 
 # Build and install Helm chart locally
 .PHONY: local-deploy
