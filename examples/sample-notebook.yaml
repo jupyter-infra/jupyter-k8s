@@ -1,0 +1,4 @@
+apiVersion: jupyter.example.com/v1
+kind: JupyterNotebook
+metadata:
+  name: sample-notebook
