@@ -29,6 +29,7 @@ sync:
 fix-all:
 	$(UV) run ruff format
 	$(UV) run ruff check --fix
+	$(HELM) lint --strict helm/jupyter-k8s
 
 # Check without fixing
 .PHONY: check-all
@@ -36,6 +37,7 @@ check-all:
 	$(UV) run ruff check
 	$(UV) run mypy
 	$(UV) run pytest
+	$(HELM) lint --strict helm/jupyter-k8s
 
 # Run-all
 .PHONY: run-all
@@ -44,6 +46,7 @@ run-all:
 	$(UV) run ruff check --fix
 	$(UV) run mypy
 	$(UV) run pytest
+	$(HELM) lint --strict helm/jupyter-k8s
 
 # Set up local development environment
 .PHONY: local-dev-setup
@@ -60,7 +63,7 @@ build:
 .PHONY: local-deploy
 local-deploy: local-dev-setup
 	$(MAKE) build
-	$(HELM) lint helm/jupyter-k8s
+	$(HELM) lint --strict helm/jupyter-k8s
 	$(HELM) upgrade --install jupyter-k8s helm/jupyter-k8s \
 		--namespace $(NAMESPACE) --create-namespace \
 		--kubeconfig $(KUBECONFIG)
@@ -68,7 +71,7 @@ local-deploy: local-dev-setup
 # Send a test command to the running cluster
 .PHONY: operator-check
 operator-check:
-	$(KUBECLT) --kubeconfig=$(KUBECONFIG) get JupyterNotebook
+	$(KUBECLT) --kubeconfig=$(KUBECONFIG) get JupyterServer
 
 # Tear down local development environment
 .PHONY: local-dev-teardown

@@ -1,4 +1,4 @@
-apiVersion: jupyter.example.com/v1
-kind: JupyterNotebook
+apiVersion: servers.org/v1alpha1
+kind: JupyterServer
 metadata:
   name: sample-notebook

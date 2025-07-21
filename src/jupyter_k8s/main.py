@@ -4,25 +4,10 @@ import asyncio
 import logging
 
 import kopf
-import uvicorn
-from fastapi import FastAPI
-
-from jupyter_k8s.api.router import api_router
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("jupyter-k8s")
-
-
-# Initialize FastAPI app
-app = FastAPI(
-    title="Jupyter K8s Controller",
-    description="Kubernetes controller for managing Jupyter notebooks",
-    version="0.1.0",
-)
-
-# Add API routes
-app.include_router(api_router)
 
 
 @kopf.on.startup()
@@ -45,13 +30,8 @@ def run() -> None:
         )
     )
 
-    # Run FastAPI server
-    config = uvicorn.Config(app=app, host="0.0.0.0", port=8000)
-    server = uvicorn.Server(config)
-    api_task = loop.create_task(server.serve())
-
     # Run both tasks
-    loop.run_until_complete(asyncio.gather(kopf_task, api_task))
+    loop.run_until_complete(kopf_task)
 
 
 if __name__ == "__main__":
