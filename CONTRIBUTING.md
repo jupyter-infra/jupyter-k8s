@@ -1,10 +1,58 @@
-# Local Development Setup
+# Contributing
 
-This directory contains tools for setting up a local development environment for the Jupyter Kubernetes controller.
+This project contains tools for setting up a local development environment for the Jupyter Kubernetes controller.
 
-## Kind Setup
+## Local development
 
-The `kind` directory contains configuration for a local Kubernetes cluster using [Kind](https://kind.sigs.k8s.io/).
+We use the following tools:
+- [uv](https://docs.astral.sh/uv/) for package and dependency management (instead of `conda` or `pip`)
+- [ruff](https://docs.astral.sh/ruff/) for linting and formatting Python files (replace `flake8`, `black` and `isort`)
+- [mypy](https://mypy.readthedocs.io/en/stable/) for Python type checking
+- [pytest](https://docs.pytest.org/en/stable/contents.html) for Python unit testing
+
+### Getting started
+
+First, install `uv`, see [guide](https://docs.astral.sh/uv/getting-started/installation/)
+
+Quick setup on MacOs/Linux: `pipx install uv`
+
+Then setup your virtual env and download dependencies
+```bash
+uv sync
+```
+
+### Before you raise a PR
+
+To apply Python formatter and linter, run:
+```bash
+make fix-all
+```
+
+Run type-checking with:
+```bash
+uv run mypy
+```
+
+Run unit tests with:
+```bash
+uv run pytest
+```
+
+Or run all at once with:
+```bash
+make run-all
+```
+
+
+## End-to-end testing with a local Kubernetes cluster
+
+The goal is to test the custom operator on a local Kubernetes cluster.
+
+We use `kind` to setup and run the local Kubernetes cluster. `kind` enables to run local containers as nodes.
+See [documentation](https://kind.sigs.k8s.io/).
+
+Given `docker` is not open source for all users, we use `finch` to run `docker build` commands.
+See [documentation](https://github.com/runfinch/finch).
 
 ### Prerequisites
 
@@ -24,7 +72,7 @@ make local-dev-setup
 This will:
 1. Create a Kind cluster named `jupyter-k8s`
 2. Set up a local Docker registry at `localhost:5000`
-3. Generate a kubeconfig file at `local-dev/kind/.kubeconfig`
+3. Generate a kubeconfig file at `.kubeconfig`
 
 ### Usage
 
@@ -37,10 +85,10 @@ After setting up the environment, you can:
 
 2. Deploy the controller to the cluster:
    ```bash
-   make deploy-local
+   make local-deploy
    ```
 
-3. Try creating a Jupyter notebook instance:
+3. Create a Jupyter notebook instance:
    ```bash
    kubectl --kubeconfig=.kubeconfig apply -f examples/sample-notebook.yaml
    ```
@@ -51,12 +99,29 @@ After setting up the environment, you can:
    kubectl --kubeconfig=.kubeconfig get JupyterNotebook sample-notebook
    ```
 
+5. Delete the notebook instance
+   ```bash
+   kubectl --kubeconfig=.kubeconfig delete JupyterNotebook sample-notebook
+   kubectl --kubeconfig=.kubeconfig get JupyterNotebook
+   ```
+
+### Apply local changes
+
+To sync local changes to the helm chart running in your local cluster, run again:
+```bash
+make local-deploy
+```
+
 ### Teardown
 
-To tear down the local development environment:
+To delete the local Kind cluster and remove the local registry, run:
 
 ```bash
 make local-dev-teardown
 ```
 
-This will delete the Kind cluster and remove the local registry.
+## Trouble-shooting
+
+### Local testing
+
+If you tore down your local cluster and have trouble setting it back up, try restarting your laptop or host.

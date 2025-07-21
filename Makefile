@@ -12,6 +12,7 @@ IMAGE_TAG := latest
 NAMESPACE := jupyter-system
 CLUSTER := jupyter-k8s
 KUBECONFIG := .kubeconfig
+KUBECLT := kubectl
 LOCAL_K8 := kind
 SHELL := sh
 
@@ -31,7 +32,7 @@ fix-all:
 
 # Check without fixing
 .PHONY: check-all
-check:
+check-all:
 	$(UV) run ruff check
 	$(UV) run mypy
 	$(UV) run pytest
@@ -57,19 +58,18 @@ build:
 # $(LOCAL_K8) load docker-image $(IMAGE_NAME) --name $(CLUSTER)
 
 # Build and install Helm chart locally
-.PHONY: deploy-local
-deploy-local: local-dev-setup
+.PHONY: local-deploy
+local-deploy: local-dev-setup
 	$(MAKE) build
 	$(HELM) lint helm/jupyter-k8s
-	$(HELM) install jupyter-k8s helm/jupyter-k8s \
+	$(HELM) upgrade --install jupyter-k8s helm/jupyter-k8s \
 		--namespace $(NAMESPACE) --create-namespace \
 		--kubeconfig $(KUBECONFIG)
 
-# Remove and reinstall Helm chart
-.PHONY: reinstall
-reinstall:
-	$(HELM) uninstall jupyter-k8s --namespace $(NAMESPACE) --kubeconfig $(KUBECONFIG)
-	$(MAKE) deploy-local
+# Send a test command to the running cluster
+.PHONY: operator-check
+operator-check:
+	$(KUBECLT) --kubeconfig=$(KUBECONFIG) get JupyterNotebook
 
 # Tear down local development environment
 .PHONY: local-dev-teardown
@@ -97,7 +97,7 @@ help:
 	@echo "  build               - Bundle dependencies, build Docker image and push to local registry"
 	@echo "  local-dev-setup     - Set up local cluster and configure kubectl access"
 	@echo "  build               - Build the image and push to local finch cluster"
-	@echo "  deploy-local        - Set up local cluster, configure kubectl access, build and install Helm chart locally"
-	@echo "  reinstall           - Build and reinstall the Helm chart on the local cluster"
+	@echo "  local-deploy        - Set up local cluster, configure kubectl access, build and install Helm chart locally"
+	@echo "  operator-check      - Sends a list notebooks call to the custom operator"
 	@echo "  local-dev-teardown  - Tear down local development environment"
 	@echo "  clean               - Clean build artifacts"

@@ -21,4 +21,6 @@ else
   echo "Local registry is already running."
 fi
 
+kind get kubeconfig --name=jupyter-k8s > .kubeconfig
+
 echo "Environment setup complete."
