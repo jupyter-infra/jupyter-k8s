@@ -1,0 +1,46 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: jupyterservers.servers.jupyter.org
+spec:
+  group: servers.jupyter.org
+  names:
+    kind: JupyterServer
+    listKind: JupyterServerList
+    plural: jupyterservers
+    singular: jupyterserver
+    shortNames:
+      - jps
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: "Name of the server"
+                image:
+                  type: string
+                  description: "Jupyter image to use"
+              required:
+                - name
+                - image
+            status:
+              type: object
+              properties:
+                status:
+                  type: string
+                  description: "Status of the notebook"
+                created_at:
+                  type: string
+                  format: date-time
+                  description: "Creation timestamp"
+      subresources:
+        status: {}
