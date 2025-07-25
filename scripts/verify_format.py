@@ -1,8 +1,11 @@
 # /// script
-# dependencies = [
-#   "rich",
-# ]
+# dependencies = []
 # ///
+
+# This script verifies that the user ran `uv run ruff format`, and fails if running formatting
+# would lead to any diff.
+# This is useful to ensure we only merge commits that have been properly formatted.
+# Ideally, `uv run ruff check` would fail if formatting hadn't been run, but that is not the case.
 
 import argparse
 import os
