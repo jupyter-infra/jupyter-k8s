@@ -1,0 +1,21 @@
+name: install-helm
+description: 'Install Helm CLI on the runner'
+inputs:
+  helm_version:
+    description: 'Helm version to install'
+    required: false
+    default: 'v3.18.4'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Download and Install Helm
+      shell: bash
+      run: |
+        echo "Installing Helm ${{ inputs.helm_version }}..."
+        curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        chmod +x get_helm.sh
+        ./get_helm.sh --version ${{ inputs.helm_version }}
+        rm get_helm.sh
+        echo "Helm installed successfully"
+        helm version
