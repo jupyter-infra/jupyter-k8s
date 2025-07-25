@@ -1,6 +1,6 @@
 # Variables
-PYTHON := python3
 UV := uv
+PYTHON := uv run --script
 HELM := helm
 DOCKER := finch
 
@@ -36,6 +36,7 @@ check-all:
 	$(UV) run ruff check
 	$(UV) run mypy
 	$(UV) run pytest
+	$(PYTHON) scripts/verify_format.py
 	$(HELM) lint --strict helm/jupyter-k8s
 
 # Attempt to fix issues, then run tests

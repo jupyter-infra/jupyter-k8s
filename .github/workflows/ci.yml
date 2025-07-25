@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    uses: ./.github/workflows/lint.yml
+    with:
+      working-directory: '.'
+
+  test:
+    uses: ./.github/workflows/unit-tests.yml
+    with:
+      working-directory: '.'
+
+  helm:
+    name: Helm validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: ./.github/actions/install-helm
+      
+      - name: Lint Helm chart
+        run: helm lint --strict helm/jupyter-k8s
