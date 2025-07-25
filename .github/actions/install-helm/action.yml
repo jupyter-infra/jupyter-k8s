@@ -1,10 +1,10 @@
-name: 'Install Helm'
+name: install-helm
 description: 'Install Helm CLI on the runner'
 inputs:
   helm_version:
     description: 'Helm version to install'
     required: false
-    default: 'v3.13.3'
+    default: 'v3.18.4'
 
 runs:
   using: "composite"

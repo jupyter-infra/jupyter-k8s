@@ -42,3 +42,16 @@ jobs:
       - name: Verify mypy
         run: uv run mypy
         working-directory: ${{ inputs.working-directory }}
+
+    lint-helm:
+      name: Helm validation
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+
+        - name: Set up Helm
+          uses: ./.github/actions/install-helm
+        
+        - name: Lint Helm chart
+          run: helm lint --strict helm/jupyter-k8s

@@ -1,12 +1,11 @@
-name: Operator Tests
-
+name: operator-tests
 on:
-  # Disable automatic triggering until end-to-end tests are implemented
-  # push:
-  #   branches: [main]
-  # pull_request:
-  #   branches: [main]
-  workflow_dispatch:  # Allow manual triggering
+  workflow_call:
+    inputs:
+      working-directory:
+        required: false
+        type: string
+        default: '.'
 
 jobs:
   e2e-tests:
