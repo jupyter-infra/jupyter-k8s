@@ -14,33 +14,62 @@ spec:
   scope: Namespaced
   versions:
     - name: v1alpha1
-      served: true
-      storage: true
       schema:
         openAPIV3Schema:
+          description: JupyterServer is the Schema for the jupyterservers API
           type: object
           properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation of an object.'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this object represents.'
+              type: string
+            metadata:
+              type: object
             spec:
               type: object
               properties:
                 name:
-                  type: string
                   description: "Name of the server"
-                image:
                   type: string
-                  description: "Jupyter image to use"
+                desiredStatus:
+                  description: DesiredStatus specifies the desired operational status of the space
+                  enum:
+                    - Running
+                    - Stopped
+                  type: string
+                image:
+                  description: Image specifies the container image to use for the space
+                  type: string
+                serviceAccountName:
+                  description: ServiceAccountName specifies the ServiceAccount used by the pod
+                  type: string
+                resources:
+                  properties:
+                    limits:
+                      additionalProperties:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      type: object
+                    requests:
+                      additionalProperties:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      type: object
+                  type: object
               required:
-                - name
                 - image
+                - name
             status:
               type: object
-              properties:
-                status:
-                  type: string
-                  description: "Status of the notebook"
-                created_at:
-                  type: string
-                  format: date-time
-                  description: "Creation timestamp"
+      served: true
+      storage: true
       subresources:
         status: {}
