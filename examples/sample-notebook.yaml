@@ -2,3 +2,16 @@ apiVersion: servers.jupyter.org/v1alpha1
 kind: JupyterServer
 metadata:
   name: sample-notebook
+  namespace: default
+spec:
+  name: comprehensive-notebook-server
+  desiredStatus: Running
+  image: jupyter/scipy-notebook:latest
+  serviceAccountName: default
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
