@@ -5,6 +5,9 @@ import logging
 
 import kopf
 
+# Import controllers to register handlers
+from jupyter_k8s.controllers import notebook  # noqa: F401
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("jupyter-k8s")
