@@ -1,10 +1,14 @@
 # Variables
-UV := uv
-PYTHON := uv run --script
+GO := go
 HELM := helm
 DOCKER := finch
 
-# aws-specific to work on clouddesktop
+# Go specific variables
+BINARY_NAME := manager
+CMD_DIR := ./cmd/manager
+MAIN_GO := $(CMD_DIR)/main.go
+
+# Build options (remove --network host for standard docker)
 BUILD_OPTS := --network host
 
 IMAGE_NAME := localhost:5000/jupyter-k8s-controller
@@ -19,33 +23,73 @@ SHELL := sh
 # Default target
 .DEFAULT_GOAL := help
 
-# runs uv sync
-.PHONY: sync
-sync:
-	$(UV) sync
+# Show help
+.PHONY: help
+help:
+	@echo "Available targets:"
+	@echo ""
+	@echo "Development:"
+	@echo "  deps              - Download Go dependencies"
+	@echo "  generate          - Generate code (DeepCopy methods, etc.)"
+	@echo "  generate-crd      - Generate CRDs from Go structs"
+	@echo "  generate-all      - Generate both DeepCopy methods and CRDs"
+	@echo "  build             - Build binary and Docker image"
+	@echo "  run               - Run the controller locally"
+	@echo ""
+	@echo "Testing:"
+	@echo "  test              - Run Go tests"
+	@echo "  test-coverage     - Run tests with coverage"
+	@echo "  check-all         - Format, vet, and test code"
+	@echo ""
+	@echo "Deployment:"
+	@echo "  local-deploy      - Full deployment (CRD + controller)"
+	@echo "  local-redeploy    - Rebuild and redeploy with new tag"
+	@echo "  dev-restart       - Quick rebuild and restart (development)"
+	@echo ""
+	@echo "Management:"
+	@echo "  status            - Show controller and resource status"
+	@echo "  logs              - Follow controller logs"
+	@echo "  clean             - Clean up all resources"
+	@echo ""
+	@echo "CRD Management:"
+	@echo "  apply-crd         - Apply CRD to cluster"
+	@echo "  delete-crd        - Delete CRD from cluster"
+	@echo ""
+	@echo "Variables:"
+	@echo "  IMAGE_TAG=$(IMAGE_TAG)"
+	@echo "  IMAGE_NAME=$(IMAGE_NAME)"
+	@echo "  NAMESPACE=$(NAMESPACE)"
 
-# Fix issues
+# Download Go dependencies
+.PHONY: deps
+deps:
+	$(GO) mod download
+	$(GO) mod tidy
+
+# Format and fix Go code
 .PHONY: fix-all
 fix-all:
-	$(UV) run ruff format
-	$(UV) run ruff check --fix
+	$(GO) fmt ./...
+	$(GO) vet ./...
 
-# Check without fixing
+# Check Go code without fixing
 .PHONY: check-all
 check-all:
-	$(UV) run ruff check
-	$(UV) run mypy src tests
-	$(UV) run pytest
-	$(PYTHON) scripts/verify_format.py
+	$(GO) fmt ./...
+	$(GO) vet ./...
+	@echo "Checking if code compiles..."
+	$(GO) build -o /tmp/test-$(BINARY_NAME) $(MAIN_GO)
+	@rm -f /tmp/test-$(BINARY_NAME)
+	@echo "Compilation check passed!"
+	$(GO) test ./...
 	$(HELM) lint --strict helm/jupyter-k8s
 
-# Attempt to fix issues, then run tests
+# Format, check and test Go code
 .PHONY: run-all
 run-all:
-	$(UV) run ruff format
-	$(UV) run ruff check --fix
-	$(UV) run mypy src tests
-	$(UV) run pytest
+	$(GO) fmt ./...
+	$(GO) vet ./...
+	$(GO) test ./...
 	$(HELM) lint --strict helm/jupyter-k8s
 
 # Set up local development environment
@@ -53,16 +97,47 @@ run-all:
 local-dev-setup:
 	$(SHELL) ./local-dev/kind/setup.sh
 
-# Build the docker image and push to local registry
+# Run the Go application locally
+.PHONY: run
+run:
+	$(GO) run $(MAIN_GO)
+
+# Run Go tests
+.PHONY: test
+test:
+	$(GO) test ./...
+
+# Run Go tests with coverage
+.PHONY: test-coverage
+test-coverage:
+	$(GO) test -coverprofile=coverage.out ./...
+	$(GO) tool cover -html=coverage.out -o coverage.html
+
+# Generate code (DeepCopy methods, etc.)
+.PHONY: generate
+generate:
+	$(GO) run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.15.0 object paths="./api/..."
+
+# Generate CRDs from Go structs
+.PHONY: generate-crd
+generate-crd:
+	$(GO) run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.15.0 crd paths="./api/..." output:crd:artifacts:config=helm/jupyter-k8s/crds
+
+# Generate both DeepCopy methods and CRDs
+.PHONY: generate-all
+generate-all: generate generate-crd
+
+# Build the Go binary and docker image
 .PHONY: build
 build:
+	$(GO) build -o bin/$(BINARY_NAME) $(MAIN_GO)
 	$(DOCKER) $(BUILD_OPTS) build --no-cache -t $(IMAGE_NAME):$(IMAGE_TAG) .
 	$(DOCKER) push $(IMAGE_NAME):$(IMAGE_TAG)
 
 # Apply CRD
 .PHONY: apply-crd
 apply-crd:
-	$(KUBECLT) --kubeconfig=$(KUBECONFIG) apply -f helm/jupyter-k8s/crds/jupyter.yaml
+	$(KUBECLT) --kubeconfig=$(KUBECONFIG) apply -f helm/jupyter-k8s/crds/servers.jupyter.org_jupyterservers.yaml
 
 # Delete CRD
 .PHONY: delete-crd
@@ -80,7 +155,63 @@ local-deploy: local-dev-setup
 		--namespace $(NAMESPACE) --create-namespace \
 		--kubeconfig $(KUBECONFIG) \
 		--set image.repository=$(IMAGE_NAME) \
-		--set image.tag=$(IMAGE_TAG)
+		--set image.tag=$(IMAGE_TAG) \
+		--force
+
+# Build and redeploy with a new image tag (forces restart)
+.PHONY: local-redeploy
+local-redeploy: local-dev-setup
+	$(eval NEW_TAG := $(shell date +%Y%m%d-%H%M%S))
+	@echo "Building with new tag: $(NEW_TAG)"
+	$(MAKE) build IMAGE_TAG=$(NEW_TAG)
+	$(HELM) lint --strict helm/jupyter-k8s
+	$(HELM) upgrade jupyter-k8s helm/jupyter-k8s \
+		--namespace $(NAMESPACE) \
+		--kubeconfig $(KUBECONFIG) \
+		--set image.repository=$(IMAGE_NAME) \
+		--set image.tag=$(NEW_TAG) \
+		--reuse-values
+	@echo "Waiting for rollout to complete..."
+	$(KUBECLT) --kubeconfig=$(KUBECONFIG) rollout status deployment/jupyter-k8s -n $(NAMESPACE)
+	@echo "Deployment complete with image: $(IMAGE_NAME):$(NEW_TAG)"
+
+# Quick rebuild and restart (for development)
+.PHONY: dev-restart
+dev-restart:
+	$(eval NEW_TAG := dev-$(shell date +%H%M%S))
+	@echo "Quick rebuild with tag: $(NEW_TAG)"
+	$(MAKE) build IMAGE_TAG=$(NEW_TAG)
+	$(KUBECLT) --kubeconfig=$(KUBECONFIG) set image deployment/jupyter-k8s jupyter-k8s=$(IMAGE_NAME):$(NEW_TAG) -n $(NAMESPACE)
+	$(KUBECLT) --kubeconfig=$(KUBECONFIG) rollout status deployment/jupyter-k8s -n $(NAMESPACE)
+	@echo "Controller restarted with image: $(IMAGE_NAME):$(NEW_TAG)"
+
+# Check controller status and logs
+.PHONY: status
+status:
+	@echo "=== Controller Pod Status ==="
+	$(KUBECLT) --kubeconfig=$(KUBECONFIG) get pods -n $(NAMESPACE) -l app.kubernetes.io/name=jupyter-k8s
+	@echo ""
+	@echo "=== JupyterServer Resources ==="
+	$(KUBECLT) --kubeconfig=$(KUBECONFIG) get jupyterserver -A
+	@echo ""
+	@echo "=== Recent Controller Logs ==="
+	$(KUBECLT) --kubeconfig=$(KUBECONFIG) logs -n $(NAMESPACE) -l app.kubernetes.io/name=jupyter-k8s --tail=10
+
+# Follow controller logs
+.PHONY: logs
+logs:
+	$(KUBECLT) --kubeconfig=$(KUBECONFIG) logs -n $(NAMESPACE) -l app.kubernetes.io/name=jupyter-k8s -f
+
+# Clean up everything
+.PHONY: clean
+clean:
+	@echo "Cleaning up JupyterServer resources..."
+	$(KUBECLT) --kubeconfig=$(KUBECONFIG) delete jupyterserver --all --all-namespaces --ignore-not-found=true
+	@echo "Uninstalling Helm release..."
+	$(HELM) uninstall jupyter-k8s --namespace $(NAMESPACE) --kubeconfig $(KUBECONFIG) --ignore-not-found
+	@echo "Deleting CRD..."
+	$(MAKE) delete-crd
+	@echo "Cleanup complete"
 
 # Run basic tests with the CRD on the running cluster
 .PHONY: operator-tests
@@ -138,8 +269,8 @@ port-forward:
 	$(KUBECLT) --kubeconfig=$(KUBECONFIG) port-forward service/jupyter-$$SERVER_NAME-service 8888:8888
 
 # Get logs from a Jupyter server
-.PHONY: logs
-logs:
+.PHONY: jupyter-logs
+jupyter-logs:
 	@read -p "Enter server name: " SERVER_NAME; \
 	if [ -z "$$SERVER_NAME" ]; then \
 		echo "Server name cannot be empty"; \
@@ -156,43 +287,8 @@ local-dev-teardown:
 	$(DOCKER) rm registry || true
 
 # Clean build artifacts
-.PHONY: clean
-clean:
-	rm -rf build/
-	rm -rf dist/
-	rm -rf *.egg-info
-	find . -type d -name __pycache__ -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
-
-# Help message
-help:
-	@echo "Makefile targets:"
-	@echo ""
-	@echo "Development:"
-	@echo "  sync                - Sync the UV environment"
-	@echo "  fix-all             - Run formatter and linter fix"
-	@echo "  check-all           - Run linter without fix, type-checker and unit tests"
-	@echo "  run-all             - Run formatter and linter fix, type-check and unit tests"
-	@echo ""
-	@echo "Deployment:"
-	@echo "  local-dev-setup     - Set up local cluster and configure kubectl access"
-	@echo "  build               - Build the image and push to local finch cluster"
-	@echo "  apply-crd           - Manually apply CRD to the cluster"
-	@echo "  delete-crd          - Delete the old CRD from the cluster, no-op if does not exist"
-	@echo "  local-deploy        - Set up local cluster, configure kubectl access, build and install Helm chart locally"
-	@echo "  local-dev-teardown  - Tear down local development environment"
-	@echo ""
-	@echo "Testing:"
-	@echo "  operator-tests      - Test basic operation on the custom operators"
-	@echo ""
-	@echo "Jupyter Server Management:"
-	@echo "  list-servers        - List all Jupyter servers and their status"
-	@echo "  port-forward        - Interactive port forward to a Jupyter server"
-	@echo "  port-forward-custom - Port forward with custom local port"
-	@echo "  port-forward-sample - Quick port forward to sample-notebook server"
-	@echo "  show-access         - Show access instructions for a server"
-	@echo "  watch-servers       - Watch Jupyter server status in real-time"
-	@echo "  logs                - Get logs from a Jupyter server"
-	@echo ""
-	@echo "Cleanup:"
-	@echo "  clean               - Clean build artifacts"
+.PHONY: clean-build
+clean-build:
+	rm -rf bin/
+	rm -f coverage.out coverage.html
+	$(GO) clean
