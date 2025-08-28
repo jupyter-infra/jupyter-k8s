@@ -12,3 +12,17 @@ wheels/
 
 # Credentials
 .kubeconfig
+
+# Go build artifacts
+bin/
+main
+manager
+*.exe
+
+# IDE files
+.idea/
+.vscode/
+
+# Temporary files
+*.tmp
+*.temp
