@@ -1,0 +1,9 @@
+apiVersion: servers.jupyter.org/v1alpha1
+kind: JupyterServer
+metadata:
+  labels:
+    app.kubernetes.io/name: jk8s
+    app.kubernetes.io/managed-by: kustomize
+  name: jupyterserver-sample
+spec:
+  # TODO(user): Add fields here

@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- servers_v1alpha1_jupyterserver.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples
