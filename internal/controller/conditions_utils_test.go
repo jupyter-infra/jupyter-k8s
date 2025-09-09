@@ -53,11 +53,9 @@ func TestGetNewConditionsOrEmptyIfUnchanged(t *testing.T) {
 	for _, cond := range result {
 		if cond.Type == "Existing" {
 			foundExisting = true
-			break
 		}
 		if cond.Type == "New" {
 			foundNew = true
-			break
 		}
 	}
 	assert.True(t, foundExisting, "Should contain existing condition")
