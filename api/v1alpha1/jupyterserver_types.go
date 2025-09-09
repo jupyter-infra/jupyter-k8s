@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -32,7 +33,23 @@ type JupyterServerSpec struct {
 
 	// foo is an example field of JupyterServer. Edit jupyterserver_types.go to remove/update
 	// +optional
-	Foo *string `json:"foo,omitempty"`
+	// Foo *string `json:"foo,omitempty"`
+
+	// Name of the server
+	Name string `json:"name"`
+
+	// Image specifies the container image to use
+	Image string `json:"image,omitempty"`
+
+	// DesiredStatus specifies the desired operational status
+	// +kubebuilder:validation:Enum=Running;Stopped
+	DesiredStatus string `json:"desiredStatus,omitempty"`
+
+	// ServiceAccountName specifies the ServiceAccount used by the pod
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
+	// Resources specifies the resource requirements
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // JupyterServerStatus defines the observed state of JupyterServer.
@@ -43,19 +60,29 @@ type JupyterServerStatus struct {
 	// For Kubernetes API conventions, see:
 	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
 
-	// conditions represent the current state of the JupyterServer resource.
+	// DeploymentName is the name of the deployment managing the JupyterServer pods
+	// +optional
+	DeploymentName string `json:"deploymentName,omitempty"`
+
+	// ServiceName is the name of the service exposing the JupyterServer
+	// +optional
+	ServiceName string `json:"serviceName,omitempty"`
+
+	// Conditions represent the current state of the JupyterServer resource.
 	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
 	//
 	// Standard condition types include:
-	// - "Available": the resource is fully functional
+	// - "Available": the resource is fully functional and ready to use
 	// - "Progressing": the resource is being created or updated
 	// - "Degraded": the resource failed to reach or maintain its desired state
 	//
 	// The status of each condition is one of True, False, or Unknown.
 	// +listType=map
 	// +listMapKey=type
+	// +patchStrategy=merge
+	// +patchMergeKey=type
 	// +optional
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
 // +kubebuilder:object:root=true

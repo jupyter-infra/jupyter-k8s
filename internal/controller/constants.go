@@ -10,30 +10,29 @@ const (
 	// Default resource allocations
 	DefaultCPURequest    = "100m"
 	DefaultMemoryRequest = "128Mi"
-	
+
 	// Network configuration
 	JupyterPort = 8888
-	
+
 	// Label keys
-	AppLabel              = "app"
-	JupyterServerLabel    = "jupyterserver.servers.jupyter.org/name"
-	
+	AppLabel           = "app"
+	JupyterServerLabel = "jupyterserver.servers.jupyter.org/name"
+
 	// Label values
 	AppLabelValue = "jupyter"
-	
+
 	// Status phases
 	PhaseCreating = "Creating"
 	PhaseRunning  = "Running"
 	PhaseStopped  = "Stopped"
-	
 	// Status messages
 	MessageCreating = "Jupyter server is starting"
 	MessageRunning  = "Jupyter server is running"
 	MessageStopped  = "Jupyter server stopped successfully"
-	
+
 	// Default desired status
 	DefaultDesiredStatus = "Running"
-	
+
 	// Reconciliation timing
 	DefaultRequeueDelay = 30 * time.Second
 )

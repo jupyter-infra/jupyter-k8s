@@ -3,6 +3,9 @@ FROM golang:1.24 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
+# Bypass Go proxy due to corporate network issues
+ENV GOPROXY=direct
+
 WORKDIR /workspace
 # Copy the Go Modules manifests
 COPY go.mod go.mod

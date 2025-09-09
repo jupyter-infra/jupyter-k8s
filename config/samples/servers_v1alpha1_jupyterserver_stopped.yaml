@@ -4,22 +4,21 @@ metadata:
   labels:
     app.kubernetes.io/name: jupyter-k8s
     app.kubernetes.io/managed-by: kustomize
-  name: jupyterserver-sample
+  name: jupyterserver-stopped
 spec:
   # Name of the server
-  name: jupyter-sample
+  name: jupyter-stopped
   # Container image to use
-  # Using the built-in 'uv' image shortcut
-  image: uv
-  # Desired operational status (Running or Stopped)
-  desiredStatus: Running
+  image: jupyter/minimal-notebook:latest
+  # Set to Stopped to demonstrate the Stopped state
+  desiredStatus: Stopped
   # Optional: Service account name for the pod
   serviceAccountName: default
   # Optional: Resource requirements
   resources:
     requests:
-      memory: "512Mi"
-      cpu: "100m"
+      memory: "256Mi"
+      cpu: "50m"
     limits:
-      memory: "1Gi"
-      cpu: "500m"
+      memory: "512Mi"
+      cpu: "200m"

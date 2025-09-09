@@ -3,7 +3,7 @@ package controller
 import (
 	"fmt"
 
-	"github.com/jupyter-k8s/jupyter-k8s/api/v1alpha1"
+	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -26,12 +26,8 @@ func NewDeploymentBuilder(scheme *runtime.Scheme) *DeploymentBuilder {
 }
 
 // BuildDeployment creates a Deployment resource for the given JupyterServer
-func (db *DeploymentBuilder) BuildDeployment(jupyterServer *v1alpha1.JupyterServer) (*appsv1.Deployment, error) {
-	resources, err := db.parseResourceRequirements(jupyterServer)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse resource requirements: %w", err)
-	}
-
+func (db *DeploymentBuilder) BuildDeployment(jupyterServer *serversv1alpha1.JupyterServer) (*appsv1.Deployment, error) {
+	resources := db.parseResourceRequirements(jupyterServer)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: db.buildObjectMeta(jupyterServer),
 		Spec:       db.buildDeploymentSpec(jupyterServer, resources),
@@ -46,7 +42,7 @@ func (db *DeploymentBuilder) BuildDeployment(jupyterServer *v1alpha1.JupyterServ
 }
 
 // buildObjectMeta creates the metadata for the Deployment
-func (db *DeploymentBuilder) buildObjectMeta(jupyterServer *v1alpha1.JupyterServer) metav1.ObjectMeta {
+func (db *DeploymentBuilder) buildObjectMeta(jupyterServer *serversv1alpha1.JupyterServer) metav1.ObjectMeta {
 	return metav1.ObjectMeta{
 		Name:      GenerateDeploymentName(jupyterServer.Name),
 		Namespace: jupyterServer.Namespace,
@@ -55,9 +51,9 @@ func (db *DeploymentBuilder) buildObjectMeta(jupyterServer *v1alpha1.JupyterServ
 }
 
 // buildDeploymentSpec creates the deployment specification
-func (db *DeploymentBuilder) buildDeploymentSpec(jupyterServer *v1alpha1.JupyterServer, resources corev1.ResourceRequirements) appsv1.DeploymentSpec {
+func (db *DeploymentBuilder) buildDeploymentSpec(jupyterServer *serversv1alpha1.JupyterServer, resources corev1.ResourceRequirements) appsv1.DeploymentSpec {
 	replicas := int32(1) // TODO: Make this configurable
-	
+
 	return appsv1.DeploymentSpec{
 		Replicas: &replicas,
 		Selector: &metav1.LabelSelector{
@@ -73,7 +69,7 @@ func (db *DeploymentBuilder) buildDeploymentSpec(jupyterServer *v1alpha1.Jupyter
 }
 
 // buildPodSpec creates the pod specification
-func (db *DeploymentBuilder) buildPodSpec(jupyterServer *v1alpha1.JupyterServer, resources corev1.ResourceRequirements) corev1.PodSpec {
+func (db *DeploymentBuilder) buildPodSpec(jupyterServer *serversv1alpha1.JupyterServer, resources corev1.ResourceRequirements) corev1.PodSpec {
 	return corev1.PodSpec{
 		Containers: []corev1.Container{
 			db.buildJupyterContainer(jupyterServer, resources),
@@ -83,10 +79,22 @@ func (db *DeploymentBuilder) buildPodSpec(jupyterServer *v1alpha1.JupyterServer,
 }
 
 // buildJupyterContainer creates the Jupyter container specification
-func (db *DeploymentBuilder) buildJupyterContainer(jupyterServer *v1alpha1.JupyterServer, resources corev1.ResourceRequirements) corev1.Container {
+func (db *DeploymentBuilder) buildJupyterContainer(jupyterServer *serversv1alpha1.JupyterServer, resources corev1.ResourceRequirements) corev1.Container {
+	// Resolve image - either use direct image reference or lookup from predefined types
+	image := jupyterServer.Spec.Image
+
+	// If this is a built-in image shortcut, resolve to the full image path
+	image = GetImagePath(image)
+
+	// If no image is specified, use the default
+	if image == "" {
+		image = DefaultJupyterImage
+	}
+
 	return corev1.Container{
-		Name:  "jupyter",
-		Image: jupyterServer.Spec.Image,
+		Name:            "jupyter",
+		Image:           image,
+		ImagePullPolicy: corev1.PullNever, // Use local images for development
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "http",
@@ -100,7 +108,7 @@ func (db *DeploymentBuilder) buildJupyterContainer(jupyterServer *v1alpha1.Jupyt
 }
 
 // parseResourceRequirements extracts and validates resource requirements
-func (db *DeploymentBuilder) parseResourceRequirements(jupyterServer *v1alpha1.JupyterServer) (corev1.ResourceRequirements, error) {
+func (db *DeploymentBuilder) parseResourceRequirements(jupyterServer *serversv1alpha1.JupyterServer) corev1.ResourceRequirements {
 	// Set defaults
 	defaultCPU := resource.MustParse(DefaultCPURequest)
 	defaultMemory := resource.MustParse(DefaultMemoryRequest)
@@ -109,7 +117,6 @@ func (db *DeploymentBuilder) parseResourceRequirements(jupyterServer *v1alpha1.J
 	if jupyterServer.Spec.Resources != nil {
 		// Return the provided ResourceRequirements directly
 		result := *jupyterServer.Spec.Resources
-		
 		// If no requests are specified, set defaults
 		if result.Requests == nil {
 			result.Requests = corev1.ResourceList{
@@ -117,8 +124,8 @@ func (db *DeploymentBuilder) parseResourceRequirements(jupyterServer *v1alpha1.J
 				corev1.ResourceMemory: defaultMemory,
 			}
 		}
-		
-		return result, nil
+
+		return result
 	}
 
 	// Return default resources if none specified
@@ -131,5 +138,5 @@ func (db *DeploymentBuilder) parseResourceRequirements(jupyterServer *v1alpha1.J
 			corev1.ResourceCPU:    defaultCPU,
 			corev1.ResourceMemory: defaultMemory,
 		},
-	}, nil
+	}
 }

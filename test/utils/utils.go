@@ -24,7 +24,7 @@ import (
 	"os/exec"
 	"strings"
 
-	. "github.com/onsi/ginkgo/v2" // nolint:revive,staticcheck
+	. "github.com/onsi/ginkgo/v2" //nolint:revive,staticcheck,golint,stylecheck
 )
 
 const (
@@ -62,7 +62,7 @@ func Run(cmd *exec.Cmd) (string, error) {
 // UninstallCertManager uninstalls the cert manager
 func UninstallCertManager() {
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
-	cmd := exec.Command("kubectl", "delete", "-f", url)
+	cmd := exec.Command("kubectl", "delete", "-f", url, "--ignore-not-found")
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
 	}
@@ -133,20 +133,53 @@ func IsCertManagerCRDsInstalled() bool {
 	return false
 }
 
-// LoadImageToKindClusterWithName loads a local docker image to the kind cluster
+// LoadImageToKindClusterWithName loads a local image to the kind cluster
+// Supports both docker and finch as container providers
 func LoadImageToKindClusterWithName(name string) error {
 	cluster := defaultKindCluster
 	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
 		cluster = v
 	}
-	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
+
 	kindBinary := defaultKindBinary
 	if v, ok := os.LookupEnv("KIND"); ok {
 		kindBinary = v
 	}
-	cmd := exec.Command(kindBinary, kindOptions...)
-	_, err := Run(cmd)
-	return err
+
+	// Check if we're using finch as the container provider
+	usingFinch := os.Getenv("KIND_EXPERIMENTAL_PROVIDER") == "finch"
+
+	// If using finch, first ensure the image is saved to a tarball, then load it
+	if usingFinch {
+		// Create temporary directory for the image tarball if it doesn't exist
+		if _, err := os.Stat("/tmp/kind-images"); os.IsNotExist(err) {
+			if err := os.MkdirAll("/tmp/kind-images", 0755); err != nil {
+				return fmt.Errorf("failed to create temporary directory for images: %w", err)
+			}
+		}
+
+		// Save the image to a tarball
+		tarballPath := fmt.Sprintf("/tmp/kind-images/%s.tar", strings.ReplaceAll(name, "/", "-"))
+		tarballPath = strings.ReplaceAll(tarballPath, ":", "-")
+
+		// Use finch to save the image
+		saveCmd := exec.Command("finch", "save", name, "-o", tarballPath)
+		if _, err := Run(saveCmd); err != nil {
+			return fmt.Errorf("failed to save image with finch: %w", err)
+		}
+
+		// Load the tarball into kind
+		kindOptions := []string{"load", "image-archive", tarballPath, "--name", cluster}
+		cmd := exec.Command(kindBinary, kindOptions...)
+		_, err := Run(cmd)
+		return err
+	} else {
+		// Original docker-based implementation
+		kindOptions := []string{"load", "docker-image", name, "--name", cluster}
+		cmd := exec.Command(kindBinary, kindOptions...)
+		_, err := Run(cmd)
+		return err
+	}
 }
 
 // GetNonEmptyLines converts given command output string into individual objects

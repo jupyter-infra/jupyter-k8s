@@ -34,16 +34,16 @@ import (
 )
 
 // namespace where the project is deployed in
-const namespace = "jk8s-system"
+const namespace = "jupyter-k8s-system"
 
 // serviceAccountName created for the project
-const serviceAccountName = "jk8s-controller-manager"
+const serviceAccountName = "jupyter-k8s-controller-manager"
 
 // metricsServiceName is the name of the metrics service of the project
-const metricsServiceName = "jk8s-controller-manager-metrics-service"
+const metricsServiceName = "jupyter-k8s-controller-manager-metrics-service"
 
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
-const metricsRoleBindingName = "jk8s-metrics-binding"
+const metricsRoleBindingName = "jupyter-k8s-metrics-binding"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
@@ -176,7 +176,7 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should ensure the metrics endpoint is serving metrics", func() {
 			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
 			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
-				"--clusterrole=jk8s-metrics-reader",
+				"--clusterrole=jupyter-k8s-metrics-reader",
 				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
 			)
 			_, err := utils.Run(cmd)
