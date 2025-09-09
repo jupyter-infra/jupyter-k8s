@@ -25,9 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var _ = Describe("JupyterServer Controller", func() {
@@ -67,10 +66,32 @@ var _ = Describe("JupyterServer Controller", func() {
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
+			By("Creating a mock StateMachine")
+			statusManager := StatusManager{
+				client: k8sClient,
+			}
+			deploymentBuilder := DeploymentBuilder{
+				scheme: k8sClient.Scheme(),
+			}
+			serviceBuilder := ServiceBuilder{
+				scheme: k8sClient.Scheme(),
+			}
+			resourceManager := ResourceManager{
+				client:            k8sClient,
+				deploymentBuilder: &deploymentBuilder,
+				serviceBuilder:    &serviceBuilder,
+				statusManager:     &statusManager,
+			}
+			stateMachine := StateMachine{
+				resourceManager: &resourceManager,
+				statusManager:   &statusManager,
+			}
+
 			By("Reconciling the created resource")
 			controllerReconciler := &JupyterServerReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:       k8sClient,
+				Scheme:       k8sClient.Scheme(),
+				stateMachine: &stateMachine,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
