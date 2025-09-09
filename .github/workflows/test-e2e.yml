@@ -26,6 +26,17 @@ jobs:
       - name: Verify kind installation
         run: kind version
 
+      - name: Install Finch
+        run: |
+          # https://runfinch.com/docs/managing-finch/linux/installation/#ubuntu
+          curl -fsSL https://artifact.runfinch.com/deb/GPG_KEY.pub | sudo gpg --dearmor -o /usr/share/keyrings/runfinch-finch-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/runfinch-finch-archive-keyring.gpg arch=amd64] https://artifact.runfinch.com/deb noble main" | sudo tee /etc/apt/sources.list.d/runfinch-finch.list
+          sudo apt update
+          sudo apt install runfinch-finch
+      
+      - name: Verify Finch installation
+        run: finch version
+
       - name: Running Test e2e
         run: |
           go mod tidy
