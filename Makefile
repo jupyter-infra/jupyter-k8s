@@ -52,8 +52,8 @@ help: ## Display this help.
 
 .PHONY: deps
 deps:
-	$(GO) mod download
-	$(GO) mod tidy
+	go mod download
+	go mod tidy
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
@@ -313,7 +313,7 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
 
 .PHONY: setup-envtest
-senvtestetup-: envtest ## Download the binaries required for ENVTEST in the local bin directory.
+setup-envtest: envtest ## Download the binaries required for ENVTEST in the local bin directory.
 	@echo "Setting up envtest binaries for Kubernetes version $(ENVTEST_K8S_VERSION)..."
 	@$(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path || { \
 		echo "Error: Failed to set up envtest binaries for version $(ENVTEST_K8S_VERSION)."; \
