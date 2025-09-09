@@ -2,7 +2,7 @@
 
 # Build config
 CONTAINER_TOOL ?= finch
-BUILD_OPTS := ""
+BUILD_OPTS :=
 
 # Registry configuration
 # For local development with Kind, we use direct image references with no registry prefix

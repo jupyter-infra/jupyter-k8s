@@ -13,7 +13,7 @@ endif
 # scaffolded by default. However, you might want to replace it to use other
 # tools. (i.e. podman)
 CONTAINER_TOOL ?= finch
-BUILD_OPTS := ""
+BUILD_OPTS :=
 
 # Use Finch as the container provider for Kind when using Finch
 # Update goproxy for cloud desktop compatibility
