@@ -26,18 +26,8 @@ jobs:
       - name: Verify kind installation
         run: kind version
 
-      - name: Install Finch
-        run: |
-          # Download the latest binary release
-          FINCH_VERSION=$(curl -s https://api.github.com/repos/runfinch/finch/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")'  | sed 's/v//')
-          curl -LO https://github.com/runfinch/finch/releases/latest/download/finch_${FINCH_VERSION}_amd64.deb
-          sudo dpkg -i finch_*.deb
-          sudo apt-get update && sudo apt-get install -f -y
-      
-      - name: Verify Finch installation
-        run: finch version
-
       - name: Running Test e2e
         run: |
           go mod tidy
-          make test-e2e
+          # Use Docker instead of Finch in GitHub Actions
+          make test-e2e CONTAINER_TOOL=docker

@@ -1,12 +1,6 @@
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 
-# Use Finch as the container provider for Kind
-export KIND_EXPERIMENTAL_PROVIDER=finch
-
-# Update goproxy for cloud desktop compatibility
-export GOPROXY=direct
-
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -19,10 +13,18 @@ endif
 # scaffolded by default. However, you might want to replace it to use other
 # tools. (i.e. podman)
 CONTAINER_TOOL ?= finch
+BUILD_OPTS := ""
 
-# Set BUILD_OPTS to '--network host' on cloud desktop (if /etc/os-release exists), otherwise empty
-# You might have to comment BUILD_OPTS out for devdesktop
-BUILD_OPTS := $(shell if [ -f /etc/os-release ]; then echo "--network host"; else echo ""; fi)
+# Use Finch as the container provider for Kind when using Finch
+# Update goproxy for cloud desktop compatibility
+ifeq ($(CONTAINER_TOOL),finch)
+  export KIND_EXPERIMENTAL_PROVIDER=finch
+  export GOPROXY=direct
+
+  # Set BUILD_OPTS to '--network host' on cloud desktop (if /etc/os-release exists), otherwise empty
+  # You might have to comment BUILD_OPTS out for devdesktop
+  BUILD_OPTS := $(shell if [ -f /etc/os-release ]; then echo "--network host"; else echo ""; fi)
+endif
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
@@ -228,7 +230,7 @@ teardown-kind: ## Tear down the Kind cluster, registry, and clean up images
 	# Clean up images from Finch cache
 	@echo "Cleaning up images from cache..."
 	$(CONTAINER_TOOL) rmi ${IMG} || true
-	$(MAKE) -C images clean
+	$(MAKE) -C images clean CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: load-images
 load-images: docker-build ## Build and load images into the Kind cluster
@@ -237,7 +239,7 @@ load-images: docker-build ## Build and load images into the Kind cluster
 	$(CONTAINER_TOOL) save ${IMG} -o /tmp/kind-images/controller.tar
 	kind load image-archive /tmp/kind-images/controller.tar --name $(DEV_KIND_CLUSTER)
 	rm -f /tmp/kind-images/controller.tar
-	$(MAKE) -C images push-all-kind CLUSTER_NAME=$(DEV_KIND_CLUSTER)
+	$(MAKE) -C images push-all-kind CLUSTER_NAME=$(DEV_KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: deploy-kind
 deploy-kind: docker-build ## Build, load, and deploy controller to a kind cluster.
