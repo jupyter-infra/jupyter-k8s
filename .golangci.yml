@@ -26,6 +26,15 @@ linters:
       rules:
         - name: comment-spacings
         - name: import-shadowing
+        - name: var-naming
+          arguments:
+            - ["ID", "API", "HTTP", "JSON", "RPC", "CORS", "UI", "URL", "DNS", "DB"]
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: var-declaration
+        - name: package-comments
+        - name: unexported-naming
   exclusions:
     generated: lax
     rules:

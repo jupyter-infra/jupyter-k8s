@@ -7,7 +7,7 @@ metadata:
   name: jupyterserver-sample
 spec:
   # Name of the server
-  name: jupyter-sample
+  displayName: sample-running
   # Container image to use
   # Using the built-in 'uv' image shortcut
   image: uv

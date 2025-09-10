@@ -14,7 +14,20 @@ spec:
     singular: jupyterserver
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Available")].status
+      name: Available
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Progressing")].status
+      name: Progressing
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Degraded")].status
+      name: Degraded
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: JupyterServer is the Schema for the jupyterservers API
@@ -45,11 +58,11 @@ spec:
                 - Running
                 - Stopped
                 type: string
+              displayName:
+                description: Display Name of the server
+                type: string
               image:
                 description: Image specifies the container image to use
-                type: string
-              name:
-                description: Name of the server
                 type: string
               resources:
                 description: Resources specifies the resource requirements
@@ -114,6 +127,8 @@ spec:
                 description: ServiceAccountName specifies the ServiceAccount used
                   by the pod
                 type: string
+            required:
+            - displayName
             type: object
           status:
             description: status defines the observed state of JupyterServer

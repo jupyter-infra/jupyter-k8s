@@ -14,20 +14,20 @@ const (
 )
 
 // Map of image shortcuts to full paths
-var JupyterImages = map[string]string{
+var jupyterImages = map[string]string{
 	"uv": ImageJupyterUV,
 }
 
 // IsBuiltInImage checks if an image name is a built-in shortcut
 func IsBuiltInImage(imageName string) bool {
-	_, exists := JupyterImages[imageName]
+	_, exists := jupyterImages[imageName]
 	return exists
 }
 
 // GetImagePath returns the full image path for a built-in image name
 // If the image is not a built-in, it returns the original image name
 func GetImagePath(imageName string) string {
-	if fullPath, exists := JupyterImages[imageName]; exists {
+	if fullPath, exists := jupyterImages[imageName]; exists {
 		return fullPath
 	}
 	return imageName

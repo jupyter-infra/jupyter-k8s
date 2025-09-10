@@ -1,3 +1,4 @@
+// Package controller defines the jupyter-k8s controller logic
 package controller
 
 import (

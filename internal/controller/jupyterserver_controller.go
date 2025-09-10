@@ -97,7 +97,7 @@ func (r *JupyterServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // SetupJupyterServerController sets up the controller with the Manager
 func SetupJupyterServerController(mgr mngr.Manager) error {
-	ctrl_client := mgr.GetClient()
+	k8sClient := mgr.GetClient()
 	scheme := mgr.GetScheme()
 
 	// Create builders
@@ -105,15 +105,15 @@ func SetupJupyterServerController(mgr mngr.Manager) error {
 	serviceBuilder := NewServiceBuilder(scheme)
 
 	// Create managers
-	statusManager := NewStatusManager(ctrl_client)
-	resourceManager := NewResourceManager(ctrl_client, deploymentBuilder, serviceBuilder, statusManager)
+	statusManager := NewStatusManager(k8sClient)
+	resourceManager := NewResourceManager(k8sClient, deploymentBuilder, serviceBuilder, statusManager)
 
 	// Create state machine
 	stateMachine := NewStateMachine(resourceManager, statusManager)
 
 	// Create reconciler with dependencies
 	reconciler := &JupyterServerReconciler{
-		Client:       ctrl_client,
+		Client:       k8sClient,
 		Scheme:       scheme,
 		stateMachine: stateMachine,
 	}

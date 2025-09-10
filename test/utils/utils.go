@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package utils
+// Package utils provides method for end-to-end testing
+package utils //nolint:revive // allow utils package name
 
 import (
 	"bufio"

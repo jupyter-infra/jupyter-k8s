@@ -31,12 +31,8 @@ type JupyterServerSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// foo is an example field of JupyterServer. Edit jupyterserver_types.go to remove/update
-	// +optional
-	// Foo *string `json:"foo,omitempty"`
-
-	// Name of the server
-	Name string `json:"name"`
+	// Display Name of the server
+	DisplayName string `json:"displayName"`
 
 	// Image specifies the container image to use
 	Image string `json:"image,omitempty"`
@@ -87,6 +83,10 @@ type JupyterServerStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Available",type="string",JSONPath=".status.conditions[?(@.type==\"Available\")].status"
+// +kubebuilder:printcolumn:name="Progressing",type="string",JSONPath=".status.conditions[?(@.type==\"Progressing\")].status"
+// +kubebuilder:printcolumn:name="Degraded",type="string",JSONPath=".status.conditions[?(@.type==\"Degraded\")].status"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // JupyterServer is the Schema for the jupyterservers API
 type JupyterServer struct {

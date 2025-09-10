@@ -34,7 +34,8 @@ const (
 	DefaultDesiredStatus = "Running"
 
 	// Reconciliation timing
-	DefaultRequeueDelay = 30 * time.Second
+	PollRequeueDelay = 200 * time.Millisecond
+	LongRequeueDelay = 60 * time.Second
 )
 
 // GenerateDeploymentName creates a consistent deployment name

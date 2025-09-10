@@ -1,3 +1,4 @@
+// entry point for the jupyter-k8s operator manager
 package main
 
 import (

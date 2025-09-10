@@ -1,10 +1,8 @@
-//nolint:typecheck // Temporary disable for development
 package controller
 
 import (
 	"context"
 	"fmt"
-	"time"
 
 	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
@@ -44,7 +42,7 @@ func (sm *StateMachine) ReconcileDesiredState(ctx context.Context, jupyterServer
 		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, jupyterServer, ReasonDeploymentError, err.Error()); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
-		return ctrl.Result{RequeueAfter: time.Second * 10}, err
+		return ctrl.Result{RequeueAfter: LongRequeueDelay}, err
 	}
 }
 
@@ -70,7 +68,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(ctx context.Context, jupyt
 		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, jupyterServer, ReasonDeploymentError, err.Error()); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
-		return ctrl.Result{RequeueAfter: time.Millisecond * 200}, err
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 	}
 
 	// Ensure service is deleted - this is an asynchronous operation
@@ -83,13 +81,13 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(ctx context.Context, jupyt
 		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, jupyterServer, ReasonServiceError, err.Error()); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
-		return ctrl.Result{RequeueAfter: time.Millisecond * 200}, err
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 	}
 
 	// Check if resources are fully deleted (asynchronous deletion check)
 	// A nil resource means the resource has been fully deleted
 	deploymentDeleted := sm.resourceManager.IsDeploymentMissingOrDeleting(deployment)
-	serviceDeleted := service == nil
+	serviceDeleted := sm.resourceManager.IsServiceMissingOrDeleting(service)
 
 	if deploymentDeleted && serviceDeleted {
 		// Both resources are fully deleted, update to stopped status
@@ -105,10 +103,10 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(ctx context.Context, jupyt
 	if deploymentDeleted || serviceDeleted {
 		logger.Info("Resources still being deleted", "deploymentDeleted", deploymentDeleted, "serviceDeleted", serviceDeleted)
 		if err := sm.statusManager.UpdateStoppingStatus(ctx, jupyterServer, deploymentDeleted, serviceDeleted); err != nil {
-			return ctrl.Result{RequeueAfter: time.Millisecond * 200}, err
+			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 		}
 		// Requeue to check deletion progress again later
-		return ctrl.Result{RequeueAfter: DefaultRequeueDelay}, nil
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
 	}
 
 	// This should not happen, return an error
@@ -117,7 +115,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(ctx context.Context, jupyt
 	if statusErr := sm.statusManager.UpdateErrorStatus(ctx, jupyterServer, ReasonDeploymentError, err.Error()); statusErr != nil {
 		logger.Error(statusErr, "Failed to update error status")
 	}
-	return ctrl.Result{RequeueAfter: time.Millisecond * 200}, err
+	return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 }
 
 func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (ctrl.Result, error) {
@@ -134,7 +132,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, jupyt
 		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, jupyterServer, ReasonDeploymentError, deployErr.Error()); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
-		return ctrl.Result{RequeueAfter: time.Millisecond * 200}, deployErr
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, deployErr
 	}
 
 	// Ensure service exists - this is an asynchronous operation
@@ -147,7 +145,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, jupyt
 		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, jupyterServer, ReasonServiceError, serviceErr.Error()); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
-		return ctrl.Result{RequeueAfter: time.Millisecond * 200}, serviceErr
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, serviceErr
 	}
 
 	// Check if resources are fully ready (asynchronous readiness check)
@@ -160,7 +158,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, jupyt
 		// Both resources are ready, update to running status
 		logger.Info("Deployment and Service are both ready, updating to Running status")
 		if err := sm.statusManager.UpdateRunningStatus(ctx, jupyterServer); err != nil {
-			return ctrl.Result{RequeueAfter: time.Millisecond * 200}, err
+			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 		}
 		return ctrl.Result{}, nil
 	}
@@ -170,9 +168,9 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, jupyt
 	logger.Info("Resources not fully ready", "deploymentReady", deploymentReady, "serviceReady", serviceReady)
 	if err := sm.statusManager.UpdateStartingStatus(
 		ctx, jupyterServer, deploymentReady, serviceReady, deployment.GetName(), service.GetName()); err != nil {
-		return ctrl.Result{RequeueAfter: time.Millisecond * 200}, err
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 	}
 
 	// Requeue to check resource readiness again later
-	return ctrl.Result{RequeueAfter: time.Millisecond * 200}, nil
+	return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
 }

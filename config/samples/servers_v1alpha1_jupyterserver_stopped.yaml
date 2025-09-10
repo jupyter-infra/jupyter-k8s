@@ -7,7 +7,7 @@ metadata:
   name: jupyterserver-stopped
 spec:
   # Name of the server
-  name: jupyter-stopped
+  displayName: sample-stopped
   # Container image to use
   image: jupyter/minimal-notebook:latest
   # Set to Stopped to demonstrate the Stopped state

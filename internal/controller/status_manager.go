@@ -1,4 +1,3 @@
-//nolint:typecheck // Temporary disable for development
 package controller
 
 import (
@@ -18,9 +17,9 @@ type StatusManager struct {
 }
 
 // NewStatusManager creates a new StatusManager
-func NewStatusManager(ctrl_client client.Client) *StatusManager {
+func NewStatusManager(k8sClient client.Client) *StatusManager {
 	return &StatusManager{
-		client: ctrl_client,
+		client: k8sClient,
 	}
 }
 
@@ -47,7 +46,7 @@ func (sm *StatusManager) updateStatus(
 	return nil
 }
 
-// UpdateStartingStatus: set Available to false and Progressing to true
+// UpdateStartingStatus sets Available to false and Progressing to true
 func (sm *StatusManager) UpdateStartingStatus(
 	ctx context.Context,
 	jupyterServer *serversv1alpha1.JupyterServer,
@@ -115,13 +114,10 @@ func (sm *StatusManager) UpdateStartingStatus(
 		jupyterServer.Status.DeploymentName = computeName
 		jupyterServer.Status.ServiceName = serviceName
 	}
-	if err := sm.updateStatus(ctx, jupyterServer, &conditionsToUpdate, shouldUpdateResourceNames); err != nil {
-		return err
-	}
-	return nil
+	return sm.updateStatus(ctx, jupyterServer, &conditionsToUpdate, shouldUpdateResourceNames)
 }
 
-// UpdateErrorStatus: sets the Degraded condition to true with the specified error reason and message
+// UpdateErrorStatus sets the Degraded condition to true with the specified error reason and message
 func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer, reason, message string) error {
 	// Set DegradedCondition to true with the provided error reason and message
 	degradedCondition := NewCondition(
@@ -131,10 +127,7 @@ func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, jupyterServer *s
 		message,
 	)
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, jupyterServer, &[]metav1.Condition{degradedCondition})
-	if err := sm.updateStatus(ctx, jupyterServer, &conditionsToUpdate, false); err != nil {
-		return err
-	}
-	return nil
+	return sm.updateStatus(ctx, jupyterServer, &conditionsToUpdate, false)
 }
 
 // UpdateRunningStatus sets the Available condition to true and Progressing to false
@@ -180,13 +173,10 @@ func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, jupyterServer 
 	}
 
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, jupyterServer, &conditions)
-	if err := sm.updateStatus(ctx, jupyterServer, &conditionsToUpdate, false); err != nil {
-		return err
-	}
-	return nil
+	return sm.updateStatus(ctx, jupyterServer, &conditionsToUpdate, false)
 }
 
-// UpdateStoppingStatus updates status to represent a stopping JupyterServer
+// UpdateStoppingStatus sets Available to false and Progressing to true
 func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer, computeStopped bool, serviceStopped bool) error {
 	stoppingReason := ReasonResourcesNotStopped
 	stoppingMessage := "Resources are still running"
@@ -243,13 +233,10 @@ func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, jupyterServer
 	}
 
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, jupyterServer, &conditions)
-	if err := sm.updateStatus(ctx, jupyterServer, &conditionsToUpdate, false); err != nil {
-		return err
-	}
-	return nil
+	return sm.updateStatus(ctx, jupyterServer, &conditionsToUpdate, false)
 }
 
-// UpdateStoppedStatus sets all conditions to represent a stopped server
+// UpdateStoppedStatus sets Available and Progressing to false, Stopped to true
 func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) error {
 	// ensure AvailableCondition is set to false with ReasonDesiredStateStopped
 	availableCondition := NewCondition(
@@ -294,8 +281,5 @@ func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, jupyterServer 
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, jupyterServer, &conditions)
 	jupyterServer.Status.DeploymentName = ""
 	jupyterServer.Status.ServiceName = ""
-	if err := sm.updateStatus(ctx, jupyterServer, &conditionsToUpdate, true); err != nil {
-		return err
-	}
-	return nil
+	return sm.updateStatus(ctx, jupyterServer, &conditionsToUpdate, true)
 }

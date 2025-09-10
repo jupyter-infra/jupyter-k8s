@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// entry point for the jupyter-k8s operator
 package main
 
 import (

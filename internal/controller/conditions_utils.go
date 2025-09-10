@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// findCondition finds a condition of a specific type in the conditions slice
+// FindCondition returns a pointer to the condition matching the type in the list, or nil if not found
 func FindCondition(conditions *[]metav1.Condition, conditionType string) *metav1.Condition {
 	for i := range *conditions {
 		condition := &(*conditions)[i]
@@ -36,9 +36,9 @@ func GetNewConditionsOrEmptyIfUnchanged(
 	// Create buffers
 	conditionsToUpdate := []metav1.Condition{}
 	updated := false
-	added_condition_names := []string{}
-	unchanged_condition_names := []string{}
-	updated_condition_names := []string{}
+	addedConditionNames := []string{}
+	unchangedConditionNames := []string{}
+	updatedConditionNames := []string{}
 
 	// Build a map of condition types we're updating
 	updateTypes := map[string]bool{}
@@ -59,30 +59,30 @@ func GetNewConditionsOrEmptyIfUnchanged(
 
 		if existingCondition == nil {
 			updated = true
-			added_condition_names = append(added_condition_names, condition.Type)
+			addedConditionNames = append(addedConditionNames, condition.Type)
 			conditionsToUpdate = append(conditionsToUpdate, condition)
 		} else if existingCondition.Status == condition.Status &&
 			existingCondition.Reason == condition.Reason &&
 			existingCondition.Message == condition.Message {
-			unchanged_condition_names = append(unchanged_condition_names, condition.Type)
+			unchangedConditionNames = append(unchangedConditionNames, condition.Type)
 			conditionsToUpdate = append(conditionsToUpdate, condition)
 		} else {
 			// Update the condition by removing old entry and appending new one
 			updated = true
-			updated_condition_names = append(updated_condition_names, condition.Type)
+			updatedConditionNames = append(updatedConditionNames, condition.Type)
 			conditionsToUpdate = append(conditionsToUpdate, condition)
 		}
 	}
 
 	if !updated {
-		logger.Info("Found no condition to update", "Unchanged Conditions", unchanged_condition_names)
+		logger.Info("Found no condition to update", "Unchanged Conditions", unchangedConditionNames)
 		return []metav1.Condition{}
 	} else {
 		logger.Info(
 			"Found conditions to update",
-			"Added Conditions", added_condition_names,
-			"Updated Conditions", updated_condition_names,
-			"Unchanged Conditions", unchanged_condition_names,
+			"Added Conditions", addedConditionNames,
+			"Updated Conditions", updatedConditionNames,
+			"Unchanged Conditions", unchangedConditionNames,
 		)
 		return conditionsToUpdate
 	}

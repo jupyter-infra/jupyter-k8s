@@ -23,9 +23,9 @@ type ResourceManager struct {
 }
 
 // NewResourceManager creates a new ResourceManager
-func NewResourceManager(ctrl_client client.Client, deploymentBuilder *DeploymentBuilder, serviceBuilder *ServiceBuilder, statusManager *StatusManager) *ResourceManager {
+func NewResourceManager(k8sClient client.Client, deploymentBuilder *DeploymentBuilder, serviceBuilder *ServiceBuilder, statusManager *StatusManager) *ResourceManager {
 	return &ResourceManager{
-		client:            ctrl_client,
+		client:            k8sClient,
 		deploymentBuilder: deploymentBuilder,
 		serviceBuilder:    serviceBuilder,
 		statusManager:     statusManager,
@@ -140,7 +140,7 @@ func (rm *ResourceManager) deleteService(ctx context.Context, service *corev1.Se
 	return nil
 }
 
-// isDeploymentAvailable checks if the Deployment is considered available
+// IsDeploymentAvailable checks if the Deployment is considered available
 // based on its status conditions
 func (rm *ResourceManager) IsDeploymentAvailable(deployment *appsv1.Deployment) bool {
 	// If deployment is nil, it's not available
@@ -161,8 +161,8 @@ func (rm *ResourceManager) IsDeploymentAvailable(deployment *appsv1.Deployment) 
 		deployment.Status.ReadyReplicas >= *deployment.Spec.Replicas
 }
 
-// isDeploymentMissingOrDeleting checks if the Deployment is either missing (nil)
-// or in the process of being deleted (has a deletion timestamp)
+// IsDeploymentMissingOrDeleting checks if the Deployment is either missing (nil)
+// or in the process of being deleted
 func (rm *ResourceManager) IsDeploymentMissingOrDeleting(deployment *appsv1.Deployment) bool {
 	// If deployment is nil, it's missing
 	if deployment == nil {
@@ -173,6 +173,7 @@ func (rm *ResourceManager) IsDeploymentMissingOrDeleting(deployment *appsv1.Depl
 	return !deployment.DeletionTimestamp.IsZero()
 }
 
+// IsServiceAvailable checks if the Service has acquired an IP address
 func (rm *ResourceManager) IsServiceAvailable(service *corev1.Service) bool {
 	// If service is nil, it's not available
 	if service == nil {
@@ -185,6 +186,12 @@ func (rm *ResourceManager) IsServiceAvailable(service *corev1.Service) bool {
 
 	// For any other type of service, assume it is available as soon as it's created
 	return true
+}
+
+// IsServiceMissingOrDeleting checks if the Service is either missing (nil)
+// or in the process of being deleted
+func (rm *ResourceManager) IsServiceMissingOrDeleting(service *corev1.Service) bool {
+	return service == nil
 }
 
 // EnsureDeploymentExists creates a deployment if it doesn't exist
@@ -211,7 +218,7 @@ func (rm *ResourceManager) EnsureServiceExists(ctx context.Context, jupyterServe
 	return service, nil
 }
 
-// EnsureDeploymentExists creates a deployment if it doesn't exist
+// EnsureDeploymentDeleted initiates deletion, or returns the deployment if it is already being deleted
 func (rm *ResourceManager) EnsureDeploymentDeleted(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*appsv1.Deployment, error) {
 	deployment, err := rm.getDeployment(ctx, jupyterServer)
 	if err != nil {
@@ -221,13 +228,13 @@ func (rm *ResourceManager) EnsureDeploymentDeleted(ctx context.Context, jupyterS
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
 
-	if rm.IsDeploymentAvailable(deployment) {
+	if !rm.IsDeploymentMissingOrDeleting(deployment) {
 		return deployment, rm.deleteDeployment(ctx, deployment)
 	}
 	return deployment, nil
 }
 
-// EnsureServiceExists creates a service if it doesn't exist
+// EnsureServiceDeleted initiates deletion, or returns the service if it is already being deleted
 func (rm *ResourceManager) EnsureServiceDeleted(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*corev1.Service, error) {
 	service, err := rm.getService(ctx, jupyterServer)
 	if err != nil {
@@ -236,7 +243,7 @@ func (rm *ResourceManager) EnsureServiceDeleted(ctx context.Context, jupyterServ
 		}
 		return nil, fmt.Errorf("failed to get service: %w", err)
 	}
-	if rm.IsServiceAvailable(service) {
+	if !rm.IsServiceMissingOrDeleting(service) {
 		return service, rm.deleteService(ctx, service)
 	}
 	return service, nil
