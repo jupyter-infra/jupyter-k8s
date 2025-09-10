@@ -1,9 +1,23 @@
+/*
+MIT License
+
+Copyright (c) 2025 jupyter-ai-contrib
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+*/
+
 package controller
 
 import (
 	"context"
-
-	"github.com/jupyter-k8s/jupyter-k8s/api/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -11,8 +25,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	mngr "sigs.k8s.io/controller-runtime/pkg/manager"
+
+	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
 // JupyterServerReconciler reconciles a JupyterServer object
@@ -27,50 +43,23 @@ func (r *JupyterServerReconciler) SetStateMachine(sm *StateMachine) {
 	r.stateMachine = sm
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *JupyterServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.JupyterServer{}).
-		Owns(&appsv1.Deployment{}).
-		Owns(&corev1.Service{}).
-		Complete(r)
-}
-
-// SetupJupyterServerController sets up the controller with the Manager
-func SetupJupyterServerController(mgr manager.Manager) error {
-	client := mgr.GetClient()
-	scheme := mgr.GetScheme()
-
-	// Create builders
-	deploymentBuilder := NewDeploymentBuilder(scheme)
-	serviceBuilder := NewServiceBuilder(scheme)
-
-	// Create managers
-	statusManager := NewStatusManager(client)
-	resourceManager := NewResourceManager(client, deploymentBuilder, serviceBuilder, statusManager)
-
-	// Create state machine
-	stateMachine := NewStateMachine(resourceManager, statusManager)
-
-	// Create reconciler with dependencies
-	reconciler := &JupyterServerReconciler{
-		Client:       client,
-		Scheme:       scheme,
-		stateMachine: stateMachine,
-	}
-
-	return reconciler.SetupWithManager(mgr)
-}
-
 // +kubebuilder:rbac:groups=servers.jupyter.org,resources=jupyterservers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=servers.jupyter.org,resources=jupyterservers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=servers.jupyter.org,resources=jupyterservers/finalizers,verbs=update
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile is part of the main kubernetes reconciliation loop
+// Reconcile is part of the main kubernetes reconciliation loop which aims to
+// move the current state of the cluster closer to the desired state.
+// TODO(user): Modify the Reconcile function to compare the state specified by
+// the JupyterServer object against the actual cluster state, and then
+// perform operations to make the cluster state reflect the state specified by
+// the user.
+//
+// For more details, check Reconcile and its Result here:
+// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *JupyterServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
+	logger := logf.FromContext(ctx)
 	logger.Info("Starting reconciliation",
 		"jupyterserver", req.NamespacedName)
 
@@ -96,9 +85,45 @@ func (r *JupyterServerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return result, nil
 }
 
+// SetupWithManager sets up the controller with the Manager.
+func (r *JupyterServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&serversv1alpha1.JupyterServer{}).
+		Named("jupyterserver").
+		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.Service{}).
+		Complete(r)
+}
+
+// SetupJupyterServerController sets up the controller with the Manager
+func SetupJupyterServerController(mgr mngr.Manager) error {
+	k8sClient := mgr.GetClient()
+	scheme := mgr.GetScheme()
+
+	// Create builders
+	deploymentBuilder := NewDeploymentBuilder(scheme)
+	serviceBuilder := NewServiceBuilder(scheme)
+
+	// Create managers
+	statusManager := NewStatusManager(k8sClient)
+	resourceManager := NewResourceManager(k8sClient, deploymentBuilder, serviceBuilder, statusManager)
+
+	// Create state machine
+	stateMachine := NewStateMachine(resourceManager, statusManager)
+
+	// Create reconciler with dependencies
+	reconciler := &JupyterServerReconciler{
+		Client:       k8sClient,
+		Scheme:       scheme,
+		stateMachine: stateMachine,
+	}
+
+	return reconciler.SetupWithManager(mgr)
+}
+
 // getJupyterServer retrieves the JupyterServer resource
-func (r *JupyterServerReconciler) getJupyterServer(ctx context.Context, req ctrl.Request) (*v1alpha1.JupyterServer, error) {
-	jupyterServer := &v1alpha1.JupyterServer{}
+func (r *JupyterServerReconciler) getJupyterServer(ctx context.Context, req ctrl.Request) (*serversv1alpha1.JupyterServer, error) {
+	jupyterServer := &serversv1alpha1.JupyterServer{}
 	err := r.Get(ctx, req.NamespacedName, jupyterServer)
 	return jupyterServer, err
 }

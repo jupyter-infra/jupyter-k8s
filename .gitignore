@@ -1,28 +1,27 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-build_temp/
-dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
-
-# Credentials
-.kubeconfig
-
-# Go build artifacts
-bin/
-main
-manager
+# Binaries for programs and plugins
 *.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/*
+Dockerfile.cross
 
-# IDE files
-.idea/
-.vscode/
+# Test binary, built with `go test -c`
+*.test
 
-# Temporary files
-*.tmp
-*.temp
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Go workspace file
+go.work
+
+# Kubernetes Generated files - skip generated files, except for vendored files
+!vendor/**/zz_generated.*
+
+# editor and IDE paraphernalia
+.idea
+.vscode
+*.swp
+*.swo
+*~

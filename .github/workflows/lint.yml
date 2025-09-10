@@ -1,57 +1,23 @@
-name: lint
+name: Lint
 
 on:
-  workflow_call:
-    inputs:
-      working-directory:
-        required: false
-        type: string
-        default: '.'
+  push:
+  pull_request:
 
 jobs:
   lint:
-    name: Lint Python
+    name: Run on Ubuntu
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ['3.12']
     steps:
-      - name: Checkout code
+      - name: Clone the code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          go-version-file: go.mod
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-
-      - name: Install dependencies
-        run: uv sync
-        working-directory: ${{ inputs.working-directory }}
-
-      - name: Verify ruff check
-        run: uv run ruff check
-        working-directory: ${{ inputs.working-directory }}
-
-      - name: Verify ruff format has been run
-        run: uv run --script scripts/verify_format.py .
-        working-directory: ${{ inputs.working-directory }}
-
-      - name: Verify mypy
-        run: uv run mypy
-        working-directory: ${{ inputs.working-directory }}
-
-  lint-helm:
-    name: Helm validation
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Helm
-        uses: ./.github/actions/install-helm
-      
-      - name: Lint Helm chart
-        run: helm lint --strict helm/jupyter-k8s
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.3.0

@@ -1,0 +1,25 @@
+apiVersion: servers.jupyter.org/v1alpha1
+kind: JupyterServer
+metadata:
+  labels:
+    app.kubernetes.io/name: jupyter-k8s
+    app.kubernetes.io/managed-by: kustomize
+  name: jupyterserver-sample
+spec:
+  # Name of the server
+  displayName: sample-running
+  # Container image to use
+  # Using the built-in 'uv' image shortcut
+  image: uv
+  # Desired operational status (Running or Stopped)
+  desiredStatus: Running
+  # Optional: Service account name for the pod
+  serviceAccountName: default
+  # Optional: Resource requirements
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"

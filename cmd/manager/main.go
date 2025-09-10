@@ -1,3 +1,4 @@
+// entry point for the jupyter-k8s operator manager
 package main
 
 import (
@@ -5,9 +6,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jupyter-k8s/jupyter-k8s/api/v1alpha1"
-	"github.com/jupyter-k8s/jupyter-k8s/internal/controller"
-	
+	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -25,15 +26,15 @@ var (
 func init() {
 	// Add Kubernetes core schemes
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	
+
 	// Add custom resource schemes
-	utilruntime.Must(v1alpha1.AddToScheme(scheme))
+	utilruntime.Must(serversv1alpha1.AddToScheme(scheme))
 }
 
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
-	
+
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
@@ -54,8 +55,8 @@ func main() {
 
 	// Create a new manager
 	mgr, err := manager.New(cfg, manager.Options{
-		Scheme:           scheme,
-		LeaderElection:   enableLeaderElection,
+		Scheme:         scheme,
+		LeaderElection: enableLeaderElection,
 		// TODO: Add hash/random suffix to LeaderElectionID to prevent conflicts
 		// Other operators use patterns like "jupyter-k8s-controller-<hash>" to ensure
 		// uniqueness when multiple operators might be deployed in the same cluster

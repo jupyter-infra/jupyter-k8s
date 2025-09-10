@@ -4,14 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jupyter-k8s/jupyter-k8s/api/v1alpha1"
+	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // ResourceManager handles CRUD operations for Kubernetes resources
@@ -23,9 +23,9 @@ type ResourceManager struct {
 }
 
 // NewResourceManager creates a new ResourceManager
-func NewResourceManager(client client.Client, deploymentBuilder *DeploymentBuilder, serviceBuilder *ServiceBuilder, statusManager *StatusManager) *ResourceManager {
+func NewResourceManager(k8sClient client.Client, deploymentBuilder *DeploymentBuilder, serviceBuilder *ServiceBuilder, statusManager *StatusManager) *ResourceManager {
 	return &ResourceManager{
-		client:            client,
+		client:            k8sClient,
 		deploymentBuilder: deploymentBuilder,
 		serviceBuilder:    serviceBuilder,
 		statusManager:     statusManager,
@@ -33,7 +33,7 @@ func NewResourceManager(client client.Client, deploymentBuilder *DeploymentBuild
 }
 
 // GetDeployment retrieves the deployment for a JupyterServer
-func (rm *ResourceManager) GetDeployment(ctx context.Context, jupyterServer *v1alpha1.JupyterServer) (*appsv1.Deployment, error) {
+func (rm *ResourceManager) getDeployment(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*appsv1.Deployment, error) {
 	deployment := &appsv1.Deployment{}
 	deploymentName := GenerateDeploymentName(jupyterServer.Name)
 
@@ -46,7 +46,7 @@ func (rm *ResourceManager) GetDeployment(ctx context.Context, jupyterServer *v1a
 }
 
 // GetService retrieves the service for a JupyterServer
-func (rm *ResourceManager) GetService(ctx context.Context, jupyterServer *v1alpha1.JupyterServer) (*corev1.Service, error) {
+func (rm *ResourceManager) getService(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*corev1.Service, error) {
 	service := &corev1.Service{}
 	serviceName := GenerateServiceName(jupyterServer.Name)
 
@@ -59,8 +59,8 @@ func (rm *ResourceManager) GetService(ctx context.Context, jupyterServer *v1alph
 }
 
 // CreateDeployment creates a new deployment for the JupyterServer
-func (rm *ResourceManager) CreateDeployment(ctx context.Context, jupyterServer *v1alpha1.JupyterServer) (*appsv1.Deployment, error) {
-	logger := log.FromContext(ctx)
+func (rm *ResourceManager) createDeployment(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*appsv1.Deployment, error) {
+	logger := logf.FromContext(ctx)
 
 	deployment, err := rm.deploymentBuilder.BuildDeployment(jupyterServer)
 	if err != nil {
@@ -75,15 +75,15 @@ func (rm *ResourceManager) CreateDeployment(ctx context.Context, jupyterServer *
 		return nil, fmt.Errorf("failed to create deployment: %w", err)
 	}
 
-	logger.Info("Successfully created Deployment",
+	logger.Info("Successfully initiated creating of Deployment",
 		"deployment", deployment.Name)
 
 	return deployment, nil
 }
 
 // CreateService creates a new service for the JupyterServer
-func (rm *ResourceManager) CreateService(ctx context.Context, jupyterServer *v1alpha1.JupyterServer) (*corev1.Service, error) {
-	logger := log.FromContext(ctx)
+func (rm *ResourceManager) createService(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*corev1.Service, error) {
+	logger := logf.FromContext(ctx)
 
 	service, err := rm.serviceBuilder.BuildService(jupyterServer)
 	if err != nil {
@@ -98,15 +98,15 @@ func (rm *ResourceManager) CreateService(ctx context.Context, jupyterServer *v1a
 		return nil, fmt.Errorf("failed to create service: %w", err)
 	}
 
-	logger.Info("Successfully created Service",
+	logger.Info("Successfully initated creation of Service",
 		"service", service.Name)
 
 	return service, nil
 }
 
 // DeleteDeployment deletes the deployment for a JupyterServer
-func (rm *ResourceManager) DeleteDeployment(ctx context.Context, deployment *appsv1.Deployment) error {
-	logger := log.FromContext(ctx)
+func (rm *ResourceManager) deleteDeployment(ctx context.Context, deployment *appsv1.Deployment) error {
+	logger := logf.FromContext(ctx)
 
 	logger.Info("Deleting Deployment",
 		"deployment", deployment.Name,
@@ -116,15 +116,15 @@ func (rm *ResourceManager) DeleteDeployment(ctx context.Context, deployment *app
 		return fmt.Errorf("failed to delete deployment: %w", err)
 	}
 
-	logger.Info("Successfully deleted Deployment",
+	logger.Info("Successfully initiated deletion of Deployment",
 		"deployment", deployment.Name)
 
 	return nil
 }
 
 // DeleteService deletes the service for a JupyterServer
-func (rm *ResourceManager) DeleteService(ctx context.Context, service *corev1.Service) error {
-	logger := log.FromContext(ctx)
+func (rm *ResourceManager) deleteService(ctx context.Context, service *corev1.Service) error {
+	logger := logf.FromContext(ctx)
 
 	logger.Info("Deleting Service",
 		"service", service.Name,
@@ -134,18 +134,72 @@ func (rm *ResourceManager) DeleteService(ctx context.Context, service *corev1.Se
 		return fmt.Errorf("failed to delete service: %w", err)
 	}
 
-	logger.Info("Successfully deleted Service",
+	logger.Info("Successfully initiated deletion of Service",
 		"service", service.Name)
 
 	return nil
 }
 
+// IsDeploymentAvailable checks if the Deployment is considered available
+// based on its status conditions
+func (rm *ResourceManager) IsDeploymentAvailable(deployment *appsv1.Deployment) bool {
+	// If deployment is nil, it's not available
+	if deployment == nil {
+		return false
+	}
+
+	// Check if the deployment has the Available condition set to True
+	for _, condition := range deployment.Status.Conditions {
+		if condition.Type == appsv1.DeploymentAvailable {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+
+	// Fallback: also check the replica counts to determine availability
+	// This is useful if the conditions aren't updated yet but replicas are running
+	return deployment.Status.AvailableReplicas > 0 &&
+		deployment.Status.ReadyReplicas >= *deployment.Spec.Replicas
+}
+
+// IsDeploymentMissingOrDeleting checks if the Deployment is either missing (nil)
+// or in the process of being deleted
+func (rm *ResourceManager) IsDeploymentMissingOrDeleting(deployment *appsv1.Deployment) bool {
+	// If deployment is nil, it's missing
+	if deployment == nil {
+		return true
+	}
+
+	// Check if the deployment has a deletion timestamp (is being deleted)
+	return !deployment.DeletionTimestamp.IsZero()
+}
+
+// IsServiceAvailable checks if the Service has acquired an IP address
+func (rm *ResourceManager) IsServiceAvailable(service *corev1.Service) bool {
+	// If service is nil, it's not available
+	if service == nil {
+		return false
+	}
+
+	if service.Spec.Type == corev1.ServiceTypeLoadBalancer {
+		return len(service.Status.LoadBalancer.Ingress) > 0
+	}
+
+	// For any other type of service, assume it is available as soon as it's created
+	return true
+}
+
+// IsServiceMissingOrDeleting checks if the Service is either missing (nil)
+// or in the process of being deleted
+func (rm *ResourceManager) IsServiceMissingOrDeleting(service *corev1.Service) bool {
+	return service == nil
+}
+
 // EnsureDeploymentExists creates a deployment if it doesn't exist
-func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, jupyterServer *v1alpha1.JupyterServer) (*appsv1.Deployment, error) {
-	deployment, err := rm.GetDeployment(ctx, jupyterServer)
+func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*appsv1.Deployment, error) {
+	deployment, err := rm.getDeployment(ctx, jupyterServer)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return rm.CreateDeployment(ctx, jupyterServer)
+			return rm.createDeployment(ctx, jupyterServer)
 		}
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
@@ -153,13 +207,44 @@ func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, jupyterSe
 }
 
 // EnsureServiceExists creates a service if it doesn't exist
-func (rm *ResourceManager) EnsureServiceExists(ctx context.Context, jupyterServer *v1alpha1.JupyterServer) (*corev1.Service, error) {
-	service, err := rm.GetService(ctx, jupyterServer)
+func (rm *ResourceManager) EnsureServiceExists(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*corev1.Service, error) {
+	service, err := rm.getService(ctx, jupyterServer)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return rm.CreateService(ctx, jupyterServer)
+			return rm.createService(ctx, jupyterServer)
 		}
 		return nil, fmt.Errorf("failed to get service: %w", err)
+	}
+	return service, nil
+}
+
+// EnsureDeploymentDeleted initiates deletion, or returns the deployment if it is already being deleted
+func (rm *ResourceManager) EnsureDeploymentDeleted(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*appsv1.Deployment, error) {
+	deployment, err := rm.getDeployment(ctx, jupyterServer)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	if !rm.IsDeploymentMissingOrDeleting(deployment) {
+		return deployment, rm.deleteDeployment(ctx, deployment)
+	}
+	return deployment, nil
+}
+
+// EnsureServiceDeleted initiates deletion, or returns the service if it is already being deleted
+func (rm *ResourceManager) EnsureServiceDeleted(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*corev1.Service, error) {
+	service, err := rm.getService(ctx, jupyterServer)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get service: %w", err)
+	}
+	if !rm.IsServiceMissingOrDeleting(service) {
+		return service, rm.deleteService(ctx, service)
 	}
 	return service, nil
 }
