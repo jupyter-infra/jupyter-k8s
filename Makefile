@@ -14,6 +14,7 @@ endif
 # tools. (i.e. podman)
 CONTAINER_TOOL ?= finch
 BUILD_OPTS :=
+CLOUD_PROVIDER :=
 
 # Use Finch as the container provider for Kind when using Finch
 # Update goproxy for cloud desktop compatibility
@@ -24,6 +25,16 @@ ifeq ($(CONTAINER_TOOL),finch)
   # Set BUILD_OPTS to '--network host' on cloud desktop (if /etc/os-release exists), otherwise empty
   # You might have to comment BUILD_OPTS out for devdesktop
   BUILD_OPTS := $(shell if [ -f /etc/os-release ]; then echo "--network host"; else echo ""; fi)
+endif
+
+# Remote cluster configuration
+ifeq ($(CLOUD_PROVIDER),aws)
+	REMOTE_KUBECONFIG := $(shell pwd)/remote/.kubeconfig
+	AWS_REGION ?= us-west-2
+	AWS_ACCOUNT_ID := $(shell aws sts get-caller-identity --query "Account" --output text)
+	ECR_REGISTRY := $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
+	ECR_REPOSITORY := jupyter-k8s
+	EKS_CLUSTER_NAME ?= jupyter-k8s-cluster
 endif
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
@@ -181,8 +192,9 @@ helm-build: build
 	kubebuilder edit --plugins=helm/v1-alpha
 
 .PHONY: helm-rebuild
-helm-build: build
+helm-rebuild: build
 	kubebuilder edit --plugins=helm/v1-alpha --force
+	./hack/apply-helm-patches.sh
 
 .PHONY: helm-package
 helm-package: helm-build ## Package the Helm chart
@@ -196,6 +208,75 @@ helm-lint: ## Lint the Helm chart
 helm-test: ## Test the Helm chart with helm template
 	rm -rf dist/test-output
 	helm template dist/chart --output-dir dist/test-output
+
+##@ Remote Deployment
+.PHONY: remote-setup-aws
+remote-setup-aws: ## Setup connection to remote cluster
+	@echo "Setting up remote cluster connection..."
+	mkdir -p remote/aws
+	@if [ -n "$(EKS_CLUSTER_NAME)" ]; then \
+		echo "Getting kubeconfig from EKS cluster $(EKS_CLUSTER_NAME)..."; \
+		aws eks update-kubeconfig \
+			--name $(EKS_CLUSTER_NAME) \
+			--region $(AWS_REGION) \
+			--kubeconfig $(REMOTE_KUBECONFIG); \
+	else \
+		echo "EKS_CLUSTER_NAME not provided. Please set it when running this command."; \
+		exit 1; \
+	fi
+	@echo "Creating ECR repository if it doesn't exist..."
+	aws ecr describe-repositories --repository-names $(ECR_REPOSITORY) --region $(AWS_REGION) || \
+	aws ecr create-repository --repository-name $(ECR_REPOSITORY) --region $(AWS_REGION)
+	@echo "Remote AWS setup complete. Remote kubeconfig at $(REMOTE_KUBECONFIG)"
+
+.PHONY: kubectl-remote-aws
+kubectl-remote-aws: ## Configure kubectl to use remote cluster
+	@echo "Setting up kubectl to use remote cluster..."
+	@if [ -f "$(REMOTE_KUBECONFIG)" ]; then \
+		{ \
+			echo "Adding remote context to kubectl config..."; \
+			mkdir -p ~/.kube; \
+			touch ~/.kube/config; \
+			KUBECONFIG="$(HOME)/.kube/config:$(REMOTE_KUBECONFIG)" kubectl config view --flatten > "$(HOME)/.kube/merged_config"; \
+			mv "$(HOME)/.kube/merged_config" "$(HOME)/.kube/config"; \
+			echo "Getting remote context name..."; \
+			REMOTE_CONTEXT=$$(KUBECONFIG="$(REMOTE_KUBECONFIG)" kubectl config current-context); \
+			echo "Switching to $$REMOTE_CONTEXT context..."; \
+			kubectl config use-context "$$REMOTE_CONTEXT"; \
+			echo "✅ kubectl configured to use remote cluster. Current context: $$(kubectl config current-context)"; \
+		}; \
+	else \
+		echo "❌ REMOTE_KUBECONFIG file not found at $(REMOTE_KUBECONFIG). Try running 'make remote-setup-aws CLOUD_PROVIDER=aws EKS_CLUSTER_NAME=your-cluster-name' first."; \
+		exit 1; \
+	fi
+	@echo "\nTest your connection with: kubectl get nodes"
+
+.PHONY: build-remote-aws
+build-remote-aws: manifests generate fmt vet ## Build and push container image to remote registry
+	@echo "Logging in to ECR..."
+	aws ecr get-login-password --region $(AWS_REGION) | $(CONTAINER_TOOL) login --username AWS --password-stdin $(ECR_REGISTRY)
+	@echo "Building and pushing controller image to AWS ECR..."
+	$(CONTAINER_TOOL) build $(BUILD_OPTS) --platform=linux/amd64 -t $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest .
+	$(CONTAINER_TOOL) push $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest
+	@echo "Image built and pushed successfully to $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest"
+
+.PHONY: helm-deploy-remote-aws
+helm-deploy-remote-aws: helm-build helm-package ## Deploy helm chart to remote cluster
+	@echo "Deploying Helm chart to remote AWS cluster..."
+	helm upgrade --install jk8s dist/chart \
+		--namespace jupyter-k8s-system --create-namespace \
+		--set controllerManager.container.image.repository=$(ECR_REGISTRY)/$(ECR_REPOSITORY) \
+		--set controllerManager.container.image.tag=latest \
+		--set application.imagePullPolicy=IfNotPresent \
+		--kubeconfig=$(REMOTE_KUBECONFIG) \
+		$(EXTRA_HELM_ARGS)
+	@echo "Helm chart deployed successfully to remote AWS cluster"
+
+.PHONY: remote-undeploy-aws
+remote-undeploy-aws: ## Undeploy helm chart from remote cluster
+	@echo "Undeploying Helm chart from remote cluster..."
+	helm uninstall jk8s --namespace jupyter-k8s-system --kubeconfig=$(REMOTE_KUBECONFIG) || true
+	@echo "Helm chart undeployed successfully from remote AWS cluster"
 
 ##@ Deployment
 
@@ -265,7 +346,7 @@ load-images: docker-build ## Build and load images into the Kind cluster
 
 .PHONY: deploy-kind
 deploy-kind: docker-build ## Build, load, and deploy controller to a kind cluster.
-	$(MAKE) deploy USE_KIND=true
+	$(MAKE) deploy USE_KIND=true EXTRA_HELM_ARGS="--set application.imagePullPolicy=Never"
 
 .PHONY: redeploy-kind
 redeploy-kind:

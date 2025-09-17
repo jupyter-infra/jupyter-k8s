@@ -1,0 +1,11 @@
+# [APPLICATION]: Application (JupyterServer) configuration
+application:
+  # Image pull policy for JupyterServer deployments (Always, IfNotPresent, or Never)
+  # This controls how the JupyterServer containers pull their images
+  imagePullPolicy: IfNotPresent
+
+    args:
+      - "--leader-elect"
+      - "--metrics-bind-address=:8443"
+      - "--health-probe-bind-address=:8081"
+      - "--application-image-pull-policy={{ .Values.application.imagePullPolicy }}"

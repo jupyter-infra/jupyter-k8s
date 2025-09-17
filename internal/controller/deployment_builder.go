@@ -15,13 +15,15 @@ import (
 
 // DeploymentBuilder handles creation of Deployment resources for JupyterServer
 type DeploymentBuilder struct {
-	scheme *runtime.Scheme
+	scheme  *runtime.Scheme
+	options JupyterServerControllerOptions
 }
 
 // NewDeploymentBuilder creates a new DeploymentBuilder
-func NewDeploymentBuilder(scheme *runtime.Scheme) *DeploymentBuilder {
+func NewDeploymentBuilder(scheme *runtime.Scheme, options JupyterServerControllerOptions) *DeploymentBuilder {
 	return &DeploymentBuilder{
-		scheme: scheme,
+		scheme:  scheme,
+		options: options,
 	}
 }
 
@@ -94,7 +96,7 @@ func (db *DeploymentBuilder) buildJupyterContainer(jupyterServer *serversv1alpha
 	return corev1.Container{
 		Name:            "jupyter",
 		Image:           image,
-		ImagePullPolicy: corev1.PullNever, // Use local images for development
+		ImagePullPolicy: db.options.ApplicationImagePullPolicy,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "http",

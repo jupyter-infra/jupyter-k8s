@@ -3,6 +3,7 @@
 # Build config
 CONTAINER_TOOL ?= finch
 BUILD_OPTS :=
+CLOUD_PROVIDER :=
 
 # Registry configuration
 # For local development with Kind, we use direct image references with no registry prefix
@@ -18,6 +19,16 @@ ifeq ($(CONTAINER_TOOL),finch)
   BUILD_OPTS := $(shell if [ -f /etc/os-release ]; then echo "--network host"; else echo ""; fi)
 endif
 DEV_KIND_CLUSTER ?= jupyter-k8s-dev
+
+# Remote cluster configuration
+ifeq ($(CLOUD_PROVIDER),aws)
+	REMOTE_KUBECONFIG := $(shell pwd)/../remote/.kubeconfig
+	AWS_REGION ?= us-west-2
+	AWS_ACCOUNT_ID := $(shell aws sts get-caller-identity --query "Account" --output text)
+	ECR_REGISTRY := $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
+	ECR_REPOSITORY_PREFIX := jupyter-k8s
+	EKS_CLUSTER_NAME ?= jupyter-k8s-cluster
+endif
 
 # Image versions
 TAG ?= latest
@@ -51,6 +62,27 @@ push-all: build-all
 		echo "REGISTRY not set, skipping push"; \
 	fi
 
+# Push all images to AWS ECR
+.PHONY: push-aws
+push-aws: build-all
+	@if [ "$(CLOUD_PROVIDER)" != "aws" ]; then \
+		echo "CLOUD_PROVIDER is not set to aws. Please run with CLOUD_PROVIDER=aws"; \
+		exit 1; \
+	fi
+	@echo "Logging in to ECR..."
+	aws ecr get-login-password --region $(AWS_REGION) | $(CONTAINER_TOOL) login --username AWS --password-stdin $(ECR_REGISTRY)
+	@echo "Creating ECR repositories if they don't exist..."
+	for img in $(IMAGES); do \
+		aws ecr describe-repositories --repository-names $(ECR_REPOSITORY_PREFIX)-$$img --region $(AWS_REGION) || \
+		aws ecr create-repository --repository-name $(ECR_REPOSITORY_PREFIX)-$$img --region $(AWS_REGION); \
+	done
+	@echo "Building and pushing images to AWS ECR..."
+	for img in $(IMAGES); do \
+		echo "Pushing $$img to ECR..."; \
+		$(CONTAINER_TOOL) tag $$img:$(TAG) $(ECR_REGISTRY)/$(ECR_REPOSITORY_PREFIX)-$$img:$(TAG); \
+		$(CONTAINER_TOOL) push $(ECR_REGISTRY)/$(ECR_REPOSITORY_PREFIX)-$$img:$(TAG); \
+	done
+
 # Load all images into kind cluster
 # CLUSTER_NAME can be overridden from command line
 CLUSTER_NAME ?= $(DEV_KIND_CLUSTER)
@@ -78,3 +110,22 @@ info:
 	@echo "Registry: $(REGISTRY)"
 	@echo "Tag: $(TAG)"
 	@echo "Images: $(IMAGES)"
+	@if [ "$(CLOUD_PROVIDER)" = "aws" ]; then \
+		echo "\nAWS Configuration:"; \
+		echo "  ECR Registry: $(ECR_REGISTRY)"; \
+		echo "  ECR Repository Prefix: $(ECR_REPOSITORY_PREFIX)"; \
+		echo "  AWS Region: $(AWS_REGION)"; \
+		echo "  EKS Cluster: $(EKS_CLUSTER_NAME)"; \
+	fi
+
+# AWS-specific targets
+.PHONY: aws-info
+aws-info:
+	@if [ "$(CLOUD_PROVIDER)" != "aws" ]; then \
+		echo "CLOUD_PROVIDER is not set to aws. Please run with CLOUD_PROVIDER=aws"; \
+		exit 1; \
+	fi
+	@echo "AWS ECR Images:"
+	for img in $(IMAGES); do \
+		echo "  $(ECR_REGISTRY)/$(ECR_REPOSITORY_PREFIX)-$$img:$(TAG)"; \
+	done
