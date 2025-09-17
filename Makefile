@@ -120,7 +120,7 @@ cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	esac
 
 .PHONY: lint
-lint: golangci-lint ## Run golangci-lint linter
+lint: golangci-lint helm-lint ## Run golangci-lint linter
 	$(GOLANGCI_LINT) run
 
 .PHONY: lint-fix
@@ -174,6 +174,28 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	mkdir -p dist
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
+
+##@ Helm Chart
+.PHONY: helm-build
+helm-build: build
+	kubebuilder edit --plugins=helm/v1-alpha
+
+.PHONY: helm-rebuild
+helm-build: build
+	kubebuilder edit --plugins=helm/v1-alpha --force
+
+.PHONY: helm-package
+helm-package: helm-build ## Package the Helm chart
+	helm package dist/chart -d dist
+
+.PHONY: helm-lint
+helm-lint: ## Lint the Helm chart
+	helm lint dist/chart
+
+.PHONY: helm-test
+helm-test: ## Test the Helm chart with helm template
+	rm -rf dist/test-output
+	helm template dist/chart --output-dir dist/test-output
 
 ##@ Deployment
 
