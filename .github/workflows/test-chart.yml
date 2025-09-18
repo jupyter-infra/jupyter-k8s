@@ -32,7 +32,7 @@ jobs:
       - name: Prepare jupyter-k8s
         run: |
           go mod tidy
-          make docker-build IMG=jupyter-k8s:v0.1.0
+          make docker-build IMG=jupyter-k8s:v0.1.0 CONTAINER_TOOL=docker
           kind load docker-image jupyter-k8s:v0.1.0
 
       - name: Install Helm
