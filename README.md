@@ -1,8 +1,13 @@
 # jupyter-k8s
-// TODO(user): Add simple overview of use/purpose
+Jupyter k8s is an open-source project that provides a secure-by-default but
+flexible way to run JupyterLab applications natively on Kubernetes.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+Jupyter k8s provides a Kubernetes custom operator to manage and run JupyterLab application
+on your Kubernetes cluster.
+
+It provides a set of custom resource definitions (CRDs) distributed as an helm chart, a controller image
+distributed on a docker repository, and a set of default application images distributed on docker repositories.
 
 ## Getting Started
 
@@ -14,7 +19,7 @@
 
 ### To setup a local Kind cluster
 ```sh
-make setup-test-e2e
+make setup-kind
 ```
 
 ### To Deploy on the cluster
@@ -71,6 +76,35 @@ make uninstall
 make undeploy
 ```
 
+**Teardown the kind cluster**
+```sh
+make teardown-kind
+```
+
+### Remote Cluster Testing on AWS
+
+**Setup**
+```sh
+make setup-aws
+```
+
+**NOTE:** the setup assumes that there exists an EKS cluster in your AWS account in region `us-west-2`
+whose name is `jupyter-k8s-cluster`. You can pass AWS_REGION or EKS_CLUSTER_NAME to all methods
+below to use a different config, e.g. `make setup AWS_REGION=us-east-1 EKS_CLUSTER_NAME=my-cluster`
+
+**Install on remote cluster**
+```sh
+make deploy-aws
+```
+
+**Testing**
+```sh
+kubectl apply -k config/samples/
+make port-forward
+kubectl delete -k config/samples/
+```
+
+
 ## Project Distribution
 
 Following the options to release and provide this solution to the users.
@@ -94,33 +128,61 @@ Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
 the project, i.e.:
 
 ```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/jupyter-k8s/<tag or branch>/dist/install.yaml
+kubectl apply -f https://raw.githubusercontent.com/jupyter-ai-contrib/jupyter-k8s/<tag or branch>/dist/install.yaml
 ```
 
 ### By providing a Helm Chart
 
-1. Build the chart using the optional helm plugin
+1. Generate the helm chart
 
 ```sh
-kubebuilder edit --plugins=helm/v1-alpha
+make helm-generate
 ```
 
 2. See that a chart was generated under 'dist/chart', and users
 can obtain this solution from there.
 
 **NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
+using the same command above to sync the latest changes.
+
+To review the effect of helm chart values substitution
+```sh
+make helm-test
+```
+Which writes the results at: `./dist/test-output`
+
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
 
 **NOTE:** Run `make help` for more information on all potential `make` targets
 
 More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
+
+**Compile the controller code**
+```sh
+make build
+```
+
+**Run the linter**
+```sh
+make lint
+```
+
+**Run the unit tests**
+```sh
+make test
+```
+
+**Generate the helm chart**
+```sh
+test helm-generate
+```
+
+**Run the end-to-end tests**
+```sh
+make test-e2e
+```
+
 
 ## License
 
