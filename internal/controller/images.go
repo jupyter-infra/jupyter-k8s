@@ -1,19 +1,23 @@
 package controller
 
-// Direct image references for built-in images
-// No registry prefix needed for local development with Kind
-// For production, update these with your registry prefix
+// Direct image references for built-in images without registry prefix
+// The registry will be added by the image resolver based on the environment
 
-// Image constants
+// Default tag
 const (
-	// Standard images
-	ImageJupyterUV = "docker.io/library/jupyter-uv:latest"
+	DefaultTag = "latest"
+)
+
+// Image constants - simple names without registry prefix
+const (
+	// Standard images - registry will be added at runtime
+	ImageJupyterUV = "jk8s-application-jupyter-uv:latest"
 
 	// Default image
 	DefaultJupyterImage = ImageJupyterUV
 )
 
-// Map of image shortcuts to full paths
+// Map of image shortcuts to image names
 var jupyterImages = map[string]string{
 	"uv": ImageJupyterUV,
 }

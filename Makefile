@@ -29,12 +29,12 @@ endif
 
 # Remote cluster configuration
 ifeq ($(CLOUD_PROVIDER),aws)
-	REMOTE_KUBECONFIG := $(shell pwd)/remote/.kubeconfig
 	AWS_REGION ?= us-west-2
 	AWS_ACCOUNT_ID := $(shell aws sts get-caller-identity --query "Account" --output text)
 	ECR_REGISTRY := $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
 	ECR_REPOSITORY := jupyter-k8s
 	EKS_CLUSTER_NAME ?= jupyter-k8s-cluster
+	EKS_CONTEXT := arn:aws:eks:$(AWS_REGION):$(AWS_ACCOUNT_ID):cluster/$(EKS_CLUSTER_NAME)
 endif
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
@@ -95,7 +95,7 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 
 # Cluster names for different environments
 KIND_CLUSTER ?= jupyter-k8s-test-e2e  # Used for automated e2e tests
-DEV_KIND_CLUSTER ?= jupyter-k8s-dev    # Used for manual development
+DEV_KIND_CLUSTER ?= jupyter-k8s-dev  # Used for manual development
 
 # Set this variable to true to use local kind cluster for deployment
 USE_KIND ?= false
@@ -116,7 +116,7 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -ginkgo.v
+	KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -ginkgo.v
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: cleanup-test-e2e
@@ -187,17 +187,13 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 
 ##@ Helm Chart
-.PHONY: helm-build
-helm-build: build
-	kubebuilder edit --plugins=helm/v1-alpha
-
-.PHONY: helm-rebuild
-helm-rebuild: build
+.PHONY: helm-generate
+helm-generate:
 	kubebuilder edit --plugins=helm/v1-alpha --force
 	./hack/apply-helm-patches.sh
 
 .PHONY: helm-package
-helm-package: helm-build ## Package the Helm chart
+helm-package: helm-generate ## Package the Helm chart
 	helm package dist/chart -d dist
 
 .PHONY: helm-lint
@@ -209,77 +205,8 @@ helm-test: ## Test the Helm chart with helm template
 	rm -rf dist/test-output
 	helm template dist/chart --output-dir dist/test-output
 
-##@ Remote Deployment
-.PHONY: remote-setup-aws
-remote-setup-aws: ## Setup connection to remote cluster
-	@echo "Setting up remote cluster connection..."
-	mkdir -p remote/aws
-	@if [ -n "$(EKS_CLUSTER_NAME)" ]; then \
-		echo "Getting kubeconfig from EKS cluster $(EKS_CLUSTER_NAME)..."; \
-		aws eks update-kubeconfig \
-			--name $(EKS_CLUSTER_NAME) \
-			--region $(AWS_REGION) \
-			--kubeconfig $(REMOTE_KUBECONFIG); \
-	else \
-		echo "EKS_CLUSTER_NAME not provided. Please set it when running this command."; \
-		exit 1; \
-	fi
-	@echo "Creating ECR repository if it doesn't exist..."
-	aws ecr describe-repositories --repository-names $(ECR_REPOSITORY) --region $(AWS_REGION) || \
-	aws ecr create-repository --repository-name $(ECR_REPOSITORY) --region $(AWS_REGION)
-	@echo "Remote AWS setup complete. Remote kubeconfig at $(REMOTE_KUBECONFIG)"
-
-.PHONY: kubectl-remote-aws
-kubectl-remote-aws: ## Configure kubectl to use remote cluster
-	@echo "Setting up kubectl to use remote cluster..."
-	@if [ -f "$(REMOTE_KUBECONFIG)" ]; then \
-		{ \
-			echo "Adding remote context to kubectl config..."; \
-			mkdir -p ~/.kube; \
-			touch ~/.kube/config; \
-			KUBECONFIG="$(HOME)/.kube/config:$(REMOTE_KUBECONFIG)" kubectl config view --flatten > "$(HOME)/.kube/merged_config"; \
-			mv "$(HOME)/.kube/merged_config" "$(HOME)/.kube/config"; \
-			echo "Getting remote context name..."; \
-			REMOTE_CONTEXT=$$(KUBECONFIG="$(REMOTE_KUBECONFIG)" kubectl config current-context); \
-			echo "Switching to $$REMOTE_CONTEXT context..."; \
-			kubectl config use-context "$$REMOTE_CONTEXT"; \
-			echo "✅ kubectl configured to use remote cluster. Current context: $$(kubectl config current-context)"; \
-		}; \
-	else \
-		echo "❌ REMOTE_KUBECONFIG file not found at $(REMOTE_KUBECONFIG). Try running 'make remote-setup-aws CLOUD_PROVIDER=aws EKS_CLUSTER_NAME=your-cluster-name' first."; \
-		exit 1; \
-	fi
-	@echo "\nTest your connection with: kubectl get nodes"
-
-.PHONY: build-remote-aws
-build-remote-aws: manifests generate fmt vet ## Build and push container image to remote registry
-	@echo "Logging in to ECR..."
-	aws ecr get-login-password --region $(AWS_REGION) | $(CONTAINER_TOOL) login --username AWS --password-stdin $(ECR_REGISTRY)
-	@echo "Building and pushing controller image to AWS ECR..."
-	$(CONTAINER_TOOL) build $(BUILD_OPTS) --platform=linux/amd64 -t $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest .
-	$(CONTAINER_TOOL) push $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest
-	@echo "Image built and pushed successfully to $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest"
-
-.PHONY: helm-deploy-remote-aws
-helm-deploy-remote-aws: helm-build helm-package ## Deploy helm chart to remote cluster
-	@echo "Deploying Helm chart to remote AWS cluster..."
-	helm upgrade --install jk8s dist/chart \
-		--namespace jupyter-k8s-system --create-namespace \
-		--set controllerManager.container.image.repository=$(ECR_REGISTRY)/$(ECR_REPOSITORY) \
-		--set controllerManager.container.image.tag=latest \
-		--set application.imagePullPolicy=IfNotPresent \
-		--kubeconfig=$(REMOTE_KUBECONFIG) \
-		$(EXTRA_HELM_ARGS)
-	@echo "Helm chart deployed successfully to remote AWS cluster"
-
-.PHONY: remote-undeploy-aws
-remote-undeploy-aws: ## Undeploy helm chart from remote cluster
-	@echo "Undeploying Helm chart from remote cluster..."
-	helm uninstall jk8s --namespace jupyter-k8s-system --kubeconfig=$(REMOTE_KUBECONFIG) || true
-	@echo "Helm chart undeployed successfully from remote AWS cluster"
 
 ##@ Deployment
-
 ifndef ignore-not-found
   ignore-not-found = false
 endif
@@ -294,6 +221,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+	@echo "Using kubectl context: $$(kubectl config current-context)"
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 	@if [ "$(USE_KIND)" = "true" ]; then \
@@ -316,6 +244,8 @@ setup-kind: ## Set up a Kind cluster for development if it does not exist
 			echo "Creating Kind cluster '$(DEV_KIND_CLUSTER)'..."; \
 			$(KIND) create cluster --name $(DEV_KIND_CLUSTER) ;; \
 	esac
+	@echo "Setting kubectl context to kind-$(DEV_KIND_CLUSTER)..."
+	kubectl config use-context kind-$(DEV_KIND_CLUSTER)
 	@if ! $(CONTAINER_TOOL) ps | grep -q "registry:2"; then \
 		echo "Setting up local Docker registry..."; \
 		$(CONTAINER_TOOL) run -d --restart=always -p 5000:5000 --name registry registry:2; \
@@ -326,7 +256,7 @@ setup-kind: ## Set up a Kind cluster for development if it does not exist
 .PHONY: teardown-kind
 teardown-kind: ## Tear down the Kind cluster, registry, and clean up images
 	# Delete the Kind cluster
-	kind delete cluster --name=$(DEV_KIND_CLUSTER)
+	$(KIND) delete cluster --name=$(DEV_KIND_CLUSTER)
 	# Stop and remove registry container if running
 	$(CONTAINER_TOOL) stop registry || true
 	$(CONTAINER_TOOL) rm registry || true
@@ -340,18 +270,106 @@ load-images: docker-build ## Build and load images into the Kind cluster
 	@echo "Loading controller image ${IMG} into kind cluster ${DEV_KIND_CLUSTER}..."
 	@mkdir -p /tmp/kind-images
 	$(CONTAINER_TOOL) save ${IMG} -o /tmp/kind-images/controller.tar
-	kind load image-archive /tmp/kind-images/controller.tar --name $(DEV_KIND_CLUSTER)
+	$(KIND) load image-archive /tmp/kind-images/controller.tar --name $(DEV_KIND_CLUSTER)
 	rm -f /tmp/kind-images/controller.tar
 	$(MAKE) -C images push-all-kind CLUSTER_NAME=$(DEV_KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL)
 
+.PHONY: kubectl-kind
+kubectl-kind: ## Configure kubectl to use kind cluster
+	@echo "Setting kubectl context to kind-$(DEV_KIND_CLUSTER)..."
+	@if kubectl config get-contexts | grep -q "kind-$(DEV_KIND_CLUSTER)"; then \
+		kubectl config use-context kind-$(DEV_KIND_CLUSTER); \
+		echo "✅ kubectl configured to use kind cluster. Current context: $$(kubectl config current-context)"; \
+	else \
+		echo "❌ kind-$(DEV_KIND_CLUSTER) context not found. Try running 'make setup-kind' first."; \
+		exit 1; \
+	fi
+	@echo "Checking connection to kind cluster..."
+	@kubectl cluster-info || { \
+		echo "❌ Cannot connect to kind cluster. There might be an issue with your kubeconfig or the cluster might not be running."; \
+		echo "Try running 'make setup-kind' to recreate the cluster."; \
+		exit 1; \
+	}
+
 .PHONY: deploy-kind
-deploy-kind: docker-build ## Build, load, and deploy controller to a kind cluster.
-	$(MAKE) deploy USE_KIND=true EXTRA_HELM_ARGS="--set application.imagePullPolicy=Never"
+deploy-kind: docker-build kubectl-kind ## Build, load, and deploy controller to a kind cluster.
+	$(MAKE) deploy USE_KIND=true EXTRA_HELM_ARGS="--set application.imagesPullPolicy=Never --set application.imagesRegistry='docker.io/library'"
 
 .PHONY: redeploy-kind
-redeploy-kind:
+redeploy-kind: kubectl-kind
 	$(KUBECTL) delete deployment jupyter-k8s-controller-manager -n jupyter-k8s-system
 	$(MAKE) deploy-kind
+
+
+##@ AWS Deployment
+setup-aws-internal: ## Setup connection to remote cluster
+	@echo "Setting up remote cluster connection..."
+	@if [ -n "$(EKS_CLUSTER_NAME)" ]; then \
+		echo "Getting kubeconfig from EKS cluster $(EKS_CLUSTER_NAME)..."; \
+		aws eks update-kubeconfig \
+			--name $(EKS_CLUSTER_NAME) \
+			--region $(AWS_REGION); \
+	else \
+		echo "EKS_CLUSTER_NAME not provided. Please set it when running this command."; \
+		exit 1; \
+	fi
+	@echo "Creating ECR repository if it doesn't exist..."
+	aws ecr describe-repositories --repository-names $(ECR_REPOSITORY) --region $(AWS_REGION) > /dev/null || \
+	aws ecr create-repository --repository-name $(ECR_REPOSITORY) --region $(AWS_REGION)
+	@echo "Remote AWS setup complete. Credentials added to ~/.kube/config"
+
+.PHONY: setup-aws
+setup-aws:
+	$(MAKE) setup-aws-internal CLOUD_PROVIDER=aws
+
+kubectl-aws-internal: ## Configure kubectl to use remote cluster
+	@echo "Setting up kubectl to use remote cluster..."
+	@if kubectl config get-contexts | grep -q "$(EKS_CLUSTER_NAME)"; then \
+		echo "Switching to EKS cluster context..."; \
+		kubectl config use-context "$(EKS_CONTEXT)"; \
+		echo "✅ kubectl configured to use remote cluster. Current context: $$(kubectl config current-context)"; \
+	else \
+		echo "❌ EKS cluster context not found. Try running 'make setup-aws CLOUD_PROVIDER=aws EKS_CLUSTER_NAME=your-cluster-name' first."; \
+		exit 1; \
+	fi
+	@echo "\nTest your connection with: kubectl get nodes"
+
+.PHONY: kubectl-aws
+kubectl-aws:
+	$(MAKE) kubectl-aws-internal CLOUD_PROVIDER=aws
+
+load-images-aws-internal: manifests generate fmt vet ## Build and push container images to remote registry
+	@echo "Logging in to ECR..."
+	aws ecr get-login-password --region $(AWS_REGION) | $(CONTAINER_TOOL) login --username AWS --password-stdin $(ECR_REGISTRY)
+
+	@echo "Building controller image..."
+	$(CONTAINER_TOOL) build $(BUILD_OPTS) --platform=linux/amd64 -t $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest .
+	$(CONTAINER_TOOL) push $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest
+	@echo "Controller image built and pushed successfully to $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest"
+
+	@echo "Building application images..."
+	$(MAKE) -C images push-all-aws CLOUD_PROVIDER=aws CONTAINER_TOOL=$(CONTAINER_TOOL)
+	@echo "All images built and pushed successfully to $(ECR_REGISTRY)"
+
+.PHONY: load-images-aws
+load-images-aws:
+	$(MAKE) load-images-aws-internal CLOUD_PROVIDER=aws
+
+deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remote cluster
+	@echo "Deploying Helm chart to remote AWS cluster..."
+	helm upgrade --install jk8s dist/chart \
+		--namespace jupyter-k8s-system --create-namespace \
+		--set controllerManager.container.image.repository=$(ECR_REGISTRY)/$(ECR_REPOSITORY) \
+		--set controllerManager.container.image.tag=latest \
+		--set application.imagesPullPolicy=IfNotPresent \
+		--set application.imagesRegistry=$(ECR_REGISTRY) \
+		$(EXTRA_HELM_ARGS)
+	@echo "Helm chart deployed successfully to remote AWS cluster"
+
+.PHONY: helm-deploy-aws
+deploy-aws:
+	$(MAKE) deploy-aws-internal CLOUD_PROVIDER=aws
+
 
 # Port forward to a specific Jupyter server
 .PHONY: port-forward
@@ -366,9 +384,9 @@ port-forward:
 	fi; \
 	echo "Port forwarding to jupyter-$$SERVER_NAME-service..."; \
 	if [ "$(uname)" = "Darwin" ]; then \
-		echo "Setting up port with localhost for laptop developpment..."; \
+		echo "Setting up port with localhost for laptop development..."; \
 		echo "Proxy available at http://localhost:8888/ (routes to web app and API)"; \
-		$(KUBECLT) port-forward service/jupyter-$$SERVER_NAME-service 8888:8888; \
+		$(KUBECTL) port-forward service/jupyter-$$SERVER_NAME-service 8888:8888; \
 	else \
 		echo "Setting up port forwarding using hostname for desktop development..."; \
 		HOST=$$(hostname -f); \

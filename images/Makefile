@@ -26,7 +26,6 @@ ifeq ($(CLOUD_PROVIDER),aws)
 	AWS_REGION ?= us-west-2
 	AWS_ACCOUNT_ID := $(shell aws sts get-caller-identity --query "Account" --output text)
 	ECR_REGISTRY := $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
-	ECR_REPOSITORY_PREFIX := jupyter-k8s
 	EKS_CLUSTER_NAME ?= jupyter-k8s-cluster
 endif
 
@@ -34,6 +33,7 @@ endif
 TAG ?= latest
 
 # List of all images
+APPLICATION_IMAGE_PREFIX := jk8s-application
 IMAGES := jupyter-uv
 
 
@@ -46,7 +46,7 @@ build-all: $(IMAGES)
 jupyter-uv:
 	@echo "Building jupyter-uv image..."
 	$(CONTAINER_TOOL) build $(BUILD_OPTS) \
-		-t jupyter-uv:$(TAG) \
+		-t $(APPLICATION_IMAGE_PREFIX)-jupyter-uv:$(TAG) \
 		-f jupyter-uv/Dockerfile jupyter-uv
 
 
@@ -55,16 +55,16 @@ push-all: build-all
 	@if [ -n "$(REGISTRY)" ]; then \
 		echo "Pushing images to $(REGISTRY)..."; \
 		for img in $(IMAGES); do \
-			$(CONTAINER_TOOL) tag $$img:$(TAG) $(REGISTRY)/$$img:$(TAG); \
-			$(CONTAINER_TOOL) push $(REGISTRY)/$$img:$(TAG); \
+			$(CONTAINER_TOOL) tag $(APPLICATION_IMAGE_PREFIX)-$$img:$(TAG) $(REGISTRY)/$(APPLICATION_IMAGE_PREFIX)-$$img:$(TAG); \
+			$(CONTAINER_TOOL) push $(REGISTRY)/$(APPLICATION_IMAGE_PREFIX)-$$img:$(TAG); \
 		done; \
 	else \
 		echo "REGISTRY not set, skipping push"; \
 	fi
 
 # Push all images to AWS ECR
-.PHONY: push-aws
-push-aws: build-all
+.PHONY: push-all-aws
+push-all-aws: build-all
 	@if [ "$(CLOUD_PROVIDER)" != "aws" ]; then \
 		echo "CLOUD_PROVIDER is not set to aws. Please run with CLOUD_PROVIDER=aws"; \
 		exit 1; \
@@ -73,14 +73,14 @@ push-aws: build-all
 	aws ecr get-login-password --region $(AWS_REGION) | $(CONTAINER_TOOL) login --username AWS --password-stdin $(ECR_REGISTRY)
 	@echo "Creating ECR repositories if they don't exist..."
 	for img in $(IMAGES); do \
-		aws ecr describe-repositories --repository-names $(ECR_REPOSITORY_PREFIX)-$$img --region $(AWS_REGION) || \
-		aws ecr create-repository --repository-name $(ECR_REPOSITORY_PREFIX)-$$img --region $(AWS_REGION); \
+		aws ecr describe-repositories --repository-names $(APPLICATION_IMAGE_PREFIX)-$$img --region $(AWS_REGION) > /dev/null || \
+		aws ecr create-repository --repository-name $(APPLICATION_IMAGE_PREFIX)-$$img --region $(AWS_REGION); \
 	done
 	@echo "Building and pushing images to AWS ECR..."
 	for img in $(IMAGES); do \
-		echo "Pushing $$img to ECR..."; \
-		$(CONTAINER_TOOL) tag $$img:$(TAG) $(ECR_REGISTRY)/$(ECR_REPOSITORY_PREFIX)-$$img:$(TAG); \
-		$(CONTAINER_TOOL) push $(ECR_REGISTRY)/$(ECR_REPOSITORY_PREFIX)-$$img:$(TAG); \
+		echo "Pushing $(APPLICATION_IMAGE_PREFIX)-$$img to ECR..."; \
+		$(CONTAINER_TOOL) tag $(APPLICATION_IMAGE_PREFIX)-$$img:$(TAG) $(ECR_REGISTRY)/$(APPLICATION_IMAGE_PREFIX)-$$img:$(TAG); \
+		$(CONTAINER_TOOL) push $(ECR_REGISTRY)/$(APPLICATION_IMAGE_PREFIX)-$$img:$(TAG); \
 	done
 
 # Load all images into kind cluster
@@ -91,9 +91,9 @@ push-all-kind: build-all
 	@echo "Loading images into kind cluster $(CLUSTER_NAME)..."
 	@mkdir -p /tmp/kind-images
 	for img in $(IMAGES); do \
-		echo "Loading $$img:$(TAG) image..."; \
-		$(CONTAINER_TOOL) save $$img:$(TAG) -o /tmp/kind-images/$$img.tar; \
-		kind load image-archive /tmp/kind-images/$$img.tar --name $(CLUSTER_NAME) || echo "Warning: Failed to load $$img:$(TAG)"; \
+		echo "Loading $(APPLICATION_IMAGE_PREFIX)-$$img:$(TAG) image..."; \
+		$(CONTAINER_TOOL) save $(APPLICATION_IMAGE_PREFIX)-$$img:$(TAG) -o /tmp/kind-images/$$img.tar; \
+		kind load image-archive /tmp/kind-images/$$img.tar --name $(CLUSTER_NAME) || echo "Warning: Failed to load $(APPLICATION_IMAGE_PREFIX)-$$img:$(TAG)"; \
 		rm -f /tmp/kind-images/$$img.tar; \
 	done
 
@@ -102,7 +102,7 @@ push-all-kind: build-all
 clean:
 	@echo "Cleaning up local images..."
 	for img in $(IMAGES); do \
-		$(CONTAINER_TOOL) rmi $$img:$(TAG) || true; \
+		$(CONTAINER_TOOL) rmi $(APPLICATION_IMAGE_PREFIX)-$$img:$(TAG) || true; \
 	done
 
 # Show configured registry
@@ -113,7 +113,6 @@ info:
 	@if [ "$(CLOUD_PROVIDER)" = "aws" ]; then \
 		echo "\nAWS Configuration:"; \
 		echo "  ECR Registry: $(ECR_REGISTRY)"; \
-		echo "  ECR Repository Prefix: $(ECR_REPOSITORY_PREFIX)"; \
 		echo "  AWS Region: $(AWS_REGION)"; \
 		echo "  EKS Cluster: $(EKS_CLUSTER_NAME)"; \
 	fi
@@ -127,5 +126,5 @@ aws-info:
 	fi
 	@echo "AWS ECR Images:"
 	for img in $(IMAGES); do \
-		echo "  $(ECR_REGISTRY)/$(ECR_REPOSITORY_PREFIX)-$$img:$(TAG)"; \
+		echo "  $(ECR_REGISTRY)/$(APPLICATION_IMAGE_PREFIX)-$$img:$(TAG)"; \
 	done

@@ -59,35 +59,42 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
     # For values.yaml, we need more careful handling due to YAML structure
     echo "Applying patches to values.yaml..."
 
-    # First ensure we have the application section for pull policy configuration
-    if ! grep -q "application:" "${CHART_DIR}/values.yaml"; then
-        echo -e "\n# [APPLICATION]: Application (JupyterServer) configuration\napplication:\n  # Image pull policy for JupyterServer deployments (Always, IfNotPresent, or Never)\n  # This controls how the JupyterServer containers pull their images\n  imagePullPolicy: IfNotPresent" >> "${CHART_DIR}/values.yaml"
-    elif ! grep -q "application.imagePullPolicy:" "${CHART_DIR}/values.yaml"; then
-        # Add the pull policy to the application section
-        sed -i '/application:/a\  # Image pull policy for JupyterServer deployments (Always, IfNotPresent, or Never)\n  # This controls how the JupyterServer containers pull their images\n  imagePullPolicy: IfNotPresent' "${CHART_DIR}/values.yaml"
+    # Check if the application section already exists
+    if grep -q "^# \[APPLICATION\]" "${CHART_DIR}/values.yaml"; then
+        # Remove existing application section - from [APPLICATION] heading to the next section heading or end of file
+        sed -i '/^# \[APPLICATION\]/,/^# \[/{ /^# \[APPLICATION\]/d; /^# \[/!d; }' "${CHART_DIR}/values.yaml"
     fi
 
-    # Now handle the args section
-    if grep -q "args:" "${CHART_DIR}/values.yaml"; then
-        # First backup the current args section
-        ARGS_SECTION=$(sed -n '/args:/,/resources:/p' "${CHART_DIR}/values.yaml")
+    # Append the entire application configuration from the patch file
+    cat "${PATCHES_DIR}/values.yaml.patch" >> "${CHART_DIR}/values.yaml"
+fi
 
-        # Check if application-image-pull-policy arg exists
-        if echo "$ARGS_SECTION" | grep -q -- "--application-image-pull-policy"; then
-            # Update it to use the variable
-            sed -i '/--application-image-pull-policy/c\      - "--application-image-pull-policy={{ .Values.application.imagePullPolicy }}"' "${CHART_DIR}/values.yaml"
+# Handle manager.yaml patch to add registry arguments
+if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
+    MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
+    if [ -f "${MANAGER_YAML}" ]; then
+        echo "Applying patch to manager.yaml..."
+        # Find the line with args: followed by the line with range
+        if grep -q "args:" "${MANAGER_YAML}" && grep -q "{{- range .Values.controllerManager.container.args }}" "${MANAGER_YAML}"; then
+            # Check if the patch is already applied
+            if ! grep -q "application-image-registry" "${MANAGER_YAML}"; then
+                # Replace the whole args block with our patched version
+                sed -i '/args:/,/command:/ {
+                    /command:/!d
+                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"
+                }' "${MANAGER_YAML}"
+            fi
         else
-            # Add the argument before resources section
-            sed -i '/resources:/i\      - "--application-image-pull-policy={{ .Values.application.imagePullPolicy }}"' "${CHART_DIR}/values.yaml"
+            echo "Warning: Could not find proper args section in manager.yaml"
         fi
     else
-        echo "Warning: args section not found in values.yaml"
+        echo "Warning: manager.yaml not found at ${MANAGER_YAML}"
     fi
 fi
 
 # Process any additional patch files
 for patch_file in "${PATCHES_DIR}"/*.patch; do
-    if [ -f "$patch_file" ] && [ "$(basename "$patch_file")" != "values.yaml.patch" ]; then
+    if [ -f "$patch_file" ] && [ "$(basename "$patch_file")" != "values.yaml.patch" ] && [ "$(basename "$patch_file")" != "manager.yaml.patch" ]; then
         file_name=$(basename "$patch_file" .patch)
         apply_patch "$file_name" "$(basename "$patch_file")"
     fi

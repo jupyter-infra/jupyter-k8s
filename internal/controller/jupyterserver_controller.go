@@ -33,8 +33,11 @@ import (
 
 // JupyterServerControllerOptions contains configuration options for the JupyterServer controller
 type JupyterServerControllerOptions struct {
-	// ApplicationImagePullPolicy defines how application container images should be pulled
-	ApplicationImagePullPolicy corev1.PullPolicy
+	// ApplicationImagesPullPolicy defines how application container images should be pulled
+	ApplicationImagesPullPolicy corev1.PullPolicy
+
+	// Registry is the prefix to use for all application images
+	ApplicationImagesRegistry string
 }
 
 // JupyterServerReconciler reconciles a JupyterServer object

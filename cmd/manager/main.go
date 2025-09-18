@@ -36,14 +36,17 @@ func init() {
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
-	var imagePullPolicy string
+	var applicationImagesPullPolicy string
+	var applicationImagesRegistry string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&imagePullPolicy, "application-image-pull-policy", "",
+	flag.StringVar(&applicationImagesPullPolicy, "application-images-pull-policy", "",
 		"Image pull policy for Application containers (Always, IfNotPresent, or Never)")
+	flag.StringVar(&applicationImagesRegistry, "application-images-registry", "",
+		"Registry prefix for application images (e.g. example.com/my-registry)")
 	flag.Parse()
 
 	// Setup logger
@@ -74,7 +77,8 @@ func main() {
 
 	// Configure controller options
 	controllerOpts := controller.JupyterServerControllerOptions{
-		ApplicationImagePullPolicy: getImagePullPolicy(imagePullPolicy),
+		ApplicationImagesPullPolicy: getImagePullPolicy(applicationImagesPullPolicy),
+		ApplicationImagesRegistry:   applicationImagesRegistry,
 	}
 
 	// Setup controllers

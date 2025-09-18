@@ -15,15 +15,17 @@ import (
 
 // DeploymentBuilder handles creation of Deployment resources for JupyterServer
 type DeploymentBuilder struct {
-	scheme  *runtime.Scheme
-	options JupyterServerControllerOptions
+	scheme        *runtime.Scheme
+	options       JupyterServerControllerOptions
+	imageResolver *ImageResolver
 }
 
 // NewDeploymentBuilder creates a new DeploymentBuilder
 func NewDeploymentBuilder(scheme *runtime.Scheme, options JupyterServerControllerOptions) *DeploymentBuilder {
 	return &DeploymentBuilder{
-		scheme:  scheme,
-		options: options,
+		scheme:        scheme,
+		options:       options,
+		imageResolver: NewImageResolver(options.ApplicationImagesRegistry),
 	}
 }
 
@@ -82,21 +84,13 @@ func (db *DeploymentBuilder) buildPodSpec(jupyterServer *serversv1alpha1.Jupyter
 
 // buildJupyterContainer creates the Jupyter container specification
 func (db *DeploymentBuilder) buildJupyterContainer(jupyterServer *serversv1alpha1.JupyterServer, resources corev1.ResourceRequirements) corev1.Container {
-	// Resolve image - either use direct image reference or lookup from predefined types
-	image := jupyterServer.Spec.Image
-
-	// If this is a built-in image shortcut, resolve to the full image path
-	image = GetImagePath(image)
-
-	// If no image is specified, use the default
-	if image == "" {
-		image = DefaultJupyterImage
-	}
+	// Use the image resolver to get the appropriate image reference
+	image := db.imageResolver.ResolveImage(jupyterServer)
 
 	return corev1.Container{
 		Name:            "jupyter",
 		Image:           image,
-		ImagePullPolicy: db.options.ApplicationImagePullPolicy,
+		ImagePullPolicy: db.options.ApplicationImagesPullPolicy,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "http",

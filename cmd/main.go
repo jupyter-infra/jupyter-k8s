@@ -65,7 +65,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
-	var imagePullPolicy string
+	var applicationImagesPullPolicy string
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -84,8 +84,11 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	flag.StringVar(&imagePullPolicy, "application-image-pull-policy", "",
+	flag.StringVar(&applicationImagesPullPolicy, "application-images-pull-policy", "",
 		"Image pull policy for Application containers (Always, IfNotPresent, or Never)")
+	var applicationImagesRegistry string
+	flag.StringVar(&applicationImagesRegistry, "application-images-registry", "",
+		"Registry prefix for application images (e.g. example.com/my-registry)")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -187,7 +190,8 @@ func main() {
 
 	// Configure controller options
 	controllerOpts := controller.JupyterServerControllerOptions{
-		ApplicationImagePullPolicy: getImagePullPolicy(imagePullPolicy),
+		ApplicationImagesPullPolicy: getImagePullPolicy(applicationImagesPullPolicy),
+		ApplicationImagesRegistry:   applicationImagesRegistry,
 	}
 
 	if err := controller.SetupJupyterServerController(mgr, controllerOpts); err != nil {
