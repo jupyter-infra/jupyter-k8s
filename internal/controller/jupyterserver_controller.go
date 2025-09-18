@@ -31,6 +31,15 @@ import (
 	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
+// JupyterServerControllerOptions contains configuration options for the JupyterServer controller
+type JupyterServerControllerOptions struct {
+	// ApplicationImagesPullPolicy defines how application container images should be pulled
+	ApplicationImagesPullPolicy corev1.PullPolicy
+
+	// Registry is the prefix to use for all application images
+	ApplicationImagesRegistry string
+}
+
 // JupyterServerReconciler reconciles a JupyterServer object
 type JupyterServerReconciler struct {
 	client.Client
@@ -95,13 +104,13 @@ func (r *JupyterServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// SetupJupyterServerController sets up the controller with the Manager
-func SetupJupyterServerController(mgr mngr.Manager) error {
+// SetupJupyterServerController sets up the controller with the Manager and specified options
+func SetupJupyterServerController(mgr mngr.Manager, options JupyterServerControllerOptions) error {
 	k8sClient := mgr.GetClient()
 	scheme := mgr.GetScheme()
 
-	// Create builders
-	deploymentBuilder := NewDeploymentBuilder(scheme)
+	// Create builders with options
+	deploymentBuilder := NewDeploymentBuilder(scheme, options)
 	serviceBuilder := NewServiceBuilder(scheme)
 
 	// Create managers

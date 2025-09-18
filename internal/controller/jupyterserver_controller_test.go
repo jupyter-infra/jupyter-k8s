@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -70,8 +71,14 @@ var _ = Describe("JupyterServer Controller", func() {
 			statusManager := StatusManager{
 				client: k8sClient,
 			}
+			options := JupyterServerControllerOptions{
+				ApplicationImagesPullPolicy: corev1.PullIfNotPresent,
+				ApplicationImagesRegistry:   "",
+			}
 			deploymentBuilder := DeploymentBuilder{
-				scheme: k8sClient.Scheme(),
+				scheme:        k8sClient.Scheme(),
+				options:       options,
+				imageResolver: NewImageResolver("docker.io/library"),
 			}
 			serviceBuilder := ServiceBuilder{
 				scheme: k8sClient.Scheme(),

@@ -1,0 +1,6 @@
+# [APPLICATION]: Application images configuration
+application:
+  # Image pull policy for JupyterServer deployments (Always, IfNotPresent, or Never)
+  # This controls how the JupyterServer containers pull their images
+  imagesPullPolicy: IfNotPresent
+  imagesRegistry: "docker.io/library"

@@ -6,6 +6,8 @@ cliVersion: 4.8.0
 domain: jupyter.org
 layout:
 - go.kubebuilder.io/v4
+plugins:
+  helm.kubebuilder.io/v1-alpha: {}
 projectName: jupyter-k8s
 repo: github.com/jupyter-ai-contrib/jupyter-k8s
 resources:
