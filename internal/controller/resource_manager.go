@@ -19,15 +19,17 @@ type ResourceManager struct {
 	client            client.Client
 	deploymentBuilder *DeploymentBuilder
 	serviceBuilder    *ServiceBuilder
+	pvcBuilder        *PVCBuilder
 	statusManager     *StatusManager
 }
 
 // NewResourceManager creates a new ResourceManager
-func NewResourceManager(k8sClient client.Client, deploymentBuilder *DeploymentBuilder, serviceBuilder *ServiceBuilder, statusManager *StatusManager) *ResourceManager {
+func NewResourceManager(k8sClient client.Client, deploymentBuilder *DeploymentBuilder, serviceBuilder *ServiceBuilder, pvcBuilder *PVCBuilder, statusManager *StatusManager) *ResourceManager {
 	return &ResourceManager{
 		client:            k8sClient,
 		deploymentBuilder: deploymentBuilder,
 		serviceBuilder:    serviceBuilder,
+		pvcBuilder:        pvcBuilder,
 		statusManager:     statusManager,
 	}
 }
@@ -56,6 +58,19 @@ func (rm *ResourceManager) getService(ctx context.Context, jupyterServer *server
 	}, service)
 
 	return service, err
+}
+
+// getPVC retrieves the PVC for a JupyterServer
+func (rm *ResourceManager) getPVC(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*corev1.PersistentVolumeClaim, error) {
+	pvc := &corev1.PersistentVolumeClaim{}
+	pvcName := GeneratePVCName(jupyterServer.Name)
+
+	err := rm.client.Get(ctx, types.NamespacedName{
+		Name:      pvcName,
+		Namespace: jupyterServer.Namespace,
+	}, pvc)
+
+	return pvc, err
 }
 
 // CreateDeployment creates a new deployment for the JupyterServer
@@ -102,6 +117,33 @@ func (rm *ResourceManager) createService(ctx context.Context, jupyterServer *ser
 		"service", service.Name)
 
 	return service, nil
+}
+
+// createPVC creates a new PVC for the JupyterServer
+func (rm *ResourceManager) createPVC(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*corev1.PersistentVolumeClaim, error) {
+	logger := logf.FromContext(ctx)
+
+	pvc, err := rm.pvcBuilder.BuildPVC(jupyterServer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build PVC: %w", err)
+	}
+
+	if pvc == nil {
+		return nil, nil // No storage requested
+	}
+
+	logger.Info("Creating PVC",
+		"pvc", pvc.Name,
+		"namespace", pvc.Namespace)
+
+	if err := rm.client.Create(ctx, pvc); err != nil {
+		return nil, fmt.Errorf("failed to create PVC: %w", err)
+	}
+
+	logger.Info("Successfully initiated creation of PVC",
+		"pvc", pvc.Name)
+
+	return pvc, nil
 }
 
 // DeleteDeployment deletes the deployment for a JupyterServer
@@ -247,4 +289,20 @@ func (rm *ResourceManager) EnsureServiceDeleted(ctx context.Context, jupyterServ
 		return service, rm.deleteService(ctx, service)
 	}
 	return service, nil
+}
+
+// EnsurePVCExists creates a PVC if it doesn't exist
+func (rm *ResourceManager) EnsurePVCExists(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*corev1.PersistentVolumeClaim, error) {
+	if jupyterServer.Spec.Storage == nil {
+		return nil, nil // No storage requested
+	}
+
+	pvc, err := rm.getPVC(ctx, jupyterServer)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return rm.createPVC(ctx, jupyterServer)
+		}
+		return nil, fmt.Errorf("failed to get PVC: %w", err)
+	}
+	return pvc, nil
 }

@@ -74,12 +74,28 @@ func (db *DeploymentBuilder) buildDeploymentSpec(jupyterServer *serversv1alpha1.
 
 // buildPodSpec creates the pod specification
 func (db *DeploymentBuilder) buildPodSpec(jupyterServer *serversv1alpha1.JupyterServer, resources corev1.ResourceRequirements) corev1.PodSpec {
-	return corev1.PodSpec{
+	podSpec := corev1.PodSpec{
 		Containers: []corev1.Container{
 			db.buildJupyterContainer(jupyterServer, resources),
 		},
 		// TODO: Add security context, service account, etc.
 	}
+
+	// Add volume if storage is configured
+	if jupyterServer.Spec.Storage != nil {
+		podSpec.Volumes = []corev1.Volume{
+			{
+				Name: "jupyter-storage",
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: GeneratePVCName(jupyterServer.Name),
+					},
+				},
+			},
+		}
+	}
+
+	return podSpec
 }
 
 // buildJupyterContainer creates the Jupyter container specification
@@ -87,7 +103,7 @@ func (db *DeploymentBuilder) buildJupyterContainer(jupyterServer *serversv1alpha
 	// Use the image resolver to get the appropriate image reference
 	image := db.imageResolver.ResolveImage(jupyterServer)
 
-	return corev1.Container{
+	container := corev1.Container{
 		Name:            "jupyter",
 		Image:           image,
 		ImagePullPolicy: db.options.ApplicationImagesPullPolicy,
@@ -99,8 +115,25 @@ func (db *DeploymentBuilder) buildJupyterContainer(jupyterServer *serversv1alpha
 			},
 		},
 		Resources: resources,
-		// TODO: Add environment variables, volume mounts, probes
+		// TODO: Add environment variables, probes
 	}
+
+	// Add volume mount if storage is configured
+	if jupyterServer.Spec.Storage != nil {
+		mountPath := jupyterServer.Spec.Storage.MountPath
+		if mountPath == "" {
+			mountPath = DefaultMountPath
+		}
+
+		container.VolumeMounts = []corev1.VolumeMount{
+			{
+				Name:      "jupyter-storage",
+				MountPath: mountPath,
+			},
+		}
+	}
+
+	return container
 }
 
 // parseResourceRequirements extracts and validates resource requirements

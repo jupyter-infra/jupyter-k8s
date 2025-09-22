@@ -14,6 +14,9 @@ const (
 	// Network configuration
 	JupyterPort = 8888
 
+	// Storage configuration
+	DefaultMountPath = "/home/jovyan"
+
 	// Label keys
 	AppLabel           = "app"
 	JupyterServerLabel = "jupyterserver.servers.jupyter.org/name"
@@ -46,6 +49,11 @@ func GenerateDeploymentName(jupyterServerName string) string {
 // GenerateServiceName creates a consistent service name
 func GenerateServiceName(jupyterServerName string) string {
 	return fmt.Sprintf("jupyter-%s-service", jupyterServerName)
+}
+
+// GeneratePVCName creates a consistent PVC name
+func GeneratePVCName(jupyterServerName string) string {
+	return fmt.Sprintf("jupyter-%s-pvc", jupyterServerName)
 }
 
 // GenerateLabels creates consistent labels for resources
