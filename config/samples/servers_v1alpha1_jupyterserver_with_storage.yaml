@@ -1,0 +1,14 @@
+apiVersion: servers.jupyter.org/v1alpha1
+kind: JupyterServer
+metadata:
+  labels:
+    app.kubernetes.io/name: jupyter-k8s
+    app.kubernetes.io/managed-by: kustomize
+  name: jupyterserver-with-storage
+spec:
+  displayName: "Jupyter Server with Storage"
+  desiredStatus: "Running"
+  storage:
+    storageClassName: "standard"
+    size: "5Gi"
+    mountPath: "/home/jovyan/work"

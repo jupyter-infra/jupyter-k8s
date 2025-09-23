@@ -122,7 +122,17 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, jupyt
 	logger := logf.FromContext(ctx)
 	logger.Info("Attempting to bring JupyterServer status to 'Running'")
 
-	// Ensure deployment exists - this is an asynchronous operation
+	// Ensure PVC exists first (if storage is configured)
+	_, err := sm.resourceManager.EnsurePVCExists(ctx, jupyterServer)
+	if err != nil {
+		pvcErr := fmt.Errorf("failed to ensure PVC exists: %w", err)
+		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, jupyterServer, ReasonDeploymentError, pvcErr.Error()); statusErr != nil {
+			logger.Error(statusErr, "Failed to update error status")
+		}
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, pvcErr
+	}
+
+	// Ensure deployment exists
 	// EnsureDeploymentExists only ensures the API request is accepted by K8s
 	// It does not wait for the deployment to be fully ready
 	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, jupyterServer)

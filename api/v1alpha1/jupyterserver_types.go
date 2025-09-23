@@ -18,11 +18,30 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+// StorageSpec defines the storage configuration for JupyterServer
+type StorageSpec struct {
+	// StorageClassName specifies the storage class to use for persistent storage
+	// +optional
+	StorageClassName *string `json:"storageClassName,omitempty"`
+
+	// Size specifies the size of the persistent volume
+	// Supports standard Kubernetes resource quantities (e.g., "10Gi", "500Mi", "1Ti")
+	// Integer values without units are interpreted as bytes
+	// +kubebuilder:default="10Gi"
+	Size resource.Quantity `json:"size,omitempty"`
+
+	// MountPath specifies where to mount the persistent volume in the container
+	// Default is /home/jovyan (jovyan is the standard user in Jupyter images)
+	// +kubebuilder:default="/home/jovyan"
+	MountPath string `json:"mountPath,omitempty"`
+}
 
 // JupyterServerSpec defines the desired state of JupyterServer
 type JupyterServerSpec struct {
@@ -46,6 +65,10 @@ type JupyterServerSpec struct {
 
 	// Resources specifies the resource requirements
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// Storage specifies the storage configuration
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage is immutable"
+	Storage *StorageSpec `json:"storage,omitempty"`
 }
 
 // JupyterServerStatus defines the observed state of JupyterServer.

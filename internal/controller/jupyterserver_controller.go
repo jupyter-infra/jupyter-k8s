@@ -57,6 +57,7 @@ func (r *JupyterServerReconciler) SetStateMachine(sm *StateMachine) {
 // +kubebuilder:rbac:groups=servers.jupyter.org,resources=jupyterservers/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -101,6 +102,7 @@ func (r *JupyterServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Named("jupyterserver").
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
+		Owns(&corev1.PersistentVolumeClaim{}).
 		Complete(r)
 }
 
@@ -112,10 +114,11 @@ func SetupJupyterServerController(mgr mngr.Manager, options JupyterServerControl
 	// Create builders with options
 	deploymentBuilder := NewDeploymentBuilder(scheme, options)
 	serviceBuilder := NewServiceBuilder(scheme)
+	pvcBuilder := NewPVCBuilder(scheme)
 
 	// Create managers
 	statusManager := NewStatusManager(k8sClient)
-	resourceManager := NewResourceManager(k8sClient, deploymentBuilder, serviceBuilder, statusManager)
+	resourceManager := NewResourceManager(k8sClient, deploymentBuilder, serviceBuilder, pvcBuilder, statusManager)
 
 	// Create state machine
 	stateMachine := NewStateMachine(resourceManager, statusManager)

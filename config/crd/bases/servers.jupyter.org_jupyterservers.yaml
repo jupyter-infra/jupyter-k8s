@@ -127,6 +127,34 @@ spec:
                 description: ServiceAccountName specifies the ServiceAccount used
                   by the pod
                 type: string
+              storage:
+                description: Storage specifies the storage configuration
+                properties:
+                  mountPath:
+                    default: /home/jovyan
+                    description: |-
+                      MountPath specifies where to mount the persistent volume in the container
+                      Default is /home/jovyan (jovyan is the standard user in Jupyter images)
+                    type: string
+                  size:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    default: 10Gi
+                    description: |-
+                      Size specifies the size of the persistent volume
+                      Supports standard Kubernetes resource quantities (e.g., "10Gi", "500Mi", "1Ti")
+                      Integer values without units are interpreted as bytes
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  storageClassName:
+                    description: StorageClassName specifies the storage class to use
+                      for persistent storage
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: storage is immutable
+                  rule: self == oldSelf
             required:
             - displayName
             type: object
