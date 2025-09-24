@@ -1,5 +1,5 @@
 ## Append samples of your project ##
 resources:
-- servers_v1alpha1_jupyterserver.yaml
-- servers_v1alpha1_jupyterserver_stopped.yaml
+- servers_v1alpha1_workspace.yaml
+- servers_v1alpha1_workspace_stopped.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

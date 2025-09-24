@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 
 	corev1 "k8s.io/api/core/v1"
@@ -30,7 +30,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	// Add custom resource schemes
-	utilruntime.Must(serversv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(workspacesv1alpha1.AddToScheme(scheme))
 }
 
 func main() {
@@ -76,13 +76,13 @@ func main() {
 	}
 
 	// Configure controller options
-	controllerOpts := controller.JupyterServerControllerOptions{
+	controllerOpts := controller.WorkspaceControllerOptions{
 		ApplicationImagesPullPolicy: getImagePullPolicy(applicationImagesPullPolicy),
 		ApplicationImagesRegistry:   applicationImagesRegistry,
 	}
 
 	// Setup controllers
-	if err = controller.SetupJupyterServerController(mgr, controllerOpts); err != nil {
+	if err = controller.SetupWorkspaceController(mgr, controllerOpts); err != nil {
 		fmt.Printf("Error setting up controller: %v\n", err)
 		os.Exit(1)
 	}

@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// StateMachine handles the state transitions for JupyterServer
+// StateMachine handles the state transitions for Workspace
 type StateMachine struct {
 	resourceManager *ResourceManager
 	statusManager   *StatusManager
@@ -24,22 +24,22 @@ func NewStateMachine(resourceManager *ResourceManager, statusManager *StatusMana
 	}
 }
 
-// ReconcileDesiredState handles the state machine logic for JupyterServer
-func (sm *StateMachine) ReconcileDesiredState(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (ctrl.Result, error) {
+// ReconcileDesiredState handles the state machine logic for Workspace
+func (sm *StateMachine) ReconcileDesiredState(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
-	desiredStatus := sm.getDesiredStatus(jupyterServer)
+	desiredStatus := sm.getDesiredStatus(workspace)
 	logger.Info("Reconciling desired state", "desiredStatus", desiredStatus)
 
 	switch desiredStatus {
 	case "Stopped":
-		return sm.reconcileDesiredStoppedStatus(ctx, jupyterServer)
+		return sm.reconcileDesiredStoppedStatus(ctx, workspace)
 	case "Running":
-		return sm.reconcileDesiredRunningStatus(ctx, jupyterServer)
+		return sm.reconcileDesiredRunningStatus(ctx, workspace)
 	default:
 		err := fmt.Errorf("unknown desired status: %s", desiredStatus)
 		// Update error condition
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, jupyterServer, ReasonDeploymentError, err.Error()); statusErr != nil {
+		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, err.Error()); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
 		return ctrl.Result{RequeueAfter: LongRequeueDelay}, err
@@ -47,25 +47,25 @@ func (sm *StateMachine) ReconcileDesiredState(ctx context.Context, jupyterServer
 }
 
 // getDesiredStatus returns the desired status with default fallback
-func (sm *StateMachine) getDesiredStatus(jupyterServer *serversv1alpha1.JupyterServer) string {
-	if jupyterServer.Spec.DesiredStatus == "" {
+func (sm *StateMachine) getDesiredStatus(workspace *workspacesv1alpha1.Workspace) string {
+	if workspace.Spec.DesiredStatus == "" {
 		return DefaultDesiredStatus
 	}
-	return jupyterServer.Spec.DesiredStatus
+	return workspace.Spec.DesiredStatus
 }
 
-func (sm *StateMachine) reconcileDesiredStoppedStatus(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (ctrl.Result, error) {
+func (sm *StateMachine) reconcileDesiredStoppedStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
-	logger.Info("Attempting to bring JupyterServer status to 'Stopped'")
+	logger.Info("Attempting to bring Workspace status to 'Stopped'")
 
 	// Ensure deployment is deleted - this is an asynchronous operation
 	// EnsureDeploymentDeleted only ensures the delete API request is accepted by K8s
 	// It does not wait for the deployment to be fully removed
-	deployment, deploymentErr := sm.resourceManager.EnsureDeploymentDeleted(ctx, jupyterServer)
+	deployment, deploymentErr := sm.resourceManager.EnsureDeploymentDeleted(ctx, workspace)
 	if deploymentErr != nil {
 		err := fmt.Errorf("failed to get deployment: %w", deploymentErr)
 		// Update error condition
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, jupyterServer, ReasonDeploymentError, err.Error()); statusErr != nil {
+		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, err.Error()); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
@@ -74,11 +74,11 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(ctx context.Context, jupyt
 	// Ensure service is deleted - this is an asynchronous operation
 	// EnsureServiceDeleted only ensures the delete API request is accepted by K8s
 	// It does not wait for the service to be fully removed
-	service, serviceErr := sm.resourceManager.EnsureServiceDeleted(ctx, jupyterServer)
+	service, serviceErr := sm.resourceManager.EnsureServiceDeleted(ctx, workspace)
 	if serviceErr != nil {
 		err := fmt.Errorf("failed to get service: %w", serviceErr)
 		// Update error condition
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, jupyterServer, ReasonServiceError, err.Error()); statusErr != nil {
+		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonServiceError, err.Error()); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
@@ -92,7 +92,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(ctx context.Context, jupyt
 	if deploymentDeleted && serviceDeleted {
 		// Both resources are fully deleted, update to stopped status
 		logger.Info("Deployment and Service are both deleted, updating to Stopped status")
-		if err := sm.statusManager.UpdateStoppedStatus(ctx, jupyterServer); err != nil {
+		if err := sm.statusManager.UpdateStoppedStatus(ctx, workspace); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -102,7 +102,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(ctx context.Context, jupyt
 	// Update status to Stopping and requeue to check again later
 	if deploymentDeleted || serviceDeleted {
 		logger.Info("Resources still being deleted", "deploymentDeleted", deploymentDeleted, "serviceDeleted", serviceDeleted)
-		if err := sm.statusManager.UpdateStoppingStatus(ctx, jupyterServer, deploymentDeleted, serviceDeleted); err != nil {
+		if err := sm.statusManager.UpdateStoppingStatus(ctx, workspace, deploymentDeleted, serviceDeleted); err != nil {
 			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 		}
 		// Requeue to check deletion progress again later
@@ -112,21 +112,21 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(ctx context.Context, jupyt
 	// This should not happen, return an error
 	err := fmt.Errorf("unexpected state: both deployment and service should be in deletion process")
 	// Update error condition
-	if statusErr := sm.statusManager.UpdateErrorStatus(ctx, jupyterServer, ReasonDeploymentError, err.Error()); statusErr != nil {
+	if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, err.Error()); statusErr != nil {
 		logger.Error(statusErr, "Failed to update error status")
 	}
 	return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 }
 
-func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (ctrl.Result, error) {
+func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
-	logger.Info("Attempting to bring JupyterServer status to 'Running'")
+	logger.Info("Attempting to bring Workspace status to 'Running'")
 
 	// Ensure PVC exists first (if storage is configured)
-	_, err := sm.resourceManager.EnsurePVCExists(ctx, jupyterServer)
+	_, err := sm.resourceManager.EnsurePVCExists(ctx, workspace)
 	if err != nil {
 		pvcErr := fmt.Errorf("failed to ensure PVC exists: %w", err)
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, jupyterServer, ReasonDeploymentError, pvcErr.Error()); statusErr != nil {
+		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, pvcErr.Error()); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, pvcErr
@@ -135,11 +135,11 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, jupyt
 	// Ensure deployment exists
 	// EnsureDeploymentExists only ensures the API request is accepted by K8s
 	// It does not wait for the deployment to be fully ready
-	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, jupyterServer)
+	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace)
 	if err != nil {
 		deployErr := fmt.Errorf("failed to ensure deployment exists: %w", err)
 		// Update error condition
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, jupyterServer, ReasonDeploymentError, deployErr.Error()); statusErr != nil {
+		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, deployErr.Error()); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, deployErr
@@ -148,11 +148,11 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, jupyt
 	// Ensure service exists - this is an asynchronous operation
 	// EnsureServiceExists only ensures the API request is accepted by K8s
 	// It does not wait for the service to be fully ready
-	service, err := sm.resourceManager.EnsureServiceExists(ctx, jupyterServer)
+	service, err := sm.resourceManager.EnsureServiceExists(ctx, workspace)
 	if err != nil {
 		serviceErr := fmt.Errorf("failed to ensure service exists: %w", err)
 		// Update error condition
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, jupyterServer, ReasonServiceError, serviceErr.Error()); statusErr != nil {
+		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonServiceError, serviceErr.Error()); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, serviceErr
@@ -167,7 +167,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, jupyt
 	if deploymentReady && serviceReady {
 		// Both resources are ready, update to running status
 		logger.Info("Deployment and Service are both ready, updating to Running status")
-		if err := sm.statusManager.UpdateRunningStatus(ctx, jupyterServer); err != nil {
+		if err := sm.statusManager.UpdateRunningStatus(ctx, workspace); err != nil {
 			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 		}
 		return ctrl.Result{}, nil
@@ -177,7 +177,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, jupyt
 	// Update status to Starting and requeue to check again later
 	logger.Info("Resources not fully ready", "deploymentReady", deploymentReady, "serviceReady", serviceReady)
 	if err := sm.statusManager.UpdateStartingStatus(
-		ctx, jupyterServer, deploymentReady, serviceReady, deployment.GetName(), service.GetName()); err != nil {
+		ctx, workspace, deploymentReady, serviceReady, deployment.GetName(), service.GetName()); err != nil {
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 	}
 

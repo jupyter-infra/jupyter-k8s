@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,50 +34,50 @@ func NewResourceManager(k8sClient client.Client, deploymentBuilder *DeploymentBu
 	}
 }
 
-// GetDeployment retrieves the deployment for a JupyterServer
-func (rm *ResourceManager) getDeployment(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*appsv1.Deployment, error) {
+// GetDeployment retrieves the deployment for a Workspace
+func (rm *ResourceManager) getDeployment(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*appsv1.Deployment, error) {
 	deployment := &appsv1.Deployment{}
-	deploymentName := GenerateDeploymentName(jupyterServer.Name)
+	deploymentName := GenerateDeploymentName(workspace.Name)
 
 	err := rm.client.Get(ctx, types.NamespacedName{
 		Name:      deploymentName,
-		Namespace: jupyterServer.Namespace,
+		Namespace: workspace.Namespace,
 	}, deployment)
 
 	return deployment, err
 }
 
-// GetService retrieves the service for a JupyterServer
-func (rm *ResourceManager) getService(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*corev1.Service, error) {
+// GetService retrieves the service for a Workspace
+func (rm *ResourceManager) getService(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*corev1.Service, error) {
 	service := &corev1.Service{}
-	serviceName := GenerateServiceName(jupyterServer.Name)
+	serviceName := GenerateServiceName(workspace.Name)
 
 	err := rm.client.Get(ctx, types.NamespacedName{
 		Name:      serviceName,
-		Namespace: jupyterServer.Namespace,
+		Namespace: workspace.Namespace,
 	}, service)
 
 	return service, err
 }
 
-// getPVC retrieves the PVC for a JupyterServer
-func (rm *ResourceManager) getPVC(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*corev1.PersistentVolumeClaim, error) {
+// getPVC retrieves the PVC for a Workspace
+func (rm *ResourceManager) getPVC(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*corev1.PersistentVolumeClaim, error) {
 	pvc := &corev1.PersistentVolumeClaim{}
-	pvcName := GeneratePVCName(jupyterServer.Name)
+	pvcName := GeneratePVCName(workspace.Name)
 
 	err := rm.client.Get(ctx, types.NamespacedName{
 		Name:      pvcName,
-		Namespace: jupyterServer.Namespace,
+		Namespace: workspace.Namespace,
 	}, pvc)
 
 	return pvc, err
 }
 
-// CreateDeployment creates a new deployment for the JupyterServer
-func (rm *ResourceManager) createDeployment(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*appsv1.Deployment, error) {
+// CreateDeployment creates a new deployment for the Workspace
+func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*appsv1.Deployment, error) {
 	logger := logf.FromContext(ctx)
 
-	deployment, err := rm.deploymentBuilder.BuildDeployment(jupyterServer)
+	deployment, err := rm.deploymentBuilder.BuildDeployment(workspace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build deployment: %w", err)
 	}
@@ -96,11 +96,11 @@ func (rm *ResourceManager) createDeployment(ctx context.Context, jupyterServer *
 	return deployment, nil
 }
 
-// CreateService creates a new service for the JupyterServer
-func (rm *ResourceManager) createService(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*corev1.Service, error) {
+// CreateService creates a new service for the Workspace
+func (rm *ResourceManager) createService(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*corev1.Service, error) {
 	logger := logf.FromContext(ctx)
 
-	service, err := rm.serviceBuilder.BuildService(jupyterServer)
+	service, err := rm.serviceBuilder.BuildService(workspace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build service: %w", err)
 	}
@@ -119,11 +119,11 @@ func (rm *ResourceManager) createService(ctx context.Context, jupyterServer *ser
 	return service, nil
 }
 
-// createPVC creates a new PVC for the JupyterServer
-func (rm *ResourceManager) createPVC(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*corev1.PersistentVolumeClaim, error) {
+// createPVC creates a new PVC for the Workspace
+func (rm *ResourceManager) createPVC(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*corev1.PersistentVolumeClaim, error) {
 	logger := logf.FromContext(ctx)
 
-	pvc, err := rm.pvcBuilder.BuildPVC(jupyterServer)
+	pvc, err := rm.pvcBuilder.BuildPVC(workspace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build PVC: %w", err)
 	}
@@ -146,7 +146,7 @@ func (rm *ResourceManager) createPVC(ctx context.Context, jupyterServer *servers
 	return pvc, nil
 }
 
-// DeleteDeployment deletes the deployment for a JupyterServer
+// DeleteDeployment deletes the deployment for a Workspace
 func (rm *ResourceManager) deleteDeployment(ctx context.Context, deployment *appsv1.Deployment) error {
 	logger := logf.FromContext(ctx)
 
@@ -164,7 +164,7 @@ func (rm *ResourceManager) deleteDeployment(ctx context.Context, deployment *app
 	return nil
 }
 
-// DeleteService deletes the service for a JupyterServer
+// DeleteService deletes the service for a Workspace
 func (rm *ResourceManager) deleteService(ctx context.Context, service *corev1.Service) error {
 	logger := logf.FromContext(ctx)
 
@@ -237,11 +237,11 @@ func (rm *ResourceManager) IsServiceMissingOrDeleting(service *corev1.Service) b
 }
 
 // EnsureDeploymentExists creates a deployment if it doesn't exist
-func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*appsv1.Deployment, error) {
-	deployment, err := rm.getDeployment(ctx, jupyterServer)
+func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*appsv1.Deployment, error) {
+	deployment, err := rm.getDeployment(ctx, workspace)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return rm.createDeployment(ctx, jupyterServer)
+			return rm.createDeployment(ctx, workspace)
 		}
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
@@ -249,11 +249,11 @@ func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, jupyterSe
 }
 
 // EnsureServiceExists creates a service if it doesn't exist
-func (rm *ResourceManager) EnsureServiceExists(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*corev1.Service, error) {
-	service, err := rm.getService(ctx, jupyterServer)
+func (rm *ResourceManager) EnsureServiceExists(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*corev1.Service, error) {
+	service, err := rm.getService(ctx, workspace)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return rm.createService(ctx, jupyterServer)
+			return rm.createService(ctx, workspace)
 		}
 		return nil, fmt.Errorf("failed to get service: %w", err)
 	}
@@ -261,8 +261,8 @@ func (rm *ResourceManager) EnsureServiceExists(ctx context.Context, jupyterServe
 }
 
 // EnsureDeploymentDeleted initiates deletion, or returns the deployment if it is already being deleted
-func (rm *ResourceManager) EnsureDeploymentDeleted(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*appsv1.Deployment, error) {
-	deployment, err := rm.getDeployment(ctx, jupyterServer)
+func (rm *ResourceManager) EnsureDeploymentDeleted(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*appsv1.Deployment, error) {
+	deployment, err := rm.getDeployment(ctx, workspace)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
@@ -277,8 +277,8 @@ func (rm *ResourceManager) EnsureDeploymentDeleted(ctx context.Context, jupyterS
 }
 
 // EnsureServiceDeleted initiates deletion, or returns the service if it is already being deleted
-func (rm *ResourceManager) EnsureServiceDeleted(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*corev1.Service, error) {
-	service, err := rm.getService(ctx, jupyterServer)
+func (rm *ResourceManager) EnsureServiceDeleted(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*corev1.Service, error) {
+	service, err := rm.getService(ctx, workspace)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
@@ -292,15 +292,15 @@ func (rm *ResourceManager) EnsureServiceDeleted(ctx context.Context, jupyterServ
 }
 
 // EnsurePVCExists creates a PVC if it doesn't exist
-func (rm *ResourceManager) EnsurePVCExists(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) (*corev1.PersistentVolumeClaim, error) {
-	if jupyterServer.Spec.Storage == nil {
+func (rm *ResourceManager) EnsurePVCExists(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*corev1.PersistentVolumeClaim, error) {
+	if workspace.Spec.Storage == nil {
 		return nil, nil // No storage requested
 	}
 
-	pvc, err := rm.getPVC(ctx, jupyterServer)
+	pvc, err := rm.getPVC(ctx, workspace)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return rm.createPVC(ctx, jupyterServer)
+			return rm.createPVC(ctx, workspace)
 		}
 		return nil, fmt.Errorf("failed to get PVC: %w", err)
 	}

@@ -1,5 +1,5 @@
-apiVersion: servers.jupyter.org/v1alpha1
-kind: JupyterServer
+apiVersion: workspaces.jupyter.org/v1alpha1
+kind: Workspace
 metadata:
   name: sample-notebook
   namespace: default

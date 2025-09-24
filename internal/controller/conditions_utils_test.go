@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -34,8 +34,8 @@ func TestFindCondition(t *testing.T) {
 
 func TestGetNewConditionsOrEmptyIfUnchanged(t *testing.T) {
 	ctx := context.Background()
-	jupyterServer := &serversv1alpha1.JupyterServer{}
-	jupyterServer.Status.Conditions = []metav1.Condition{
+	workspace := &workspacesv1alpha1.Workspace{}
+	workspace.Status.Conditions = []metav1.Condition{
 		{Type: "Existing", Status: metav1.ConditionTrue, Reason: "InitialReason", Message: "Initial message"},
 		{Type: "ToUpdate", Status: metav1.ConditionFalse, Reason: "OldReason", Message: "Old message"},
 	}
@@ -44,7 +44,7 @@ func TestGetNewConditionsOrEmptyIfUnchanged(t *testing.T) {
 	newConditions := []metav1.Condition{
 		{Type: "New", Status: metav1.ConditionTrue, Reason: "NewReason", Message: "New message"},
 	}
-	result := GetNewConditionsOrEmptyIfUnchanged(ctx, jupyterServer, &newConditions)
+	result := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &newConditions)
 	assert.Len(t, result, 3) // 2 existing + 1 new
 
 	// Check that both existing conditions are preserved
@@ -65,7 +65,7 @@ func TestGetNewConditionsOrEmptyIfUnchanged(t *testing.T) {
 	updateConditions := []metav1.Condition{
 		{Type: "ToUpdate", Status: metav1.ConditionTrue, Reason: "NewReason", Message: "Updated message"},
 	}
-	result = GetNewConditionsOrEmptyIfUnchanged(ctx, jupyterServer, &updateConditions)
+	result = GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &updateConditions)
 	assert.Len(t, result, 2) // Both existing conditions, one updated
 
 	// Find the updated condition
@@ -85,6 +85,6 @@ func TestGetNewConditionsOrEmptyIfUnchanged(t *testing.T) {
 	unchangedConditions := []metav1.Condition{
 		{Type: "Existing", Status: metav1.ConditionTrue, Reason: "InitialReason", Message: "Initial message"},
 	}
-	result = GetNewConditionsOrEmptyIfUnchanged(ctx, jupyterServer, &unchangedConditions)
+	result = GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &unchangedConditions)
 	assert.Empty(t, result, "Should return empty slice when no changes")
 }

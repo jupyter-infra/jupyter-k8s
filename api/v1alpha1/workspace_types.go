@@ -25,7 +25,7 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// StorageSpec defines the storage configuration for JupyterServer
+// StorageSpec defines the storage configuration for Workspace
 type StorageSpec struct {
 	// StorageClassName specifies the storage class to use for persistent storage
 	// +optional
@@ -43,8 +43,8 @@ type StorageSpec struct {
 	MountPath string `json:"mountPath,omitempty"`
 }
 
-// JupyterServerSpec defines the desired state of JupyterServer
-type JupyterServerSpec struct {
+// WorkspaceSpec defines the desired state of Workspace
+type WorkspaceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
@@ -71,23 +71,23 @@ type JupyterServerSpec struct {
 	Storage *StorageSpec `json:"storage,omitempty"`
 }
 
-// JupyterServerStatus defines the observed state of JupyterServer.
-type JupyterServerStatus struct {
+// WorkspaceStatus defines the observed state of Workspace.
+type WorkspaceStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// For Kubernetes API conventions, see:
 	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
 
-	// DeploymentName is the name of the deployment managing the JupyterServer pods
+	// DeploymentName is the name of the deployment managing the Workspace pods
 	// +optional
 	DeploymentName string `json:"deploymentName,omitempty"`
 
-	// ServiceName is the name of the service exposing the JupyterServer
+	// ServiceName is the name of the service exposing the Workspace
 	// +optional
 	ServiceName string `json:"serviceName,omitempty"`
 
-	// Conditions represent the current state of the JupyterServer resource.
+	// Conditions represent the current state of the Workspace resource.
 	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
 	//
 	// Standard condition types include:
@@ -111,32 +111,32 @@ type JupyterServerStatus struct {
 // +kubebuilder:printcolumn:name="Degraded",type="string",JSONPath=".status.conditions[?(@.type==\"Degraded\")].status"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-// JupyterServer is the Schema for the jupyterservers API
-type JupyterServer struct {
+// Workspace is the Schema for the workspaces API
+type Workspace struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// metadata is a standard object metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	// spec defines the desired state of JupyterServer
+	// spec defines the desired state of Workspace
 	// +required
-	Spec JupyterServerSpec `json:"spec"`
+	Spec WorkspaceSpec `json:"spec"`
 
-	// status defines the observed state of JupyterServer
+	// status defines the observed state of Workspace
 	// +optional
-	Status JupyterServerStatus `json:"status,omitempty,omitzero"`
+	Status WorkspaceStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true
 
-// JupyterServerList contains a list of JupyterServer
-type JupyterServerList struct {
+// WorkspaceList contains a list of Workspace
+type WorkspaceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []JupyterServer `json:"items"`
+	Items           []Workspace `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&JupyterServer{}, &JupyterServerList{})
+	SchemeBuilder.Register(&Workspace{}, &WorkspaceList{})
 }

@@ -18,8 +18,8 @@ const (
 	DefaultMountPath = "/home/jovyan"
 
 	// Label keys
-	AppLabel           = "app"
-	JupyterServerLabel = "jupyterserver.servers.jupyter.org/name"
+	AppLabel       = "app"
+	WorkspaceLabel = "workspace.workspaces.jupyter.org/name"
 
 	// Label values
 	AppLabelValue = "jupyter"
@@ -42,24 +42,24 @@ const (
 )
 
 // GenerateDeploymentName creates a consistent deployment name
-func GenerateDeploymentName(jupyterServerName string) string {
-	return fmt.Sprintf("jupyter-%s", jupyterServerName)
+func GenerateDeploymentName(workspaceName string) string {
+	return fmt.Sprintf("jupyter-%s", workspaceName)
 }
 
 // GenerateServiceName creates a consistent service name
-func GenerateServiceName(jupyterServerName string) string {
-	return fmt.Sprintf("jupyter-%s-service", jupyterServerName)
+func GenerateServiceName(workspaceName string) string {
+	return fmt.Sprintf("jupyter-%s-service", workspaceName)
 }
 
 // GeneratePVCName creates a consistent PVC name
-func GeneratePVCName(jupyterServerName string) string {
-	return fmt.Sprintf("jupyter-%s-pvc", jupyterServerName)
+func GeneratePVCName(workspaceName string) string {
+	return fmt.Sprintf("jupyter-%s-pvc", workspaceName)
 }
 
 // GenerateLabels creates consistent labels for resources
-func GenerateLabels(jupyterServerName string) map[string]string {
+func GenerateLabels(workspaceName string) map[string]string {
 	return map[string]string{
-		AppLabel:           AppLabelValue,
-		JupyterServerLabel: jupyterServerName,
+		AppLabel:       AppLabelValue,
+		WorkspaceLabel: workspaceName,
 	}
 }
