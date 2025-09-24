@@ -7,22 +7,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Condition types for JupyterServer resources
+// Condition types for Workspace resources
 const (
-	// ConditionTypeAvailable indicates the JupyterServer is fully available
+	// ConditionTypeAvailable indicates the Workspace is fully available
 	ConditionTypeAvailable = "Available"
 
-	// ConditionTypeStarting indicates the JupyterServer is in the process of starting
+	// ConditionTypeStarting indicates the Workspace is in the process of starting
 	ConditionTypeProgressing = "Progressing"
 
-	// ConditionTypeDegraded indicates the JupyterServer is in a degraded state
+	// ConditionTypeDegraded indicates the Workspace is in a degraded state
 	ConditionTypeDegraded = "Degraded"
 
-	// ConditionTypeStopped indicates if the JupyterServer is in a stopped state
+	// ConditionTypeStopped indicates if the Workspace is in a stopped state
 	ConditionTypeStopped = "Stopped"
 )
 
-// Condition reasons for JupyterServer resources
+// Condition reasons for Workspace resources
 const (
 	// ConditionTypeAvailable and ConditionTypeProgressing reasons
 	ReasonResourcesNotReady   = "ResourcesNotReady"

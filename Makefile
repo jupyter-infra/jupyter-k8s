@@ -378,7 +378,7 @@ deploy-aws:
 .PHONY: port-forward
 port-forward:
 	@echo "Available Jupyter servers:"
-	@$(KUBECTL) get JupyterServers --no-headers | awk '{print "  " $$1}'
+	@$(KUBECTL) get Workspaces --no-headers | awk '{print "  " $$1}'
 	@echo ""
 	@read -p "Enter server name: " SERVER_NAME; \
 	if [ -z "$$SERVER_NAME" ]; then \

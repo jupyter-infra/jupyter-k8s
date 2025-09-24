@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
 // ImageResolver handles the resolution of image references
@@ -21,15 +21,15 @@ func NewImageResolver(registry string) *ImageResolver {
 	}
 }
 
-// ResolveImage resolves an image reference from a JupyterServer spec
+// ResolveImage resolves an image reference from a Workspace spec
 // It handles:
 // - Direct image references
 // - Built-in image shortcuts
 // - Default image when none is specified
 // - Adding registry prefix in production environments
-func (r *ImageResolver) ResolveImage(jupyterServer *serversv1alpha1.JupyterServer) string {
+func (r *ImageResolver) ResolveImage(workspace *workspacesv1alpha1.Workspace) string {
 	// Get image from server spec
-	image := jupyterServer.Spec.Image
+	image := workspace.Spec.Image
 
 	// If this is a built-in image shortcut, resolve to the base image name
 	if IsBuiltInImage(image) {

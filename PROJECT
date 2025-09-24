@@ -16,8 +16,8 @@ resources:
     namespaced: true
   controller: true
   domain: jupyter.org
-  group: servers
-  kind: JupyterServer
+  group: workspaces
+  kind: Workspace
   path: github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1
   version: v1alpha1
 version: "3"

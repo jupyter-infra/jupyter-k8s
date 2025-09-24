@@ -3,7 +3,7 @@ package controller
 import (
 	"context"
 
-	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,11 +20,11 @@ func FindCondition(conditions *[]metav1.Condition, conditionType string) *metav1
 	return nil
 }
 
-// GetNewConditionsOrEmptyIfUnchanged returns the new list of conditions for JupyterServer.Status
+// GetNewConditionsOrEmptyIfUnchanged returns the new list of conditions for Workspace.Status
 // or an empty list if there are no update needed.
 func GetNewConditionsOrEmptyIfUnchanged(
 	ctx context.Context,
-	jupyterServer *serversv1alpha1.JupyterServer,
+	workspace *workspacesv1alpha1.Workspace,
 	conditions *[]metav1.Condition) []metav1.Condition {
 
 	// abort early if nothing is requested
@@ -47,7 +47,7 @@ func GetNewConditionsOrEmptyIfUnchanged(
 	}
 
 	// Start with existing conditions that we're not updating
-	for _, condition := range jupyterServer.Status.Conditions {
+	for _, condition := range workspace.Status.Conditions {
 		if !updateTypes[condition.Type] {
 			conditionsToUpdate = append(conditionsToUpdate, condition)
 		}
@@ -55,7 +55,7 @@ func GetNewConditionsOrEmptyIfUnchanged(
 
 	// Then evaluate conditions that we are updating
 	for _, condition := range *conditions {
-		existingCondition := FindCondition(&jupyterServer.Status.Conditions, condition.Type)
+		existingCondition := FindCondition(&workspace.Status.Conditions, condition.Type)
 
 		if existingCondition == nil {
 			updated = true

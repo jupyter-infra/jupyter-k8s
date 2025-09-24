@@ -4,14 +4,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: jupyterservers.servers.jupyter.org
+  name: workspaces.workspaces.jupyter.org
 spec:
-  group: servers.jupyter.org
+  group: workspaces.jupyter.org
   names:
-    kind: JupyterServer
-    listKind: JupyterServerList
-    plural: jupyterservers
-    singular: jupyterserver
+    kind: Workspace
+    listKind: WorkspaceList
+    plural: workspaces
+    singular: workspace
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -30,7 +30,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: JupyterServer is the Schema for the jupyterservers API
+        description: Workspace is the Schema for the workspaces API
         properties:
           apiVersion:
             description: |-
@@ -50,7 +50,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of JupyterServer
+            description: spec defines the desired state of Workspace
             properties:
               desiredStatus:
                 description: DesiredStatus specifies the desired operational status
@@ -159,11 +159,11 @@ spec:
             - displayName
             type: object
           status:
-            description: status defines the observed state of JupyterServer
+            description: status defines the observed state of Workspace
             properties:
               conditions:
                 description: |-
-                  Conditions represent the current state of the JupyterServer resource.
+                  Conditions represent the current state of the Workspace resource.
                   Each condition has a unique type and reflects the status of a specific aspect of the resource.
 
                   Standard condition types include:
@@ -232,10 +232,10 @@ spec:
                 x-kubernetes-list-type: map
               deploymentName:
                 description: DeploymentName is the name of the deployment managing
-                  the JupyterServer pods
+                  the Workspace pods
                 type: string
               serviceName:
-                description: ServiceName is the name of the service exposing the JupyterServer
+                description: ServiceName is the name of the service exposing the Workspace
                 type: string
             type: object
         required:

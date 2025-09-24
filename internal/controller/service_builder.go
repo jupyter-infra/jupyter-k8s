@@ -3,7 +3,7 @@ package controller
 import (
 	"fmt"
 
-	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-// ServiceBuilder handles creation of Service resources for JupyterServer
+// ServiceBuilder handles creation of Service resources for Workspace
 type ServiceBuilder struct {
 	scheme *runtime.Scheme
 }
@@ -24,15 +24,15 @@ func NewServiceBuilder(scheme *runtime.Scheme) *ServiceBuilder {
 	}
 }
 
-// BuildService creates a Service resource for the given JupyterServer
-func (sb *ServiceBuilder) BuildService(jupyterServer *serversv1alpha1.JupyterServer) (*corev1.Service, error) {
+// BuildService creates a Service resource for the given Workspace
+func (sb *ServiceBuilder) BuildService(workspace *workspacesv1alpha1.Workspace) (*corev1.Service, error) {
 	service := &corev1.Service{
-		ObjectMeta: sb.buildObjectMeta(jupyterServer),
-		Spec:       sb.buildServiceSpec(jupyterServer),
+		ObjectMeta: sb.buildObjectMeta(workspace),
+		Spec:       sb.buildServiceSpec(workspace),
 	}
 
 	// Set owner reference for garbage collection
-	if err := controllerutil.SetControllerReference(jupyterServer, service, sb.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(workspace, service, sb.scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
@@ -40,19 +40,19 @@ func (sb *ServiceBuilder) BuildService(jupyterServer *serversv1alpha1.JupyterSer
 }
 
 // buildObjectMeta creates the metadata for the Service
-func (sb *ServiceBuilder) buildObjectMeta(jupyterServer *serversv1alpha1.JupyterServer) metav1.ObjectMeta {
+func (sb *ServiceBuilder) buildObjectMeta(workspace *workspacesv1alpha1.Workspace) metav1.ObjectMeta {
 	return metav1.ObjectMeta{
-		Name:      GenerateServiceName(jupyterServer.Name),
-		Namespace: jupyterServer.Namespace,
-		Labels:    GenerateLabels(jupyterServer.Name),
+		Name:      GenerateServiceName(workspace.Name),
+		Namespace: workspace.Namespace,
+		Labels:    GenerateLabels(workspace.Name),
 	}
 }
 
 // buildServiceSpec creates the service specification
-func (sb *ServiceBuilder) buildServiceSpec(jupyterServer *serversv1alpha1.JupyterServer) corev1.ServiceSpec {
+func (sb *ServiceBuilder) buildServiceSpec(workspace *workspacesv1alpha1.Workspace) corev1.ServiceSpec {
 	return corev1.ServiceSpec{
 		Type:     corev1.ServiceTypeClusterIP,
-		Selector: GenerateLabels(jupyterServer.Name),
+		Selector: GenerateLabels(workspace.Name),
 		Ports: []corev1.ServicePort{
 			{
 				Name:       "http",

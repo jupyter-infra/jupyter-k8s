@@ -30,9 +30,9 @@ rules:
   - update
   - watch
 - apiGroups:
-  - servers.jupyter.org
+  - workspaces.jupyter.org
   resources:
-  - jupyterservers
+  - workspaces
   verbs:
   - create
   - delete
@@ -42,15 +42,15 @@ rules:
   - update
   - watch
 - apiGroups:
-  - servers.jupyter.org
+  - workspaces.jupyter.org
   resources:
-  - jupyterservers/finalizers
+  - workspaces/finalizers
   verbs:
   - update
 - apiGroups:
-  - servers.jupyter.org
+  - workspaces.jupyter.org
   resources:
-  - jupyterservers/status
+  - workspaces/status
   verbs:
   - get
   - patch

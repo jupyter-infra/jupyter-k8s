@@ -4,14 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// StatusManager handles JupyterServer status updates
+// StatusManager handles Workspace status updates
 type StatusManager struct {
 	client client.Client
 }
@@ -25,31 +25,31 @@ func NewStatusManager(k8sClient client.Client) *StatusManager {
 
 func (sm *StatusManager) updateStatus(
 	ctx context.Context,
-	jupyterServer *serversv1alpha1.JupyterServer,
+	workspace *workspacesv1alpha1.Workspace,
 	conditionsToUpdate *[]metav1.Condition,
 	updateResourceNames bool,
 ) error {
 	logger := logf.FromContext(ctx)
 
 	if !updateResourceNames && len(*conditionsToUpdate) == 0 {
-		logger.Info("no-op: JupyterServer.Status is up-to-date")
+		logger.Info("no-op: Workspace.Status is up-to-date")
 		return nil
 	}
 	if len(*conditionsToUpdate) > 0 {
 		// requesting to modify condition: overwrite
-		jupyterServer.Status.Conditions = *conditionsToUpdate
+		workspace.Status.Conditions = *conditionsToUpdate
 	}
-	if err := sm.client.Status().Update(ctx, jupyterServer); err != nil {
-		return fmt.Errorf("failed to update JupyterServer.Status: %w", err)
+	if err := sm.client.Status().Update(ctx, workspace); err != nil {
+		return fmt.Errorf("failed to update Workspace.Status: %w", err)
 	}
-	logger.Info("updated JupyterServer.Status")
+	logger.Info("updated Workspace.Status")
 	return nil
 }
 
 // UpdateStartingStatus sets Available to false and Progressing to true
 func (sm *StatusManager) UpdateStartingStatus(
 	ctx context.Context,
-	jupyterServer *serversv1alpha1.JupyterServer,
+	workspace *workspacesv1alpha1.Workspace,
 	computeReady bool,
 	serviceReady bool,
 	computeName string,
@@ -58,7 +58,7 @@ func (sm *StatusManager) UpdateStartingStatus(
 	// ensure StartingCondition is set to True with the appropriate reason
 
 	startingReason := ReasonResourcesNotReady
-	startingMessage := "JupyterServer is starting"
+	startingMessage := "Workspace is starting"
 
 	if computeReady && serviceReady {
 		return fmt.Errorf("invalid call: not all resources should be ready in method UpdateStartingStatus")
@@ -98,7 +98,7 @@ func (sm *StatusManager) UpdateStartingStatus(
 		ConditionTypeStopped,
 		metav1.ConditionFalse,
 		ReasonDesiredStateRunning,
-		"JupyterServer is starting",
+		"Workspace is starting",
 	)
 
 	// Apply all conditions
@@ -108,17 +108,17 @@ func (sm *StatusManager) UpdateStartingStatus(
 		degradedCondition,
 		stoppedCondition,
 	}
-	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, jupyterServer, &conditions)
-	shouldUpdateResourceNames := jupyterServer.Status.DeploymentName != computeName || jupyterServer.Status.ServiceName != serviceName
+	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
+	shouldUpdateResourceNames := workspace.Status.DeploymentName != computeName || workspace.Status.ServiceName != serviceName
 	if shouldUpdateResourceNames {
-		jupyterServer.Status.DeploymentName = computeName
-		jupyterServer.Status.ServiceName = serviceName
+		workspace.Status.DeploymentName = computeName
+		workspace.Status.ServiceName = serviceName
 	}
-	return sm.updateStatus(ctx, jupyterServer, &conditionsToUpdate, shouldUpdateResourceNames)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, shouldUpdateResourceNames)
 }
 
 // UpdateErrorStatus sets the Degraded condition to true with the specified error reason and message
-func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer, reason, message string) error {
+func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, reason, message string) error {
 	// Set DegradedCondition to true with the provided error reason and message
 	degradedCondition := NewCondition(
 		ConditionTypeDegraded,
@@ -126,18 +126,18 @@ func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, jupyterServer *s
 		reason,
 		message,
 	)
-	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, jupyterServer, &[]metav1.Condition{degradedCondition})
-	return sm.updateStatus(ctx, jupyterServer, &conditionsToUpdate, false)
+	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &[]metav1.Condition{degradedCondition})
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
 }
 
 // UpdateRunningStatus sets the Available condition to true and Progressing to false
-func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) error {
+func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
 	// ensure AvailableCondition is set to true with ReasonResourcesReady
 	availableCondition := NewCondition(
 		ConditionTypeAvailable,
 		metav1.ConditionTrue,
 		ReasonResourcesReady,
-		"JupyterServer is ready",
+		"Workspace is ready",
 	)
 
 	// ensure ProgressingCondition is set to false with ReasonResourcesReady
@@ -145,7 +145,7 @@ func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, jupyterServer 
 		ConditionTypeProgressing,
 		metav1.ConditionFalse,
 		ReasonResourcesReady,
-		"JupyterServer is ready",
+		"Workspace is ready",
 	)
 
 	// ensure DegradedCondition is set to false with ReasonNoError
@@ -161,7 +161,7 @@ func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, jupyterServer 
 		ConditionTypeStopped,
 		metav1.ConditionFalse,
 		ReasonDesiredStateRunning,
-		"JupyterServer is running",
+		"Workspace is running",
 	)
 
 	// Apply all conditions
@@ -172,12 +172,12 @@ func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, jupyterServer 
 		stoppedCondition,
 	}
 
-	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, jupyterServer, &conditions)
-	return sm.updateStatus(ctx, jupyterServer, &conditionsToUpdate, false)
+	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
 }
 
 // UpdateStoppingStatus sets Available to false and Progressing to true
-func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer, computeStopped bool, serviceStopped bool) error {
+func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, computeStopped bool, serviceStopped bool) error {
 	stoppingReason := ReasonResourcesNotStopped
 	stoppingMessage := "Resources are still running"
 
@@ -232,18 +232,18 @@ func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, jupyterServer
 		stoppedCondition,
 	}
 
-	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, jupyterServer, &conditions)
-	return sm.updateStatus(ctx, jupyterServer, &conditionsToUpdate, false)
+	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
 }
 
 // UpdateStoppedStatus sets Available and Progressing to false, Stopped to true
-func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, jupyterServer *serversv1alpha1.JupyterServer) error {
+func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
 	// ensure AvailableCondition is set to false with ReasonDesiredStateStopped
 	availableCondition := NewCondition(
 		ConditionTypeAvailable,
 		metav1.ConditionFalse,
 		ReasonDesiredStateStopped,
-		"JupyterServer is stopped",
+		"Workspace is stopped",
 	)
 
 	// ensure ProgressingCondition is set to false with ReasonDesiredStateStopped
@@ -251,7 +251,7 @@ func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, jupyterServer 
 		ConditionTypeProgressing,
 		metav1.ConditionFalse,
 		ReasonDesiredStateStopped,
-		"JupyterServer is stopped",
+		"Workspace is stopped",
 	)
 
 	// ensure DegradedCondition is set to false with ReasonNoError
@@ -267,7 +267,7 @@ func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, jupyterServer 
 		ConditionTypeStopped,
 		metav1.ConditionTrue,
 		ReasonResourcesStopped,
-		"JupyterServer is stopped",
+		"Workspace is stopped",
 	)
 
 	// Apply all conditions
@@ -278,8 +278,8 @@ func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, jupyterServer 
 		stoppedCondition,
 	}
 
-	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, jupyterServer, &conditions)
-	jupyterServer.Status.DeploymentName = ""
-	jupyterServer.Status.ServiceName = ""
-	return sm.updateStatus(ctx, jupyterServer, &conditionsToUpdate, true)
+	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
+	workspace.Status.DeploymentName = ""
+	workspace.Status.ServiceName = ""
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, true)
 }

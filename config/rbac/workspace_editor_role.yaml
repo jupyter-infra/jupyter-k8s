@@ -1,7 +1,7 @@
 # This rule is not used by the project jupyter-k8s itself.
 # It is provided to allow the cluster admin to help manage permissions for users.
 #
-# Grants permissions to create, update, and delete resources within the servers.jupyter.org.
+# Grants permissions to create, update, and delete resources within the workspaces.jupyter.org.
 # This role is intended for users who need to manage these resources
 # but should not control RBAC or manage permissions for others.
 
@@ -11,12 +11,12 @@ metadata:
   labels:
     app.kubernetes.io/name: jupyter-k8s
     app.kubernetes.io/managed-by: kustomize
-  name: jupyterserver-editor-role
+  name: workspace-editor-role
 rules:
 - apiGroups:
-  - servers.jupyter.org
+  - workspaces.jupyter.org
   resources:
-  - jupyterservers
+  - workspaces
   verbs:
   - create
   - delete
@@ -26,8 +26,8 @@ rules:
   - update
   - watch
 - apiGroups:
-  - servers.jupyter.org
+  - workspaces.jupyter.org
   resources:
-  - jupyterservers/status
+  - workspaces/status
   verbs:
   - get

@@ -11,18 +11,18 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: jupyterserver-admin-role
+  name: workspace-admin-role
 rules:
 - apiGroups:
   - servers.jupyter.org
   resources:
-  - jupyterservers
+  - workspaces
   verbs:
   - '*'
 - apiGroups:
   - servers.jupyter.org
   resources:
-  - jupyterservers/status
+  - workspaces/status
   verbs:
   - get
 {{- end -}}

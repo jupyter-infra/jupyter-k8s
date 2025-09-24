@@ -11,12 +11,12 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: jupyterserver-viewer-role
+  name: workspace-viewer-role
 rules:
 - apiGroups:
   - servers.jupyter.org
   resources:
-  - jupyterservers
+  - workspaces
   verbs:
   - get
   - list
@@ -24,7 +24,7 @@ rules:
 - apiGroups:
   - servers.jupyter.org
   resources:
-  - jupyterservers/status
+  - workspaces/status
   verbs:
   - get
 {{- end -}}

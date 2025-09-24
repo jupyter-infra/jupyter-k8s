@@ -25,12 +25,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var _ = Describe("JupyterServer Controller", func() {
+var _ = Describe("Workspace Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -40,13 +40,13 @@ var _ = Describe("JupyterServer Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		jupyterserver := &serversv1alpha1.JupyterServer{}
+		workspace := &workspacesv1alpha1.Workspace{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind JupyterServer")
-			err := k8sClient.Get(ctx, typeNamespacedName, jupyterserver)
+			By("creating the custom resource for the Kind Workspace")
+			err := k8sClient.Get(ctx, typeNamespacedName, workspace)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &serversv1alpha1.JupyterServer{
+				resource := &workspacesv1alpha1.Workspace{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -59,11 +59,11 @@ var _ = Describe("JupyterServer Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &serversv1alpha1.JupyterServer{}
+			resource := &workspacesv1alpha1.Workspace{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance JupyterServer")
+			By("Cleanup the specific resource instance Workspace")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
@@ -71,7 +71,7 @@ var _ = Describe("JupyterServer Controller", func() {
 			statusManager := StatusManager{
 				client: k8sClient,
 			}
-			options := JupyterServerControllerOptions{
+			options := WorkspaceControllerOptions{
 				ApplicationImagesPullPolicy: corev1.PullIfNotPresent,
 				ApplicationImagesRegistry:   "",
 			}
@@ -95,7 +95,7 @@ var _ = Describe("JupyterServer Controller", func() {
 			}
 
 			By("Reconciling the created resource")
-			controllerReconciler := &JupyterServerReconciler{
+			controllerReconciler := &WorkspaceReconciler{
 				Client:       k8sClient,
 				Scheme:       k8sClient.Scheme(),
 				stateMachine: &stateMachine,

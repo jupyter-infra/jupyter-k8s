@@ -3,7 +3,7 @@ package controller
 import (
 	"fmt"
 
-	serversv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -13,15 +13,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-// DeploymentBuilder handles creation of Deployment resources for JupyterServer
+// DeploymentBuilder handles creation of Deployment resources for Workspace
 type DeploymentBuilder struct {
 	scheme        *runtime.Scheme
-	options       JupyterServerControllerOptions
+	options       WorkspaceControllerOptions
 	imageResolver *ImageResolver
 }
 
 // NewDeploymentBuilder creates a new DeploymentBuilder
-func NewDeploymentBuilder(scheme *runtime.Scheme, options JupyterServerControllerOptions) *DeploymentBuilder {
+func NewDeploymentBuilder(scheme *runtime.Scheme, options WorkspaceControllerOptions) *DeploymentBuilder {
 	return &DeploymentBuilder{
 		scheme:        scheme,
 		options:       options,
@@ -29,16 +29,16 @@ func NewDeploymentBuilder(scheme *runtime.Scheme, options JupyterServerControlle
 	}
 }
 
-// BuildDeployment creates a Deployment resource for the given JupyterServer
-func (db *DeploymentBuilder) BuildDeployment(jupyterServer *serversv1alpha1.JupyterServer) (*appsv1.Deployment, error) {
-	resources := db.parseResourceRequirements(jupyterServer)
+// BuildDeployment creates a Deployment resource for the given Workspace
+func (db *DeploymentBuilder) BuildDeployment(workspace *workspacesv1alpha1.Workspace) (*appsv1.Deployment, error) {
+	resources := db.parseResourceRequirements(workspace)
 	deployment := &appsv1.Deployment{
-		ObjectMeta: db.buildObjectMeta(jupyterServer),
-		Spec:       db.buildDeploymentSpec(jupyterServer, resources),
+		ObjectMeta: db.buildObjectMeta(workspace),
+		Spec:       db.buildDeploymentSpec(workspace, resources),
 	}
 
 	// Set owner reference for garbage collection
-	if err := controllerutil.SetControllerReference(jupyterServer, deployment, db.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(workspace, deployment, db.scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
@@ -46,49 +46,49 @@ func (db *DeploymentBuilder) BuildDeployment(jupyterServer *serversv1alpha1.Jupy
 }
 
 // buildObjectMeta creates the metadata for the Deployment
-func (db *DeploymentBuilder) buildObjectMeta(jupyterServer *serversv1alpha1.JupyterServer) metav1.ObjectMeta {
+func (db *DeploymentBuilder) buildObjectMeta(workspace *workspacesv1alpha1.Workspace) metav1.ObjectMeta {
 	return metav1.ObjectMeta{
-		Name:      GenerateDeploymentName(jupyterServer.Name),
-		Namespace: jupyterServer.Namespace,
-		Labels:    GenerateLabels(jupyterServer.Name),
+		Name:      GenerateDeploymentName(workspace.Name),
+		Namespace: workspace.Namespace,
+		Labels:    GenerateLabels(workspace.Name),
 	}
 }
 
 // buildDeploymentSpec creates the deployment specification
-func (db *DeploymentBuilder) buildDeploymentSpec(jupyterServer *serversv1alpha1.JupyterServer, resources corev1.ResourceRequirements) appsv1.DeploymentSpec {
+func (db *DeploymentBuilder) buildDeploymentSpec(workspace *workspacesv1alpha1.Workspace, resources corev1.ResourceRequirements) appsv1.DeploymentSpec {
 	replicas := int32(1) // TODO: Make this configurable
 
 	return appsv1.DeploymentSpec{
 		Replicas: &replicas,
 		Selector: &metav1.LabelSelector{
-			MatchLabels: GenerateLabels(jupyterServer.Name),
+			MatchLabels: GenerateLabels(workspace.Name),
 		},
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: GenerateLabels(jupyterServer.Name),
+				Labels: GenerateLabels(workspace.Name),
 			},
-			Spec: db.buildPodSpec(jupyterServer, resources),
+			Spec: db.buildPodSpec(workspace, resources),
 		},
 	}
 }
 
 // buildPodSpec creates the pod specification
-func (db *DeploymentBuilder) buildPodSpec(jupyterServer *serversv1alpha1.JupyterServer, resources corev1.ResourceRequirements) corev1.PodSpec {
+func (db *DeploymentBuilder) buildPodSpec(workspace *workspacesv1alpha1.Workspace, resources corev1.ResourceRequirements) corev1.PodSpec {
 	podSpec := corev1.PodSpec{
 		Containers: []corev1.Container{
-			db.buildJupyterContainer(jupyterServer, resources),
+			db.buildJupyterContainer(workspace, resources),
 		},
 		// TODO: Add security context, service account, etc.
 	}
 
 	// Add volume if storage is configured
-	if jupyterServer.Spec.Storage != nil {
+	if workspace.Spec.Storage != nil {
 		podSpec.Volumes = []corev1.Volume{
 			{
 				Name: "jupyter-storage",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: GeneratePVCName(jupyterServer.Name),
+						ClaimName: GeneratePVCName(workspace.Name),
 					},
 				},
 			},
@@ -99,9 +99,9 @@ func (db *DeploymentBuilder) buildPodSpec(jupyterServer *serversv1alpha1.Jupyter
 }
 
 // buildJupyterContainer creates the Jupyter container specification
-func (db *DeploymentBuilder) buildJupyterContainer(jupyterServer *serversv1alpha1.JupyterServer, resources corev1.ResourceRequirements) corev1.Container {
+func (db *DeploymentBuilder) buildJupyterContainer(workspace *workspacesv1alpha1.Workspace, resources corev1.ResourceRequirements) corev1.Container {
 	// Use the image resolver to get the appropriate image reference
-	image := db.imageResolver.ResolveImage(jupyterServer)
+	image := db.imageResolver.ResolveImage(workspace)
 
 	container := corev1.Container{
 		Name:            "jupyter",
@@ -119,8 +119,8 @@ func (db *DeploymentBuilder) buildJupyterContainer(jupyterServer *serversv1alpha
 	}
 
 	// Add volume mount if storage is configured
-	if jupyterServer.Spec.Storage != nil {
-		mountPath := jupyterServer.Spec.Storage.MountPath
+	if workspace.Spec.Storage != nil {
+		mountPath := workspace.Spec.Storage.MountPath
 		if mountPath == "" {
 			mountPath = DefaultMountPath
 		}
@@ -137,15 +137,15 @@ func (db *DeploymentBuilder) buildJupyterContainer(jupyterServer *serversv1alpha
 }
 
 // parseResourceRequirements extracts and validates resource requirements
-func (db *DeploymentBuilder) parseResourceRequirements(jupyterServer *serversv1alpha1.JupyterServer) corev1.ResourceRequirements {
+func (db *DeploymentBuilder) parseResourceRequirements(workspace *workspacesv1alpha1.Workspace) corev1.ResourceRequirements {
 	// Set defaults
 	defaultCPU := resource.MustParse(DefaultCPURequest)
 	defaultMemory := resource.MustParse(DefaultMemoryRequest)
 
 	// Use provided resources if available, otherwise use defaults
-	if jupyterServer.Spec.Resources != nil {
+	if workspace.Spec.Resources != nil {
 		// Return the provided ResourceRequirements directly
-		result := *jupyterServer.Spec.Resources
+		result := *workspace.Spec.Resources
 		// If no requests are specified, set defaults
 		if result.Requests == nil {
 			result.Requests = corev1.ResourceList{

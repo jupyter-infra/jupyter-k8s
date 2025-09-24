@@ -11,12 +11,12 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: jupyterserver-editor-role
+  name: workspace-editor-role
 rules:
 - apiGroups:
   - servers.jupyter.org
   resources:
-  - jupyterservers
+  - workspaces
   verbs:
   - create
   - delete
@@ -28,7 +28,7 @@ rules:
 - apiGroups:
   - servers.jupyter.org
   resources:
-  - jupyterservers/status
+  - workspaces/status
   verbs:
   - get
 {{- end -}}

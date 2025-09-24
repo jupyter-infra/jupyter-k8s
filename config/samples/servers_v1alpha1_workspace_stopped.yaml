@@ -1,10 +1,10 @@
-apiVersion: servers.jupyter.org/v1alpha1
-kind: JupyterServer
+apiVersion: workspaces.jupyter.org/v1alpha1
+kind: Workspace
 metadata:
   labels:
     app.kubernetes.io/name: jupyter-k8s
     app.kubernetes.io/managed-by: kustomize
-  name: jupyterserver-stopped
+  name: workspace-stopped
 spec:
   # Name of the server
   displayName: sample-stopped
