@@ -1,0 +1,23 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: jupyter-k8s-webhook
+  annotations:
+    cert-manager.io/inject-ca-from: jupyter-k8s-system/jupyter-k8s-serving-cert
+webhooks:
+- name: workspaces.jupyter.org
+  clientConfig:
+    service:
+      name: jupyter-k8s-controller-manager
+      namespace: jupyter-k8s-system
+      path: "/mutate-workspace"
+      port: 9443
+  rules:
+  - operations: ["CREATE"]
+    apiGroups: ["workspaces.jupyter.org"]
+    apiVersions: ["v1alpha1"]
+    resources: ["workspaces"]
+  admissionReviewVersions: ["v1"]
+  sideEffects: None
+  failurePolicy: Fail
+  timeoutSeconds: 10
