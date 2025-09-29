@@ -1,0 +1,15 @@
+{{- if .Values.storageClass.efs.create }}
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.storageClass.efs.name }}
+  labels:
+    app.kubernetes.io/name: jupyter-k8s-aws-traefik-dex
+provisioner: {{ .Values.storageClass.efs.provisioner }}
+parameters:
+  {{- toYaml .Values.storageClass.efs.parameters | nindent 2 }}
+reclaimPolicy: {{ .Values.storageClass.efs.reclaimPolicy }}
+volumeBindingMode: {{ .Values.storageClass.efs.volumeBindingMode }}
+---
+{{- end }}

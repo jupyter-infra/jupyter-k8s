@@ -27,5 +27,12 @@ go.work
 *~
 
 # helm
-dist/test-output/*
+dist/test-output*/*
 dist/*.tgz
+dist/chart/charts/
+dist/chart/*.lock
+guided-charts/**/*.tgz
+guided-charts/**/*.lock
+
+# env files with sensitive data
+.env

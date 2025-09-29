@@ -1,0 +1,32 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: oauth2-proxy-https
+  namespace: {{ .Values.namespace }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ .Values.domain }}`) && PathPrefix(`/oauth2-redirect/`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: auth-headers
+          namespace: {{ .Values.namespace }}
+        - name: strip-prefix-oauth2
+          namespace: {{ .Values.namespace }}
+      services:
+        - name: oauth2-proxy
+          port: 4180
+          namespace: {{ .Values.namespace }}
+    - match: Host(`{{ .Values.domain }}`) && PathPrefix(`/oauth2/`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: auth-headers
+          namespace: {{ .Values.namespace }}
+      services:
+        - name: oauth2-proxy
+          port: 4180
+          namespace: {{ .Values.namespace }}
+  tls: {}

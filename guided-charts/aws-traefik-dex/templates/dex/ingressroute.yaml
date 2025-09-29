@@ -1,0 +1,16 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: dex-https
+  namespace: {{ .Values.namespace }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ .Values.domain }}`) && PathPrefix(`/dex`)
+      kind: Rule
+      priority: 10
+      services:
+        - name: dex
+          port: 5556
+  tls: {}

@@ -1,0 +1,102 @@
+# [AWS TRAEFIK DEX]: Configuration for aws-traefik-dex deployment mode
+
+# Default namespace for Traefik Middlewares and other resources
+# This should be left as the default for normal operation
+namespace: jupyter-k8s-router
+
+# Full domain for the application (required)
+domain: ""
+
+
+# [STORAGE] StorageClasses for Workspaces
+storageClass:
+  ebs:
+    create: true
+    name: ebs-sc
+    isDefault: false
+    provisioner: ebs.csi.aws.com
+    reclaimPolicy: Delete
+    volumeBindingMode: WaitForFirstConsumer
+    parameters:
+      type: gp3
+      fsType: ext4
+  efs:
+    create: false
+    name: efs-sc
+    provisioner: efs.csi.aws.com
+    reclaimPolicy: Delete
+    volumeBindingMode: WaitForFirstConsumer
+    parameters:
+      provisioningMode: efs-ap
+      fileSystemId: ""
+      directoryPerms: "700"
+      basePath: "/shared-data"
+      uid: "65532"
+      gid: "65532"
+
+# [CERT-MANAGER]: Configuration for cert-manager
+certManager:
+  # Email address for Let's Encrypt notifications
+  email: ""
+  # Whether to use staging or production Let's Encrypt server
+  useStaging: false
+
+# [TRAEFIK]: Configuration for Traefik
+traefik:
+  # Always enabled for this chart
+  enabled: true
+  # Traefik deployment image repository
+  repository: docker.io
+  # Traefik deployment image name
+  imageName: traefik
+  # Traefik deployment image tag
+  imageTag: latest
+  # Number of traefik replicas
+  replicas: 1
+  # Redirect HTTP to HTTPS
+  redirectHttp: true
+  # Whether to configure traefik at 'debug' log level ('info' if omitted) 
+  debug: true
+
+# Dex configuration
+dex:
+  # Number of traefik replicas
+  replicas: 1
+  # initContainer config for traefik availability checks
+  traefikCheck:
+    # Maximum time to wait for traefik availability
+    timeout_seconds: 60
+
+  # Client ID for oauth2-proxy to authenticate with Dex (auto-generated if empty)
+  oauth2ProxyClientId: "oauth2-proxy"
+  # Client secret for oauth2-proxy to authenticate with Dex (auto-generated if empty)
+  # Generate with 'openssl rand -hex 16'
+  oauth2ProxyClientSecret: "15203aa672ded2f4bbc39182049ee0b9"
+
+  # Client ID for kubernetes to authenticate with Dex (auto-generated if empty)
+  kubernetesClientId: "kubernetes-cluster"
+  # Client secret for Kubernetes to authenticate with Dex
+  # Generate with 'openssl rand -hex 16'
+  kubernetesClientSecret: "98c5b362b19e4a7cbdc95222c5a4f526"
+
+# Github OAuth configuration
+github:
+  # GitHub OAuth client ID (required)
+  clientId: ""
+  # GitHub OAuth client secret (required)
+  clientSecret: ""
+  # GitHub organizations to allow access
+  orgs: []
+    # - name: example-org
+    # - name: example-org-2
+    #   teams:
+    #     - team-1
+
+# OAuth2 Proxy configuration
+oauth2Proxy:
+  # Cookie secret for OAuth2 Proxy (will be auto-generated if not provided)
+  cookieSecret: ""
+  # initContainer config for dex availability checks
+  dexCheck:
+    # Maximum time to wait for Dex to be available in seconds
+    timeout_seconds: 300

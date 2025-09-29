@@ -13,7 +13,7 @@ This directory contains scripts and patches for customizing the generated Helm c
 ## Adding new patches
 
 1. Create a new patch file in `helm-patches/`
-2. Run `make helm-rebuild` to apply patches
+2. Run `make helm-generate` to apply patches
 
 ## Current customizations
 
