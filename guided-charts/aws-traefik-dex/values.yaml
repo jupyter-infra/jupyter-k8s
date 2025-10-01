@@ -67,6 +67,11 @@ dex:
     # Maximum time to wait for traefik availability
     timeout_seconds: 60
 
+  # Prefix for the username k8s identity authenticated through Dex
+  oidcUsernamePrefix: "github:"
+  # Prefix for the k8s groups authenticated through Dex
+  oidcGroupPrefix: "github:"
+
   # Client ID for oauth2-proxy to authenticate with Dex (auto-generated if empty)
   oauth2ProxyClientId: "oauth2-proxy"
   # Client secret for oauth2-proxy to authenticate with Dex (auto-generated if empty)
@@ -74,11 +79,17 @@ dex:
   oauth2ProxyClientSecret: "15203aa672ded2f4bbc39182049ee0b9"
 
   # Client ID for kubernetes to authenticate with Dex (auto-generated if empty)
-  kubernetesClientId: "kubernetes-cluster"
+  kubernetesClientId: "kubectl-oidc"
   # Client secret for Kubernetes to authenticate with Dex
-  # Generate with 'openssl rand -hex 16'
-  kubernetesClientSecret: "98c5b362b19e4a7cbdc95222c5a4f526"
-
+  # To set: generate with 'openssl rand -hex 16'
+  # Leave empty to use Dex's 'public: true' option (recommended for kubectl oidc-login)
+  kubernetesClientSecret: ""
+  # Client localhost:PORT to set for redirect
+  kubernetesClientRedirectPorts:
+    - 8000
+    - 18000
+    - 9800
+    
 # Github OAuth configuration
 github:
   # GitHub OAuth client ID (required)
@@ -87,10 +98,28 @@ github:
   clientSecret: ""
   # GitHub organizations to allow access
   orgs: []
-    # - name: example-org
     # - name: example-org-2
     #   teams:
     #     - team-1
+    # GitHub oauth can support teamless org membership access
+    # However dex cannot match it to a group, so do NOT use
+    # - name: example-org
+
+# RBAC to create
+githubRbac:
+  # whether to create RBAC resources at all
+  create: true
+  # whether to create organization/team-based role and role bindings
+  createOrgsRole: true
+  orgs: []
+    # GitHub oauth can support teamless org membership access
+    # However dex cannot match it to a group, so do NOT use
+    # - name: example-org-2
+    #   teams:
+    #     - team-1
+  createUsersRoles: false
+  users: []
+    # - username1
 
 # OAuth2 Proxy configuration
 oauth2Proxy:

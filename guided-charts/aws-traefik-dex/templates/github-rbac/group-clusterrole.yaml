@@ -1,0 +1,17 @@
+{{- if .Values.githubRbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: github-orgs-auth-whoami
+  annotations:
+    description: "Allows users to check their identity and permissions with commands like 'kubectl auth whoami' and 'kubectl auth can-i'"
+rules:
+# Allow users to check who they are authenticated as
+- apiGroups: ["authentication.k8s.io"]
+  resources: ["selfsubjectreviews"]
+  verbs: ["create"]
+# Allow users to check what permissions they have
+- apiGroups: ["authorization.k8s.io"]
+  resources: ["selfsubjectaccessreviews", "selfsubjectrulesreviews"]
+  verbs: ["create"]
+{{- end }}

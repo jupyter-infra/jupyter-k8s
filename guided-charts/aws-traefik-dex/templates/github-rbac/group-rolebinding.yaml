@@ -1,0 +1,27 @@
+{{- if and .Values.githubRbac.create .Values.githubRbac.createOrgsRole }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: github-workspace-orgs-binding
+  namespace: default
+  annotations:
+    description: "Grants access to workspaces.jupyter.org resources for specified GitHub teams"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: github-workspace-orgs-role
+subjects:
+{{- if .Values.githubRbac.orgs }}
+{{- range $org := .Values.githubRbac.orgs }}
+{{- if $org.teams }}
+{{- range $team := $org.teams }}
+# For specific teams within the org
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: {{ $.Values.dex.oidcGroupPrefix }}{{ $org.name }}:{{ $team }}
+{{- end }}
+{{- else }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

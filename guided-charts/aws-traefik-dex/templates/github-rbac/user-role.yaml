@@ -1,0 +1,18 @@
+{{- if and .Values.githubRbac.create .Values.githubRbac.createUsersRoles }}
+# These Roles grant namespace-specific permissions to access workspace resources
+# For cluster-wide auth command permissions, see group-clusterrole.yaml
+{{- range $user := .Values.githubRbac.users }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: github-workspace-user-{{ $user }}
+  namespace: default
+  annotations:
+    description: "Grants namespace-specific permissions for workspaces to GitHub user {{ $user }}"
+rules:
+  - apiGroups: ["workspaces.jupyter.org"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+{{- end }}
+{{- end }}

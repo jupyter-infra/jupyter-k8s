@@ -211,6 +211,9 @@ helm-lint: ## Lint the Helm chart
 		--set github.clientId=some-client-id \
 		--set github.clientSecret=some-github-secret \
 		--set github.orgs[0].name=some-org \
+		--set github.orgs[0].teams[0]=ace-devs \
+		--set githubRbac.orgs[0].name=some-org \
+		--set githubRbac.orgs[0].teams[0]=ace-devs \
 		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET)
 
 .PHONY: helm-test
@@ -236,6 +239,9 @@ helm-test-aws-traefik-dex: ## Test the Helm chart with guided mode (aws-traefik-
 		--set github.clientId=some-client-id \
 		--set github.clientSecret=some-github-secret \
 		--set github.orgs[0].name=some-org \
+		--set github.orgs[0].teams[0]=ace-devs \
+		--set githubRbac.orgs[0].name=some-org \
+		--set githubRbac.orgs[0].teams[0]=ace-devs \
 		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET)
 	# Clean up temporary chart directory
 	rm -rf /tmp/helm-test-chart
@@ -417,7 +423,8 @@ deploy-aws:
 deploy-aws-traefik-dex-internal:
 	@if [ ! -f .env ]; then \
 		echo "❌ .env file not found. Copy the `.env.example` file to `.env` and edit the values."; \
-		echo "Required variables: DOMAIN, LETSENCRYPT_EMAIL, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_ORG_NAME, DEX_OAUTH2_SECRET, DEX_K8S_SECRET"; \
+		echo "Required variables: DOMAIN, LETSENCRYPT_EMAIL, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_ORG_NAME"; \
+		echo "Optional variables: DEX_OAUTH2_SECRET (defaults to auto-generated), DEX_K8S_SECRET (can be empty for public clients)"; \
 		exit 1; \
 	fi
 	@echo "Loading configuration from .env file and deploying..."
@@ -430,17 +437,41 @@ deploy-aws-traefik-dex-internal:
 		echo 'Installing traefik CRDs first'; \
 		helm upgrade --install traefik-crd traefik/traefik-crds; \
 		echo 'Deploying AWS traefik dex helm chart'; \
-		helm upgrade --install jk8-aws-traefik-dex /tmp/jk8s-aws-traefik-dex/aws-traefik-dex \
-			-n jupyter-k8s-router \
-			--create-namespace \
-			--force \
-			--set domain=$$DOMAIN \
+		HELM_ARGS="--set domain=$$DOMAIN \
 			--set certManager.email=$$LETSENCRYPT_EMAIL \
 			--set storageClass.efs.parameters.fileSystemId=$$EFS_ID \
 			--set github.clientId=$$GITHUB_CLIENT_ID \
 			--set github.clientSecret=$$GITHUB_CLIENT_SECRET \
 			--set github.orgs[0].name=$$GITHUB_ORG_NAME \
-			--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET); \
+			--set github.orgs[0].teams[0]=$$GITHUB_TEAM \
+			--set githubRbac.orgs[0].name=$$GITHUB_ORG_NAME \
+			--set githubRbac.orgs[0].teams[0]=$$GITHUB_TEAM \
+			--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET)"; \
+		\
+		if [ ! -z "$$DEX_OAUTH2_SECRET" ]; then \
+			HELM_ARGS="$$HELM_ARGS --set dex.oauth2ProxyClientSecret=$$DEX_OAUTH2_SECRET"; \
+		fi; \
+		\
+		if [ ! -z "$$DEX_K8S_SECRET" ]; then \
+			HELM_ARGS="$$HELM_ARGS --set dex.kubernetesClientSecret=$$DEX_K8S_SECRET"; \
+		fi; \
+		\
+		# Default redirect ports are set in values.yaml (8000, 18000, 9800) \
+		# But allow overriding with env vars \
+		if [ ! -z "$$KUBECTL_REDIRECT_PORTS" ]; then \
+			IFS=',' read -ra PORTS <<< "$$KUBECTL_REDIRECT_PORTS"; \
+			PORT_INDEX=0; \
+			for PORT in "$${PORTS[@]}"; do \
+				HELM_ARGS="$$HELM_ARGS --set dex.kubernetesClientRedirectPorts[$${PORT_INDEX}]=$${PORT}"; \
+				PORT_INDEX=$$((PORT_INDEX + 1)); \
+			done; \
+		fi; \
+		\
+		helm upgrade --install jk8-aws-traefik-dex /tmp/jk8s-aws-traefik-dex/aws-traefik-dex \
+			-n jupyter-k8s-router \
+			--create-namespace \
+			--force \
+			$$HELM_ARGS; \
 	)
 	@echo "Restarting deployments to use new images..."
 	kubectl rollout restart deployment -n jupyter-k8s-router \

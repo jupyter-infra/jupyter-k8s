@@ -1,0 +1,21 @@
+{{- if and .Values.githubRbac.create .Values.githubRbac.createUsersRoles }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: github-auth-whoami-users
+  annotations:
+    description: "Grants cluster-wide access for auth commands to specified GitHub users"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: github-orgs-auth-whoami
+subjects:
+{{- if .Values.githubRbac.users }}
+{{- range $user := .Values.githubRbac.users }}
+# For individual GitHub users
+- apiGroup: rbac.authorization.k8s.io
+  kind: User
+  name: {{ $.Values.dex.oidcUsernamePrefix }}{{ $user }}
+{{- end }}
+{{- end }}
+{{- end }}

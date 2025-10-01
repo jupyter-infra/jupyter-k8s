@@ -2,7 +2,7 @@
 # This rule is not used by the project jupyter-k8s itself.
 # It is provided to allow the cluster admin to help manage permissions for users.
 #
-# Grants full permissions ('*') over servers.jupyter.org.
+# Grants full permissions ('*') over workspaces.jupyter.org.
 # This role is intended for users authorized to modify roles and bindings within the cluster,
 # enabling them to delegate specific permissions to other users or groups as needed.
 
@@ -14,13 +14,13 @@ metadata:
   name: workspace-admin-role
 rules:
 - apiGroups:
-  - servers.jupyter.org
+  - workspaces.jupyter.org
   resources:
   - workspaces
   verbs:
   - '*'
 - apiGroups:
-  - servers.jupyter.org
+  - workspaces.jupyter.org
   resources:
   - workspaces/status
   verbs:

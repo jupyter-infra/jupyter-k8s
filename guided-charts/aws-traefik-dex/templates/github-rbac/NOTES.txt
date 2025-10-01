@@ -1,0 +1,87 @@
+=====================================================================
+ GitHub Authentication for Kubernetes with Dex and OIDC
+=====================================================================
+
+To authenticate with your Kubernetes cluster using GitHub credentials:
+
+1. Install the kubectl oidc-login plugin:
+   https://github.com/int128/kubelogin#setup
+
+2. Configure kubectl to use the plugin:
+
+   kubectl oidc-login setup \
+     --oidc-issuer-url=https://{{ .Values.domain }}/dex \
+     --oidc-client-id={{ .Values.dex.kubernetesClientId }} \
+     {{- if .Values.dex.kubernetesClientSecret }}
+     --oidc-client-secret={{ .Values.dex.kubernetesClientSecret }} \
+     {{- end }}
+     --listen-address=localhost:{{ index .Values.dex.kubernetesClientRedirectPorts 0 }}
+
+   # Supported redirect ports: {{ range .Values.dex.kubernetesClientRedirectPorts }}{{ . }} {{ end }}
+
+3. This will generate a kubeconfig with OIDC authentication.
+   Alternatively, manually add to your kubeconfig:
+
+   users:
+   - name: github-user
+     user:
+       exec:
+         apiVersion: client.authentication.k8s.io/v1beta1
+         command: kubectl
+         args:
+         - oidc-login
+         - get-token
+         - --oidc-issuer-url=https://{{ .Values.domain }}/dex
+         - --oidc-client-id={{ .Values.dex.kubernetesClientId }}
+         {{- if .Values.dex.kubernetesClientSecret }}
+         - --oidc-client-secret={{ .Values.dex.kubernetesClientSecret }}
+         {{- end }}
+         - --listen-address=localhost:{{ index .Values.dex.kubernetesClientRedirectPorts 0 }}
+         # Any of these supported ports can be used: {{ range .Values.dex.kubernetesClientRedirectPorts }}{{ . }} {{ end }}
+
+4. Set this user in your context:
+
+   kubectl config set-context --current --user=github-user
+
+5. When you run a kubectl command, you'll be prompted to authenticate
+   through GitHub in your browser.
+
+RBAC CONFIGURATION:
+------------------
+Access is granted based on the configuration in values.yaml:
+
+1. Organization & Team-based access (githubRbac.createOrgsRole: {{ .Values.githubRbac.createOrgsRole }}):
+   {{- if .Values.githubRbac.createOrgsRole }}
+   - Creates a single role "github-workspace-orgs-role" for all organizations and teams
+   - Teams are formatted as: {{ .Values.dex.oidcGroupPrefix }}<organization>:<team>
+   - Organizations without teams are formatted as: {{ .Values.dex.oidcGroupPrefix }}<organization>
+   - Example: github:jupyter-ai-contrib:jupyter-k8s-writer
+   {{- else }}
+   - Currently disabled. Set githubRbac.createOrgsRole: true to enable.
+   {{- end }}
+
+2. Individual user access (githubRbac.createUsersRoles: {{ .Values.githubRbac.createUsersRoles }}):
+   {{- if .Values.githubRbac.createUsersRoles }}
+   - Creates separate roles for each user listed in githubRbac.users
+   - Each user gets their own role (github-workspace-user-<username>)
+   - User identities are prefixed with: {{ .Values.dex.oidcUsernamePrefix }}
+   - Example: github:username
+   {{- else }}
+   - Currently disabled. Set githubRbac.createUsersRoles: true to enable.
+   {{- end }}
+
+AUTHORIZATION COMMANDS:
+-------------------
+The following commands are enabled for authenticated users:
+
+1. Check your identity:
+   kubectl auth whoami
+
+2. Check your permissions:
+   kubectl auth can-i --list
+
+3. Check access to specific resources:
+   kubectl auth can-i create workspaces -n default
+   kubectl auth can-i get workspaces -n default
+
+=====================================================================

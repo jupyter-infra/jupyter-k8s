@@ -77,7 +77,7 @@ networkPolicy:
   enable: false
 # [APPLICATION]: Application images configuration
 application:
-  # Image pull policy for Workspace deployments (Always, IfNotPresent, or Never)
-  # This controls how the Workspace containers pull their images
+  # Image pull policy for JupyterServer deployments (Always, IfNotPresent, or Never)
+  # This controls how the JupyterServer containers pull their images
   imagesPullPolicy: IfNotPresent
   imagesRegistry: "docker.io/library"

@@ -20,10 +20,15 @@ data:
       secret: {{ .Values.dex.oauth2ProxyClientSecret }}
     - id: {{ .Values.dex.kubernetesClientId }}
       redirectURIs:
-      - https://kubernetes-dashboard.{{ .Values.domain }}/oauth2/callback
-      - http://localhost:8000 # For kubectl plugin use
+      {{- range .Values.dex.kubernetesClientRedirectPorts }}
+      - http://localhost:{{ . }}
+      {{- end }}
       name: 'Kubernetes Cluster'
+      {{- if .Values.dex.kubernetesClientSecret }}
       secret: {{ .Values.dex.kubernetesClientSecret }}
+      {{- else }}
+      public: true
+      {{- end }}
     connectors:
     - type: github
       id: github
