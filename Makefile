@@ -472,6 +472,13 @@ deploy-aws-traefik-dex-internal:
 			--create-namespace \
 			--force \
 			$$HELM_ARGS; \
+		\
+		$(SHELL) scripts/aws-traefik-dex/generate-client.sh \
+			$(EKS_CLUSTER_NAME) \
+			https://$$DOMAIN/dex \
+			$(AWS_REGION) \
+			9800 \
+			dist/users-scripts/set-kubeconfig.sh; \
 	)
 	@echo "Restarting deployments to use new images..."
 	kubectl rollout restart deployment -n jupyter-k8s-router \
@@ -479,6 +486,7 @@ deploy-aws-traefik-dex-internal:
 	@echo "All deployments to use new images..."
 	# Clean up temporary chart directory
 	rm -rf /tmp/jk8s-aws-traefik-dex
+	@echo "Bash script for end-users to set their kubeconfig available at: dist/users-scripts"
 
 
 .PHONY: deploy-aws-traefik-dex

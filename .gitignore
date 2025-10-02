@@ -31,6 +31,7 @@ dist/test-output*/*
 dist/*.tgz
 dist/chart/charts/
 dist/chart/*.lock
+dist/users-scripts/*
 guided-charts/**/*.tgz
 guided-charts/**/*.lock
 
