@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dex-config
+  namespace: {{ .Values.namespace }}
+data:
+  config.yaml: |
+    issuer: https://{{ .Values.domain }}/dex
+    storage:
+      type: kubernetes
+      config:
+        inCluster: true
+    web:
+      http: 0.0.0.0:5556
+    staticClients:
+    - id: {{ .Values.dex.oauth2ProxyClientId }}
+      redirectURIs:
+      - https://{{ .Values.domain }}/oauth2/callback
+      name: 'OAuth2 Proxy'
+      secret: {{ .Values.dex.oauth2ProxyClientSecret }}
+    - id: {{ .Values.dex.kubernetesClientId }}
+      redirectURIs:
+      {{- range .Values.dex.kubernetesClientRedirectPorts }}
+      - http://localhost:{{ . }}
+      {{- end }}
+      name: 'Kubernetes Cluster'
+      {{- if .Values.dex.kubernetesClientSecret }}
+      secret: {{ .Values.dex.kubernetesClientSecret }}
+      {{- else }}
+      public: true
+      {{- end }}
+    connectors:
+    - type: github
+      id: github
+      name: GitHub
+      config:
+        clientID: $GITHUB_CLIENT_ID
+        clientSecret: $GITHUB_CLIENT_SECRET
+        redirectURI: https://{{ .Values.domain }}/dex/callback
+        {{- if .Values.github.orgs }}
+        orgs:
+        {{- range .Values.github.orgs }}
+        - name: {{ .name }}
+          {{- if .teams }}
+          teams:
+          {{- range .teams }}
+          - {{ . }}
+          {{- end }}
+          {{- end }}
+        {{- end }}
+        {{- end }}
+    oauth2:
+      skipApprovalScreen: true
+      responseTypes: ["code", "token", "id_token"]
+
+    enablePasswordDB: false
+
+    # Enable debug logging
+    logger:
+      level: debug

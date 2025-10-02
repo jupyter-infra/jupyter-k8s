@@ -1,0 +1,20 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: workspace-template
+  namespace: {{ .Values.namespace }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ .Values.domain }}`) && PathPrefix(`/`)
+      priority: 1
+      kind: Rule
+      middlewares:
+        - name: oauth-auth-redirect # redirects all unauthenticated to oauth2 signin
+          namespace: {{ .Values.namespace }}
+      services:
+        - name: traefik-healthcheck
+          port: 9000
+          namespace: {{ .Values.namespace }}
+  tls: {}

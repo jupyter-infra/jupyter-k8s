@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dex
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: dex
+    component: oauth
+spec:
+  replicas: {{ .Values.dex.replicas }}
+  selector:
+    matchLabels:
+      app: dex
+      component: oauth
+  template:
+    metadata:
+      labels:
+        app: dex
+        component: oauth
+    spec:
+      serviceAccountName: dex
+      initContainers:
+      - name: wait-for-traefik
+        image: busybox:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for Traefik service to be available..."
+          timeout={{ .Values.dex.traefikCheck.timeout_seconds }}  # Timeout in seconds
+          counter=0
+          interval=5
+          until wget -q -O - http://traefik-healthcheck.jupyter-k8s-router:9000/ping > /dev/null 2>&1; do
+            echo "Traefik service is not yet available, retrying in ${interval}s... (${counter}/${timeout}s)"
+            sleep $interval
+            counter=$((counter + interval))
+            if [ $counter -ge $timeout ]; then
+              echo "Timeout after ${timeout}s waiting for Traefik service. Continuing anyway..."
+              break
+            fi
+          done
+          echo "Traefik service is available or timeout reached!"
+      containers:
+      - name: dex
+        image: ghcr.io/dexidp/dex:latest
+        command: ["/usr/local/bin/dex", "serve", "/etc/dex/config/config.yaml"]
+        env:
+        - name: GITHUB_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: github-client
+              key: client-id
+        - name: GITHUB_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: github-client
+              key: client-secret
+        ports:
+        - name: http
+          containerPort: 5556
+        volumeMounts:
+        - name: config
+          mountPath: /etc/dex/config
+        readinessProbe:
+          httpGet:
+            path: /dex/healthz
+            port: 5556
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /dex/healthz
+            port: 5556
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+      volumes:
+      - name: config
+        configMap:
+          name: dex-config
+          items:
+          - key: config.yaml
+            path: config.yaml

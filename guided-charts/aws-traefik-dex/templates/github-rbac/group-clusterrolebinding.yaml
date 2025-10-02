@@ -1,0 +1,30 @@
+{{- if and .Values.githubRbac.create .Values.githubRbac.createOrgsRole }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: github-orgs-auth-whoami
+  annotations:
+    description: "Grants cluster-wide access for auth commands to specified GitHub teams"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: github-orgs-auth-whoami
+subjects:
+{{- if .Values.githubRbac.orgs }}
+{{- range $org := .Values.githubRbac.orgs }}
+{{- if $org.teams }}
+{{- range $team := $org.teams }}
+# For specific teams within the org
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: {{ $.Values.dex.oidcGroupPrefix }}{{ $org.name }}:{{ $team }}
+{{- end }}
+{{- else }}
+# No specific teams defined for this org
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: {{ $.Values.dex.oidcGroupPrefix }}{{ $org.name }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

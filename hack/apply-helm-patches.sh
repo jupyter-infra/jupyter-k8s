@@ -69,6 +69,7 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
     cat "${PATCHES_DIR}/values.yaml.patch" >> "${CHART_DIR}/values.yaml"
 fi
 
+
 # Handle manager.yaml patch to add registry arguments
 if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
     MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"

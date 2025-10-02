@@ -2,12 +2,31 @@
 Jupyter k8s is an open-source project that provides a secure-by-default but
 flexible way to run JupyterLab applications natively on Kubernetes.
 
+The IDEs can be either accessed from the webbrowser (e.g. Jupyterlab) or via remote connection from a desktop app (e.g. VS Code),
+but in that case only via tunneling, no direct SSH ingress. The goal of the custom resources it defines is to manage the compute, 
+storage, networking of IDEs of multiple users in a secure, scalable, usable and flexible way, in that order.
+
 ## Description
 Jupyter k8s provides a Kubernetes custom operator to manage and run JupyterLab application
-on your Kubernetes cluster.
+on your Kubernetes cluster. 
 
 It provides a set of custom resource definitions (CRDs) distributed as an helm chart, a controller image
 distributed on a docker repository, and a set of default application images distributed on docker repositories.
+
+Cluster admins can use it in two modes: guided or customized. In the guided mode, the helm chart creates additional k8s resources to 
+achieve a full end-to-end managed IDE experience. It sets up 1/ a reverse proxy, 2/ auth middlewares, 3/ Identity provider (w/ oauth),
+4/ namespaces, RBAC, SAs, limits and quotas for users, 5/ basic images and templates for IDEs, including their sidecars.
+
+In the customized mode, admin create a combination of 1/, 2/, 3/, 4/ and 5/ above themselves and reference them when they create the custom resources.
+
+### Core Custom Resources
+
+- **Workspace**: A compute unit with dedicated storage, unique URL, and access control list for users
+- **WorkspaceManager**: Handles routing, authentication, and authorization for Workspaces
+- **WorkspaceTemplate**: Provides default settings and bounds for variations
+- **WorkspaceExecutionProfile**: Provides k8s and potentially other identities to a Workspace at runtime
+- **WorkspaceShare**: Associates Workspaces with k8s identities for sharing access
+  
 
 ## Getting Started
 

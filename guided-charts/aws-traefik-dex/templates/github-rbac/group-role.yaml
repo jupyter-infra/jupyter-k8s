@@ -1,0 +1,15 @@
+{{- if and .Values.githubRbac.create .Values.githubRbac.createOrgsRole }}
+# This Role grants namespace-specific permissions to access workspace resources
+# For cluster-wide auth command permissions, see group-clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: github-workspace-orgs-role
+  namespace: default
+  annotations:
+    description: "Grants namespace-specific permissions for workspaces to GitHub teams"
+rules:
+  - apiGroups: ["workspaces.jupyter.org"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+{{- end }}

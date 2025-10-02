@@ -42,6 +42,9 @@ endif
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+# Guided deployment
+OAUTH2P_COOKIE_SECRET := $(shell openssl rand -base64 32 | tr -- '+/' '-_')
+
 .PHONY: all
 all: build
 
@@ -86,7 +89,7 @@ vet: ## Run go vet against code.
 
 .PHONY: test
 test: manifests generate fmt vet setup-envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v /test/helm) -coverprofile cover.out
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
@@ -188,22 +191,62 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 
 ##@ Helm Chart
 .PHONY: helm-generate
-helm-generate:
+helm-generate: manifests
+	rm -rf dist/chart
 	kubebuilder edit --plugins=helm/v1-alpha --force
 	./hack/apply-helm-patches.sh
 
 .PHONY: helm-package
 helm-package: helm-generate ## Package the Helm chart
 	helm package dist/chart -d dist
+	helm package guided-charts/aws-traefik-dex -d dist
 
 .PHONY: helm-lint
 helm-lint: ## Lint the Helm chart
 	helm lint dist/chart
+	helm lint guided-charts/aws-traefik-dex \
+		--set domain=a.fine.example.com \
+		--set certManager.email=admin@example.com \
+		--set storageClass.efs.parameters.fileSystemId=fs-00001111222233334 \
+		--set github.clientId=some-client-id \
+		--set github.clientSecret=some-github-secret \
+		--set github.orgs[0].name=some-org \
+		--set github.orgs[0].teams[0]=ace-devs \
+		--set githubRbac.orgs[0].name=some-org \
+		--set githubRbac.orgs[0].teams[0]=ace-devs \
+		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET)
 
 .PHONY: helm-test
 helm-test: ## Test the Helm chart with helm template
-	rm -rf dist/test-output
-	helm template dist/chart --output-dir dist/test-output
+	rm -rf dist/test-output-crd-only
+	rm -rf /tmp/helm-test-chart
+	cp -r dist/chart /tmp/helm-test-chart
+	cd /tmp/helm-test-chart && helm dependency build
+	helm template jk8s /tmp/helm-test-chart --output-dir dist/test-output-crd-only
+	rm -rf /tmp/helm-test-chart
+	go test ./test/helm/crd-only -v
+
+.PHONY: helm-test-aws-traefik-dex
+helm-test-aws-traefik-dex: ## Test the Helm chart with guided mode (aws-traefik-dex)
+	rm -rf dist/test-output-guided
+	rm -rf /tmp/helm-test-chart
+	cp -r guided-charts/aws-traefik-dex /tmp/helm-test-chart
+	cd /tmp/helm-test-chart && helm dependency build
+	helm template jk8s /tmp/helm-test-chart --output-dir dist/test-output-guided \
+		--set domain=a.fine.example.com \
+		--set certManager.email=admin@example.com \
+		--set storageClass.efs.parameters.fileSystemId=fs-00001111222233334 \
+		--set github.clientId=some-client-id \
+		--set github.clientSecret=some-github-secret \
+		--set github.orgs[0].name=some-org \
+		--set github.orgs[0].teams[0]=ace-devs \
+		--set githubRbac.orgs[0].name=some-org \
+		--set githubRbac.orgs[0].teams[0]=ace-devs \
+		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET)
+	# Clean up temporary chart directory
+	rm -rf /tmp/helm-test-chart
+	# Run helm tests to verify resources
+	go test ./test/helm/guided-aws-traefik-dex -v
 
 
 ##@ Deployment
@@ -356,23 +399,111 @@ load-images-aws:
 	$(MAKE) load-images-aws-internal CLOUD_PROVIDER=aws
 
 deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remote cluster
-	@echo "Deploying Helm chart to remote AWS cluster..."
-	helm upgrade --install jk8s dist/chart \
+	@echo "Deploying jupyter-k8s CRD and controller with Helm chart to remote AWS cluster..."
+	rm -rf /tmp/jk8s-helm-crd-only
+	cp -r dist/chart /tmp/jk8s-helm-crd-only
+	cd /tmp/jk8s-helm-crd-only
+	helm upgrade --install jk8s /tmp/jk8s-helm-crd-only \
 		--namespace jupyter-k8s-system --create-namespace \
 		--set controllerManager.container.imagePullPolicy=Always \
 		--set controllerManager.container.image.repository=$(ECR_REGISTRY)/$(ECR_REPOSITORY) \
 		--set controllerManager.container.image.tag=latest \
 		--set application.imagesPullPolicy=Always \
-		--set application.imagesRegistry=$(ECR_REGISTRY) \
-		$(EXTRA_HELM_ARGS)
-	@echo "Helm chart deployed successfully to remote AWS cluster"
+		--set application.imagesRegistry=$(ECR_REGISTRY)
+	@echo "Helm chart jupyter-k8s deployed successfully to remote AWS cluster"
 	@echo "Restarting deployments to use new images..."
 	kubectl rollout restart deployment -n jupyter-k8s-system jupyter-k8s-controller-manager
+	rm -rf /tmp/jk8s-helm-crd-only
 
-.PHONY: helm-deploy-aws
+.PHONY: deploy-aws
 deploy-aws:
 	$(MAKE) deploy-aws-internal CLOUD_PROVIDER=aws
 
+# Load environment variables from .env file for guided deployment
+deploy-aws-traefik-dex-internal:
+	@if [ ! -f .env ]; then \
+		echo "❌ .env file not found. Copy the `.env.example` file to `.env` and edit the values."; \
+		echo "Required variables: DOMAIN, LETSENCRYPT_EMAIL, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_ORG_NAME"; \
+		echo "Optional variables: DEX_OAUTH2_SECRET (defaults to auto-generated), DEX_K8S_SECRET (can be empty for public clients)"; \
+		exit 1; \
+	fi
+	@echo "Loading configuration from .env file and deploying..."
+	@( \
+		set -e; \
+		. ./.env; \
+		rm -rf /tmp/jk8s-aws-traefik-dex; \
+		mkdir /tmp/jk8s-aws-traefik-dex; \
+		cp -r guided-charts/aws-traefik-dex/ /tmp/jk8s-aws-traefik-dex/; \
+		echo 'Installing traefik CRDs first'; \
+		helm upgrade --install traefik-crd traefik/traefik-crds; \
+		echo 'Deploying AWS traefik dex helm chart'; \
+		HELM_ARGS="--set domain=$$DOMAIN \
+			--set certManager.email=$$LETSENCRYPT_EMAIL \
+			--set storageClass.efs.parameters.fileSystemId=$$EFS_ID \
+			--set github.clientId=$$GITHUB_CLIENT_ID \
+			--set github.clientSecret=$$GITHUB_CLIENT_SECRET \
+			--set github.orgs[0].name=$$GITHUB_ORG_NAME \
+			--set github.orgs[0].teams[0]=$$GITHUB_TEAM \
+			--set githubRbac.orgs[0].name=$$GITHUB_ORG_NAME \
+			--set githubRbac.orgs[0].teams[0]=$$GITHUB_TEAM \
+			--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET)"; \
+		\
+		if [ ! -z "$$DEX_OAUTH2_SECRET" ]; then \
+			HELM_ARGS="$$HELM_ARGS --set dex.oauth2ProxyClientSecret=$$DEX_OAUTH2_SECRET"; \
+		fi; \
+		\
+		if [ ! -z "$$DEX_K8S_SECRET" ]; then \
+			HELM_ARGS="$$HELM_ARGS --set dex.kubernetesClientSecret=$$DEX_K8S_SECRET"; \
+		fi; \
+		\
+		# Default redirect ports are set in values.yaml (8000, 18000, 9800) \
+		# But allow overriding with env vars \
+		if [ ! -z "$$KUBECTL_REDIRECT_PORTS" ]; then \
+			IFS=',' read -ra PORTS <<< "$$KUBECTL_REDIRECT_PORTS"; \
+			PORT_INDEX=0; \
+			for PORT in "$${PORTS[@]}"; do \
+				HELM_ARGS="$$HELM_ARGS --set dex.kubernetesClientRedirectPorts[$${PORT_INDEX}]=$${PORT}"; \
+				PORT_INDEX=$$((PORT_INDEX + 1)); \
+			done; \
+		fi; \
+		\
+		helm upgrade --install jk8-aws-traefik-dex /tmp/jk8s-aws-traefik-dex/aws-traefik-dex \
+			-n jupyter-k8s-router \
+			--create-namespace \
+			--force \
+			$$HELM_ARGS; \
+		\
+		$(SHELL) scripts/aws-traefik-dex/generate-client.sh \
+			$(EKS_CLUSTER_NAME) \
+			https://$$DOMAIN/dex \
+			$(AWS_REGION) \
+			9800 \
+			dist/users-scripts/set-kubeconfig.sh; \
+	)
+	@echo "Restarting deployments to use new images..."
+	kubectl rollout restart deployment -n jupyter-k8s-router \
+		traefik oauth2-proxy dex
+	@echo "All deployments to use new images..."
+	# Clean up temporary chart directory
+	rm -rf /tmp/jk8s-aws-traefik-dex
+	@echo "Bash script for end-users to set their kubeconfig available at: dist/users-scripts"
+
+
+.PHONY: deploy-aws-traefik-dex
+deploy-aws-traefik-dex:
+	$(MAKE) deploy-aws-traefik-dex-internal CLOUD_PROVIDER=aws
+
+.PHONY: undeploy-aws
+undeploy-aws: ## Uninstall the Helm chart from remote cluster
+	@echo "Undeploying Helm chart from remote AWS cluster..."
+	# Not specifying namespace to allow Helm to clean up resources across all namespaces
+	helm uninstall jk8s -n jupyter-k8s-system --ignore-not-found
+	helm uninstall jk8-aws-traefik-dex -n jupyter-k8s-router --ignore-not-found
+	helm uninstall traefik-crd --ignore-not-found
+	# CRDs with resource-policy: keep are not deleted by Helm, but we can find them by release name
+# 	@echo "Cleaning up CRDs with resource-policy: keep..."
+# 	kubectl get crds | grep jupyterservers | awk '{print $1}' | xargs -n1 kubectl delete crd
+	kubectl get crds --no-headers -o custom-columns=NAME:.metadata.name | grep traefik | xargs -r kubectl delete crd || true
 
 # Port forward to a specific Jupyter server
 .PHONY: port-forward

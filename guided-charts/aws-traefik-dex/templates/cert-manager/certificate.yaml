@@ -1,0 +1,27 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: traefik-cert
+  namespace: {{ .Values.namespace }}
+spec:
+  secretName: traefik-cert-tls
+  duration: 2160h  # 90 days
+  renewBefore: 360h  # 15 days
+  subject:
+    organizations:
+      - Jupyter-k8s
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - {{ .Values.domain }}
+    # Uncomment to add additional domains/subdomains
+    # - '*.{{ .Values.domain }}'
+  issuerRef:
+    name: {{ if .Values.certManager.useStaging }}letsencrypt-staging{{ else }}letsencrypt-prod{{ end }}
+    kind: ClusterIssuer
