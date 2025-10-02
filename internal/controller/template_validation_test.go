@@ -1,0 +1,680 @@
+/*
+MIT License
+
+Copyright (c) 2025 jupyter-ai-contrib
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+*/
+
+package controller
+
+import (
+	"context"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+)
+
+var _ = Describe("Template Validation", func() {
+	Context("TemplateResolver", func() {
+		var (
+			ctx              context.Context
+			templateResolver *TemplateResolver
+			templateName     string
+			template         *workspacesv1alpha1.WorkspaceTemplate
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			templateResolver = NewTemplateResolver(k8sClient)
+			templateName = "validation-template-" + randString(5)
+
+			// Create a comprehensive test template
+			template = &workspacesv1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: templateName,
+				},
+				Spec: workspacesv1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Validation Test Template",
+					Description:  "Template for validation testing",
+					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
+					AllowedImages: []string{
+						"quay.io/jupyter/minimal-notebook:latest",
+						"quay.io/jupyter/scipy-notebook:latest",
+						"custom/allowed-image:v1",
+					},
+					DefaultResources: &corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+							corev1.ResourceMemory: resource.MustParse("1Gi"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("2"),
+							corev1.ResourceMemory: resource.MustParse("4Gi"),
+						},
+					},
+					ResourceBounds: &workspacesv1alpha1.ResourceBounds{
+						CPU: &workspacesv1alpha1.ResourceRange{
+							Min: resource.MustParse("100m"),
+							Max: resource.MustParse("4"),
+						},
+						Memory: &workspacesv1alpha1.ResourceRange{
+							Min: resource.MustParse("256Mi"),
+							Max: resource.MustParse("8Gi"),
+						},
+						GPU: &workspacesv1alpha1.ResourceRange{
+							Min: resource.MustParse("0"),
+							Max: resource.MustParse("2"),
+						},
+					},
+					PrimaryStorage: &workspacesv1alpha1.StorageConfig{
+						DefaultSize: resource.MustParse("10Gi"),
+						MinSize:     &[]resource.Quantity{resource.MustParse("1Gi")}[0],
+						MaxSize:     &[]resource.Quantity{resource.MustParse("100Gi")}[0],
+					},
+					EnvironmentVariables: []corev1.EnvVar{
+						{Name: "JUPYTER_ENABLE_LAB", Value: "yes"},
+						{Name: "DEFAULT_ENV", Value: "test"},
+					},
+					AllowSecondaryStorages: &[]bool{true}[0],
+					IdleShutdownConfig: &workspacesv1alpha1.IdleShutdownConfig{
+						IdleTimeoutMinutes:  &[]int32{30}[0],
+						GracePeriodMinutes:  &[]int32{5}[0],
+						NotificationEnabled: &[]bool{true}[0],
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+		})
+
+		AfterEach(func() {
+			if template != nil {
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, template))).To(Succeed())
+			}
+		})
+
+		It("should validate workspace without template reference", func() {
+			workspace := &workspacesv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "no-template-workspace",
+					Namespace: "default",
+				},
+				Spec: workspacesv1alpha1.WorkspaceSpec{
+					// No TemplateRef
+				},
+			}
+
+			result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Valid).To(BeTrue())
+			Expect(result.Violations).To(BeEmpty())
+			Expect(result.Template).NotTo(BeNil())
+			Expect(result.Template.Image).To(Equal("quay.io/jupyter/minimal-notebook:latest"))
+		})
+
+		It("should validate workspace with valid template reference", func() {
+			workspace := &workspacesv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "valid-template-workspace",
+					Namespace: "default",
+				},
+				Spec: workspacesv1alpha1.WorkspaceSpec{
+					TemplateRef: &templateName,
+				},
+			}
+
+			result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Valid).To(BeTrue())
+			Expect(result.Violations).To(BeEmpty())
+			Expect(result.Template).NotTo(BeNil())
+			Expect(result.Template.Image).To(Equal("quay.io/jupyter/minimal-notebook:latest"))
+		})
+
+		It("should handle template without DefaultResources", func() {
+			// Create a template without DefaultResources
+			minimalTemplateName := "minimal-template-" + randString(5)
+			minimalTemplate := &workspacesv1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: minimalTemplateName,
+				},
+				Spec: workspacesv1alpha1.WorkspaceTemplateSpec{
+					DisplayName: "Minimal Template",
+					Description: "Template without default resources",
+					// DefaultResources is intentionally omitted (nil)
+					AllowedImages: []string{
+						"quay.io/jupyter/minimal-notebook:latest",
+					},
+					PrimaryStorage: &workspacesv1alpha1.StorageConfig{
+						DefaultSize: resource.MustParse("10Gi"),
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, minimalTemplate)).To(Succeed())
+			defer func() {
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, minimalTemplate))).To(Succeed())
+			}()
+
+			workspace := &workspacesv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "minimal-template-workspace",
+					Namespace: "default",
+				},
+				Spec: workspacesv1alpha1.WorkspaceSpec{
+					TemplateRef: &minimalTemplateName,
+				},
+			}
+
+			result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Valid).To(BeTrue())
+			Expect(result.Violations).To(BeEmpty())
+			Expect(result.Template).NotTo(BeNil())
+			// Should have empty resource requirements when template doesn't specify them
+			Expect(result.Template.Resources.Requests).To(BeNil())
+			Expect(result.Template.Resources.Limits).To(BeNil())
+		})
+
+		It("should reject workspace with non-existent template", func() {
+			nonExistentTemplate := "non-existent-template"
+			workspace := &workspacesv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "invalid-template-workspace",
+					Namespace: "default",
+				},
+				Spec: workspacesv1alpha1.WorkspaceSpec{
+					TemplateRef: &nonExistentTemplate,
+				},
+			}
+
+			result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Valid).To(BeFalse())
+			Expect(result.Violations).To(HaveLen(1))
+			Expect(result.Violations[0].Type).To(Equal(ViolationTypeTemplateNotFound))
+			Expect(result.Violations[0].Field).To(Equal("spec.templateRef"))
+			Expect(result.Template).To(BeNil())
+		})
+
+		Context("Image Validation", func() {
+			It("should allow images in the allowed list", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "allowed-image-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+						TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
+							Image: &[]string{"quay.io/jupyter/scipy-notebook:latest"}[0],
+						},
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeTrue())
+				Expect(result.Violations).To(BeEmpty())
+				Expect(result.Template.Image).To(Equal("quay.io/jupyter/scipy-notebook:latest"))
+			})
+
+			It("should reject images not in the allowed list", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "disallowed-image-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+						TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
+							Image: &[]string{"malicious/image:latest"}[0],
+						},
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeFalse())
+				Expect(result.Violations).To(HaveLen(1))
+				Expect(result.Violations[0].Type).To(Equal(ViolationTypeImageNotAllowed))
+				Expect(result.Violations[0].Field).To(Equal("spec.templateOverrides.image"))
+			})
+		})
+
+		Context("Resource Validation", func() {
+			It("should allow resources within bounds", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "valid-resources-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+						TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
+							Resources: &corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("1"),
+									corev1.ResourceMemory: resource.MustParse("2Gi"),
+								},
+							},
+						},
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeTrue())
+				Expect(result.Violations).To(BeEmpty())
+				Expect(result.Template.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("1")))
+			})
+
+			It("should reject CPU requests above maximum", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "cpu-exceeded-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+						TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
+							Resources: &corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU: resource.MustParse("8"), // Exceeds max of 4
+								},
+							},
+						},
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeFalse())
+				Expect(result.Violations).To(HaveLen(1))
+				Expect(result.Violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
+				Expect(result.Violations[0].Field).To(Equal("spec.templateOverrides.resources.requests.cpu"))
+			})
+
+			It("should reject CPU requests below minimum", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "cpu-below-min-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+						TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
+							Resources: &corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU: resource.MustParse("50m"), // Below min of 100m
+								},
+							},
+						},
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeFalse())
+				Expect(result.Violations).To(HaveLen(1))
+				Expect(result.Violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
+				Expect(result.Violations[0].Field).To(Equal("spec.templateOverrides.resources.requests.cpu"))
+			})
+
+			It("should reject memory requests above maximum", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "memory-exceeded-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+						TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
+							Resources: &corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceMemory: resource.MustParse("16Gi"), // Exceeds max of 8Gi
+								},
+							},
+						},
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeFalse())
+				Expect(result.Violations).To(HaveLen(1))
+				Expect(result.Violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
+				Expect(result.Violations[0].Field).To(Equal("spec.templateOverrides.resources.requests.memory"))
+			})
+
+			It("should validate GPU resources", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "gpu-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+						TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
+							Resources: &corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("1"),
+								},
+							},
+						},
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeTrue())
+				Expect(result.Violations).To(BeEmpty())
+			})
+
+			It("should reject GPU requests above maximum", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "gpu-exceeded-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+						TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
+							Resources: &corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("4"), // Exceeds max of 2
+								},
+							},
+						},
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeFalse())
+				Expect(result.Violations).To(HaveLen(1))
+				Expect(result.Violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
+				Expect(result.Violations[0].Field).To(Equal("spec.templateOverrides.resources.requests['nvidia.com/gpu']"))
+			})
+		})
+
+		Context("Storage Validation", func() {
+			It("should allow storage size within bounds", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "valid-storage-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+						TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
+							StorageSize: &[]string{"50Gi"}[0],
+						},
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeTrue())
+				Expect(result.Violations).To(BeEmpty())
+				Expect(result.Template.StorageConfiguration.DefaultSize).To(Equal(resource.MustParse("50Gi")))
+			})
+
+			It("should reject storage size above maximum", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "storage-exceeded-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+						TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
+							StorageSize: &[]string{"200Gi"}[0], // Exceeds max of 100Gi
+						},
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeFalse())
+				Expect(result.Violations).To(HaveLen(1))
+				Expect(result.Violations[0].Type).To(Equal(ViolationTypeStorageExceeded))
+				Expect(result.Violations[0].Field).To(Equal("spec.templateOverrides.storageSize"))
+			})
+
+			It("should reject storage size below minimum", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "storage-below-min-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+						TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
+							StorageSize: &[]string{"500Mi"}[0], // Below min of 1Gi
+						},
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeFalse())
+				Expect(result.Violations).To(HaveLen(1))
+				Expect(result.Violations[0].Type).To(Equal(ViolationTypeStorageExceeded))
+				Expect(result.Violations[0].Field).To(Equal("spec.templateOverrides.storageSize"))
+			})
+
+			It("should reject invalid storage size format", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "invalid-storage-format-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+						TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
+							StorageSize: &[]string{"invalid-size"}[0],
+						},
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeFalse())
+				Expect(result.Violations).To(HaveLen(1))
+				Expect(result.Violations[0].Type).To(Equal(ViolationTypeStorageExceeded))
+				Expect(result.Violations[0].Field).To(Equal("spec.templateOverrides.storageSize"))
+			})
+		})
+
+		Context("Multiple Violations", func() {
+			It("should collect all validation failures", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "multiple-violations-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+						TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
+							Image: &[]string{"forbidden/image:latest"}[0],
+							Resources: &corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("8"),    // Exceeds max
+									corev1.ResourceMemory: resource.MustParse("50Mi"), // Below min
+								},
+							},
+							StorageSize: &[]string{"200Gi"}[0], // Exceeds max
+						},
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeFalse())
+				Expect(result.Violations).To(HaveLen(4)) // Image, CPU max, Memory min, Storage max
+
+				violationTypes := make(map[string]bool)
+				for _, violation := range result.Violations {
+					violationTypes[violation.Type] = true
+				}
+				Expect(violationTypes[ViolationTypeImageNotAllowed]).To(BeTrue())
+				Expect(violationTypes[ViolationTypeResourceExceeded]).To(BeTrue())
+				Expect(violationTypes[ViolationTypeStorageExceeded]).To(BeTrue())
+			})
+		})
+
+		Context("Template Resolution", func() {
+			It("should properly resolve all template fields", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "full-resolution-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeTrue())
+				Expect(result.Template).NotTo(BeNil())
+
+				// Verify all template fields are properly resolved
+				Expect(result.Template.Image).To(Equal("quay.io/jupyter/minimal-notebook:latest"))
+				Expect(result.Template.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("500m")))
+				Expect(result.Template.Resources.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("1Gi")))
+				Expect(result.Template.EnvironmentVariables).To(HaveLen(2))
+				Expect(result.Template.StorageConfiguration).NotTo(BeNil())
+				Expect(result.Template.StorageConfiguration.DefaultSize).To(Equal(resource.MustParse("10Gi")))
+			})
+
+			It("should handle AllowSecondaryStorages field from template", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "secondary-storage-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeTrue())
+				Expect(result.Template).NotTo(BeNil())
+				Expect(result.Template.AllowSecondaryStorages).To(BeTrue())
+			})
+
+			It("should handle IdleShutdownConfig from template", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "idle-config-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeTrue())
+				Expect(result.Template).NotTo(BeNil())
+				Expect(result.Template.IdleShutdownConfig).NotTo(BeNil())
+				Expect(*result.Template.IdleShutdownConfig.IdleTimeoutMinutes).To(Equal(int32(30)))
+				Expect(*result.Template.IdleShutdownConfig.GracePeriodMinutes).To(Equal(int32(5)))
+				Expect(*result.Template.IdleShutdownConfig.NotificationEnabled).To(BeTrue())
+			})
+
+			It("should apply IdleShutdownConfig override", func() {
+				customIdleConfig := &workspacesv1alpha1.IdleShutdownConfig{
+					IdleTimeoutMinutes:  &[]int32{60}[0],
+					GracePeriodMinutes:  &[]int32{10}[0],
+					NotificationEnabled: &[]bool{false}[0],
+				}
+
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "idle-override-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &templateName,
+						TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
+							IdleShutdownConfig: customIdleConfig,
+						},
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeTrue())
+				Expect(result.Template).NotTo(BeNil())
+				Expect(result.Template.IdleShutdownConfig).NotTo(BeNil())
+				Expect(*result.Template.IdleShutdownConfig.IdleTimeoutMinutes).To(Equal(int32(60)))
+				Expect(*result.Template.IdleShutdownConfig.GracePeriodMinutes).To(Equal(int32(10)))
+				Expect(*result.Template.IdleShutdownConfig.NotificationEnabled).To(BeFalse())
+			})
+
+			It("should handle template with AllowSecondaryStorages set to false", func() {
+				// Create a template with AllowSecondaryStorages disabled
+				restrictedTemplateName := "restricted-template-" + randString(5)
+				restrictedTemplate := &workspacesv1alpha1.WorkspaceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: restrictedTemplateName,
+					},
+					Spec: workspacesv1alpha1.WorkspaceTemplateSpec{
+						DisplayName:            "Restricted Template",
+						AllowSecondaryStorages: &[]bool{false}[0],
+					},
+				}
+				Expect(k8sClient.Create(ctx, restrictedTemplate)).To(Succeed())
+				defer func() {
+					Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, restrictedTemplate))).To(Succeed())
+				}()
+
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "restricted-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						TemplateRef: &restrictedTemplateName,
+					},
+				}
+
+				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Valid).To(BeTrue())
+				Expect(result.Template).NotTo(BeNil())
+				Expect(result.Template.AllowSecondaryStorages).To(BeFalse())
+			})
+		})
+	})
+})
+
+// Helper function to generate random strings for test names
+func randString(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	result := make([]byte, length)
+	for i := range result {
+		result[i] = charset[len(charset)/2+i%len(charset)/2] // Simple deterministic selection for tests
+	}
+	return string(result)
+}

@@ -1,0 +1,66 @@
+apiVersion: servers.jupyter.org/v1alpha1
+kind: JupyterServer
+metadata:
+  name: gpu-workspace-from-template
+  namespace: default
+spec:
+  # Display name for this workspace
+  displayName: "My GPU Workspace"
+
+  # Reference to the WorkspaceTemplate
+  templateRef: gpu-datascience-template
+
+  # Override some template defaults (validated against bounds)
+  templateOverrides:
+    # Use PyTorch instead of TensorFlow
+    image: pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+
+    # Request more memory (within template bounds of 4Gi-32Gi)
+    resources:
+      requests:
+        cpu: "3"
+        memory: "12Gi"
+        nvidia.com/gpu: "1"
+      limits:
+        cpu: "6"
+        memory: "24Gi"
+        nvidia.com/gpu: "1"
+
+    # Request larger storage (within bounds of 20Gi-200Gi)
+    storageSize: "100Gi"
+
+  # Desired operational status
+  desiredStatus: Running
+
+---
+# Example of a minimal JupyterServer using template defaults
+apiVersion: servers.jupyter.org/v1alpha1
+kind: JupyterServer
+metadata:
+  name: cpu-workspace-minimal
+  namespace: default
+spec:
+  displayName: "Basic CPU Workspace"
+  templateRef: cpu-standard-template
+  desiredStatus: Running
+  # No overrides - will use all template defaults
+
+---
+# Example of traditional JupyterServer without template (backward compatible)
+apiVersion: servers.jupyter.org/v1alpha1
+kind: JupyterServer
+metadata:
+  name: legacy-workspace
+  namespace: default
+spec:
+  displayName: "Legacy Workspace (No Template)"
+  image: jupyter/scipy-notebook:latest
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: "0.5"
+      memory: "1Gi"
+    limits:
+      cpu: "1"
+      memory: "2Gi"
+  # No templateRef - works as before

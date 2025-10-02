@@ -160,11 +160,13 @@ func LoadImageToKindClusterWithName(name string) error {
 		}
 
 		// Save the image to a tarball
-		tarballPath := fmt.Sprintf("/tmp/kind-images/%s.tar", strings.ReplaceAll(name, "/", "-"))
-		tarballPath = strings.ReplaceAll(tarballPath, ":", "-")
+		// Clean the name by replacing invalid characters
+		cleanName := strings.ReplaceAll(name, "/", "-")
+		cleanName = strings.ReplaceAll(cleanName, ":", "-")
+		tarballPath := fmt.Sprintf("/tmp/kind-images/%s.tar", cleanName)
 
-		// Use finch to save the image
-		saveCmd := exec.Command("finch", "save", name, "-o", tarballPath)
+		// Use finch to save the image (finch save -o doesn't work, use stdout redirection)
+		saveCmd := exec.Command("sh", "-c", fmt.Sprintf("finch save %s > %s", name, tarballPath))
 		if _, err := Run(saveCmd); err != nil {
 			return fmt.Errorf("failed to save image with finch: %w", err)
 		}

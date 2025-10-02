@@ -1,0 +1,42 @@
+# Example WorkspaceTemplate for data science with GPU
+apiVersion: workspaces.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: data-science-gpu-template
+spec:
+  displayName: "Data Science GPU Notebook"
+  description: "GPU-enabled notebook for machine learning workloads"
+  defaultImage: "quay.io/jupyter/tensorflow-notebook:cuda-12"
+  allowedImages:
+    - "quay.io/jupyter/tensorflow-notebook:cuda-12"
+    - "quay.io/jupyter/pytorch-notebook:cuda-12"
+  defaultResources:
+    requests:
+      cpu: "4"
+      memory: "16Gi"
+      nvidia.com/gpu: "1"
+    limits:
+      cpu: "8"
+      memory: "32Gi"
+      nvidia.com/gpu: "1"
+  resourceBounds:
+    cpu:
+      min: "2"
+      max: "16"
+    memory:
+      min: "8Gi"
+      max: "64Gi"
+    gpu:
+      min: "0"
+      max: "4"
+  primaryStorage:
+    defaultSize: "100Gi"
+    minSize: "50Gi"
+    maxSize: "1Ti"
+  environmentVariables:
+    - name: JUPYTER_ENABLE_LAB
+      value: "yes"
+    - name: CUDA_VISIBLE_DEVICES
+      value: "0"
+    - name: TF_FORCE_GPU_ALLOW_GROWTH
+      value: "true"

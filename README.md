@@ -76,6 +76,61 @@ kubectl apply -k config/samples/
 
 >**NOTE**: Ensure that the samples has default values to test it out.
 
+### Workspace Templates
+
+Workspace Templates provide standardized, reusable configurations for Jupyter workspaces. Platform administrators can define approved environments with resource limits, allowed container images, storage configuration, and environment variables, while giving users flexibility within those boundaries.
+
+Templates are validated by the controller during reconciliation. Invalid workspaces are created but marked with `TemplateValidation=False` and `Degraded=True` conditions and will not deploy pods until validation passes. This ensures no compute resources are wasted on invalid configurations.
+
+**Validation Rules**
+- Allowed Images: Only container images in the `allowedImages` list are permitted
+- Resource Bounds: CPU, memory, and GPU requests/limits must be within `resourceBounds` (min/max)
+- Storage Bounds: Workspace storage must be within `primaryStorage.minSize` and `maxSize`
+
+**Configuration Inheritance**
+
+Workspaces inherit configuration from templates when not explicitly specified:
+- Storage: If workspace doesn't specify storage, uses template's `primaryStorage.defaultSize`
+- Resources: If workspace doesn't specify resources, uses template's `defaultResources`
+- Image: If workspace doesn't specify image, uses template's `defaultImage`
+
+**Template Overrides**
+
+Workspaces can override inherited values using `templateOverrides` (must still satisfy validation rules):
+```yaml
+spec:
+  templateRef: "production-notebook-template"
+  templateOverrides:
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "384Mi"
+```
+
+**Create a template with resource limits and security policies:**
+```sh
+kubectl apply -f config/samples/workspaces_v1alpha1_workspacetemplate_production.yaml
+kubectl get workspacetemplates
+```
+
+**Create a workspace using the template:**
+```sh
+kubectl apply -f config/samples/workspaces_v1alpha1_workspace_with_template.yaml
+```
+
+**Check validation status:**
+```sh
+kubectl get workspace workspace-with-template -o jsonpath='{.status.conditions[?(@.type=="TemplateValidation")]}'
+```
+
+**Require all workspaces to use templates (optional):**
+```sh
+# Local development
+make run ARGS="--require-template"
+
+# Production deployment: Add --require-template flag to controller args in config/manager/manager.yaml
+```
+
 ### To Uninstall
 **Delete the instances (CRs) from the cluster:**
 
@@ -194,7 +249,7 @@ make test
 
 **Generate the helm chart**
 ```sh
-test helm-generate
+make helm-generate
 ```
 
 **Run the end-to-end tests**

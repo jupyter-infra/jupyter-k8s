@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/workspaces.jupyter.org_workspaces.yaml
+- bases/workspaces.jupyter.org_workspacetemplates.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

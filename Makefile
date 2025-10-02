@@ -125,13 +125,6 @@ test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expect
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
-	@case "$$($(KIND) get clusters)" in \
-		*"$(KIND_CLUSTER)"*) \
-			echo "Deleting Kind cluster '$(KIND_CLUSTER)'..."; \
-			$(KIND) delete cluster --name $(KIND_CLUSTER) ;; \
-		*) \
-			echo "Kind cluster '$(KIND_CLUSTER)' does not exist. Skipping deletion." ;; \
-	esac
 
 .PHONY: lint
 lint: golangci-lint helm-lint ## Run golangci-lint linter

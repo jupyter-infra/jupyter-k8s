@@ -25,14 +25,33 @@ func NewPVCBuilder(scheme *runtime.Scheme) *PVCBuilder {
 }
 
 // BuildPVC creates a PersistentVolumeClaim resource for the given Workspace
-func (pb *PVCBuilder) BuildPVC(workspace *workspacesv1alpha1.Workspace) (*corev1.PersistentVolumeClaim, error) {
-	if workspace.Spec.Storage == nil {
-		return nil, nil // No storage requested
+// It uses workspace storage if specified, otherwise falls back to template storage configuration
+func (pb *PVCBuilder) BuildPVC(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
+	// Determine storage configuration from workspace or template
+	var size resource.Quantity
+	var storageClassName *string
+
+	if workspace.Spec.Storage != nil {
+		// Workspace storage takes precedence
+		size = workspace.Spec.Storage.Size
+		storageClassName = workspace.Spec.Storage.StorageClassName
+	} else if resolvedTemplate != nil && resolvedTemplate.StorageConfiguration != nil {
+		// Fall back to template storage configuration
+		size = resolvedTemplate.StorageConfiguration.DefaultSize
+		// Use default storage class from cluster (storageClassName remains nil)
+	} else {
+		// No storage requested from either source
+		return nil, nil
+	}
+
+	// Ensure size is set to a default if zero
+	if size.IsZero() {
+		size = resource.MustParse("10Gi")
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: pb.buildObjectMeta(workspace),
-		Spec:       pb.buildPVCSpec(workspace.Spec.Storage),
+		Spec:       pb.buildPVCSpecWithSize(size, storageClassName),
 	}
 
 	// Set owner reference for garbage collection
@@ -52,13 +71,8 @@ func (pb *PVCBuilder) buildObjectMeta(workspace *workspacesv1alpha1.Workspace) m
 	}
 }
 
-// buildPVCSpec creates the PVC specification
-func (pb *PVCBuilder) buildPVCSpec(storage *workspacesv1alpha1.StorageSpec) corev1.PersistentVolumeClaimSpec {
-	size := storage.Size
-	if size.IsZero() {
-		size = resource.MustParse("10Gi") // Default size
-	}
-
+// buildPVCSpecWithSize creates the PVC specification with the given size and storage class
+func (pb *PVCBuilder) buildPVCSpecWithSize(size resource.Quantity, storageClassName *string) corev1.PersistentVolumeClaimSpec {
 	spec := corev1.PersistentVolumeClaimSpec{
 		AccessModes: []corev1.PersistentVolumeAccessMode{
 			corev1.ReadWriteOnce,
@@ -70,8 +84,8 @@ func (pb *PVCBuilder) buildPVCSpec(storage *workspacesv1alpha1.StorageSpec) core
 		},
 	}
 
-	if storage.StorageClassName != nil {
-		spec.StorageClassName = storage.StorageClassName
+	if storageClassName != nil {
+		spec.StorageClassName = storageClassName
 	}
 
 	return spec

@@ -130,6 +130,119 @@ func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, workspace *works
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
 }
 
+// SetTemplateValidated sets the TemplateValidation condition to true
+func (sm *StatusManager) SetTemplateValidated(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
+	// Set TemplateValidation condition to true
+	templateCondition := NewCondition(
+		ConditionTypeTemplateValidation,
+		metav1.ConditionTrue,
+		ReasonTemplateValid,
+		"Template validation passed",
+	)
+
+	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &[]metav1.Condition{templateCondition})
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
+}
+
+// SetTemplateRequired sets conditions when a workspace is rejected due to missing required template
+func (sm *StatusManager) SetTemplateRequired(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
+	// Set TemplateValidation condition to false
+	templateCondition := NewCondition(
+		ConditionTypeTemplateValidation,
+		metav1.ConditionFalse,
+		ReasonTemplateRequired,
+		"Template reference is required by policy",
+	)
+
+	// Set Degraded to true since the workspace can't start
+	degradedCondition := NewCondition(
+		ConditionTypeDegraded,
+		metav1.ConditionTrue,
+		ReasonTemplateRequired,
+		"Workspace rejected: template reference required",
+	)
+
+	// Set Available to false
+	availableCondition := NewCondition(
+		ConditionTypeAvailable,
+		metav1.ConditionFalse,
+		ReasonTemplateRequired,
+		"Workspace rejected: template reference required",
+	)
+
+	// Set Progressing to false
+	progressingCondition := NewCondition(
+		ConditionTypeProgressing,
+		metav1.ConditionFalse,
+		ReasonTemplateRequired,
+		"Workspace rejected: template reference required",
+	)
+
+	conditions := []metav1.Condition{
+		templateCondition,
+		degradedCondition,
+		availableCondition,
+		progressingCondition,
+	}
+
+	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
+}
+
+// SetTemplateRejected sets the TemplateValidation condition to false with policy violations
+func (sm *StatusManager) SetTemplateRejected(ctx context.Context, workspace *workspacesv1alpha1.Workspace, validation *TemplateValidationResult) error {
+	// Build violation message
+	message := fmt.Sprintf("Template validation failed: %d violation(s)", len(validation.Violations))
+	if len(validation.Violations) > 0 {
+		// Include first violation in message for visibility
+		v := validation.Violations[0]
+		message = fmt.Sprintf("%s. First: %s at %s (allowed: %s, actual: %s)",
+			message, v.Message, v.Field, v.Allowed, v.Actual)
+	}
+
+	// Set TemplateValidation condition to false
+	templateCondition := NewCondition(
+		ConditionTypeTemplateValidation,
+		metav1.ConditionFalse,
+		ReasonPolicyViolation,
+		message,
+	)
+
+	// Also set Degraded to true since the workspace can't start
+	degradedCondition := NewCondition(
+		ConditionTypeDegraded,
+		metav1.ConditionTrue,
+		ReasonPolicyViolation,
+		"Template validation failed",
+	)
+
+	// Set Available to false
+	availableCondition := NewCondition(
+		ConditionTypeAvailable,
+		metav1.ConditionFalse,
+		ReasonPolicyViolation,
+		"Template validation failed",
+	)
+
+	// Set Progressing to false
+	progressingCondition := NewCondition(
+		ConditionTypeProgressing,
+		metav1.ConditionFalse,
+		ReasonPolicyViolation,
+		"Template validation failed",
+	)
+
+	conditions := []metav1.Condition{
+		templateCondition,
+		degradedCondition,
+		availableCondition,
+		progressingCondition,
+	}
+
+	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
+}
+
 // UpdateRunningStatus sets the Available condition to true and Progressing to false
 func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
 	// ensure AvailableCondition is set to true with ReasonResourcesReady

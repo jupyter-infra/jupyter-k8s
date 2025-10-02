@@ -69,6 +69,35 @@ type WorkspaceSpec struct {
 	// Storage specifies the storage configuration
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage is immutable"
 	Storage *StorageSpec `json:"storage,omitempty"`
+
+	// TemplateRef references a WorkspaceTemplate to use as base configuration
+	// Note: Changing templateRef after creation is not recommended as it may lead to
+	// configuration inconsistencies. Future versions may enforce immutability via webhook.
+	// +optional
+	TemplateRef *string `json:"templateRef,omitempty"`
+
+	// TemplateOverrides allows overriding specific template values
+	// +optional
+	TemplateOverrides *TemplateOverrides `json:"templateOverrides,omitempty"`
+}
+
+// TemplateOverrides allows selective overrides of template settings
+type TemplateOverrides struct {
+	// Image overrides the template's default image
+	// +optional
+	Image *string `json:"image,omitempty"`
+
+	// Resources overrides the template's default resources
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// StorageSize overrides the template's default storage size
+	// +optional
+	StorageSize *string `json:"storageSize,omitempty"`
+
+	// IdleShutdownConfig overrides the template's idle shutdown configuration
+	// +optional
+	IdleShutdownConfig *IdleShutdownConfig `json:"idleShutdownConfig,omitempty"`
 }
 
 // WorkspaceStatus defines the observed state of Workspace.
@@ -94,6 +123,7 @@ type WorkspaceStatus struct {
 	// - "Available": the resource is fully functional and ready to use
 	// - "Progressing": the resource is being created or updated
 	// - "Degraded": the resource failed to reach or maintain its desired state
+	// - "TemplateValid": the template reference and overrides are valid (if using template)
 	//
 	// The status of each condition is one of True, False, or Unknown.
 	// +listType=map

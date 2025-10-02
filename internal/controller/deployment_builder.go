@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
@@ -10,34 +11,38 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // DeploymentBuilder handles creation of Deployment resources for Workspace
 type DeploymentBuilder struct {
-	scheme        *runtime.Scheme
-	options       WorkspaceControllerOptions
-	imageResolver *ImageResolver
+	scheme           *runtime.Scheme
+	options          WorkspaceControllerOptions
+	imageResolver    *ImageResolver
+	templateResolver *TemplateResolver
 }
 
 // NewDeploymentBuilder creates a new DeploymentBuilder
-func NewDeploymentBuilder(scheme *runtime.Scheme, options WorkspaceControllerOptions) *DeploymentBuilder {
+func NewDeploymentBuilder(scheme *runtime.Scheme, options WorkspaceControllerOptions, k8sClient client.Client) *DeploymentBuilder {
 	return &DeploymentBuilder{
-		scheme:        scheme,
-		options:       options,
-		imageResolver: NewImageResolver(options.ApplicationImagesRegistry),
+		scheme:           scheme,
+		options:          options,
+		imageResolver:    NewImageResolver(options.ApplicationImagesRegistry),
+		templateResolver: NewTemplateResolver(k8sClient),
 	}
 }
 
 // BuildDeployment creates a Deployment resource for the given Workspace
-func (db *DeploymentBuilder) BuildDeployment(workspace *workspacesv1alpha1.Workspace) (*appsv1.Deployment, error) {
-	resources := db.parseResourceRequirements(workspace)
+// Note: Template validation should happen in StateMachine before calling this
+func (db *DeploymentBuilder) BuildDeployment(ctx context.Context, workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
+	resources := db.parseResourceRequirements(workspace, resolvedTemplate)
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: db.buildObjectMeta(workspace),
-		Spec:       db.buildDeploymentSpec(workspace, resources),
+		Spec:       db.buildDeploymentSpec(workspace, resolvedTemplate, resources),
 	}
 
-	// Set owner reference for garbage collection
 	if err := controllerutil.SetControllerReference(workspace, deployment, db.scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference: %w", err)
 	}
@@ -55,8 +60,9 @@ func (db *DeploymentBuilder) buildObjectMeta(workspace *workspacesv1alpha1.Works
 }
 
 // buildDeploymentSpec creates the deployment specification
-func (db *DeploymentBuilder) buildDeploymentSpec(workspace *workspacesv1alpha1.Workspace, resources corev1.ResourceRequirements) appsv1.DeploymentSpec {
-	replicas := int32(1) // TODO: Make this configurable
+func (db *DeploymentBuilder) buildDeploymentSpec(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, resources corev1.ResourceRequirements) appsv1.DeploymentSpec {
+	// Single replica for Jupyter workspaces (stateful, user-specific workloads)
+	replicas := int32(1)
 
 	return appsv1.DeploymentSpec{
 		Replicas: &replicas,
@@ -67,22 +73,27 @@ func (db *DeploymentBuilder) buildDeploymentSpec(workspace *workspacesv1alpha1.W
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: GenerateLabels(workspace.Name),
 			},
-			Spec: db.buildPodSpec(workspace, resources),
+			Spec: db.buildPodSpec(workspace, resolvedTemplate, resources),
 		},
 	}
 }
 
 // buildPodSpec creates the pod specification
-func (db *DeploymentBuilder) buildPodSpec(workspace *workspacesv1alpha1.Workspace, resources corev1.ResourceRequirements) corev1.PodSpec {
+func (db *DeploymentBuilder) buildPodSpec(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, resources corev1.ResourceRequirements) corev1.PodSpec {
 	podSpec := corev1.PodSpec{
 		Containers: []corev1.Container{
-			db.buildJupyterContainer(workspace, resources),
+			db.buildJupyterContainer(workspace, resolvedTemplate, resources),
 		},
-		// TODO: Add security context, service account, etc.
 	}
 
-	// Add volume if storage is configured
-	if workspace.Spec.Storage != nil {
+	if resolvedTemplate != nil {
+		if resolvedTemplate.ServiceAccountName != "" {
+			podSpec.ServiceAccountName = resolvedTemplate.ServiceAccountName
+		}
+	}
+
+	storageConfig := db.getStorageConfig(workspace, resolvedTemplate)
+	if storageConfig != nil {
 		podSpec.Volumes = []corev1.Volume{
 			{
 				Name: "jupyter-storage",
@@ -99,9 +110,13 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacesv1alpha1.Workspac
 }
 
 // buildJupyterContainer creates the Jupyter container specification
-func (db *DeploymentBuilder) buildJupyterContainer(workspace *workspacesv1alpha1.Workspace, resources corev1.ResourceRequirements) corev1.Container {
-	// Use the image resolver to get the appropriate image reference
-	image := db.imageResolver.ResolveImage(workspace)
+func (db *DeploymentBuilder) buildJupyterContainer(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, resources corev1.ResourceRequirements) corev1.Container {
+	var image string
+	if resolvedTemplate != nil && resolvedTemplate.Image != "" {
+		image = resolvedTemplate.Image
+	} else {
+		image = db.imageResolver.ResolveImage(workspace)
+	}
 
 	container := corev1.Container{
 		Name:            "jupyter",
@@ -115,20 +130,18 @@ func (db *DeploymentBuilder) buildJupyterContainer(workspace *workspacesv1alpha1
 			},
 		},
 		Resources: resources,
-		// TODO: Add environment variables, probes
 	}
 
-	// Add volume mount if storage is configured
-	if workspace.Spec.Storage != nil {
-		mountPath := workspace.Spec.Storage.MountPath
-		if mountPath == "" {
-			mountPath = DefaultMountPath
-		}
+	if resolvedTemplate != nil && len(resolvedTemplate.EnvironmentVariables) > 0 {
+		container.Env = resolvedTemplate.EnvironmentVariables
+	}
 
+	storageConfig := db.getStorageConfig(workspace, resolvedTemplate)
+	if storageConfig != nil {
 		container.VolumeMounts = []corev1.VolumeMount{
 			{
 				Name:      "jupyter-storage",
-				MountPath: mountPath,
+				MountPath: DefaultMountPath,
 			},
 		}
 	}
@@ -137,16 +150,17 @@ func (db *DeploymentBuilder) buildJupyterContainer(workspace *workspacesv1alpha1
 }
 
 // parseResourceRequirements extracts and validates resource requirements
-func (db *DeploymentBuilder) parseResourceRequirements(workspace *workspacesv1alpha1.Workspace) corev1.ResourceRequirements {
-	// Set defaults
+func (db *DeploymentBuilder) parseResourceRequirements(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) corev1.ResourceRequirements {
+	if resolvedTemplate != nil {
+		return resolvedTemplate.Resources
+	}
+
 	defaultCPU := resource.MustParse(DefaultCPURequest)
 	defaultMemory := resource.MustParse(DefaultMemoryRequest)
 
 	// Use provided resources if available, otherwise use defaults
 	if workspace.Spec.Resources != nil {
-		// Return the provided ResourceRequirements directly
 		result := *workspace.Spec.Resources
-		// If no requests are specified, set defaults
 		if result.Requests == nil {
 			result.Requests = corev1.ResourceList{
 				corev1.ResourceCPU:    defaultCPU,
@@ -157,7 +171,6 @@ func (db *DeploymentBuilder) parseResourceRequirements(workspace *workspacesv1al
 		return result
 	}
 
-	// Return default resources if none specified
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    defaultCPU,
@@ -168,4 +181,20 @@ func (db *DeploymentBuilder) parseResourceRequirements(workspace *workspacesv1al
 			corev1.ResourceMemory: defaultMemory,
 		},
 	}
+}
+
+// getStorageConfig determines storage configuration from workspace or template
+func (db *DeploymentBuilder) getStorageConfig(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) *workspacesv1alpha1.StorageConfig {
+	// Workspace storage takes precedence
+	if workspace.Spec.Storage != nil {
+		return &workspacesv1alpha1.StorageConfig{
+			DefaultSize: workspace.Spec.Storage.Size,
+		}
+	}
+
+	if resolvedTemplate != nil && resolvedTemplate.StorageConfiguration != nil {
+		return resolvedTemplate.StorageConfiguration
+	}
+
+	return nil
 }
