@@ -7,6 +7,7 @@ import (
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -134,6 +135,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 
 	// Validate template BEFORE creating any resources
 	var resolvedTemplate *ResolvedTemplate
+	var validatedTemplate *workspacesv1alpha1.WorkspaceTemplate
 	if workspace.Spec.TemplateRef != nil {
 		validation, err := sm.templateResolver.ValidateAndResolveTemplate(ctx, workspace)
 		if err != nil {
@@ -167,15 +169,25 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 		resolvedTemplate = validation.Template
 		logger.Info("Template validation passed")
 
-		// Record validation success event
-		templateName := "<no template>"
-		if workspace.Spec.TemplateRef != nil {
-			templateName = *workspace.Spec.TemplateRef
+		// Update validation cache to avoid redundant fetches on next reconcile
+		templateName := *workspace.Spec.TemplateRef
+		validatedTemplate = &workspacesv1alpha1.WorkspaceTemplate{}
+		templateKey := types.NamespacedName{
+			Name: templateName,
 		}
+		if err := sm.resourceManager.client.Get(ctx, templateKey, validatedTemplate); err == nil {
+			sm.templateResolver.UpdateValidationCache(workspace, validatedTemplate)
+			logger.Info("Updated validation cache",
+				"templateRV", validatedTemplate.ResourceVersion,
+				"templateGen", validatedTemplate.Generation,
+				"workspaceRV", workspace.ResourceVersion)
+		} else {
+			logger.Error(err, "Failed to fetch template for cache update", "template", templateName)
+		}
+
 		message := "Template validation passed for " + templateName
 		sm.recorder.Event(workspace, corev1.EventTypeNormal, "TemplateValidated", message)
 
-		// Set the TemplateValidation condition to true
 		if statusErr := sm.statusManager.SetTemplateValidated(ctx, workspace); statusErr != nil {
 			logger.Error(statusErr, "Failed to update template validation status")
 		}
