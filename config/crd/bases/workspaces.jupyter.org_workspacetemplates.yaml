@@ -65,11 +65,10 @@ spec:
                 maxItems: 50
                 type: array
               defaultImage:
-                default: quay.io/jupyter/minimal-notebook:latest
-                description: |-
-                  DefaultImage is the default container image for workspaces using this template
-                  If not specified, defaults to "quay.io/jupyter/minimal-notebook:latest"
+                description: DefaultImage is the default container image for workspaces
+                  using this template
                 maxLength: 500
+                minLength: 1
                 type: string
               defaultResources:
                 description: DefaultResources specifies the default resource requirements
@@ -392,6 +391,7 @@ spec:
                     type: object
                 type: object
             required:
+            - defaultImage
             - displayName
             type: object
         type: object

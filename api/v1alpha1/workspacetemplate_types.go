@@ -36,11 +36,10 @@ type WorkspaceTemplateSpec struct {
 	Description string `json:"description,omitempty"`
 
 	// DefaultImage is the default container image for workspaces using this template
-	// If not specified, defaults to "quay.io/jupyter/minimal-notebook:latest"
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=500
-	// +kubebuilder:default="quay.io/jupyter/minimal-notebook:latest"
-	// +optional
-	DefaultImage string `json:"defaultImage,omitempty"`
+	DefaultImage string `json:"defaultImage"`
 
 	// AllowedImages is a list of container images that can be used with this template
 	// If empty, only DefaultImage is allowed (secure by default)

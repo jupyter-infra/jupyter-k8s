@@ -61,18 +61,20 @@ type ResolvedTemplate struct {
 func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*TemplateValidationResult, error) {
 	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name, "namespace", workspace.Namespace)
 
-	// If no template reference, create a default resolved template from workspace spec
+	// If no template reference, workspace must specify image directly
 	if workspace.Spec.TemplateRef == nil {
-		logger.Info("No template reference, using direct workspace configuration")
+		logger.Info("No template reference, workspace must specify image directly")
 
-		// Create a default resolved template from workspace spec
-		// This ensures Template is never nil when Valid=true
-		defaultTemplate := tr.createDefaultTemplate(workspace)
+		// Require workspace.Spec.Image to be set
+		if workspace.Spec.Image == "" {
+			return nil, fmt.Errorf("workspace does not reference a template and does not specify an image - either set spec.templateRef or spec.image")
+		}
 
+		// Return nil template for non-template workspaces
 		return &TemplateValidationResult{
 			Valid:      true,
 			Violations: []TemplateViolation{},
-			Template:   defaultTemplate,
+			Template:   nil, // No template = use workspace spec directly
 		}, nil
 	}
 
@@ -107,11 +109,10 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 	logger.Info("Resolving template", "template", template.Name, "displayName", template.Spec.DisplayName)
 
 	// Start with template defaults
-	// Handle optional DefaultImage field - use default if not specified
+	// Require DefaultImage to be set in template
 	defaultImage := template.Spec.DefaultImage
 	if defaultImage == "" {
-		defaultImage = "quay.io/jupyter/minimal-notebook:latest"
-		logger.Info("Using default image as template DefaultImage is not specified", "image", defaultImage)
+		return nil, fmt.Errorf("template %s does not define a DefaultImage - templates must specify a default container image", template.Name)
 	}
 
 	allowSecondaryStorages := true
@@ -167,10 +168,8 @@ func (tr *TemplateResolver) validateAndApplyOverrides(ctx context.Context, resol
 	}
 
 	if overrides.Image != nil {
+		// Note: defaultImage is already validated to be non-empty earlier in resolveTemplate
 		defaultImage := template.Spec.DefaultImage
-		if defaultImage == "" {
-			defaultImage = "quay.io/jupyter/minimal-notebook:latest"
-		}
 		if violation := tr.validateImageAllowed(*overrides.Image, template.Spec.AllowedImages, defaultImage); violation != nil {
 			violations = append(violations, *violation)
 		} else {
@@ -381,33 +380,4 @@ func (tr *TemplateResolver) validateStorageSize(size resource.Quantity, storageC
 	}
 
 	return nil
-}
-
-// createDefaultTemplate creates a ResolvedTemplate from direct workspace configuration
-// This is used when no template reference is provided
-func (tr *TemplateResolver) createDefaultTemplate(_ *workspacesv1alpha1.Workspace) *ResolvedTemplate {
-	// Provide sensible defaults for workspaces without templates
-	defaultCPU := resource.MustParse("500m")
-	defaultMemory := resource.MustParse("1Gi")
-	defaultStorageSize := resource.MustParse("10Gi")
-
-	return &ResolvedTemplate{
-		Image: "quay.io/jupyter/minimal-notebook:latest", // Default image
-		Resources: corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    defaultCPU,
-				corev1.ResourceMemory: defaultMemory,
-			},
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("2"),
-				corev1.ResourceMemory: resource.MustParse("4Gi"),
-			},
-		},
-		EnvironmentVariables: []corev1.EnvVar{},
-		StorageConfiguration: &workspacesv1alpha1.StorageConfig{
-			DefaultSize: defaultStorageSize,
-		},
-		ServiceAccountName:     "",
-		AllowSecondaryStorages: true, // Default to true per brief
-	}
 }

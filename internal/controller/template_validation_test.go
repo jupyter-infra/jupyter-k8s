@@ -41,7 +41,7 @@ var _ = Describe("Template Validation", func() {
 		BeforeEach(func() {
 			ctx = context.Background()
 			templateResolver = NewTemplateResolver(k8sClient)
-			templateName = "validation-template-" + randString(5)
+			templateName = "validation-template"
 
 			// Create a comprehensive test template
 			template = &workspacesv1alpha1.WorkspaceTemplate{
@@ -102,14 +102,15 @@ var _ = Describe("Template Validation", func() {
 			}
 		})
 
-		It("should validate workspace without template reference", func() {
+		It("should validate workspace without template reference but with image", func() {
 			workspace := &workspacesv1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "no-template-workspace",
 					Namespace: "default",
 				},
 				Spec: workspacesv1alpha1.WorkspaceSpec{
-					// No TemplateRef
+					// No TemplateRef but has Image
+					Image: "my-registry.com/jupyter:v1.0",
 				},
 			}
 
@@ -117,8 +118,7 @@ var _ = Describe("Template Validation", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.Valid).To(BeTrue())
 			Expect(result.Violations).To(BeEmpty())
-			Expect(result.Template).NotTo(BeNil())
-			Expect(result.Template.Image).To(Equal("quay.io/jupyter/minimal-notebook:latest"))
+			Expect(result.Template).To(BeNil()) // No template = nil
 		})
 
 		It("should validate workspace with valid template reference", func() {
@@ -142,14 +142,15 @@ var _ = Describe("Template Validation", func() {
 
 		It("should handle template without DefaultResources", func() {
 			// Create a template without DefaultResources
-			minimalTemplateName := "minimal-template-" + randString(5)
+			minimalTemplateName := "minimal-template"
 			minimalTemplate := &workspacesv1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: minimalTemplateName,
 				},
 				Spec: workspacesv1alpha1.WorkspaceTemplateSpec{
-					DisplayName: "Minimal Template",
-					Description: "Template without default resources",
+					DisplayName:  "Minimal Template",
+					Description:  "Template without default resources",
+					DefaultImage: "quay.io/jupyter/minimal-notebook:latest", // Required field
 					// DefaultResources is intentionally omitted (nil)
 					AllowedImages: []string{
 						"quay.io/jupyter/minimal-notebook:latest",
@@ -578,13 +579,14 @@ var _ = Describe("Template Validation", func() {
 
 			It("should handle template with AllowSecondaryStorages set to false", func() {
 				// Create a template with AllowSecondaryStorages disabled
-				restrictedTemplateName := "restricted-template-" + randString(5)
+				restrictedTemplateName := "restricted-template"
 				restrictedTemplate := &workspacesv1alpha1.WorkspaceTemplate{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: restrictedTemplateName,
 					},
 					Spec: workspacesv1alpha1.WorkspaceTemplateSpec{
 						DisplayName:            "Restricted Template",
+						DefaultImage:           "quay.io/jupyter/minimal-notebook:latest", // Required field
 						AllowSecondaryStorages: &[]bool{false}[0],
 					},
 				}
@@ -610,15 +612,40 @@ var _ = Describe("Template Validation", func() {
 				Expect(result.Template.AllowSecondaryStorages).To(BeFalse())
 			})
 		})
+
+		Context("Image Requirement Enforcement", func() {
+			It("should reject template with empty DefaultImage at CRD level", func() {
+				emptyImageTemplate := &workspacesv1alpha1.WorkspaceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "empty-image-template",
+					},
+					Spec: workspacesv1alpha1.WorkspaceTemplateSpec{
+						DisplayName:  "Empty Image Template",
+						DefaultImage: "", // Intentionally empty
+					},
+				}
+
+				// The CRD validation should prevent creation
+				err := k8sClient.Create(ctx, emptyImageTemplate)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("defaultImage"))
+			})
+
+			It("should reject workspace without template and without image", func() {
+				workspace := &workspacesv1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "no-template-no-image-workspace",
+						Namespace: "default",
+					},
+					Spec: workspacesv1alpha1.WorkspaceSpec{
+						// No TemplateRef and no Image
+					},
+				}
+
+				_, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("does not specify an image"))
+			})
+		})
 	})
 })
-
-// Helper function to generate random strings for test names
-func randString(length int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-	result := make([]byte, length)
-	for i := range result {
-		result[i] = charset[len(charset)/2+i%len(charset)/2] // Simple deterministic selection for tests
-	}
-	return string(result)
-}
