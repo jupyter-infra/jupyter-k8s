@@ -69,7 +69,6 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var applicationImagesPullPolicy string
-	var requireTemplate bool
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -95,8 +94,6 @@ func main() {
 	var applicationImagesRegistry string
 	flag.StringVar(&applicationImagesRegistry, "application-images-registry", "",
 		"Registry prefix for application images (e.g. example.com/my-registry)")
-	flag.BoolVar(&requireTemplate, "require-template", false,
-		"Require all workspaces to reference a WorkspaceTemplate")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -200,7 +197,6 @@ func main() {
 	controllerOpts := controller.WorkspaceControllerOptions{
 		ApplicationImagesPullPolicy: getImagePullPolicy(applicationImagesPullPolicy),
 		ApplicationImagesRegistry:   applicationImagesRegistry,
-		RequireTemplate:             requireTemplate,
 	}
 
 	if err := controller.SetupWorkspaceController(mgr, controllerOpts); err != nil {

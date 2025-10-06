@@ -39,9 +39,6 @@ type WorkspaceControllerOptions struct {
 
 	// Registry is the prefix to use for all application images
 	ApplicationImagesRegistry string
-
-	// RequireTemplate enforces that all workspaces must reference a template
-	RequireTemplate bool
 }
 
 // WorkspaceReconciler reconciles a Workspace object
@@ -91,24 +88,6 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		logger.Error(err, "Failed to get Workspace")
 		return ctrl.Result{}, err
-	}
-
-	// Enforce template requirement if configured
-	if r.options.RequireTemplate && workspace.Spec.TemplateRef == nil {
-		logger.Info("Workspace rejected: template reference required")
-
-		// Record rejection event
-		r.recorder.Event(workspace, corev1.EventTypeWarning, "TemplateRequired",
-			"Workspace creation rejected: template reference is required by policy")
-
-		// Update status to reflect rejection
-		if err := r.statusManager.SetTemplateRequired(ctx, workspace); err != nil {
-			logger.Error(err, "Failed to update rejection status")
-			return ctrl.Result{}, err
-		}
-
-		// Don't requeue - policy violation won't auto-resolve
-		return ctrl.Result{}, nil
 	}
 
 	// Delegate to state machine for business logic

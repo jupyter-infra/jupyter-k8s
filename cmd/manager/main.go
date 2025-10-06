@@ -102,7 +102,6 @@ func main() {
 	controllerOpts := controller.WorkspaceControllerOptions{
 		ApplicationImagesPullPolicy: getImagePullPolicy(applicationImagesPullPolicy),
 		ApplicationImagesRegistry:   applicationImagesRegistry,
-		RequireTemplate:             requireTemplate,
 	}
 
 	// Setup controllers

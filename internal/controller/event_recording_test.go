@@ -25,8 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
@@ -182,58 +180,6 @@ var _ = Describe("Event Recording", func() {
 			By("cleaning up")
 			Expect(k8sClient.Delete(ctx, workspace)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, template)).To(Succeed())
-		})
-	})
-
-	Context("Workspace Controller Events", func() {
-		It("should record TemplateRequired event when template is required but missing", func() {
-			By("creating a workspace without template reference")
-			workspace := &workspacesv1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-no-template",
-					Namespace: "default",
-				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{
-					DisplayName: "Test No Template",
-					// No TemplateRef
-				},
-			}
-			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
-
-			By("creating reconciler with RequireTemplate option and fake recorder")
-			options := WorkspaceControllerOptions{
-				ApplicationImagesPullPolicy: corev1.PullIfNotPresent,
-				RequireTemplate:             true,
-			}
-			reconciler := &WorkspaceReconciler{
-				Client:        k8sClient,
-				Scheme:        k8sClient.Scheme(),
-				statusManager: statusManager,
-				recorder:      fakeRecorder,
-				options:       options,
-			}
-
-			By("reconciling the workspace")
-			_, err := reconciler.Reconcile(ctx, ctrl.Request{
-				NamespacedName: client.ObjectKeyFromObject(workspace),
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("verifying TemplateRequired event was recorded")
-			var event string
-			Eventually(func() bool {
-				select {
-				case event = <-fakeRecorder.Events:
-					return true
-				default:
-					return false
-				}
-			}, "5s").Should(BeTrue(), "Expected to receive an event")
-			Expect(event).To(ContainSubstring("Warning"))
-			Expect(event).To(ContainSubstring("TemplateRequired"))
-
-			By("cleaning up")
-			Expect(k8sClient.Delete(ctx, workspace)).To(Succeed())
 		})
 	})
 
