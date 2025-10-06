@@ -215,6 +215,10 @@ func main() {
 	}))
 	setupLog.Info("Registered webhook", "path", "/webhook-health", "type", "HealthCheck")
 	setupLog.Info("All webhooks registered successfully")
+	if err := controller.SetupWorkspaceTemplateController(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WorkspaceTemplate")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

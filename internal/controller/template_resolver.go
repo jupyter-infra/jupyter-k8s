@@ -41,8 +41,8 @@ const (
 	// Template's resourceVersion when workspace was last validated
 	AnnotationValidatedTemplateRV = "workspaces.jupyter.org/validated-template-rv"
 
-	// Workspace's resourceVersion when last validated against template
-	AnnotationValidatedWorkspaceRV = "workspaces.jupyter.org/validated-workspace-rv"
+	// Workspace's generation when last validated against template - only increments on spec changes
+	AnnotationValidatedWorkspaceGeneration = "workspaces.jupyter.org/validated-workspace-generation"
 
 	// Template's generation when validated - only increments on spec changes
 	AnnotationValidatedTemplateGeneration = "workspaces.jupyter.org/validated-template-generation"
@@ -103,7 +103,7 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 		logger.Info("Validation cache hit - skipping template fetch",
 			"cachedTemplateRV", cacheResult.TemplateResourceVersion,
 			"cachedTemplateGen", cacheResult.TemplateGeneration,
-			"cachedWorkspaceRV", cacheResult.WorkspaceResourceVersion)
+			"cachedWorkspaceGen", cacheResult.WorkspaceGeneration)
 
 		return &TemplateValidationResult{
 			Valid:      true,
@@ -116,7 +116,7 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 		logger.Info("Validation cache miss - fetching template",
 			"reason", cacheResult.MissReason,
 			"cachedTemplateRV", cacheResult.TemplateResourceVersion,
-			"cachedWorkspaceRV", cacheResult.WorkspaceResourceVersion)
+			"cachedWorkspaceGen", cacheResult.WorkspaceGeneration)
 	}
 
 	if err := tr.client.Get(ctx, templateKey, template); err != nil {
@@ -409,11 +409,11 @@ func (tr *TemplateResolver) validateStorageSize(size resource.Quantity, storageC
 
 // CacheCheckResult contains the result of checking the validation cache
 type CacheCheckResult struct {
-	Hit                      bool
-	MissReason               string
-	TemplateResourceVersion  string
-	TemplateGeneration       int64
-	WorkspaceResourceVersion string
+	Hit                     bool
+	MissReason              string
+	TemplateResourceVersion string
+	TemplateGeneration      int64
+	WorkspaceGeneration     int64
 }
 
 // checkValidationCache determines if we can skip template fetch based on cached annotations
@@ -430,9 +430,9 @@ func (tr *TemplateResolver) checkValidationCache(ctx context.Context, workspace 
 
 	cachedTemplateRV, hasTemplateRV := workspace.Annotations[AnnotationValidatedTemplateRV]
 	cachedTemplateGenStr, hasTemplateGen := workspace.Annotations[AnnotationValidatedTemplateGeneration]
-	cachedWorkspaceRV, hasWorkspaceRV := workspace.Annotations[AnnotationValidatedWorkspaceRV]
+	cachedWorkspaceGenStr, hasWorkspaceGen := workspace.Annotations[AnnotationValidatedWorkspaceGeneration]
 
-	if !hasTemplateRV || !hasTemplateGen || !hasWorkspaceRV {
+	if !hasTemplateRV || !hasTemplateGen || !hasWorkspaceGen {
 		return CacheCheckResult{
 			Hit:        false,
 			MissReason: "missing cache annotations",
@@ -448,13 +448,22 @@ func (tr *TemplateResolver) checkValidationCache(ctx context.Context, workspace 
 		}
 	}
 
-	if workspace.ResourceVersion != cachedWorkspaceRV {
+	cachedWorkspaceGen, err := strconv.ParseInt(cachedWorkspaceGenStr, 10, 64)
+	if err != nil {
+		logger.Error(err, "Failed to parse cached workspace generation", "value", cachedWorkspaceGenStr)
 		return CacheCheckResult{
-			Hit:                      false,
-			MissReason:               "workspace resourceVersion changed",
-			TemplateResourceVersion:  cachedTemplateRV,
-			TemplateGeneration:       cachedTemplateGen,
-			WorkspaceResourceVersion: cachedWorkspaceRV,
+			Hit:        false,
+			MissReason: "invalid cached workspace generation",
+		}
+	}
+
+	if workspace.Generation != cachedWorkspaceGen {
+		return CacheCheckResult{
+			Hit:                     false,
+			MissReason:              "workspace generation changed (spec modified)",
+			TemplateResourceVersion: cachedTemplateRV,
+			TemplateGeneration:      cachedTemplateGen,
+			WorkspaceGeneration:     cachedWorkspaceGen,
 		}
 	}
 
@@ -474,29 +483,29 @@ func (tr *TemplateResolver) checkValidationCache(ctx context.Context, workspace 
 
 	if template.ResourceVersion != cachedTemplateRV {
 		return CacheCheckResult{
-			Hit:                      false,
-			MissReason:               "template resourceVersion changed",
-			TemplateResourceVersion:  cachedTemplateRV,
-			TemplateGeneration:       cachedTemplateGen,
-			WorkspaceResourceVersion: cachedWorkspaceRV,
+			Hit:                     false,
+			MissReason:              "template resourceVersion changed",
+			TemplateResourceVersion: cachedTemplateRV,
+			TemplateGeneration:      cachedTemplateGen,
+			WorkspaceGeneration:     cachedWorkspaceGen,
 		}
 	}
 
 	if template.Generation != cachedTemplateGen {
 		return CacheCheckResult{
-			Hit:                      false,
-			MissReason:               "template generation changed",
-			TemplateResourceVersion:  cachedTemplateRV,
-			TemplateGeneration:       cachedTemplateGen,
-			WorkspaceResourceVersion: cachedWorkspaceRV,
+			Hit:                     false,
+			MissReason:              "template generation changed",
+			TemplateResourceVersion: cachedTemplateRV,
+			TemplateGeneration:      cachedTemplateGen,
+			WorkspaceGeneration:     cachedWorkspaceGen,
 		}
 	}
 
 	return CacheCheckResult{
-		Hit:                      true,
-		TemplateResourceVersion:  template.ResourceVersion,
-		TemplateGeneration:       template.Generation,
-		WorkspaceResourceVersion: workspace.ResourceVersion,
+		Hit:                     true,
+		TemplateResourceVersion: template.ResourceVersion,
+		TemplateGeneration:      template.Generation,
+		WorkspaceGeneration:     workspace.Generation,
 	}
 }
 
@@ -508,5 +517,18 @@ func (tr *TemplateResolver) UpdateValidationCache(workspace *workspacesv1alpha1.
 
 	workspace.Annotations[AnnotationValidatedTemplateRV] = template.ResourceVersion
 	workspace.Annotations[AnnotationValidatedTemplateGeneration] = strconv.FormatInt(template.Generation, 10)
-	workspace.Annotations[AnnotationValidatedWorkspaceRV] = workspace.ResourceVersion
+	workspace.Annotations[AnnotationValidatedWorkspaceGeneration] = strconv.FormatInt(workspace.Generation, 10)
+}
+
+// ListWorkspacesUsingTemplate returns all workspaces that reference the specified template
+func (tr *TemplateResolver) ListWorkspacesUsingTemplate(ctx context.Context, templateName string) ([]workspacesv1alpha1.Workspace, error) {
+	// Use label selector for fast, efficient lookup
+	workspaceList := &workspacesv1alpha1.WorkspaceList{}
+	if err := tr.client.List(ctx, workspaceList, client.MatchingLabels{
+		"workspaces.jupyter.org/template": templateName,
+	}); err != nil {
+		return nil, fmt.Errorf("failed to list workspaces by template label: %w", err)
+	}
+
+	return workspaceList.Items, nil
 }

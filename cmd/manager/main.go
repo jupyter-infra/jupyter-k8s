@@ -107,6 +107,12 @@ func main() {
 	// Setup controllers
 	if err = controller.SetupWorkspaceController(mgr, controllerOpts); err != nil {
 		setupLog.Error(err, "Error setting up controller")
+		fmt.Printf("Error setting up workspace controller: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err = controller.SetupWorkspaceTemplateController(mgr); err != nil {
+		fmt.Printf("Error setting up workspace template controller: %v\n", err)
 		os.Exit(1)
 	}
 

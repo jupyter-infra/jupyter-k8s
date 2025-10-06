@@ -90,9 +90,9 @@ var _ = Describe("Template Validation Caching", func() {
 
 			// Update cache annotations to simulate successful validation
 			workspace.Annotations = map[string]string{
-				AnnotationValidatedTemplateRV:         template.ResourceVersion,
-				AnnotationValidatedTemplateGeneration: strconv.FormatInt(template.Generation, 10),
-				AnnotationValidatedWorkspaceRV:        workspace.ResourceVersion,
+				AnnotationValidatedTemplateRV:          template.ResourceVersion,
+				AnnotationValidatedTemplateGeneration:  strconv.FormatInt(template.Generation, 10),
+				AnnotationValidatedWorkspaceGeneration: strconv.FormatInt(workspace.Generation, 10),
 			}
 
 			// Second validation - should hit cache
@@ -102,14 +102,14 @@ var _ = Describe("Template Validation Caching", func() {
 		})
 
 		It("should re-validate when workspace spec changes", func() {
-			// Set up cache
+			// Set up cache with old generation
 			workspace.Annotations = map[string]string{
-				AnnotationValidatedTemplateRV:         template.ResourceVersion,
-				AnnotationValidatedTemplateGeneration: strconv.FormatInt(template.Generation, 10),
-				AnnotationValidatedWorkspaceRV:        "old-resource-version",
+				AnnotationValidatedTemplateRV:          template.ResourceVersion,
+				AnnotationValidatedTemplateGeneration:  strconv.FormatInt(template.Generation, 10),
+				AnnotationValidatedWorkspaceGeneration: "1", // Old generation
 			}
 
-			workspace.ResourceVersion = "new-resource-version"
+			workspace.Generation = 2 // Simulate spec change
 
 			result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
@@ -119,9 +119,9 @@ var _ = Describe("Template Validation Caching", func() {
 		It("should re-validate when template spec changes", func() {
 			// Set up cache with current state
 			workspace.Annotations = map[string]string{
-				AnnotationValidatedTemplateRV:         template.ResourceVersion,
-				AnnotationValidatedTemplateGeneration: strconv.FormatInt(template.Generation, 10),
-				AnnotationValidatedWorkspaceRV:        workspace.ResourceVersion,
+				AnnotationValidatedTemplateRV:          template.ResourceVersion,
+				AnnotationValidatedTemplateGeneration:  strconv.FormatInt(template.Generation, 10),
+				AnnotationValidatedWorkspaceGeneration: strconv.FormatInt(workspace.Generation, 10),
 			}
 
 			// Modify template spec to increment generation
@@ -147,9 +147,9 @@ var _ = Describe("Template Validation Caching", func() {
 
 		It("should handle corrupted cache annotations gracefully", func() {
 			workspace.Annotations = map[string]string{
-				AnnotationValidatedTemplateRV:         template.ResourceVersion,
-				AnnotationValidatedTemplateGeneration: "not-a-number",
-				AnnotationValidatedWorkspaceRV:        workspace.ResourceVersion,
+				AnnotationValidatedTemplateRV:          template.ResourceVersion,
+				AnnotationValidatedTemplateGeneration:  "not-a-number",
+				AnnotationValidatedWorkspaceGeneration: strconv.FormatInt(workspace.Generation, 10),
 			}
 
 			result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
@@ -165,6 +165,7 @@ var _ = Describe("Template Validation Caching", func() {
 					Name:            "test-workspace",
 					Namespace:       "default",
 					ResourceVersion: "workspace-rv-123",
+					Generation:      3,
 				},
 			}
 
@@ -182,7 +183,7 @@ var _ = Describe("Template Validation Caching", func() {
 			Expect(workspace.Annotations).NotTo(BeNil())
 			Expect(workspace.Annotations[AnnotationValidatedTemplateRV]).To(Equal("template-rv-456"))
 			Expect(workspace.Annotations[AnnotationValidatedTemplateGeneration]).To(Equal("5"))
-			Expect(workspace.Annotations[AnnotationValidatedWorkspaceRV]).To(Equal("workspace-rv-123"))
+			Expect(workspace.Annotations[AnnotationValidatedWorkspaceGeneration]).To(Equal("3"))
 		})
 
 		It("should not overwrite existing annotations", func() {
@@ -271,11 +272,12 @@ var _ = Describe("Template Validation Caching", func() {
 					Name:      "deleted-template-workspace",
 					Namespace: "default",
 					Annotations: map[string]string{
-						AnnotationValidatedTemplateRV:         "old-rv",
-						AnnotationValidatedTemplateGeneration: "1",
-						AnnotationValidatedWorkspaceRV:        "workspace-rv",
+						AnnotationValidatedTemplateRV:          "old-rv",
+						AnnotationValidatedTemplateGeneration:  "1",
+						AnnotationValidatedWorkspaceGeneration: "2",
 					},
 					ResourceVersion: "workspace-rv",
+					Generation:      2,
 				},
 				Spec: workspacesv1alpha1.WorkspaceSpec{
 					TemplateRef: &nonExistentTemplate,

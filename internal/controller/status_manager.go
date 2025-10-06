@@ -132,7 +132,6 @@ func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, workspace *works
 
 // SetTemplateValidated sets the TemplateValidation condition to true
 func (sm *StatusManager) SetTemplateValidated(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
-	// Set TemplateValidation condition to true
 	templateCondition := NewCondition(
 		ConditionTypeTemplateValidation,
 		metav1.ConditionTrue,
@@ -155,7 +154,6 @@ func (sm *StatusManager) SetTemplateRejected(ctx context.Context, workspace *wor
 			message, v.Message, v.Field, v.Allowed, v.Actual)
 	}
 
-	// Set TemplateValidation condition to false
 	templateCondition := NewCondition(
 		ConditionTypeTemplateValidation,
 		metav1.ConditionFalse,
@@ -163,15 +161,16 @@ func (sm *StatusManager) SetTemplateRejected(ctx context.Context, workspace *wor
 		message,
 	)
 
-	// Also set Degraded to true since the workspace can't start
+	// Policy violations are user errors, not system degradation
+	// Degraded is for system issues (controller failures, k8s API errors, etc.)
+	// Invalid config should only affect Available, not Degraded
 	degradedCondition := NewCondition(
 		ConditionTypeDegraded,
-		metav1.ConditionTrue,
+		metav1.ConditionFalse,
 		ReasonPolicyViolation,
-		"Template validation failed",
+		"No system errors detected",
 	)
 
-	// Set Available to false
 	availableCondition := NewCondition(
 		ConditionTypeAvailable,
 		metav1.ConditionFalse,

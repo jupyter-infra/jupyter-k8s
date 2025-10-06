@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -176,11 +177,17 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 			Name: templateName,
 		}
 		if err := sm.resourceManager.client.Get(ctx, templateKey, validatedTemplate); err == nil {
+			// Use strategic merge patch to update only annotations, avoiding full reconciliation
+			patch := client.MergeFrom(workspace.DeepCopy())
 			sm.templateResolver.UpdateValidationCache(workspace, validatedTemplate)
-			logger.Info("Updated validation cache",
-				"templateRV", validatedTemplate.ResourceVersion,
-				"templateGen", validatedTemplate.Generation,
-				"workspaceRV", workspace.ResourceVersion)
+			if err := sm.resourceManager.client.Patch(ctx, workspace, patch); err != nil {
+				logger.Error(err, "Failed to persist validation cache annotations")
+			} else {
+				logger.Info("Updated validation cache",
+					"templateRV", validatedTemplate.ResourceVersion,
+					"templateGen", validatedTemplate.Generation,
+					"workspaceGen", workspace.Generation)
+			}
 		} else {
 			logger.Error(err, "Failed to fetch template for cache update", "template", templateName)
 		}

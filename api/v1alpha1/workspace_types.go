@@ -72,8 +72,8 @@ type WorkspaceSpec struct {
 
 	// TemplateRef references a WorkspaceTemplate to use as base configuration
 	// When set, template provides defaults and spec fields (Image, Resources, Storage.Size) act as overrides
-	// Note: Changing templateRef after creation is not recommended as it may lead to
-	// configuration inconsistencies. Future versions may enforce immutability via webhook.
+	// IMMUTABLE: Cannot be changed after workspace creation
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="templateRef is immutable"
 	// +optional
 	TemplateRef *string `json:"templateRef,omitempty"`
 }

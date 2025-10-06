@@ -58,8 +58,6 @@ func (r *WorkspaceReconciler) SetStateMachine(sm *StateMachine) {
 
 // +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=workspaces,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=workspaces/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=workspacetemplates,verbs=get;list;watch
-// +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=workspacetemplates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
@@ -88,6 +86,25 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		logger.Error(err, "Failed to get Workspace")
 		return ctrl.Result{}, err
+	}
+
+	// Ensure template label is set if workspace uses a template
+	if workspace.Spec.TemplateRef != nil && *workspace.Spec.TemplateRef != "" {
+		if workspace.Labels == nil {
+			workspace.Labels = make(map[string]string)
+		}
+		expectedLabel := "workspaces.jupyter.org/template"
+		if workspace.Labels[expectedLabel] != *workspace.Spec.TemplateRef {
+			logger.Info("Adding template label to workspace", "template", *workspace.Spec.TemplateRef)
+			workspace.Labels[expectedLabel] = *workspace.Spec.TemplateRef
+			if err := r.Update(ctx, workspace); err != nil {
+				logger.Error(err, "Failed to update workspace with template label")
+				return ctrl.Result{}, err
+			}
+			logger.Info("Successfully added template label to workspace")
+			// Requeue to process with updated labels
+			return ctrl.Result{Requeue: true}, nil
+		}
 	}
 
 	// Delegate to state machine for business logic

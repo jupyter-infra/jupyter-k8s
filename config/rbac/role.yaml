@@ -52,7 +52,6 @@ rules:
   - workspaces.jupyter.org
   resources:
   - workspaces/status
-  - workspacetemplates/status
   verbs:
   - get
   - patch
@@ -64,4 +63,12 @@ rules:
   verbs:
   - get
   - list
+  - patch
+  - update
   - watch
+- apiGroups:
+  - workspaces.jupyter.org
+  resources:
+  - workspacetemplates/finalizers
+  verbs:
+  - update
