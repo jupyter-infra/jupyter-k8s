@@ -78,7 +78,7 @@ kubectl apply -k config/samples/
 
 ### Workspace Templates
 
-Workspace Templates provide standardized, reusable configurations for Jupyter workspaces. Platform administrators can define approved environments with resource limits, allowed container images, storage configuration, and environment variables, while giving users flexibility within those boundaries.
+Jupyter Workspace Templates provide standardized, reusable configurations for Jupyter Workspaces. Platform administrators can define approved environments with resource limits, allowed container images, storage configuration, and environment variables, while giving users flexibility within those boundaries.
 
 Templates are validated by the controller during reconciliation. Invalid workspaces are created but marked with `TemplateValidation=False` and `Degraded=True` conditions and will not deploy pods until validation passes. This ensures no compute resources are wasted on invalid configurations.
 
