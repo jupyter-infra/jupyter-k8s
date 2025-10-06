@@ -62,9 +62,7 @@ var _ = Describe("Event Recording", func() {
 				Spec: workspacesv1alpha1.WorkspaceSpec{
 					DisplayName: "Test Validation Failed",
 					TemplateRef: stringPtr("test-template"),
-					TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
-						Image: stringPtr("disallowed-image:latest"),
-					},
+					Image:       "disallowed-image:latest",
 				},
 			}
 			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
@@ -127,9 +125,7 @@ var _ = Describe("Event Recording", func() {
 				Spec: workspacesv1alpha1.WorkspaceSpec{
 					DisplayName: "Test Validation Passed",
 					TemplateRef: stringPtr("test-template-valid"),
-					TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
-						Image: stringPtr("allowed-image:latest"),
-					},
+					Image:       "allowed-image:latest",
 				},
 			}
 			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
@@ -194,11 +190,9 @@ var _ = Describe("Event Recording", func() {
 				Spec: workspacesv1alpha1.WorkspaceSpec{
 					DisplayName: "Test CPU Exceeded",
 					TemplateRef: stringPtr("bounded-template"),
-					TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
-						Resources: &corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU: resource.MustParse("10"), // Exceeds max
-							},
+					Resources: &corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU: resource.MustParse("10"), // Exceeds max
 						},
 					},
 				},

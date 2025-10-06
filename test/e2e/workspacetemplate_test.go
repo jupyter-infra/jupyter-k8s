@@ -82,7 +82,7 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 
 		_, _ = fmt.Fprintf(GinkgoWriter, "Applying restricted template for validation tests...\n")
 		cmd = exec.Command("kubectl", "apply", "-f",
-			"examples/test-template-rejection.yaml")
+			"config/samples/test_template_rejection.yaml")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create test templates")
 	})
@@ -251,10 +251,9 @@ metadata:
 spec:
   displayName: "CPU Bounds Test"
   templateRef: "production-notebook-template"
-  templateOverrides:
-    resources:
-      requests:
-        cpu: "10"
+  resources:
+    requests:
+      cpu: "10"  # Exceeds template max of 2
 `
 			cmd := exec.Command("sh", "-c",
 				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
@@ -302,16 +301,15 @@ metadata:
 spec:
   displayName: "Valid Overrides Test"
   templateRef: "production-notebook-template"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
   storage:
-    size: 5Gi
-  templateOverrides:
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "128Mi"
-      limits:
-        cpu: "500m"
-        memory: "256Mi"
+    size: 100Mi
 `
 			cmd := exec.Command("sh", "-c",
 				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))

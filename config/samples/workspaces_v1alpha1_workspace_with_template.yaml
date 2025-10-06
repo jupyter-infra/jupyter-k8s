@@ -9,13 +9,3 @@ spec:
   displayName: "Workspace Using Template"
   templateRef: "production-notebook-template"
   desiredStatus: Running
-  storage:
-    size: 500Mi
-  templateOverrides:
-    resources:
-      requests:
-        cpu: "200m"
-        memory: "384Mi"
-      limits:
-        cpu: "1"
-        memory: "768Mi"

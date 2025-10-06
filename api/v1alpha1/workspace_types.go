@@ -71,29 +71,11 @@ type WorkspaceSpec struct {
 	Storage *StorageSpec `json:"storage,omitempty"`
 
 	// TemplateRef references a WorkspaceTemplate to use as base configuration
+	// When set, template provides defaults and spec fields (Image, Resources, Storage.Size) act as overrides
 	// Note: Changing templateRef after creation is not recommended as it may lead to
 	// configuration inconsistencies. Future versions may enforce immutability via webhook.
 	// +optional
 	TemplateRef *string `json:"templateRef,omitempty"`
-
-	// TemplateOverrides allows overriding specific template values
-	// +optional
-	TemplateOverrides *TemplateOverrides `json:"templateOverrides,omitempty"`
-}
-
-// TemplateOverrides allows selective overrides of template settings
-type TemplateOverrides struct {
-	// Image overrides the template's default image
-	// +optional
-	Image *string `json:"image,omitempty"`
-
-	// Resources overrides the template's default resources
-	// +optional
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
-
-	// StorageSize overrides the template's default storage size
-	// +optional
-	StorageSize *string `json:"storageSize,omitempty"`
 }
 
 // WorkspaceStatus defines the observed state of Workspace.

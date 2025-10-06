@@ -157,51 +157,42 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 }
 
 // validateAndApplyOverrides validates and applies workspace-specific overrides to the resolved template
+// When template is set, base spec fields (Image, Resources, Storage.Size) act as overrides
 // Returns a list of violations if validation fails
 func (tr *TemplateResolver) validateAndApplyOverrides(ctx context.Context, resolved *ResolvedTemplate, workspace *workspacesv1alpha1.Workspace, template *workspacesv1alpha1.WorkspaceTemplate) []TemplateViolation {
 	logger := logf.FromContext(ctx)
-	overrides := workspace.Spec.TemplateOverrides
 	var violations []TemplateViolation
 
-	if overrides == nil {
-		return violations
-	}
-
-	if overrides.Image != nil {
+	// Override image if workspace specifies one
+	if workspace.Spec.Image != "" {
 		// Note: defaultImage is already validated to be non-empty earlier in resolveTemplate
 		defaultImage := template.Spec.DefaultImage
-		if violation := tr.validateImageAllowed(*overrides.Image, template.Spec.AllowedImages, defaultImage); violation != nil {
+		if violation := tr.validateImageAllowed(workspace.Spec.Image, template.Spec.AllowedImages, defaultImage); violation != nil {
 			violations = append(violations, *violation)
 		} else {
-			resolved.Image = *overrides.Image
-			logger.Info("Applied image override", "image", *overrides.Image)
+			resolved.Image = workspace.Spec.Image
+			logger.Info("Applied image override", "image", workspace.Spec.Image)
 		}
 	}
 
-	if overrides.Resources != nil {
-		if resourceViolations := tr.validateResourceBounds(*overrides.Resources, template.Spec.ResourceBounds); len(resourceViolations) > 0 {
+	// Override resources if workspace specifies them
+	if workspace.Spec.Resources != nil {
+		if resourceViolations := tr.validateResourceBounds(*workspace.Spec.Resources, template.Spec.ResourceBounds); len(resourceViolations) > 0 {
 			violations = append(violations, resourceViolations...)
 		} else {
-			resolved.Resources = *overrides.Resources
+			resolved.Resources = *workspace.Spec.Resources
 			logger.Info("Applied resource overrides")
 		}
 	}
 
-	if overrides.StorageSize != nil && resolved.StorageConfiguration != nil {
-		storageQuantity, err := resource.ParseQuantity(*overrides.StorageSize)
-		if err != nil {
-			violations = append(violations, TemplateViolation{
-				Type:    ViolationTypeStorageExceeded,
-				Field:   "spec.templateOverrides.storageSize",
-				Message: fmt.Sprintf("Invalid storage size format: %v", err),
-				Allowed: "Valid Kubernetes quantity (e.g., '10Gi', '100Mi')",
-				Actual:  *overrides.StorageSize,
-			})
-		} else if violation := tr.validateStorageSize(storageQuantity, template.Spec.PrimaryStorage); violation != nil {
+	// Override storage size if workspace specifies one
+	if workspace.Spec.Storage != nil && !workspace.Spec.Storage.Size.IsZero() && resolved.StorageConfiguration != nil {
+		storageQuantity := workspace.Spec.Storage.Size
+		if violation := tr.validateStorageSize(storageQuantity, template.Spec.PrimaryStorage); violation != nil {
 			violations = append(violations, *violation)
 		} else {
 			resolved.StorageConfiguration.DefaultSize = storageQuantity
-			logger.Info("Applied storage size override", "storageSize", *overrides.StorageSize)
+			logger.Info("Applied storage size override", "storageSize", storageQuantity.String())
 		}
 	}
 
@@ -228,7 +219,7 @@ func (tr *TemplateResolver) validateImageAllowed(image string, allowedImages []s
 
 	return &TemplateViolation{
 		Type:    ViolationTypeImageNotAllowed,
-		Field:   "spec.templateOverrides.image",
+		Field:   "spec.image",
 		Message: "Image is not in the template's allowed list",
 		Allowed: allowedStr,
 		Actual:  image,
@@ -247,7 +238,7 @@ func (tr *TemplateResolver) validateResourceBounds(resources corev1.ResourceRequ
 				if cpuLimit.Cmp(cpuRequest) < 0 {
 					violations = append(violations, TemplateViolation{
 						Type:    ViolationTypeResourceExceeded,
-						Field:   "spec.templateOverrides.resources.limits.cpu",
+						Field:   "spec.resources.limits.cpu",
 						Message: "CPU limit must be greater than or equal to CPU request",
 						Allowed: fmt.Sprintf("limit >= %s", cpuRequest.String()),
 						Actual:  cpuLimit.String(),
@@ -261,7 +252,7 @@ func (tr *TemplateResolver) validateResourceBounds(resources corev1.ResourceRequ
 				if memoryLimit.Cmp(memoryRequest) < 0 {
 					violations = append(violations, TemplateViolation{
 						Type:    ViolationTypeResourceExceeded,
-						Field:   "spec.templateOverrides.resources.limits.memory",
+						Field:   "spec.resources.limits.memory",
 						Message: "Memory limit must be greater than or equal to memory request",
 						Allowed: fmt.Sprintf("limit >= %s", memoryRequest.String()),
 						Actual:  memoryLimit.String(),
@@ -282,7 +273,7 @@ func (tr *TemplateResolver) validateResourceBounds(resources corev1.ResourceRequ
 			if cpuRequest.Cmp(bounds.CPU.Min) < 0 {
 				violations = append(violations, TemplateViolation{
 					Type:    ViolationTypeResourceExceeded,
-					Field:   "spec.templateOverrides.resources.requests.cpu",
+					Field:   "spec.resources.requests.cpu",
 					Message: "CPU request is below template minimum",
 					Allowed: fmt.Sprintf("min: %s", bounds.CPU.Min.String()),
 					Actual:  cpuRequest.String(),
@@ -291,7 +282,7 @@ func (tr *TemplateResolver) validateResourceBounds(resources corev1.ResourceRequ
 			if cpuRequest.Cmp(bounds.CPU.Max) > 0 {
 				violations = append(violations, TemplateViolation{
 					Type:    ViolationTypeResourceExceeded,
-					Field:   "spec.templateOverrides.resources.requests.cpu",
+					Field:   "spec.resources.requests.cpu",
 					Message: "CPU request exceeds template maximum",
 					Allowed: fmt.Sprintf("max: %s", bounds.CPU.Max.String()),
 					Actual:  cpuRequest.String(),
@@ -306,7 +297,7 @@ func (tr *TemplateResolver) validateResourceBounds(resources corev1.ResourceRequ
 			if memoryRequest.Cmp(bounds.Memory.Min) < 0 {
 				violations = append(violations, TemplateViolation{
 					Type:    ViolationTypeResourceExceeded,
-					Field:   "spec.templateOverrides.resources.requests.memory",
+					Field:   "spec.resources.requests.memory",
 					Message: "Memory request is below template minimum",
 					Allowed: fmt.Sprintf("min: %s", bounds.Memory.Min.String()),
 					Actual:  memoryRequest.String(),
@@ -315,7 +306,7 @@ func (tr *TemplateResolver) validateResourceBounds(resources corev1.ResourceRequ
 			if memoryRequest.Cmp(bounds.Memory.Max) > 0 {
 				violations = append(violations, TemplateViolation{
 					Type:    ViolationTypeResourceExceeded,
-					Field:   "spec.templateOverrides.resources.requests.memory",
+					Field:   "spec.resources.requests.memory",
 					Message: "Memory request exceeds template maximum",
 					Allowed: fmt.Sprintf("max: %s", bounds.Memory.Max.String()),
 					Actual:  memoryRequest.String(),
@@ -331,7 +322,7 @@ func (tr *TemplateResolver) validateResourceBounds(resources corev1.ResourceRequ
 			if gpuRequest.Cmp(bounds.GPU.Min) < 0 {
 				violations = append(violations, TemplateViolation{
 					Type:    ViolationTypeResourceExceeded,
-					Field:   "spec.templateOverrides.resources.requests['nvidia.com/gpu']",
+					Field:   "spec.resources.requests['nvidia.com/gpu']",
 					Message: "GPU request is below template minimum",
 					Allowed: fmt.Sprintf("min: %s", bounds.GPU.Min.String()),
 					Actual:  gpuRequest.String(),
@@ -340,7 +331,7 @@ func (tr *TemplateResolver) validateResourceBounds(resources corev1.ResourceRequ
 			if gpuRequest.Cmp(bounds.GPU.Max) > 0 {
 				violations = append(violations, TemplateViolation{
 					Type:    ViolationTypeResourceExceeded,
-					Field:   "spec.templateOverrides.resources.requests['nvidia.com/gpu']",
+					Field:   "spec.resources.requests['nvidia.com/gpu']",
 					Message: "GPU request exceeds template maximum",
 					Allowed: fmt.Sprintf("max: %s", bounds.GPU.Max.String()),
 					Actual:  gpuRequest.String(),
@@ -362,7 +353,7 @@ func (tr *TemplateResolver) validateStorageSize(size resource.Quantity, storageC
 	if storageConfig.MinSize != nil && size.Cmp(*storageConfig.MinSize) < 0 {
 		return &TemplateViolation{
 			Type:    ViolationTypeStorageExceeded,
-			Field:   "spec.templateOverrides.storageSize",
+			Field:   "spec.storage.size",
 			Message: "Storage size is below template minimum",
 			Allowed: fmt.Sprintf("min: %s", storageConfig.MinSize.String()),
 			Actual:  size.String(),
@@ -372,7 +363,7 @@ func (tr *TemplateResolver) validateStorageSize(size resource.Quantity, storageC
 	if storageConfig.MaxSize != nil && size.Cmp(*storageConfig.MaxSize) > 0 {
 		return &TemplateViolation{
 			Type:    ViolationTypeStorageExceeded,
-			Field:   "spec.templateOverrides.storageSize",
+			Field:   "spec.storage.size",
 			Message: "Storage size exceeds template maximum",
 			Allowed: fmt.Sprintf("max: %s", storageConfig.MaxSize.String()),
 			Actual:  size.String(),

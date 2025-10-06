@@ -134,7 +134,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 
 	// Validate template BEFORE creating any resources
 	var resolvedTemplate *ResolvedTemplate
-	if workspace.Spec.TemplateRef != nil || workspace.Spec.TemplateOverrides != nil {
+	if workspace.Spec.TemplateRef != nil {
 		validation, err := sm.templateResolver.ValidateAndResolveTemplate(ctx, workspace)
 		if err != nil {
 			// System error (couldn't fetch template, etc.)
