@@ -144,51 +144,6 @@ func (sm *StatusManager) SetTemplateValidated(ctx context.Context, workspace *wo
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
 }
 
-// SetTemplateRequired sets conditions when a workspace is rejected due to missing required template
-func (sm *StatusManager) SetTemplateRequired(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
-	// Set TemplateValidation condition to false
-	templateCondition := NewCondition(
-		ConditionTypeTemplateValidation,
-		metav1.ConditionFalse,
-		ReasonTemplateRequired,
-		"Template reference is required by policy",
-	)
-
-	// Set Degraded to true since the workspace can't start
-	degradedCondition := NewCondition(
-		ConditionTypeDegraded,
-		metav1.ConditionTrue,
-		ReasonTemplateRequired,
-		"Workspace rejected: template reference required",
-	)
-
-	// Set Available to false
-	availableCondition := NewCondition(
-		ConditionTypeAvailable,
-		metav1.ConditionFalse,
-		ReasonTemplateRequired,
-		"Workspace rejected: template reference required",
-	)
-
-	// Set Progressing to false
-	progressingCondition := NewCondition(
-		ConditionTypeProgressing,
-		metav1.ConditionFalse,
-		ReasonTemplateRequired,
-		"Workspace rejected: template reference required",
-	)
-
-	conditions := []metav1.Condition{
-		templateCondition,
-		degradedCondition,
-		availableCondition,
-		progressingCondition,
-	}
-
-	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
-}
-
 // SetTemplateRejected sets the TemplateValidation condition to false with policy violations
 func (sm *StatusManager) SetTemplateRejected(ctx context.Context, workspace *workspacesv1alpha1.Workspace, validation *TemplateValidationResult) error {
 	// Build violation message

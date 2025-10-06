@@ -123,13 +123,6 @@ kubectl apply -f config/samples/workspaces_v1alpha1_workspace_with_template.yaml
 kubectl get workspace workspace-with-template -o jsonpath='{.status.conditions[?(@.type=="TemplateValidation")]}'
 ```
 
-**Require all workspaces to use templates (optional):**
-```sh
-# Local development
-make run ARGS="--require-template"
-
-# Production deployment: Add --require-template flag to controller args in config/manager/manager.yaml
-```
 
 ### To Uninstall
 **Delete the instances (CRs) from the cluster:**

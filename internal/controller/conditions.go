@@ -47,9 +47,8 @@ const (
 	ReasonNoError         = "NoError"
 
 	// ConditionTypeTemplateValidation reasons
-	ReasonPolicyViolation  = "PolicyViolation"
-	ReasonTemplateValid    = "TemplateValid"
-	ReasonTemplateRequired = "TemplateRequired"
+	ReasonPolicyViolation = "PolicyViolation"
+	ReasonTemplateValid   = "TemplateValid"
 )
 
 // NewCondition creates a new condition with the specified status
