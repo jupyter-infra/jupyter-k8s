@@ -94,10 +94,6 @@ type TemplateOverrides struct {
 	// StorageSize overrides the template's default storage size
 	// +optional
 	StorageSize *string `json:"storageSize,omitempty"`
-
-	// IdleShutdownConfig overrides the template's idle shutdown configuration
-	// +optional
-	IdleShutdownConfig *IdleShutdownConfig `json:"idleShutdownConfig,omitempty"`
 }
 
 // WorkspaceStatus defines the observed state of Workspace.

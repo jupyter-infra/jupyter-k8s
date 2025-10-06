@@ -50,12 +50,6 @@ spec:
   # Allow additional storage volumes
   allowSecondaryStorage: true
 
-  # Idle shutdown configuration
-  idleShutdownConfig:
-    enabled: true
-    idleTimeout: "2h"
-    checkInterval: "10m"
-
   # Environment variables for GPU
   environmentVariables:
     - name: NVIDIA_VISIBLE_DEVICES

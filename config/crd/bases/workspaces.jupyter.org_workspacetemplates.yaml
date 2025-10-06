@@ -297,26 +297,6 @@ spec:
                   - name
                   type: object
                 type: array
-              idleShutdownConfig:
-                description: IdleShutdownConfig defines idle shutdown behavior for
-                  workspaces using this template
-                properties:
-                  gracePeriodMinutes:
-                    description: GracePeriodMinutes before actual shutdown after idle
-                      timeout
-                    format: int32
-                    type: integer
-                  idleTimeoutMinutes:
-                    description: IdleTimeoutMinutes after which workspace is considered
-                      idle
-                    format: int32
-                    type: integer
-                  notificationEnabled:
-                    default: true
-                    description: NotificationEnabled whether to notify users before
-                      shutdown
-                    type: boolean
-                type: object
               primaryStorage:
                 description: PrimaryStorage defines storage configuration
                 properties:

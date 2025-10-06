@@ -91,11 +91,6 @@ var _ = Describe("Template Validation", func() {
 						{Name: "DEFAULT_ENV", Value: "test"},
 					},
 					AllowSecondaryStorages: &[]bool{true}[0],
-					IdleShutdownConfig: &workspacesv1alpha1.IdleShutdownConfig{
-						IdleTimeoutMinutes:  &[]int32{30}[0],
-						GracePeriodMinutes:  &[]int32{5}[0],
-						NotificationEnabled: &[]bool{true}[0],
-					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, template)).To(Succeed())
@@ -579,57 +574,6 @@ var _ = Describe("Template Validation", func() {
 				Expect(result.Valid).To(BeTrue())
 				Expect(result.Template).NotTo(BeNil())
 				Expect(result.Template.AllowSecondaryStorages).To(BeTrue())
-			})
-
-			It("should handle IdleShutdownConfig from template", func() {
-				workspace := &workspacesv1alpha1.Workspace{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "idle-config-workspace",
-						Namespace: "default",
-					},
-					Spec: workspacesv1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
-					},
-				}
-
-				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Valid).To(BeTrue())
-				Expect(result.Template).NotTo(BeNil())
-				Expect(result.Template.IdleShutdownConfig).NotTo(BeNil())
-				Expect(*result.Template.IdleShutdownConfig.IdleTimeoutMinutes).To(Equal(int32(30)))
-				Expect(*result.Template.IdleShutdownConfig.GracePeriodMinutes).To(Equal(int32(5)))
-				Expect(*result.Template.IdleShutdownConfig.NotificationEnabled).To(BeTrue())
-			})
-
-			It("should apply IdleShutdownConfig override", func() {
-				customIdleConfig := &workspacesv1alpha1.IdleShutdownConfig{
-					IdleTimeoutMinutes:  &[]int32{60}[0],
-					GracePeriodMinutes:  &[]int32{10}[0],
-					NotificationEnabled: &[]bool{false}[0],
-				}
-
-				workspace := &workspacesv1alpha1.Workspace{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "idle-override-workspace",
-						Namespace: "default",
-					},
-					Spec: workspacesv1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
-						TemplateOverrides: &workspacesv1alpha1.TemplateOverrides{
-							IdleShutdownConfig: customIdleConfig,
-						},
-					},
-				}
-
-				result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Valid).To(BeTrue())
-				Expect(result.Template).NotTo(BeNil())
-				Expect(result.Template.IdleShutdownConfig).NotTo(BeNil())
-				Expect(*result.Template.IdleShutdownConfig.IdleTimeoutMinutes).To(Equal(int32(60)))
-				Expect(*result.Template.IdleShutdownConfig.GracePeriodMinutes).To(Equal(int32(10)))
-				Expect(*result.Template.IdleShutdownConfig.NotificationEnabled).To(BeFalse())
 			})
 
 			It("should handle template with AllowSecondaryStorages set to false", func() {

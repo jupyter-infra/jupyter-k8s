@@ -46,12 +46,6 @@ spec:
   # Allow additional storage volumes
   allowSecondaryStorage: true
 
-  # Idle shutdown configuration
-  idleShutdownConfig:
-    enabled: true
-    idleTimeout: "4h"
-    checkInterval: "15m"
-
   # Environment variables
   environmentVariables:
     - name: JUPYTER_ENABLE_LAB

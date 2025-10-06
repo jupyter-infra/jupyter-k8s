@@ -55,7 +55,6 @@ type ResolvedTemplate struct {
 	StorageConfiguration   *workspacesv1alpha1.StorageConfig
 	ServiceAccountName     string
 	AllowSecondaryStorages bool
-	IdleShutdownConfig     *workspacesv1alpha1.IdleShutdownConfig
 }
 
 // ValidateAndResolveTemplate resolves a WorkspaceTemplate reference, validates overrides, and returns validation result
@@ -126,7 +125,6 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 		EnvironmentVariables:   template.Spec.EnvironmentVariables,
 		ServiceAccountName:     "",
 		AllowSecondaryStorages: allowSecondaryStorages,
-		IdleShutdownConfig:     template.Spec.IdleShutdownConfig,
 	}
 
 	if template.Spec.DefaultResources != nil {
@@ -206,12 +204,6 @@ func (tr *TemplateResolver) validateAndApplyOverrides(ctx context.Context, resol
 			resolved.StorageConfiguration.DefaultSize = storageQuantity
 			logger.Info("Applied storage size override", "storageSize", *overrides.StorageSize)
 		}
-	}
-
-	// Apply IdleShutdownConfig override (no validation needed - any config is valid)
-	if overrides.IdleShutdownConfig != nil {
-		resolved.IdleShutdownConfig = overrides.IdleShutdownConfig
-		logger.Info("Applied idle shutdown config override")
 	}
 
 	return violations
@@ -417,6 +409,5 @@ func (tr *TemplateResolver) createDefaultTemplate(_ *workspacesv1alpha1.Workspac
 		},
 		ServiceAccountName:     "",
 		AllowSecondaryStorages: true, // Default to true per brief
-		IdleShutdownConfig:     nil,  // No default idle shutdown config
 	}
 }

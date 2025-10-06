@@ -159,26 +159,6 @@ spec:
                 description: TemplateOverrides allows overriding specific template
                   values
                 properties:
-                  idleShutdownConfig:
-                    description: IdleShutdownConfig overrides the template's idle
-                      shutdown configuration
-                    properties:
-                      gracePeriodMinutes:
-                        description: GracePeriodMinutes before actual shutdown after
-                          idle timeout
-                        format: int32
-                        type: integer
-                      idleTimeoutMinutes:
-                        description: IdleTimeoutMinutes after which workspace is considered
-                          idle
-                        format: int32
-                        type: integer
-                      notificationEnabled:
-                        default: true
-                        description: NotificationEnabled whether to notify users before
-                          shutdown
-                        type: boolean
-                    type: object
                   image:
                     description: Image overrides the template's default image
                     type: string

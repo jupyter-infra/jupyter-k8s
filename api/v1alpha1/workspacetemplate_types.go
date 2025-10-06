@@ -70,10 +70,6 @@ type WorkspaceTemplateSpec struct {
 	// +kubebuilder:default=true
 	// +optional
 	AllowSecondaryStorages *bool `json:"allowSecondaryStorages,omitempty"`
-
-	// IdleShutdownConfig defines idle shutdown behavior for workspaces using this template
-	// +optional
-	IdleShutdownConfig *IdleShutdownConfig `json:"idleShutdownConfig,omitempty"`
 }
 
 // ResourceBounds defines minimum and maximum resource limits
@@ -120,22 +116,6 @@ type StorageConfig struct {
 	// MaxSize is the maximum allowed storage size
 	// +optional
 	MaxSize *resource.Quantity `json:"maxSize,omitempty"`
-}
-
-// IdleShutdownConfig defines idle shutdown settings
-type IdleShutdownConfig struct {
-	// IdleTimeoutMinutes after which workspace is considered idle
-	// +optional
-	IdleTimeoutMinutes *int32 `json:"idleTimeoutMinutes,omitempty"`
-
-	// GracePeriodMinutes before actual shutdown after idle timeout
-	// +optional
-	GracePeriodMinutes *int32 `json:"gracePeriodMinutes,omitempty"`
-
-	// NotificationEnabled whether to notify users before shutdown
-	// +kubebuilder:default=true
-	// +optional
-	NotificationEnabled *bool `json:"notificationEnabled,omitempty"`
 }
 
 // +kubebuilder:object:root=true
