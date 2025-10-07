@@ -82,7 +82,7 @@ func (db *DeploymentBuilder) buildDeploymentSpec(workspace *workspacesv1alpha1.W
 func (db *DeploymentBuilder) buildPodSpec(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, resources corev1.ResourceRequirements) corev1.PodSpec {
 	podSpec := corev1.PodSpec{
 		Containers: []corev1.Container{
-			db.buildJupyterContainer(workspace, resolvedTemplate, resources),
+			db.buildPrimaryContainer(workspace, resolvedTemplate, resources),
 		},
 	}
 
@@ -109,8 +109,8 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacesv1alpha1.Workspac
 	return podSpec
 }
 
-// buildJupyterContainer creates the Jupyter container specification
-func (db *DeploymentBuilder) buildJupyterContainer(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, resources corev1.ResourceRequirements) corev1.Container {
+// buildPrimaryContainer creates the container specification
+func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, resources corev1.ResourceRequirements) corev1.Container {
 	var image string
 	if resolvedTemplate != nil && resolvedTemplate.Image != "" {
 		image = resolvedTemplate.Image
