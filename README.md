@@ -80,6 +80,19 @@ kubectl apply -k config/samples/
 
 Jupyter Workspace Templates provide standardized, reusable configurations for Jupyter Workspaces. Platform administrators can define approved environments with resource limits, allowed container images, storage configuration, and environment variables, while giving users flexibility within those boundaries.
 
+**Immutability:** Both `WorkspaceTemplate.spec` AND `Workspace.templateRef` are immutable after creation (enforced by CEL validation). To update a template, create a new version with a different name (e.g., `production-v2`). This ensures workspaces maintain stable, predictable configurations throughout their lifecycle.
+
+**Deletion Protection:** WorkspaceTemplates use a lazy finalizer pattern following Kubernetes best practices:
+- Finalizers are automatically added when first workspace references the template
+- Templates cannot be deleted while active workspaces use them
+- Finalizers are automatically removed when all workspaces are deleted
+- This prevents orphaned workspaces without burdening unused templates
+
+To delete a template:
+1. Delete all workspaces using the template: `kubectl delete workspace <name>`
+2. Wait for workspaces to finish deleting (they will complete in background)
+3. Delete the template: `kubectl delete workspacetemplate <name>`
+
 Templates are validated by the controller during reconciliation. Invalid workspaces are created but marked with `TemplateValidation=False` and `Degraded=True` conditions and will not deploy pods until validation passes. This ensures no compute resources are wasted on invalid configurations.
 
 **Validation Rules**

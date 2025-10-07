@@ -25,7 +25,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -34,18 +33,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-)
-
-// Validation cache annotation keys - prevent redundant API calls when nothing changed
-const (
-	// Template's resourceVersion when workspace was last validated
-	AnnotationValidatedTemplateRV = "workspaces.jupyter.org/validated-template-rv"
-
-	// Workspace's generation when last validated against template - only increments on spec changes
-	AnnotationValidatedWorkspaceGeneration = "workspaces.jupyter.org/validated-workspace-generation"
-
-	// Template's generation when validated - only increments on spec changes
-	AnnotationValidatedTemplateGeneration = "workspaces.jupyter.org/validated-template-generation"
 )
 
 // TemplateResolver handles resolving WorkspaceTemplate references and applying overrides
@@ -98,26 +85,7 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 		Name: templateName,
 	}
 
-	cacheResult := tr.checkValidationCache(ctx, workspace, templateName)
-	if cacheResult.Hit {
-		logger.Info("Validation cache hit - skipping template fetch",
-			"cachedTemplateRV", cacheResult.TemplateResourceVersion,
-			"cachedTemplateGen", cacheResult.TemplateGeneration,
-			"cachedWorkspaceGen", cacheResult.WorkspaceGeneration)
-
-		return &TemplateValidationResult{
-			Valid:      true,
-			Violations: []TemplateViolation{},
-			Template:   nil,
-		}, nil
-	}
-
-	if !cacheResult.Hit {
-		logger.Info("Validation cache miss - fetching template",
-			"reason", cacheResult.MissReason,
-			"cachedTemplateRV", cacheResult.TemplateResourceVersion,
-			"cachedWorkspaceGen", cacheResult.WorkspaceGeneration)
-	}
+	logger.Info("Fetching template for validation", "template", templateName)
 
 	if err := tr.client.Get(ctx, templateKey, template); err != nil {
 		// If template not found, return a specific validation failure
@@ -407,120 +375,9 @@ func (tr *TemplateResolver) validateStorageSize(size resource.Quantity, storageC
 	return nil
 }
 
-// CacheCheckResult contains the result of checking the validation cache
-type CacheCheckResult struct {
-	Hit                     bool
-	MissReason              string
-	TemplateResourceVersion string
-	TemplateGeneration      int64
-	WorkspaceGeneration     int64
-}
-
-// checkValidationCache determines if we can skip template fetch based on cached annotations
-// Cache hits when workspace + template resourceVersions and template generation match cached values
-func (tr *TemplateResolver) checkValidationCache(ctx context.Context, workspace *workspacesv1alpha1.Workspace, templateName string) CacheCheckResult {
-	logger := logf.FromContext(ctx)
-
-	if workspace.Annotations == nil {
-		return CacheCheckResult{
-			Hit:        false,
-			MissReason: "no annotations on workspace",
-		}
-	}
-
-	cachedTemplateRV, hasTemplateRV := workspace.Annotations[AnnotationValidatedTemplateRV]
-	cachedTemplateGenStr, hasTemplateGen := workspace.Annotations[AnnotationValidatedTemplateGeneration]
-	cachedWorkspaceGenStr, hasWorkspaceGen := workspace.Annotations[AnnotationValidatedWorkspaceGeneration]
-
-	if !hasTemplateRV || !hasTemplateGen || !hasWorkspaceGen {
-		return CacheCheckResult{
-			Hit:        false,
-			MissReason: "missing cache annotations",
-		}
-	}
-
-	cachedTemplateGen, err := strconv.ParseInt(cachedTemplateGenStr, 10, 64)
-	if err != nil {
-		logger.Error(err, "Failed to parse cached template generation", "value", cachedTemplateGenStr)
-		return CacheCheckResult{
-			Hit:        false,
-			MissReason: "invalid cached template generation",
-		}
-	}
-
-	cachedWorkspaceGen, err := strconv.ParseInt(cachedWorkspaceGenStr, 10, 64)
-	if err != nil {
-		logger.Error(err, "Failed to parse cached workspace generation", "value", cachedWorkspaceGenStr)
-		return CacheCheckResult{
-			Hit:        false,
-			MissReason: "invalid cached workspace generation",
-		}
-	}
-
-	if workspace.Generation != cachedWorkspaceGen {
-		return CacheCheckResult{
-			Hit:                     false,
-			MissReason:              "workspace generation changed (spec modified)",
-			TemplateResourceVersion: cachedTemplateRV,
-			TemplateGeneration:      cachedTemplateGen,
-			WorkspaceGeneration:     cachedWorkspaceGen,
-		}
-	}
-
-	// Fetch template to compare resourceVersion/generation - still cheaper than full validation
-	template := &workspacesv1alpha1.WorkspaceTemplate{}
-	templateKey := types.NamespacedName{
-		Name: templateName,
-	}
-
-	if err := tr.client.Get(ctx, templateKey, template); err != nil {
-		logger.Error(err, "Failed to fetch template for cache check", "template", templateName)
-		return CacheCheckResult{
-			Hit:        false,
-			MissReason: "failed to fetch template for cache check",
-		}
-	}
-
-	if template.ResourceVersion != cachedTemplateRV {
-		return CacheCheckResult{
-			Hit:                     false,
-			MissReason:              "template resourceVersion changed",
-			TemplateResourceVersion: cachedTemplateRV,
-			TemplateGeneration:      cachedTemplateGen,
-			WorkspaceGeneration:     cachedWorkspaceGen,
-		}
-	}
-
-	if template.Generation != cachedTemplateGen {
-		return CacheCheckResult{
-			Hit:                     false,
-			MissReason:              "template generation changed",
-			TemplateResourceVersion: cachedTemplateRV,
-			TemplateGeneration:      cachedTemplateGen,
-			WorkspaceGeneration:     cachedWorkspaceGen,
-		}
-	}
-
-	return CacheCheckResult{
-		Hit:                     true,
-		TemplateResourceVersion: template.ResourceVersion,
-		TemplateGeneration:      template.Generation,
-		WorkspaceGeneration:     workspace.Generation,
-	}
-}
-
-// UpdateValidationCache sets cache annotations after successful template validation
-func (tr *TemplateResolver) UpdateValidationCache(workspace *workspacesv1alpha1.Workspace, template *workspacesv1alpha1.WorkspaceTemplate) {
-	if workspace.Annotations == nil {
-		workspace.Annotations = make(map[string]string)
-	}
-
-	workspace.Annotations[AnnotationValidatedTemplateRV] = template.ResourceVersion
-	workspace.Annotations[AnnotationValidatedTemplateGeneration] = strconv.FormatInt(template.Generation, 10)
-	workspace.Annotations[AnnotationValidatedWorkspaceGeneration] = strconv.FormatInt(workspace.Generation, 10)
-}
-
 // ListWorkspacesUsingTemplate returns all workspaces that reference the specified template
+// Excludes workspaces that are being deleted (have deletionTimestamp set) to follow
+// Kubernetes best practices for finalizer management and garbage collection
 func (tr *TemplateResolver) ListWorkspacesUsingTemplate(ctx context.Context, templateName string) ([]workspacesv1alpha1.Workspace, error) {
 	// Use label selector for fast, efficient lookup
 	workspaceList := &workspacesv1alpha1.WorkspaceList{}
@@ -530,5 +387,15 @@ func (tr *TemplateResolver) ListWorkspacesUsingTemplate(ctx context.Context, tem
 		return nil, fmt.Errorf("failed to list workspaces by template label: %w", err)
 	}
 
-	return workspaceList.Items, nil
+	// Filter out workspaces being deleted - they should not block template deletion
+	// This follows Kubernetes controller best practice: resources with deletionTimestamp
+	// are considered "gone" for dependency checking purposes
+	activeWorkspaces := []workspacesv1alpha1.Workspace{}
+	for _, ws := range workspaceList.Items {
+		if ws.DeletionTimestamp.IsZero() {
+			activeWorkspaces = append(activeWorkspaces, ws)
+		}
+	}
+
+	return activeWorkspaces, nil
 }

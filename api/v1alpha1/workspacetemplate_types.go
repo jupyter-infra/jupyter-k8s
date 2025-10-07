@@ -122,8 +122,11 @@ type StorageConfig struct {
 // +kubebuilder:printcolumn:name="Display Name",type="string",JSONPath=".spec.displayName"
 // +kubebuilder:printcolumn:name="Default Image",type="string",JSONPath=".spec.defaultImage"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:validation:XValidation:rule="self.spec == oldSelf.spec",message="template spec is immutable after creation"
 
 // WorkspaceTemplate is the Schema for the workspacetemplates API
+// Templates define reusable, secure-by-default configurations for workspaces.
+// The spec is immutable after creation - to update a template, create a new version.
 type WorkspaceTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

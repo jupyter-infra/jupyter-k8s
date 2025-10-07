@@ -67,6 +67,9 @@ var _ = Describe("Template Immutability", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "immutable-test-workspace",
 					Namespace: "default",
+					Labels: map[string]string{
+						"workspaces.jupyter.org/template": template1.Name,
+					},
 				},
 				Spec: workspacesv1alpha1.WorkspaceSpec{
 					DisplayName: "Immutable Test",
@@ -147,6 +150,9 @@ var _ = Describe("Template Immutability", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "protection-test-workspace",
 					Namespace: "default",
+					Labels: map[string]string{
+						"workspaces.jupyter.org/template": template.Name,
+					},
 				},
 				Spec: workspacesv1alpha1.WorkspaceSpec{
 					DisplayName: "Protection Test",
@@ -194,7 +200,7 @@ var _ = Describe("Template Immutability", func() {
 			Expect(workspaces).To(HaveLen(1))
 
 			// Controller logic would check this before allowing deletion
-			Expect(len(workspaces)).To(BeNumerically(">", 0))
+			Expect(workspaces).ToNot(BeEmpty())
 		})
 
 		It("should detect when no workspaces use template for deletion", func() {
@@ -222,15 +228,15 @@ var _ = Describe("Template Immutability", func() {
 		})
 	})
 
-	Context("Template Modification Warning", func() {
-		It("should emit event when template modified while in use", func() {
+	Context("Template Spec CEL Immutability", func() {
+		It("should reject template spec modification via CEL validation", func() {
 			ctx := context.Background()
 			template := &workspacesv1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "modification-test-template",
+					Name: "cel-immutable-template",
 				},
 				Spec: workspacesv1alpha1.WorkspaceTemplateSpec{
-					DisplayName:  "Modification Test",
+					DisplayName:  "CEL Immutability Test",
 					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
 					ResourceBounds: &workspacesv1alpha1.ResourceBounds{
 						CPU: &workspacesv1alpha1.ResourceRange{
@@ -245,26 +251,44 @@ var _ = Describe("Template Immutability", func() {
 				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, template))).To(Succeed())
 			}()
 
-			workspace := &workspacesv1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "modification-test-workspace",
-					Namespace: "default",
-				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{
-					DisplayName: "Modification Test",
-					TemplateRef: &template.Name,
-				},
-			}
-			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
-			defer func() {
-				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, workspace))).To(Succeed())
-			}()
-
-			// Modify the template while workspace references it
+			// Attempt to modify the template spec (should fail due to CEL validation)
 			updatedTemplate := &workspacesv1alpha1.WorkspaceTemplate{}
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updatedTemplate)).To(Succeed())
-			updatedTemplate.Spec.ResourceBounds.CPU.Max = resource.MustParse("4")
+			updatedTemplate.Spec.DisplayName = "Modified Display Name"
+			err := k8sClient.Update(ctx, updatedTemplate)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("template spec is immutable after creation"))
+		})
+
+		It("should allow metadata updates while spec remains immutable", func() {
+			ctx := context.Background()
+			template := &workspacesv1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "metadata-mutable-template",
+				},
+				Spec: workspacesv1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Metadata Test",
+					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+			defer func() {
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, template))).To(Succeed())
+			}()
+
+			// Metadata changes (labels, annotations) should be allowed
+			updatedTemplate := &workspacesv1alpha1.WorkspaceTemplate{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updatedTemplate)).To(Succeed())
+			if updatedTemplate.Labels == nil {
+				updatedTemplate.Labels = make(map[string]string)
+			}
+			updatedTemplate.Labels["new-label"] = "test"
 			Expect(k8sClient.Update(ctx, updatedTemplate)).To(Succeed())
+
+			// Verify label was added
+			verifyTemplate := &workspacesv1alpha1.WorkspaceTemplate{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), verifyTemplate)).To(Succeed())
+			Expect(verifyTemplate.Labels["new-label"]).To(Equal("test"))
 		})
 	})
 })

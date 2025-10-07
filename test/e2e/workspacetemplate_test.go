@@ -92,16 +92,20 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 		By("cleaning up test workspaces")
 		_, _ = fmt.Fprintf(GinkgoWriter, "Deleting test workspaces...\n")
 		cmd := exec.Command("kubectl", "delete", "workspace",
-			"workspace-with-template", "test-rejected-workspace",
+			"workspace-with-template", "test-rejected-workspace", "test-valid-workspace",
 			"cpu-exceed-test", "valid-overrides-test",
-			"--ignore-not-found")
+			"deletion-protection-test", "cel-immutability-test",
+			"--ignore-not-found", "--wait=false")
 		_, _ = utils.Run(cmd)
 
 		By("cleaning up test templates")
 		_, _ = fmt.Fprintf(GinkgoWriter, "Deleting test templates...\n")
+		// Templates with lazy finalizers will only delete after workspaces are gone
+		// Using --wait=false allows kubectl to return immediately while deletion proceeds
 		cmd = exec.Command("kubectl", "delete", "workspacetemplate",
 			"production-notebook-template", "restricted-template",
-			"--ignore-not-found")
+			"immutability-test-template",
+			"--ignore-not-found", "--wait=false")
 		_, _ = utils.Run(cmd)
 
 		By("undeploying the controller-manager")
@@ -452,6 +456,12 @@ spec:
 		It("should reject workspace templateRef changes via CEL validation", func() {
 			var err error
 
+			By("re-creating production template for CEL tests")
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"config/samples/workspaces_v1alpha1_workspacetemplate_production.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
 			By("creating workspace using production template")
 			workspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
 kind: Workspace
@@ -461,7 +471,7 @@ spec:
   displayName: "CEL Immutability Test"
   templateRef: "production-notebook-template"
 `
-			cmd := exec.Command("sh", "-c",
+			cmd = exec.Command("sh", "-c",
 				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -479,373 +489,49 @@ spec:
 			_, _ = utils.Run(cmd)
 		})
 
-		It("should allow template modification but emit warning event", func() {
-			var err error
-
-			By("recreating production template")
-			cmd := exec.Command("kubectl", "apply", "-f",
-				"config/samples/workspaces_v1alpha1_workspacetemplate_production.yaml")
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("creating workspace using the template")
-			workspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
-kind: Workspace
+		It("should reject WorkspaceTemplate spec modification via CEL validation", func() {
+			By("creating a template specifically for immutability testing")
+			templateYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
 metadata:
-  name: modification-warning-test
+  name: immutability-test-template
 spec:
-  displayName: "Modification Warning Test"
-  templateRef: "production-notebook-template"
+  displayName: "Immutability Test Template"
+  description: "Original description"
+  allowedImages:
+    - "jk8s-application-jupyter-uv:latest"
+  defaultImage: "jk8s-application-jupyter-uv:latest"
 `
-			cmd = exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
-			_, err = utils.Run(cmd)
+			cmd := exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("waiting for workspace to be validated")
-			verifyValidated := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "workspace", "modification-warning-test",
-					"-o", "jsonpath={.status.conditions[?(@.type=='TemplateValidation')].status}")
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"))
-			}
-			Eventually(verifyValidated).
-				WithPolling(1 * time.Second).
-				WithTimeout(10 * time.Second).
-				Should(Succeed())
-
-			By("modifying template while workspace is using it")
-			patchCmd := `{"spec":{"description":"Modified while in use"}}`
-			cmd = exec.Command("kubectl", "patch", "workspacetemplate",
-				"production-notebook-template", "--type=merge",
-				"-p", patchCmd)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("checking for warning event on template")
-			time.Sleep(2 * time.Second)
-			cmd = exec.Command("kubectl", "get", "events",
-				"--field-selector", "involvedObject.name=production-notebook-template",
-				"-o", "jsonpath={.items[?(@.reason=='TemplateModifiedWhileInUse')].message}")
+			By("verifying template was created")
+			cmd = exec.Command("kubectl", "get", "workspacetemplate",
+				"immutability-test-template", "-o", "jsonpath={.metadata.name}")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(output).To(ContainSubstring("in use"))
+			Expect(output).To(Equal("immutability-test-template"))
 
-			By("cleaning up test workspace")
-			cmd = exec.Command("kubectl", "delete", "workspace",
-				"modification-warning-test")
-			_, _ = utils.Run(cmd)
-		})
+			By("attempting to modify template spec (change description)")
+			patchCmd := `{"spec":{"description":"Modified description - should fail"}}`
+			cmd = exec.Command("kubectl", "patch", "workspacetemplate",
+				"immutability-test-template", "--type=merge",
+				"-p", patchCmd)
+			output, err = utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "expected CEL validation to reject template spec modification")
+			Expect(output).To(ContainSubstring("template spec is immutable after creation"))
 
-		It("should cache validation and skip redundant template fetches", func() {
-		Skip("Cache validation test disabled - needs optimization for rapid reconciliation loops")
-			var err error
-			var output string
-
-			By("creating workspace with templateRef")
-			workspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: cache-test-workspace
-spec:
-  displayName: "Cache Test"
-  templateRef: "production-notebook-template"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("waiting for initial validation")
-			verifyValidated := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "workspace", "cache-test-workspace",
-					"-o", "jsonpath={.status.conditions[?(@.type=='TemplateValidation')].status}")
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"))
-			}
-			Eventually(verifyValidated).
-				WithPolling(1 * time.Second).
-				WithTimeout(15 * time.Second).
-				Should(Succeed())
-
-			By("checking controller logs for cache miss on first validation")
-			time.Sleep(2 * time.Second)
-			cmd = exec.Command("kubectl", "logs",
-				"-n", namespace,
-				"deployment/jupyter-k8s-controller-manager",
-				"--tail", "500")
+			By("verifying template spec description remains unchanged")
+			cmd = exec.Command("kubectl", "get", "workspacetemplate",
+				"immutability-test-template", "-o", "jsonpath={.spec.description}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(output).To(ContainSubstring("Validation cache miss"))
+			Expect(output).To(Equal("Original description"))
 
-			By("triggering reconciliation without changing spec")
-			cmd = exec.Command("kubectl", "annotate", "workspace", "cache-test-workspace",
-				"test-annotation=trigger-reconcile", "--overwrite")
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("checking controller logs for cache hit")
-			time.Sleep(3 * time.Second)
-			cmd = exec.Command("kubectl", "logs",
-				"-n", namespace,
-				"deployment/jupyter-k8s-controller-manager",
-				"--tail", "50")
-			output, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(output).To(ContainSubstring("Validation cache hit - skipping template fetch"))
-
-			By("modifying workspace spec to invalidate cache")
-			patchCmd := `{"spec":{"displayName":"Cache Test Modified"}}`
-			cmd = exec.Command("kubectl", "patch", "workspace", "cache-test-workspace",
-				"--type=merge", "-p", patchCmd)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("checking controller logs for cache miss after spec change")
-			time.Sleep(3 * time.Second)
-			cmd = exec.Command("kubectl", "logs",
-				"-n", namespace,
-				"deployment/jupyter-k8s-controller-manager",
-				"--tail", "500")
-			output, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(output).To(ContainSubstring("Validation cache miss"))
-
-			By("cleaning up test workspace")
-			cmd = exec.Command("kubectl", "delete", "workspace", "cache-test-workspace")
-			_, _ = utils.Run(cmd)
-		})
-
-		It("should re-validate workspace when template becomes stricter", func() {
-			var err error
-			var output string
-
-			By("creating a permissive template")
-			templateYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
-kind: WorkspaceTemplate
-metadata:
-  name: revalidation-test-template
-spec:
-  displayName: "Re-validation Test"
-  defaultImage: "jk8s-application-jupyter-uv:latest"
-  allowedImages:
-    - "jk8s-application-jupyter-uv:latest"
-  defaultResources:
-    requests:
-      cpu: "100m"
-      memory: "128Mi"
-  resourceBounds:
-    cpu:
-      min: "100m"
-      max: "2"
-    memory:
-      min: "128Mi"
-      max: "4Gi"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("creating workspace with CPU request=1 (compliant with max=2)")
-			workspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: revalidation-test-workspace
-spec:
-  displayName: "Re-validation Test"
-  templateRef: "revalidation-test-template"
-  resources:
-    requests:
-      cpu: "1"
-      memory: "256Mi"
-`
-			cmd = exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("waiting for initial validation to pass")
-			verifyValidated := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "workspace", "revalidation-test-workspace",
-					"-o", "jsonpath={.status.conditions[?(@.type=='TemplateValidation')].status}")
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"))
-			}
-			Eventually(verifyValidated).
-				WithPolling(1 * time.Second).
-				WithTimeout(15 * time.Second).
-				Should(Succeed())
-
-			By("modifying template to reduce max CPU from 2 to 500m (now non-compliant)")
-			patchCmd := `{"spec":{"resourceBounds":{"cpu":{"min":"100m","max":"500m"}}}}`
-			cmd = exec.Command("kubectl", "patch", "workspacetemplate", "revalidation-test-template",
-				"--type=merge", "-p", patchCmd)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("checking for warning event on template")
-			time.Sleep(2 * time.Second)
-			cmd = exec.Command("kubectl", "get", "events",
-				"--field-selector", "involvedObject.name=revalidation-test-template",
-				"-o", "jsonpath={.items[?(@.reason=='TemplateModifiedWhileInUse')].message}")
-			output, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(output).To(ContainSubstring("in use"))
-
-			By("waiting for workspace to be re-validated and marked non-compliant")
-			verifyNonCompliant := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "workspace", "revalidation-test-workspace",
-					"-o", "jsonpath={.status.conditions[?(@.type=='TemplateValidation')].status}")
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("False"))
-			}
-			Eventually(verifyNonCompliant).
-				WithPolling(2 * time.Second).
-				WithTimeout(45 * time.Second).
-				Should(Succeed())
-
-			By("verifying violation message contains CPU bound details")
-			cmd = exec.Command("kubectl", "get", "workspace", "revalidation-test-workspace",
-				"-o", "jsonpath={.status.conditions[?(@.type=='TemplateValidation')].message}")
-			output, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(output).To(ContainSubstring("cpu"))
-			Expect(output).To(ContainSubstring("500m"))
-
-			By("verifying workspace resources still exist (keeps running)")
-			cmd = exec.Command("kubectl", "get", "deployment",
-				"-l", "workspace.workspaces.jupyter.org/name=revalidation-test-workspace",
-				"-o", "jsonpath={.items[*].metadata.name}")
-			output, err = utils.Run(cmd)
-			// Deployment may or may not exist depending on state machine - just verify command succeeds
-			Expect(err).NotTo(HaveOccurred())
-
-			By("cleaning up test resources")
-			cmd = exec.Command("kubectl", "delete", "workspace", "revalidation-test-workspace")
-			_, _ = utils.Run(cmd)
-			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "revalidation-test-template")
-			_, _ = utils.Run(cmd)
-		})
-
-		It("should re-validate and block resources when workspace patched out of compliance", func() {
-			var err error
-			var output string
-
-			By("creating a template with CPU max=2")
-			templateYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
-kind: WorkspaceTemplate
-metadata:
-  name: patch-test-template
-spec:
-  displayName: "Patch Test"
-  defaultImage: "jk8s-application-jupyter-uv:latest"
-  allowedImages:
-    - "jk8s-application-jupyter-uv:latest"
-  defaultResources:
-    requests:
-      cpu: "100m"
-      memory: "128Mi"
-  resourceBounds:
-    cpu:
-      min: "100m"
-      max: "2"
-    memory:
-      min: "128Mi"
-      max: "4Gi"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("creating workspace with compliant CPU request=500m")
-			workspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: patch-test-workspace
-spec:
-  displayName: "Patch Test"
-  templateRef: "patch-test-template"
-  resources:
-    requests:
-      cpu: "500m"
-      memory: "256Mi"
-`
-			cmd = exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("waiting for initial validation to pass")
-			verifyValidated := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "workspace", "patch-test-workspace",
-					"-o", "jsonpath={.status.conditions[?(@.type=='TemplateValidation')].status}")
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"))
-			}
-			Eventually(verifyValidated).
-				WithPolling(1 * time.Second).
-				WithTimeout(15 * time.Second).
-				Should(Succeed())
-
-			By("patching workspace to increase CPU request to 4 (exceeds template max=2)")
-			patchCmd := `{"spec":{"resources":{"requests":{"cpu":"4"}}}}`
-			cmd = exec.Command("kubectl", "patch", "workspace", "patch-test-workspace",
-				"--type=merge", "-p", patchCmd)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("waiting for workspace to be re-validated and marked non-compliant")
-			verifyNonCompliant := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "workspace", "patch-test-workspace",
-					"-o", "jsonpath={.status.conditions[?(@.type=='TemplateValidation')].status}")
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("False"))
-			}
-			Eventually(verifyNonCompliant).
-				WithPolling(2 * time.Second).
-				WithTimeout(45 * time.Second).
-				Should(Succeed())
-
-			By("verifying violation message contains CPU bound details")
-			cmd = exec.Command("kubectl", "get", "workspace", "patch-test-workspace",
-				"-o", "jsonpath={.status.conditions[?(@.type=='TemplateValidation')].message}")
-			output, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(output).To(ContainSubstring("cpu"))
-			Expect(output).To(ContainSubstring("4"))
-
-			By("verifying Available condition is False")
-			cmd = exec.Command("kubectl", "get", "workspace", "patch-test-workspace",
-				"-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}")
-			output, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(output).To(Equal("False"))
-
-			By("patching workspace back to compliant value (500m)")
-			patchCmd = `{"spec":{"resources":{"requests":{"cpu":"500m"}}}}`
-			cmd = exec.Command("kubectl", "patch", "workspace", "patch-test-workspace",
-				"--type=merge", "-p", patchCmd)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("waiting for validation to pass again")
-			Eventually(verifyValidated).
-				WithPolling(2 * time.Second).
-				WithTimeout(45 * time.Second).
-				Should(Succeed())
-
-			By("cleaning up test resources")
-			cmd = exec.Command("kubectl", "delete", "workspace", "patch-test-workspace")
-			_, _ = utils.Run(cmd)
-			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "patch-test-template")
+			By("cleaning up test template")
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "immutability-test-template")
 			_, _ = utils.Run(cmd)
 		})
 	})

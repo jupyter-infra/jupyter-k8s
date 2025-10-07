@@ -27,7 +27,10 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: WorkspaceTemplate is the Schema for the workspacetemplates API
+        description: |-
+          WorkspaceTemplate is the Schema for the workspacetemplates API
+          Templates define reusable, secure-by-default configurations for workspaces.
+          The spec is immutable after creation - to update a template, create a new version.
         properties:
           apiVersion:
             description: |-
@@ -395,6 +398,9 @@ spec:
             - displayName
             type: object
         type: object
+        x-kubernetes-validations:
+        - message: template spec is immutable after creation
+          rule: self.spec == oldSelf.spec
     served: true
     storage: true
     subresources: {}

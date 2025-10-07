@@ -70,35 +70,64 @@ func (r *WorkspaceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return r.handleDeletion(ctx, template)
 	}
 
-	// Ensure finalizer is present
-	if !controllerutil.ContainsFinalizer(template, templateFinalizerName) {
-		logger.Info("Adding finalizer to template", "finalizer", templateFinalizerName)
+	// Manage finalizer based on workspace usage (lazy finalizer pattern)
+	// This follows Kubernetes best practice: only add finalizers when needed
+	return r.manageFinalizer(ctx, template)
+}
+
+// manageFinalizer implements lazy finalizer management for WorkspaceTemplates
+// Following Kubernetes best practices:
+// - Finalizers are only added when workspaces start using the template
+// - Finalizers are removed when all workspaces stop using the template
+// - This minimizes overhead and complexity compared to adding finalizers to all templates
+func (r *WorkspaceTemplateReconciler) manageFinalizer(ctx context.Context, template *workspacesv1alpha1.WorkspaceTemplate) (ctrl.Result, error) {
+	logger := logf.FromContext(ctx)
+
+	// Check if any active workspaces are using this template
+	workspaces, err := r.templateResolver.ListWorkspacesUsingTemplate(ctx, template.Name)
+	if err != nil {
+		logger.Error(err, "Failed to list workspaces using template")
+		return ctrl.Result{}, err
+	}
+
+	hasFinalizer := controllerutil.ContainsFinalizer(template, templateFinalizerName)
+	hasWorkspaces := len(workspaces) > 0
+
+	logger.V(1).Info("Checking finalizer state",
+		"templateName", template.Name,
+		"hasFinalizer", hasFinalizer,
+		"workspaceCount", len(workspaces))
+
+	// Case 1: Workspaces exist, but finalizer is missing → Add finalizer
+	if hasWorkspaces && !hasFinalizer {
+		logger.Info("Adding finalizer to template (workspaces are using it)",
+			"finalizer", templateFinalizerName,
+			"workspaceCount", len(workspaces))
 		controllerutil.AddFinalizer(template, templateFinalizerName)
 		if err := r.Update(ctx, template); err != nil {
 			logger.Error(err, "Failed to add finalizer to template")
 			return ctrl.Result{}, err
 		}
 		logger.Info("Successfully added finalizer to template")
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{}, nil
 	}
 
-	logger.V(1).Info("Finalizer already present on template")
-
-	// Check if template spec is being modified while in use
-	if template.Generation > 1 {
-		workspaces, err := r.templateResolver.ListWorkspacesUsingTemplate(ctx, template.Name)
-		if err != nil {
-			logger.Error(err, "Failed to list workspaces using template")
+	// Case 2: No workspaces, but finalizer is present → Remove finalizer
+	// This handles the case where all workspaces were deleted
+	if !hasWorkspaces && hasFinalizer {
+		logger.Info("Removing finalizer from template (no workspaces using it)",
+			"finalizer", templateFinalizerName)
+		controllerutil.RemoveFinalizer(template, templateFinalizerName)
+		if err := r.Update(ctx, template); err != nil {
+			logger.Error(err, "Failed to remove finalizer from template")
 			return ctrl.Result{}, err
 		}
-
-		if len(workspaces) > 0 {
-			msg := fmt.Sprintf("Template is in use by %d workspace(s) but spec was modified - workspaces will be re-validated", len(workspaces))
-			logger.Info(msg, "workspaceCount", len(workspaces))
-			r.recorder.Event(template, "Warning", "TemplateModifiedWhileInUse", msg)
-		}
+		logger.Info("Successfully removed finalizer from template")
+		return ctrl.Result{}, nil
 	}
 
+	// Case 3: State is correct (both have workspaces+finalizer, or neither)
+	logger.V(1).Info("Finalizer state is correct, no action needed")
 	return ctrl.Result{}, nil
 }
 
@@ -149,6 +178,9 @@ func (r *WorkspaceTemplateReconciler) handleDeletion(ctx context.Context, templa
 	return ctrl.Result{}, nil
 }
 
+// SetupWithManager sets up the controller with the Manager.
+// It configures watches for WorkspaceTemplate resources and triggers reconciliation
+// when Workspaces change to manage finalizers based on template usage.
 func (r *WorkspaceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	logger := mgr.GetLogger().WithName("workspacetemplate-setup")
 	logger.Info("Setting up WorkspaceTemplate controller")

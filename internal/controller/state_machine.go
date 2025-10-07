@@ -7,10 +7,8 @@ import (
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -136,7 +134,6 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 
 	// Validate template BEFORE creating any resources
 	var resolvedTemplate *ResolvedTemplate
-	var validatedTemplate *workspacesv1alpha1.WorkspaceTemplate
 	if workspace.Spec.TemplateRef != nil {
 		validation, err := sm.templateResolver.ValidateAndResolveTemplate(ctx, workspace)
 		if err != nil {
@@ -170,28 +167,8 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 		resolvedTemplate = validation.Template
 		logger.Info("Template validation passed")
 
-		// Update validation cache to avoid redundant fetches on next reconcile
+		// Record successful validation event
 		templateName := *workspace.Spec.TemplateRef
-		validatedTemplate = &workspacesv1alpha1.WorkspaceTemplate{}
-		templateKey := types.NamespacedName{
-			Name: templateName,
-		}
-		if err := sm.resourceManager.client.Get(ctx, templateKey, validatedTemplate); err == nil {
-			// Use strategic merge patch to update only annotations, avoiding full reconciliation
-			patch := client.MergeFrom(workspace.DeepCopy())
-			sm.templateResolver.UpdateValidationCache(workspace, validatedTemplate)
-			if err := sm.resourceManager.client.Patch(ctx, workspace, patch); err != nil {
-				logger.Error(err, "Failed to persist validation cache annotations")
-			} else {
-				logger.Info("Updated validation cache",
-					"templateRV", validatedTemplate.ResourceVersion,
-					"templateGen", validatedTemplate.Generation,
-					"workspaceGen", workspace.Generation)
-			}
-		} else {
-			logger.Error(err, "Failed to fetch template for cache update", "template", templateName)
-		}
-
 		message := "Template validation passed for " + templateName
 		sm.recorder.Event(workspace, corev1.EventTypeNormal, "TemplateValidated", message)
 
