@@ -92,7 +92,7 @@ push-all-kind: build-all
 	@mkdir -p /tmp/kind-images
 	for img in $(IMAGES); do \
 		echo "Loading $(APPLICATION_IMAGE_PREFIX)-$$img:$(TAG) image..."; \
-		$(CONTAINER_TOOL) save $(APPLICATION_IMAGE_PREFIX)-$$img:$(TAG) > /tmp/kind-images/$$img.tar; \
+		$(CONTAINER_TOOL) save $(APPLICATION_IMAGE_PREFIX)-$$img:$(TAG) -o /tmp/kind-images/$$img.tar; \
 		kind load image-archive /tmp/kind-images/$$img.tar --name $(CLUSTER_NAME) || echo "Warning: Failed to load $(APPLICATION_IMAGE_PREFIX)-$$img:$(TAG)"; \
 		rm -f /tmp/kind-images/$$img.tar; \
 	done
