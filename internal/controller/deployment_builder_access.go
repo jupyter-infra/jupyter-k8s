@@ -10,13 +10,19 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// partialAccessResourceData provides values for template substitutions
+type partialAccessResourceData struct {
+	Workspace      *workspacesv1alpha1.Workspace
+	AccessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy
+}
+
 // resolveAccessStrategyEnv interpolates the env defined in the AccessStrategy
 // for a particular Workspace.
 func (b *DeploymentBuilder) resolveAccessStrategyEnv(
 	accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy,
 	workspace *workspacesv1alpha1.Workspace,
 ) ([]map[string]string, error) {
-	data := &AccessResourceData{
+	data := &partialAccessResourceData{
 		Workspace:      workspace,
 		AccessStrategy: accessStrategy,
 	}
@@ -105,15 +111,10 @@ func (db *DeploymentBuilder) ApplyAccessStrategyToDeployment(
 	if deployment == nil {
 		return fmt.Errorf("cannot apply AccessStrategy '%s' to nil deployment", accessStrategy.Name)
 	}
-
 	if accessStrategy == nil {
 		return nil // Nothing to do
 	}
-
 	primaryContainer := &deployment.Spec.Template.Spec.Containers[0]
-	if primaryContainer == nil {
-		return fmt.Errorf("primary container not found, cannot apply AccessStrategy: %s", accessStrategy.Name)
-	}
 
 	// Apply environment variables to primary container
 	if err := db.addAccessStrategyEnvToContainer(primaryContainer, workspace, accessStrategy); err != nil {

@@ -62,12 +62,12 @@ func (rm *ResourceManager) EnsureAccessResourcesExist(
 	// specified in the AccessStrategy;
 	// or fallback to the Workspace's namespace.
 	accessResourceNamespace := workspace.Namespace
-	if accessStrategy.Spec.RoutesNamespace != "" {
-		accessResourceNamespace = accessStrategy.Spec.RoutesNamespace
+	if accessStrategy.Spec.AccessResourcesNamespace != "" {
+		accessResourceNamespace = accessStrategy.Spec.AccessResourcesNamespace
 	}
 
 	// ensure each of the resources defined in the accessStrategy exists
-	for _, resourceTemplate := range accessStrategy.Spec.RoutesResourceTemplates {
+	for _, resourceTemplate := range accessStrategy.Spec.AccessResourceTemplates {
 		// Apply resource
 		err := rm.ensureAccessResourceExists(ctx, workspace, accessStrategy, service, &resourceTemplate, accessResourceNamespace)
 		if err != nil {
@@ -107,8 +107,8 @@ func (rm *ResourceManager) ensureAccessResourceExists(
 		existingObj := &unstructured.Unstructured{}
 		existingObj.SetKind(accessResourceStatus.Kind)
 		lookupError := rm.client.Get(ctx, types.NamespacedName{
-			Namespace: accessResourceStatus.Name,
-			Name:      accessResourceStatus.Namespace,
+			Namespace: accessResourceStatus.Namespace,
+			Name:      accessResourceStatus.Name,
 		}, existingObj)
 
 		if lookupError == nil {

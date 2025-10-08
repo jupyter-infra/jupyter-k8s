@@ -44,40 +44,13 @@ spec:
           spec:
             description: Spec defines the desired state of WorkspaceAccessStrategy
             properties:
-              accessURLTemplate:
+              accessResourceNamespace:
                 description: |-
-                  AccessURLTemplate is a template string for constructing the workspace access URL
-                  Template variables include .Workspace and .AccessStrategy objects
-                  If not provided, the AccessURL will not be set in the workspace status
-                  Example: "https://example.com/workspace-path/"
+                  AccessResourcesNamespace is the namespace where routing resources will be created
+                  If omitted, creates routes in the same namespace as the Workspace
                 type: string
-              displayName:
-                description: DisplayName is a human-readable name for this access
-                  strategy
-                type: string
-              mergeEnv:
-                description: |-
-                  MergeEnv defines environment variables to be added to the main container
-                  These will be merged with any existing env vars in the Workspace's container
-                items:
-                  description: AccessEnvTemplate defines a template for environment
-                    variables
-                  properties:
-                    name:
-                      description: Name of the environment variable
-                      type: string
-                    valueTemplate:
-                      description: |-
-                        ValueTemplate is a template string for the value
-                        Can use variables from the Workspace and AccessStrategy objects
-                      type: string
-                  required:
-                  - name
-                  - valueTemplate
-                  type: object
-                type: array
-              routesAccessResourceTemplates:
-                description: RoutesResourceTemplates defines templates for resources
+              accessResourceTemplates:
+                description: AccessResourceTemplates defines templates for resources
                   created in the routes namespace
                 items:
                   description: AccessResourceTemplate defines a template for creating
@@ -106,14 +79,42 @@ spec:
                   - template
                   type: object
                 type: array
-              routesNamespace:
+              accessURLTemplate:
                 description: |-
-                  RoutesNamespace is the namespace where routing resources will be created
-                  If omitted, creates routes in the same namespace as the Workspace
+                  AccessURLTemplate is a template string for constructing the workspace access URL
+                  Template variables include .Workspace and .AccessStrategy objects
+                  If not provided, the AccessURL will not be set in the workspace status
+                  Example: "https://example.com/workspace-path/"
                 type: string
+              displayName:
+                description: DisplayName is a human-readable name for this access
+                  strategy
+                type: string
+              mergeEnv:
+                description: |-
+                  MergeEnv defines environment variables to be added to the main container
+                  These will be merged with any existing env vars in the Workspace's container
+                items:
+                  description: AccessEnvTemplate defines a template for environment
+                    variables
+                  properties:
+                    name:
+                      description: Name of the environment variable
+                      type: string
+                    valueTemplate:
+                      description: |-
+                        ValueTemplate is a template string for the value
+                        Can use variables from the Workspace or AccessStrategy objects
+                        but not the Service object
+                      type: string
+                  required:
+                  - name
+                  - valueTemplate
+                  type: object
+                type: array
             required:
+            - accessResourceTemplates
             - displayName
-            - routesAccessResourceTemplates
             type: object
           status:
             description: Status defines the observed state of WorkspaceAccessStrategy

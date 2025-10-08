@@ -43,7 +43,8 @@ type AccessEnvTemplate struct {
 	Name string `json:"name"`
 
 	// ValueTemplate is a template string for the value
-	// Can use variables from the Workspace and AccessStrategy objects
+	// Can use variables from the Workspace or AccessStrategy objects
+	// but not the Service object
 	ValueTemplate string `json:"valueTemplate"`
 }
 
@@ -52,13 +53,13 @@ type WorkspaceAccessStrategySpec struct {
 	// DisplayName is a human-readable name for this access strategy
 	DisplayName string `json:"displayName"`
 
-	// RoutesNamespace is the namespace where routing resources will be created
+	// AccessResourcesNamespace is the namespace where routing resources will be created
 	// If omitted, creates routes in the same namespace as the Workspace
 	// +optional
-	RoutesNamespace string `json:"routesNamespace,omitempty"`
+	AccessResourcesNamespace string `json:"accessResourceNamespace,omitempty"`
 
-	// RoutesResourceTemplates defines templates for resources created in the routes namespace
-	RoutesResourceTemplates []AccessResourceTemplate `json:"routesAccessResourceTemplates"`
+	// AccessResourceTemplates defines templates for resources created in the routes namespace
+	AccessResourceTemplates []AccessResourceTemplate `json:"accessResourceTemplates"`
 
 	// MergeEnv defines environment variables to be added to the main container
 	// These will be merged with any existing env vars in the Workspace's container

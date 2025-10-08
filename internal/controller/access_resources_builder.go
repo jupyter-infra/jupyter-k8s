@@ -22,8 +22,8 @@ func NewAccessResourcesBuilder() *AccessResourcesBuilder {
 	return &AccessResourcesBuilder{}
 }
 
-// AccessResourceData provides values for template substitutions
-type AccessResourceData struct {
+// fullAccessResourceData provides values for template substitutions
+type fullAccessResourceData struct {
 	Workspace      *workspacesv1alpha1.Workspace
 	AccessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy
 	Service        *corev1.Service
@@ -45,9 +45,10 @@ func (b *AccessResourcesBuilder) BuildUnstructuredResource(
 		return nil, fmt.Errorf("failed to parse resource template: %w", err)
 	}
 
-	accessResourceData := &AccessResourceData{
+	accessResourceData := &fullAccessResourceData{
 		Workspace:      workspace,
 		AccessStrategy: accessStrategy,
+		Service:        service,
 	}
 
 	var resourceBuffer bytes.Buffer
@@ -67,8 +68,8 @@ func (b *AccessResourcesBuilder) BuildUnstructuredResource(
 
 	// Determine the target namespace
 	targetNamespace := accessResourceData.Workspace.Namespace
-	if accessStrategy.Spec.RoutesNamespace != "" {
-		targetNamespace = accessStrategy.Spec.RoutesNamespace
+	if accessStrategy.Spec.AccessResourcesNamespace != "" {
+		targetNamespace = accessStrategy.Spec.AccessResourcesNamespace
 	}
 	obj.SetNamespace(targetNamespace)
 
@@ -119,9 +120,10 @@ func (b *AccessResourcesBuilder) ResolveAccessURL(
 	}
 
 	// Create template data
-	accessResourceData := &AccessResourceData{
+	accessResourceData := &fullAccessResourceData{
 		Workspace:      workspace,
 		AccessStrategy: accessStrategy,
+		Service:        service,
 	}
 
 	// Execute template
