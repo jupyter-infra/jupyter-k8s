@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authmiddleware
+  namespace: jupyter-k8s
+  labels:
+    app: authmiddleware
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: authmiddleware
+  template:
+    metadata:
+      labels:
+        app: authmiddleware
+    spec:
+      containers:
+        - name: authmiddleware
+          image: ${IMAGE_REPOSITORY}:${IMAGE_TAG}
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: READ_TIMEOUT
+              value: "10s"
+            - name: WRITE_TIMEOUT
+              value: "10s"
+            - name: SHUTDOWN_TIMEOUT
+              value: "30s"
+            - name: JWT_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: authmiddleware-secrets
+                  key: jwt-signing-key
+            - name: JWT_ISSUER
+              value: "authmiddleware"
+            - name: JWT_AUDIENCE
+              value: "workspace-users"
+            - name: JWT_EXPIRATION
+              value: "1h"
+            - name: COOKIE_NAME
+              value: "workspace_auth"
+            - name: COOKIE_SECURE
+              value: "true"
+            - name: COOKIE_DOMAIN
+              value: ""
+            - name: COOKIE_PATH
+              value: "/"
+            - name: COOKIE_MAX_AGE
+              value: "24h"
+            - name: COOKIE_HTTP_ONLY
+              value: "true"
+            - name: COOKIE_SAME_SITE
+              value: "lax"
+            - name: CSRF_AUTH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: authmiddleware-secrets
+                  key: csrf-auth-key
+            - name: CSRF_COOKIE_NAME
+              value: "workspace_csrf"
+            - name: CSRF_COOKIE_PATH
+              value: "/"
+            - name: CSRF_COOKIE_MAX_AGE
+              value: "1h"
+            - name: CSRF_COOKIE_SECURE
+              value: "true"
+          resources:
+            limits:
+              cpu: 200m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authmiddleware
+  namespace: jupyter-k8s
+spec:
+  selector:
+    app: authmiddleware
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: authmiddleware
+  namespace: jupyter-k8s
+spec:
+  forwardAuth:
+    address: "http://authmiddleware.jupyter-k8s.svc.cluster.local:8080/verify"
+    authResponseHeaders:
+      - "X-Auth-Request-User"
+      - "X-Auth-Request-Groups"
+      - "X-Forwarded-Uri"
+      - "X-Forwarded-Host"
+      - "X-Forwarded-Proto"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: authmiddleware-secrets
+  namespace: jupyter-k8s
+type: Opaque
+data:
+  # These values need to be replaced with actual secrets generated at deployment time
+  # The values below are placeholders for demonstration
+  jwt-signing-key: ChangeMe
+  csrf-auth-key: ChangeMe32CharactersMinimumLength

@@ -4,13 +4,48 @@
 
 Jupyter-k8s is a Kubernetes operator for Jupyter notebooks and other IDEs. It manages compute, storage, networking, and access control for multiple users in a secure, scalable, usable and flexible way.
 
-### Core Custom Resources
+### Kubernetes Custom Resources
 
 - **Workspace**: A compute unit with dedicated storage, unique URL, and access control list for users
-- **WorkspaceManager**: Handles routing, authentication, and authorization for Workspaces
+- **WorkspaceAccessStrategy**: Handles network routing with HTTPS ingress or tunneling out from workspaces
 - **WorkspaceTemplate**: Provides default settings and bounds for variations
-- **WorkspaceExecutionProfile**: Provides k8s and potentially other identities to a Workspace at runtime
-- **WorkspaceShare**: Associates Workspaces with k8s identities for sharing access
+- **WorkspaceExecutionProfile**: Associates a Grantee (k8s username or group) with a Service Account
+- **WorkspaceShare**: Associates a Grantee (k8s username or group) with a Workspace for access
+
+## Architecture
+
+### Kubernetes Controller
+
+The Kubernetes controller implements the operator pattern to manage workspace resources:
+- **Reconciliation Loops**: Continuously reconciles desired state with actual cluster state
+- **Custom Resource Management**: Creates, updates, and deletes underlying resources
+- **Status Updates**: Reports resource status back to the custom resources
+- **Event Recording**: Logs significant events for auditing and troubleshooting
+- **Admission Webhooks**: Validates and mutates resources before they are stored in etcd
+
+### Auth Middleware
+The auth middleware component provides authentication and authorization for workspace access:
+
+- **JWT-Based Authentication**: Uses JSON Web Tokens (JWT) for stateless authentication
+- **Path-Based Authorization**: Tokens are scoped to specific workspace paths
+- **CSRF Protection**: Implements protection for state-changing operations
+- **Token Refresh**: Transparently refreshes tokens within a configurable window
+- **Cookie Management**: Handles secure cookie storage with path-specific scopes
+
+#### Endpoints
+
+- `/auth`: Initial authentication endpoint that generates JWT tokens from proxy headers
+  - Takes user and group information from headers
+  - Creates a token scoped to the workspace path
+  - Returns CSRF token for form submissions
+
+- `/verify`: Token verification endpoint for validating requests
+  - Verifies token validity and freshness
+  - Ensures path and domain match the request
+  - Refreshes tokens when nearing expiration
+
+- `/health`: System health check endpoint for monitoring
+
 
 ### Deployment Modes
 

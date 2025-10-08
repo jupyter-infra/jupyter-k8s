@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -16,21 +17,33 @@ import (
 
 // ResourceManager handles CRUD operations for Kubernetes resources
 type ResourceManager struct {
-	client            client.Client
-	deploymentBuilder *DeploymentBuilder
-	serviceBuilder    *ServiceBuilder
-	pvcBuilder        *PVCBuilder
-	statusManager     *StatusManager
+	client                 client.Client
+	scheme                 *runtime.Scheme
+	deploymentBuilder      *DeploymentBuilder
+	serviceBuilder         *ServiceBuilder
+	pvcBuilder             *PVCBuilder
+	accessResourcesBuilder *AccessResourcesBuilder
+	statusManager          *StatusManager
 }
 
 // NewResourceManager creates a new ResourceManager
-func NewResourceManager(k8sClient client.Client, deploymentBuilder *DeploymentBuilder, serviceBuilder *ServiceBuilder, pvcBuilder *PVCBuilder, statusManager *StatusManager) *ResourceManager {
+func NewResourceManager(
+	k8sClient client.Client,
+	scheme *runtime.Scheme,
+	deploymentBuilder *DeploymentBuilder,
+	serviceBuilder *ServiceBuilder,
+	pvcBuilder *PVCBuilder,
+	accessResourcesBuilder *AccessResourcesBuilder,
+	statusManager *StatusManager,
+) *ResourceManager {
 	return &ResourceManager{
-		client:            k8sClient,
-		deploymentBuilder: deploymentBuilder,
-		serviceBuilder:    serviceBuilder,
-		pvcBuilder:        pvcBuilder,
-		statusManager:     statusManager,
+		client:                 k8sClient,
+		scheme:                 scheme,
+		deploymentBuilder:      deploymentBuilder,
+		serviceBuilder:         serviceBuilder,
+		pvcBuilder:             pvcBuilder,
+		accessResourcesBuilder: accessResourcesBuilder,
+		statusManager:          statusManager,
 	}
 }
 
@@ -82,14 +95,24 @@ func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *work
 		return nil, fmt.Errorf("failed to build deployment: %w", err)
 	}
 
+	// Modify deployment build per AccessStrategy
+	accessStrategy, getAccessStrategyErr := rm.GetAccessStrategyForWorkspace(ctx, workspace)
+	if getAccessStrategyErr != nil {
+		return nil, fmt.Errorf("failed to retrieve access strategy for deployment: %w", getAccessStrategyErr)
+	}
+	if accessStrategy != nil {
+		if err := rm.deploymentBuilder.ApplyAccessStrategyToDeployment(deployment, workspace, accessStrategy); err != nil {
+			return nil, fmt.Errorf("failed to apply access strategy to deployment: %w", getAccessStrategyErr)
+		}
+	}
+
+	// Apply the changes to deployment
 	logger.Info("Creating Deployment",
 		"deployment", deployment.Name,
 		"namespace", deployment.Namespace)
-
 	if err := rm.client.Create(ctx, deployment); err != nil {
 		return nil, fmt.Errorf("failed to create deployment: %w", err)
 	}
-
 	logger.Info("Successfully initiated creating of Deployment",
 		"deployment", deployment.Name)
 

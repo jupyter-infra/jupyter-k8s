@@ -33,6 +33,7 @@ ifeq ($(CLOUD_PROVIDER),aws)
 	AWS_ACCOUNT_ID := $(shell aws sts get-caller-identity --query "Account" --output text)
 	ECR_REGISTRY := $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
 	ECR_REPOSITORY := jupyter-k8s
+	ECR_REPOSITORY_AUTH := jupyter-k8s-auth
 	EKS_CLUSTER_NAME ?= jupyter-k8s-cluster
 	EKS_CONTEXT := arn:aws:eks:$(AWS_REGION):$(AWS_ACCOUNT_ID):cluster/$(EKS_CLUSTER_NAME)
 endif
@@ -214,7 +215,9 @@ helm-lint: ## Lint the Helm chart
 		--set github.orgs[0].teams[0]=ace-devs \
 		--set githubRbac.orgs[0].name=some-org \
 		--set githubRbac.orgs[0].teams[0]=ace-devs \
-		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET)
+		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
+		--set authmiddleware.jwtSigningKey=some-signing-key \
+		--set authmiddleware.csrfAuthKey=some-auth-key
 
 .PHONY: helm-test
 helm-test: ## Test the Helm chart with helm template
@@ -242,7 +245,9 @@ helm-test-aws-traefik-dex: ## Test the Helm chart with guided mode (aws-traefik-
 		--set github.orgs[0].teams[0]=ace-devs \
 		--set githubRbac.orgs[0].name=some-org \
 		--set githubRbac.orgs[0].teams[0]=ace-devs \
-		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET)
+		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
+		--set authmiddleware.jwtSigningKey=some-signing-key \
+		--set authmiddleware.csrfAuthKey=some-auth-key
 	# Clean up temporary chart directory
 	rm -rf /tmp/helm-test-chart
 	# Run helm tests to verify resources
@@ -356,9 +361,13 @@ setup-aws-internal: ## Setup connection to remote cluster
 		echo "EKS_CLUSTER_NAME not provided. Please set it when running this command."; \
 		exit 1; \
 	fi
-	@echo "Creating ECR repository if it doesn't exist..."
+	@echo "Creating ECR repository for controller if it doesn't exist..."
 	aws ecr describe-repositories --repository-names $(ECR_REPOSITORY) --region $(AWS_REGION) > /dev/null || \
 	aws ecr create-repository --repository-name $(ECR_REPOSITORY) --region $(AWS_REGION)
+
+	@echo "Creating ECR repository for auth middleware if it doesn't exist..."
+	aws ecr describe-repositories --repository-names $(ECR_REPOSITORY_AUTH) --region $(AWS_REGION) > /dev/null || \
+	aws ecr create-repository --repository-name $(ECR_REPOSITORY_AUTH) --region $(AWS_REGION)
 	@echo "Remote AWS setup complete. Credentials added to ~/.kube/config"
 
 .PHONY: setup-aws
@@ -389,6 +398,11 @@ load-images-aws-internal: manifests generate fmt vet ## Build and push container
 	$(CONTAINER_TOOL) build $(BUILD_OPTS) --platform=linux/amd64 -t $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest .
 	$(CONTAINER_TOOL) push $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest
 	@echo "Controller image built and pushed successfully to $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest"
+
+	@echo "Building auth middleware image..."
+	$(CONTAINER_TOOL) build $(BUILD_OPTS) --platform=linux/amd64 -t $(ECR_REGISTRY)/$(ECR_REPOSITORY_AUTH):latest -f images/authmiddleware/Dockerfile .
+	$(CONTAINER_TOOL) push $(ECR_REGISTRY)/$(ECR_REPOSITORY_AUTH):latest
+	@echo "Auth middleware image built and pushed successfully to $(ECR_REGISTRY)/$(ECR_REPOSITORY_AUTH):latest"
 
 	@echo "Building application images..."
 	$(MAKE) -C images push-all-aws CLOUD_PROVIDER=aws CONTAINER_TOOL=$(CONTAINER_TOOL)
@@ -446,7 +460,11 @@ deploy-aws-traefik-dex-internal:
 			--set github.orgs[0].teams[0]=$$GITHUB_TEAM \
 			--set githubRbac.orgs[0].name=$$GITHUB_ORG_NAME \
 			--set githubRbac.orgs[0].teams[0]=$$GITHUB_TEAM \
-			--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET)"; \
+			--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
+			--set authmiddleware.repository=$(ECR_REGISTRY) \
+			--set authmiddleware.imageName=$(ECR_REPOSITORY_AUTH) \
+			--set authmiddleware.jwtSigningKey=$$JWT_SIGNING_KEY \
+			--set authmiddleware.csrfAuthKey=$$CSRF_AUTH_KEY"; \
 		\
 		if [ ! -z "$$DEX_OAUTH2_SECRET" ]; then \
 			HELM_ARGS="$$HELM_ARGS --set dex.oauth2ProxyClientSecret=$$DEX_OAUTH2_SECRET"; \

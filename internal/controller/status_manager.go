@@ -27,14 +27,8 @@ func (sm *StatusManager) updateStatus(
 	ctx context.Context,
 	workspace *workspacesv1alpha1.Workspace,
 	conditionsToUpdate *[]metav1.Condition,
-	updateResourceNames bool,
 ) error {
 	logger := logf.FromContext(ctx)
-
-	if !updateResourceNames && len(*conditionsToUpdate) == 0 {
-		logger.Info("no-op: Workspace.Status is up-to-date")
-		return nil
-	}
 	if len(*conditionsToUpdate) > 0 {
 		// requesting to modify condition: overwrite
 		workspace.Status.Conditions = *conditionsToUpdate
@@ -46,26 +40,31 @@ func (sm *StatusManager) updateStatus(
 	return nil
 }
 
+// WorkspaceRunningReadiness wraps the readiness flag of underlying components
+type WorkspaceRunningReadiness struct {
+	computeReady         bool
+	serviceReady         bool
+	accessResourcesReady bool
+}
+
 // UpdateStartingStatus sets Available to false and Progressing to true
 func (sm *StatusManager) UpdateStartingStatus(
 	ctx context.Context,
 	workspace *workspacesv1alpha1.Workspace,
-	computeReady bool,
-	serviceReady bool,
-	computeName string,
-	serviceName string,
+	readiness WorkspaceRunningReadiness,
 ) error {
 	// ensure StartingCondition is set to True with the appropriate reason
-
 	startingReason := ReasonResourcesNotReady
 	startingMessage := "Workspace is starting"
 
-	if computeReady && serviceReady {
+	if readiness.computeReady && readiness.serviceReady && readiness.accessResourcesReady {
 		return fmt.Errorf("invalid call: not all resources should be ready in method UpdateStartingStatus")
-	} else if serviceReady {
+	}
+
+	if !readiness.computeReady {
 		startingReason = ReasonComputeNotReady
 		startingMessage = "Compute is not ready"
-	} else if computeReady {
+	} else if !readiness.serviceReady {
 		startingReason = ReasonServiceNotReady
 		startingMessage = "Service is not ready"
 	}
@@ -109,12 +108,7 @@ func (sm *StatusManager) UpdateStartingStatus(
 		stoppedCondition,
 	}
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
-	shouldUpdateResourceNames := workspace.Status.DeploymentName != computeName || workspace.Status.ServiceName != serviceName
-	if shouldUpdateResourceNames {
-		workspace.Status.DeploymentName = computeName
-		workspace.Status.ServiceName = serviceName
-	}
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, shouldUpdateResourceNames)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate)
 }
 
 // UpdateErrorStatus sets the Degraded condition to true with the specified error reason and message
@@ -127,7 +121,7 @@ func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, workspace *works
 		message,
 	)
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &[]metav1.Condition{degradedCondition})
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate)
 }
 
 // UpdateRunningStatus sets the Available condition to true and Progressing to false
@@ -173,20 +167,27 @@ func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, workspace *wor
 	}
 
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate)
+}
+
+// WorkspaceStoppingReadiness wraps the readiness flag of underlying components
+type WorkspaceStoppingReadiness struct {
+	computeStopped         bool
+	serviceStopped         bool
+	accessResourcesStopped bool
 }
 
 // UpdateStoppingStatus sets Available to false and Progressing to true
-func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, computeStopped bool, serviceStopped bool) error {
+func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, readiness WorkspaceStoppingReadiness) error {
 	stoppingReason := ReasonResourcesNotStopped
 	stoppingMessage := "Resources are still running"
 
-	if computeStopped && serviceStopped {
+	if readiness.computeStopped && readiness.serviceStopped {
 		return fmt.Errorf("invalid call: not all resources should be stopped in method UpdateStoppingStatus")
-	} else if serviceStopped {
+	} else if readiness.serviceStopped {
 		stoppingReason = ReasonComputeNotStopped
 		stoppingMessage = "Compute is still running"
-	} else if computeStopped {
+	} else if readiness.computeStopped {
 		stoppingReason = ReasonServiceNotStopped
 		stoppingMessage = "Service is still up"
 	}
@@ -233,7 +234,7 @@ func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, workspace *wo
 	}
 
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate)
 }
 
 // UpdateStoppedStatus sets Available and Progressing to false, Stopped to true
@@ -281,5 +282,5 @@ func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, workspace *wor
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
 	workspace.Status.DeploymentName = ""
 	workspace.Status.ServiceName = ""
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, true)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate)
 }

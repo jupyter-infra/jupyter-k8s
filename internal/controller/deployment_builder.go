@@ -115,7 +115,9 @@ func (db *DeploymentBuilder) buildJupyterContainer(workspace *workspacesv1alpha1
 			},
 		},
 		Resources: resources,
-		// TODO: Add environment variables, probes
+		// Default environment variables
+		Env: []corev1.EnvVar{},
+		// TODO: Add probes
 	}
 
 	// Add volume mount if storage is configured

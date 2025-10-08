@@ -1,0 +1,30 @@
+{{- if .Values.authmiddleware.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jupyter-k8s-authmiddleware
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: authmiddleware
+    component: auth
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: authmiddleware-role
+rules: []  # No Kubernetes API permissions needed
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: authmiddleware-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: authmiddleware-role
+subjects:
+  - kind: ServiceAccount
+    name: jupyter-k8s-authmiddleware
+    namespace: {{ .Values.namespace }}
+{{- end }}

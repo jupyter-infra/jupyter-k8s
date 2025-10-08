@@ -1,0 +1,126 @@
+{{- if .Values.authmiddleware.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authmiddleware
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: authmiddleware
+    component: auth
+spec:
+  replicas: {{ .Values.authmiddleware.replicas }}
+  selector:
+    matchLabels:
+      app: authmiddleware
+      component: auth
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  minReadySeconds: 0
+  template:
+    metadata:
+      labels:
+        app: authmiddleware
+        component: auth
+    spec:
+      serviceAccountName: jupyter-k8s-authmiddleware
+      terminationGracePeriodSeconds: 30
+      containers:
+      - image: {{ .Values.authmiddleware.repository }}/{{ .Values.authmiddleware.imageName }}:{{ .Values.authmiddleware.imageTag }}
+        imagePullPolicy: {{ .Values.authmiddleware.imagePullPolicy }}
+        name: authmiddleware
+        resources:
+          requests:
+            cpu: {{ .Values.authmiddleware.resources.requests.cpu }}
+            memory: {{ .Values.authmiddleware.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.authmiddleware.resources.limits.cpu }}
+            memory: {{ .Values.authmiddleware.resources.limits.memory }}
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsUser: 65532
+          runAsGroup: 65532
+        env:
+          - name: PORT
+            value: "8080"
+          - name: READ_TIMEOUT
+            value: "{{ .Values.authmiddleware.readTimeout }}"
+          - name: WRITE_TIMEOUT
+            value: "{{ .Values.authmiddleware.writeTimeout }}"
+          - name: SHUTDOWN_TIMEOUT
+            value: "{{ .Values.authmiddleware.shutdownTimeout }}"
+          - name: JWT_SIGNING_KEY
+            valueFrom:
+              secretKeyRef:
+                name: authmiddleware-secrets
+                key: jwt-signing-key
+          - name: JWT_ISSUER
+            value: "{{ .Values.authmiddleware.jwtIssuer }}"
+          - name: JWT_AUDIENCE
+            value: "{{ .Values.authmiddleware.jwtAudience }}"
+          - name: JWT_EXPIRATION
+            value: "{{ .Values.authmiddleware.jwtExpiration }}"
+          - name: JWT_REFRESH_WINDOW
+            value: "{{ .Values.authmiddleware.jwtRefreshWindow }}"
+          - name: COOKIE_NAME
+            value: "{{ .Values.authmiddleware.cookieName }}"
+          - name: COOKIE_SECURE
+            value: "{{ .Values.authmiddleware.cookieSecure }}"
+          - name: COOKIE_DOMAIN
+            value: "{{ .Values.domain }}"
+          - name: COOKIE_PATH
+            value: "{{ .Values.authmiddleware.cookiePath }}"
+          - name: COOKIE_MAX_AGE
+            value: "{{ .Values.authmiddleware.cookieMaxAge }}"
+          - name: COOKIE_HTTP_ONLY
+            value: "{{ .Values.authmiddleware.cookieHttpOnly }}"
+          - name: COOKIE_SAME_SITE
+            value: "{{ .Values.authmiddleware.cookieSameSite }}"
+          - name: PATH_REGEX_PATTERN
+            value: "{{ .Values.authmiddleware.pathRegexPattern }}"
+          - name: MAX_COOKIE_PATHS
+            value: "{{ .Values.authmiddleware.maxCookiePaths }}"
+          - name: CSRF_AUTH_KEY
+            valueFrom:
+              secretKeyRef:
+                name: authmiddleware-secrets
+                key: csrf-auth-key
+          - name: CSRF_COOKIE_NAME
+            value: "{{ .Values.authmiddleware.csrfCookieName }}"
+          - name: CSRF_COOKIE_MAX_AGE
+            value: "{{ .Values.authmiddleware.csrfCookieMaxAge }}"
+          - name: CSRF_COOKIE_SECURE
+            value: "{{ .Values.authmiddleware.csrfCookieSecure }}"
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      securityContext:
+        fsGroup: 65532
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+{{- end }}

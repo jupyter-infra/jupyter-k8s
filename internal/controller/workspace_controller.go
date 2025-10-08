@@ -22,6 +22,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,12 +53,12 @@ func (r *WorkspaceReconciler) SetStateMachine(sm *StateMachine) {
 	r.stateMachine = sm
 }
 
-// +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=workspaces,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=workspaces/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=workspaces/finalizers,verbs=update
+// +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=*,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=traefik.io,resources=ingressroutes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=traefik.io,resources=middlewares,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -97,12 +98,26 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Create an IngressRoute unstructured object for watching
+	ingressRouteGVK := &unstructured.Unstructured{}
+	ingressRouteGVK.SetAPIVersion("traefik.io/v1alpha1")
+	ingressRouteGVK.SetKind("IngressRoute")
+
+	// Create a Middleware unstructured object for watching
+	middlewareGVK := &unstructured.Unstructured{}
+	middlewareGVK.SetAPIVersion("traefik.io/v1alpha1")
+	middlewareGVK.SetKind("Middleware")
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&workspacesv1alpha1.Workspace{}).
 		Named("workspace").
+		// Watch for standard Kubernetes resources
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
+		// Watch for Traefik resources created by templates
+		Owns(ingressRouteGVK).
+		Owns(middlewareGVK).
 		Complete(r)
 }
 
@@ -111,14 +126,17 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	k8sClient := mgr.GetClient()
 	scheme := mgr.GetScheme()
 
-	// Create builders with options
-	deploymentBuilder := NewDeploymentBuilder(scheme, options)
-	serviceBuilder := NewServiceBuilder(scheme)
-	pvcBuilder := NewPVCBuilder(scheme)
-
 	// Create managers
 	statusManager := NewStatusManager(k8sClient)
-	resourceManager := NewResourceManager(k8sClient, deploymentBuilder, serviceBuilder, pvcBuilder, statusManager)
+	resourceManager := NewResourceManager(
+		k8sClient,
+		scheme,
+		NewDeploymentBuilder(scheme, options),
+		NewServiceBuilder(scheme),
+		NewPVCBuilder(scheme),
+		NewAccessResourcesBuilder(),
+		statusManager,
+	)
 
 	// Create state machine
 	stateMachine := NewStateMachine(resourceManager, statusManager)
