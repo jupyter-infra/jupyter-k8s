@@ -100,6 +100,10 @@ Templates are validated by the controller during reconciliation. Invalid workspa
 - Resource Bounds: CPU, memory, and GPU requests/limits must be within `resourceBounds` (min/max)
 - Storage Bounds: Workspace storage must be within `primaryStorage.minSize` and `maxSize`
 
+**Cluster-Scoped Templates**
+
+WorkspaceTemplates are cluster-scoped resources, meaning they can be referenced by Workspaces in any namespace. This allows platform administrators to define organization-wide templates accessible across all teams.
+
 **Configuration Inheritance**
 
 Workspaces inherit configuration from templates when not explicitly specified:
@@ -107,17 +111,18 @@ Workspaces inherit configuration from templates when not explicitly specified:
 - Resources: If workspace doesn't specify resources, uses template's `defaultResources`
 - Image: If workspace doesn't specify image, uses template's `defaultImage`
 
-**Template Overrides**
+**Overriding Template Defaults**
 
-Workspaces can override inherited values using `templateOverrides` (must still satisfy validation rules):
+Workspaces can override template values by specifying them directly in the spec (must still satisfy validation rules):
 ```yaml
 spec:
   templateRef: "production-notebook-template"
-  templateOverrides:
-    resources:
-      requests:
-        cpu: "200m"
-        memory: "384Mi"
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "384Mi"
+  storage:
+    size: "5Gi"
 ```
 
 **Create a template with resource limits and security policies:**
