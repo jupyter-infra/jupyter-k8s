@@ -185,7 +185,7 @@ var _ = Describe("Template Validation", func() {
 			Expect(result.Template.Resources.Limits).To(BeNil())
 		})
 
-		It("should reject workspace with non-existent template", func() {
+		It("should return error for non-existent template", func() {
 			nonExistentTemplate := "non-existent-template"
 			workspace := &workspacesv1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -197,13 +197,12 @@ var _ = Describe("Template Validation", func() {
 				},
 			}
 
+			// Template not found should return a system error, not a validation result
 			result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Valid).To(BeFalse())
-			Expect(result.Violations).To(HaveLen(1))
-			Expect(result.Violations[0].Type).To(Equal(ViolationTypeTemplateNotFound))
-			Expect(result.Violations[0].Field).To(Equal("spec.templateRef"))
-			Expect(result.Template).To(BeNil())
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to get WorkspaceTemplate"))
+			Expect(err.Error()).To(ContainSubstring("non-existent-template"))
+			Expect(result).To(BeNil())
 		})
 
 		Context("Image Validation", func() {

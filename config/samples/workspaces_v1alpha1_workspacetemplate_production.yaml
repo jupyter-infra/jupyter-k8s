@@ -9,7 +9,6 @@ spec:
   defaultImage: "jk8s-application-jupyter-uv:latest"
   allowedImages:
     - "jk8s-application-jupyter-uv:latest"
-    - "quay.io/jupyter/minimal-notebook:latest"
   defaultResources:
     requests:
       cpu: "200m"

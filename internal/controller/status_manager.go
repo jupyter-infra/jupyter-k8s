@@ -139,7 +139,16 @@ func (sm *StatusManager) SetTemplateValidated(ctx context.Context, workspace *wo
 		"Template validation passed",
 	)
 
-	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &[]metav1.Condition{templateCondition})
+	// Successful validation means no system errors
+	degradedCondition := NewCondition(
+		ConditionTypeDegraded,
+		metav1.ConditionFalse,
+		ReasonNoError,
+		"No errors detected",
+	)
+
+	conditions := []metav1.Condition{templateCondition, degradedCondition}
+	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
 }
 

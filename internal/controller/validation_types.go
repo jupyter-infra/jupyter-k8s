@@ -57,5 +57,4 @@ const (
 	ViolationTypeResourceExceeded = "ResourceExceeded"
 	ViolationTypeStorageExceeded  = "StorageExceeded"
 	ViolationTypeInvalidTemplate  = "InvalidTemplate"
-	ViolationTypeTemplateNotFound = "TemplateNotFound"
 )

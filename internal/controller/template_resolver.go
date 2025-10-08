@@ -87,23 +87,8 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 	logger.Info("Fetching template for validation", "template", templateName)
 
 	if err := tr.client.Get(ctx, templateKey, template); err != nil {
-		// If template not found, return a specific validation failure
-		if client.IgnoreNotFound(err) == nil {
-			logger.Error(err, "WorkspaceTemplate not found", "template", *workspace.Spec.TemplateRef)
-			return &TemplateValidationResult{
-				Valid: false,
-				Violations: []TemplateViolation{
-					{
-						Type:    ViolationTypeTemplateNotFound,
-						Field:   "spec.templateRef",
-						Message: "WorkspaceTemplate does not exist",
-						Allowed: "Existing WorkspaceTemplate name",
-						Actual:  *workspace.Spec.TemplateRef,
-					},
-				},
-				Template: nil,
-			}, nil
-		}
+		// Template not found is a system error (not a user validation error)
+		// Return error to trigger controller error handling and Degraded condition
 		return nil, fmt.Errorf("failed to get WorkspaceTemplate %s: %w", *workspace.Spec.TemplateRef, err)
 	}
 
