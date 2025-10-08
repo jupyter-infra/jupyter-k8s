@@ -163,7 +163,9 @@ func (r *WorkspaceTemplateReconciler) handleDeletion(ctx context.Context, templa
 		r.recorder.Event(template, "Warning", "TemplateInUse", msg)
 
 		// Don't remove finalizer - block deletion
-		return ctrl.Result{}, fmt.Errorf("template %s is in use by %d workspaces", template.Name, len(workspaces))
+		// Return nil (not error) - we successfully determined template is in use
+		// Template will be reconciled again when workspace changes (via watch)
+		return ctrl.Result{}, nil
 	}
 
 	// No workspaces using template - safe to delete

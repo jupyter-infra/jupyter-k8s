@@ -188,9 +188,11 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 	}
 
 	// Ensure deployment exists (pass the resolved template)
-	// EnsureDeploymentExists only ensures the API request is accepted by K8s
-	// It does not wait for the deployment to be fully ready
-	if _, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace, resolvedTemplate); err != nil {
+	// EnsureDeploymentExists internally fetches the deployment and returns it with current status
+	// On first reconciliation: creates deployment (status will be empty initially)
+	// On subsequent reconciliations: returns existing deployment with populated status
+	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace, resolvedTemplate)
+	if err != nil {
 		deployErr := fmt.Errorf("failed to ensure deployment exists: %w", err)
 		// Update error condition
 		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, deployErr.Error()); statusErr != nil {
@@ -199,33 +201,12 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, deployErr
 	}
 
-	// Ensure service exists - this is an asynchronous operation
-	// EnsureServiceExists only ensures the API request is accepted by K8s
-	// It does not wait for the service to be fully ready
-	if _, err := sm.resourceManager.EnsureServiceExists(ctx, workspace); err != nil {
+	// Ensure service exists
+	// EnsureServiceExists internally fetches the service and returns it with current status
+	service, err := sm.resourceManager.EnsureServiceExists(ctx, workspace)
+	if err != nil {
 		serviceErr := fmt.Errorf("failed to ensure service exists: %w", err)
 		// Update error condition
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonServiceError, serviceErr.Error()); statusErr != nil {
-			logger.Error(statusErr, "Failed to update error status")
-		}
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, serviceErr
-	}
-
-	// Re-fetch resources from API to get current status
-	// The objects returned from EnsureXExists have empty Status fields
-	// because they were just created and K8s hasn't populated status yet
-	deployment, err := sm.resourceManager.getDeployment(ctx, workspace)
-	if err != nil {
-		deployErr := fmt.Errorf("failed to get deployment status: %w", err)
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, deployErr.Error()); statusErr != nil {
-			logger.Error(statusErr, "Failed to update error status")
-		}
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, deployErr
-	}
-
-	service, err := sm.resourceManager.getService(ctx, workspace)
-	if err != nil {
-		serviceErr := fmt.Errorf("failed to get service status: %w", err)
 		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonServiceError, serviceErr.Error()); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}

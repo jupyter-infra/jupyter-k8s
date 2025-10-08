@@ -379,6 +379,8 @@ func (tr *TemplateResolver) validateStorageSize(size resource.Quantity, storageC
 // Excludes workspaces that are being deleted (have deletionTimestamp set) to follow
 // Kubernetes best practices for finalizer management and garbage collection
 func (tr *TemplateResolver) ListWorkspacesUsingTemplate(ctx context.Context, templateName string) ([]workspacesv1alpha1.Workspace, error) {
+	logger := logf.FromContext(ctx)
+
 	// Use label selector for fast, efficient lookup
 	workspaceList := &workspacesv1alpha1.WorkspaceList{}
 	if err := tr.client.List(ctx, workspaceList, client.MatchingLabels{
@@ -387,14 +389,34 @@ func (tr *TemplateResolver) ListWorkspacesUsingTemplate(ctx context.Context, tem
 		return nil, fmt.Errorf("failed to list workspaces by template label: %w", err)
 	}
 
-	// Filter out workspaces being deleted - they should not block template deletion
+	// Filter out workspaces being deleted and verify template reference
 	// This follows Kubernetes controller best practice: resources with deletionTimestamp
 	// are considered "gone" for dependency checking purposes
 	activeWorkspaces := []workspacesv1alpha1.Workspace{}
 	for _, ws := range workspaceList.Items {
-		if ws.DeletionTimestamp.IsZero() {
-			activeWorkspaces = append(activeWorkspaces, ws)
+		if !ws.DeletionTimestamp.IsZero() {
+			continue // Skip workspaces being deleted
 		}
+
+		// Verify templateRef matches label to guard against label/spec mismatch. 
+		// This is somewhat redundant given CEL immutability validation but adds zero cost and adds a layer of verification.
+		if ws.Spec.TemplateRef == nil {
+			logger.V(1).Info("Workspace has template label but nil templateRef",
+				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
+				"label", templateName)
+			continue
+		}
+
+		if *ws.Spec.TemplateRef != templateName {
+			// This should never happen due to CEL immutability - log if it occurs
+			logger.Info("Workspace has template label but different templateRef",
+				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
+				"label", templateName,
+				"spec", *ws.Spec.TemplateRef)
+			continue
+		}
+
+		activeWorkspaces = append(activeWorkspaces, ws)
 	}
 
 	return activeWorkspaces, nil
