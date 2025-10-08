@@ -9,7 +9,6 @@ spec:
   displayName: sample-stopped
   image: jupyter/minimal-notebook:latest
   desiredStatus: Stopped
-  serviceAccountName: default
   resources:
     requests:
       memory: "128Mi"

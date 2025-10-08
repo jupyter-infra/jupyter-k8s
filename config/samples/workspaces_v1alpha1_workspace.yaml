@@ -9,7 +9,6 @@ spec:
   displayName: sample-running
   image: uv
   desiredStatus: Running
-  serviceAccountName: default
   resources:
     requests:
       memory: "128Mi"

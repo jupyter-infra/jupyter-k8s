@@ -53,7 +53,6 @@ type ResolvedTemplate struct {
 	Resources              corev1.ResourceRequirements
 	EnvironmentVariables   []corev1.EnvVar
 	StorageConfiguration   *workspacesv1alpha1.StorageConfig
-	ServiceAccountName     string
 	AllowSecondaryStorages bool
 }
 
@@ -126,7 +125,6 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 		Image:                  defaultImage,
 		Resources:              corev1.ResourceRequirements{}, // Default empty if not specified
 		EnvironmentVariables:   template.Spec.EnvironmentVariables,
-		ServiceAccountName:     "",
 		AllowSecondaryStorages: allowSecondaryStorages,
 	}
 
@@ -398,7 +396,7 @@ func (tr *TemplateResolver) ListWorkspacesUsingTemplate(ctx context.Context, tem
 			continue // Skip workspaces being deleted
 		}
 
-		// Verify templateRef matches label to guard against label/spec mismatch. 
+		// Verify templateRef matches label to guard against label/spec mismatch.
 		// This is somewhat redundant given CEL immutability validation but adds zero cost and adds a layer of verification.
 		if ws.Spec.TemplateRef == nil {
 			logger.V(1).Info("Workspace has template label but nil templateRef",

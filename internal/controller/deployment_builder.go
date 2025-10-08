@@ -86,12 +86,6 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacesv1alpha1.Workspac
 		},
 	}
 
-	if resolvedTemplate != nil {
-		if resolvedTemplate.ServiceAccountName != "" {
-			podSpec.ServiceAccountName = resolvedTemplate.ServiceAccountName
-		}
-	}
-
 	storageConfig := db.getStorageConfig(workspace, resolvedTemplate)
 	if storageConfig != nil {
 		podSpec.Volumes = []corev1.Volume{

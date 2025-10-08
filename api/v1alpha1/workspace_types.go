@@ -60,9 +60,6 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:Enum=Running;Stopped
 	DesiredStatus string `json:"desiredStatus,omitempty"`
 
-	// ServiceAccountName specifies the ServiceAccount used by the pod
-	ServiceAccountName string `json:"serviceAccountName,omitempty"`
-
 	// Resources specifies the resource requirements
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
