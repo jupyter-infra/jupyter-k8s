@@ -150,10 +150,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 			logger.Info("Validation failed, rejecting workspace", "violations", len(validation.Violations))
 
 			// Record validation failure event
-			templateName := "<no template>"
-			if workspace.Spec.TemplateRef != nil {
-				templateName = *workspace.Spec.TemplateRef
-			}
+			templateName := *workspace.Spec.TemplateRef
 			message := fmt.Sprintf("Validation failed for %s with %d violations", templateName, len(validation.Violations))
 			sm.recorder.Event(workspace, corev1.EventTypeWarning, "ValidationFailed", message)
 
