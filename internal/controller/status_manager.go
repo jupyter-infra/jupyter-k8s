@@ -130,13 +130,13 @@ func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, workspace *works
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
 }
 
-// SetTemplateValidated sets the TemplateValidation condition to true
-func (sm *StatusManager) SetTemplateValidated(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
-	templateCondition := NewCondition(
-		ConditionTypeTemplateValidation,
+// SetValid sets the Valid condition to true when all policy checks pass
+func (sm *StatusManager) SetValid(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
+	validCondition := NewCondition(
+		ConditionTypeValid,
 		metav1.ConditionTrue,
-		ReasonTemplateValid,
-		"Template validation passed",
+		ReasonAllChecksPass,
+		"All validation checks passed",
 	)
 
 	// Successful validation means no system errors
@@ -147,15 +147,15 @@ func (sm *StatusManager) SetTemplateValidated(ctx context.Context, workspace *wo
 		"No errors detected",
 	)
 
-	conditions := []metav1.Condition{templateCondition, degradedCondition}
+	conditions := []metav1.Condition{validCondition, degradedCondition}
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
 }
 
-// SetTemplateRejected sets the TemplateValidation condition to false with policy violations
-func (sm *StatusManager) SetTemplateRejected(ctx context.Context, workspace *workspacesv1alpha1.Workspace, validation *TemplateValidationResult) error {
+// SetInvalid sets the Valid condition to false when policy validation fails
+func (sm *StatusManager) SetInvalid(ctx context.Context, workspace *workspacesv1alpha1.Workspace, validation *TemplateValidationResult) error {
 	// Build violation message
-	message := fmt.Sprintf("Template validation failed: %d violation(s)", len(validation.Violations))
+	message := fmt.Sprintf("Validation failed: %d violation(s)", len(validation.Violations))
 	if len(validation.Violations) > 0 {
 		// Include first violation in message for visibility
 		v := validation.Violations[0]
@@ -163,10 +163,10 @@ func (sm *StatusManager) SetTemplateRejected(ctx context.Context, workspace *wor
 			message, v.Message, v.Field, v.Allowed, v.Actual)
 	}
 
-	templateCondition := NewCondition(
-		ConditionTypeTemplateValidation,
+	validCondition := NewCondition(
+		ConditionTypeValid,
 		metav1.ConditionFalse,
-		ReasonPolicyViolation,
+		ReasonTemplateViolation,
 		message,
 	)
 
@@ -176,27 +176,27 @@ func (sm *StatusManager) SetTemplateRejected(ctx context.Context, workspace *wor
 	degradedCondition := NewCondition(
 		ConditionTypeDegraded,
 		metav1.ConditionFalse,
-		ReasonPolicyViolation,
+		ReasonTemplateViolation,
 		"No system errors detected",
 	)
 
 	availableCondition := NewCondition(
 		ConditionTypeAvailable,
 		metav1.ConditionFalse,
-		ReasonPolicyViolation,
-		"Template validation failed",
+		ReasonTemplateViolation,
+		"Validation failed",
 	)
 
 	// Set Progressing to false
 	progressingCondition := NewCondition(
 		ConditionTypeProgressing,
 		metav1.ConditionFalse,
-		ReasonPolicyViolation,
-		"Template validation failed",
+		ReasonTemplateViolation,
+		"Validation failed",
 	)
 
 	conditions := []metav1.Condition{
-		templateCondition,
+		validCondition,
 		degradedCondition,
 		availableCondition,
 		progressingCondition,

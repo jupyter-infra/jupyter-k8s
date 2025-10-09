@@ -147,33 +147,33 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 
 		if !validation.Valid {
 			// Validation failed - this is a SUCCESS (policy enforced)
-			logger.Info("Template validation failed, rejecting workspace", "violations", len(validation.Violations))
+			logger.Info("Validation failed, rejecting workspace", "violations", len(validation.Violations))
 
 			// Record validation failure event
 			templateName := "<no template>"
 			if workspace.Spec.TemplateRef != nil {
 				templateName = *workspace.Spec.TemplateRef
 			}
-			message := fmt.Sprintf("Template validation failed for %s with %d violations", templateName, len(validation.Violations))
-			sm.recorder.Event(workspace, corev1.EventTypeWarning, "TemplateValidationFailed", message)
+			message := fmt.Sprintf("Validation failed for %s with %d violations", templateName, len(validation.Violations))
+			sm.recorder.Event(workspace, corev1.EventTypeWarning, "ValidationFailed", message)
 
-			if statusErr := sm.statusManager.SetTemplateRejected(ctx, workspace, validation); statusErr != nil {
-				logger.Error(statusErr, "Failed to update rejection status")
+			if statusErr := sm.statusManager.SetInvalid(ctx, workspace, validation); statusErr != nil {
+				logger.Error(statusErr, "Failed to update validation status")
 			}
 			// No error returned - we successfully enforced policy
 			return ctrl.Result{}, nil
 		}
 
 		resolvedTemplate = validation.Template
-		logger.Info("Template validation passed")
+		logger.Info("Validation passed")
 
 		// Record successful validation event
 		templateName := *workspace.Spec.TemplateRef
-		message := "Template validation passed for " + templateName
-		sm.recorder.Event(workspace, corev1.EventTypeNormal, "TemplateValidated", message)
+		message := "Validation passed for " + templateName
+		sm.recorder.Event(workspace, corev1.EventTypeNormal, "Validated", message)
 
-		if statusErr := sm.statusManager.SetTemplateValidated(ctx, workspace); statusErr != nil {
-			logger.Error(statusErr, "Failed to update template validation status")
+		if statusErr := sm.statusManager.SetValid(ctx, workspace); statusErr != nil {
+			logger.Error(statusErr, "Failed to update validation status")
 		}
 	}
 

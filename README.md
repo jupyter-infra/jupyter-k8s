@@ -93,7 +93,7 @@ To delete a template:
 2. Wait for workspaces to finish deleting (they will complete in background)
 3. Delete the template: `kubectl delete workspacetemplate <name>`
 
-Templates are validated by the controller during reconciliation. Invalid workspaces are created but marked with `TemplateValidation=False` and `Degraded=True` conditions and will not deploy pods until validation passes. This ensures no compute resources are wasted on invalid configurations.
+Templates are validated by the controller during reconciliation. Invalid workspaces are created but marked with `Valid=False` condition and will not deploy pods until validation passes. This ensures no compute resources are wasted on invalid configurations.
 
 **Validation Rules**
 - Allowed Images: Only container images in the `allowedImages` list are permitted
@@ -138,7 +138,7 @@ kubectl apply -f config/samples/workspaces_v1alpha1_workspace_with_template.yaml
 
 **Check validation status:**
 ```sh
-kubectl get workspace workspace-with-template -o jsonpath='{.status.conditions[?(@.type=="TemplateValidation")]}'
+kubectl get workspace workspace-with-template -o jsonpath='{.status.conditions[?(@.type=="Valid")]}'
 ```
 
 

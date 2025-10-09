@@ -52,7 +52,7 @@ var _ = Describe("Event Recording", func() {
 	})
 
 	Context("Template Validation Events", func() {
-		It("should record TemplateValidationFailed event when validation fails", func() {
+		It("should record ValidationFailed event when validation fails", func() {
 			By("creating a workspace with invalid template overrides")
 			workspace := &workspacesv1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -97,7 +97,7 @@ var _ = Describe("Event Recording", func() {
 			_, err := stateMachine.ReconcileDesiredState(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("verifying TemplateValidationFailed event was recorded")
+			By("verifying ValidationFailed event was recorded")
 			var event string
 			Eventually(func() bool {
 				select {
@@ -108,14 +108,14 @@ var _ = Describe("Event Recording", func() {
 				}
 			}, "5s").Should(BeTrue(), "Expected to receive an event")
 			Expect(event).To(ContainSubstring("Warning"))
-			Expect(event).To(ContainSubstring("TemplateValidationFailed"))
+			Expect(event).To(ContainSubstring("ValidationFailed"))
 
 			By("cleaning up")
 			Expect(k8sClient.Delete(ctx, workspace)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, template)).To(Succeed())
 		})
 
-		It("should record TemplateValidated event when validation passes", func() {
+		It("should record Validated event when validation passes", func() {
 			By("creating a workspace with valid template overrides")
 			workspace := &workspacesv1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -160,7 +160,7 @@ var _ = Describe("Event Recording", func() {
 			_, err := stateMachine.ReconcileDesiredState(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("verifying TemplateValidated event was recorded")
+			By("verifying Validated event was recorded")
 			var event string
 			Eventually(func() bool {
 				select {
@@ -171,7 +171,7 @@ var _ = Describe("Event Recording", func() {
 				}
 			}, "5s").Should(BeTrue(), "Expected to receive an event")
 			Expect(event).To(ContainSubstring("Normal"))
-			Expect(event).To(ContainSubstring("TemplateValidated"))
+			Expect(event).To(ContainSubstring("Validated"))
 
 			By("cleaning up")
 			Expect(k8sClient.Delete(ctx, workspace)).To(Succeed())
@@ -233,7 +233,7 @@ var _ = Describe("Event Recording", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying validation failed event was recorded")
-			Eventually(fakeRecorder.Events).Should(Receive(ContainSubstring("TemplateValidationFailed")))
+			Eventually(fakeRecorder.Events).Should(Receive(ContainSubstring("ValidationFailed")))
 
 			By("cleaning up")
 			Expect(k8sClient.Delete(ctx, workspace)).To(Succeed())

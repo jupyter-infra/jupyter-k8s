@@ -172,15 +172,15 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("verifying TemplateValidation condition is True")
-			verifyTemplateValidation := func(g Gomega) {
+			By("verifying Valid condition is True")
+			verifyValid := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "workspace", "workspace-with-template",
-					"-o", "jsonpath={.status.conditions[?(@.type=='TemplateValidation')].status}")
+					"-o", "jsonpath={.status.conditions[?(@.type=='Valid')].status}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("True"))
 			}
-			Eventually(verifyTemplateValidation).
+			Eventually(verifyValid).
 				WithPolling(1 * time.Second).
 				WithTimeout(10 * time.Second).
 				Should(Succeed())
@@ -216,7 +216,7 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(output).To(ContainSubstring("Resolving template"))
-			Expect(output).To(ContainSubstring("Template validation passed"))
+			Expect(output).To(ContainSubstring("Validation passed"))
 		})
 	})
 
@@ -235,10 +235,10 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 				WithTimeout(10 * time.Second).
 				Should(Succeed())
 
-			By("waiting for TemplateValidation condition to be False")
+			By("waiting for Valid condition to be False")
 			verifyTemplateRejected := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "workspace", "test-rejected-workspace",
-					"-o", "jsonpath={.status.conditions[?(@.type=='TemplateValidation')].status}")
+					"-o", "jsonpath={.status.conditions[?(@.type=='Valid')].status}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("False"))
@@ -285,22 +285,22 @@ spec:
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("verifying workspace is rejected with PolicyViolation")
-			verifyPolicyViolation := func(g Gomega) {
+			By("verifying workspace is rejected with TemplateViolation")
+			verifyTemplateViolation := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "workspace", "cpu-exceed-test",
 					"-o", "jsonpath={.status.conditions[?(@.type=='Degraded')].reason}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("PolicyViolation"))
+				g.Expect(output).To(Equal("TemplateViolation"))
 			}
-			Eventually(verifyPolicyViolation).
+			Eventually(verifyTemplateViolation).
 				WithPolling(1 * time.Second).
 				WithTimeout(10 * time.Second).
 				Should(Succeed())
 
 			By("verifying status message explains which bound was exceeded")
 			cmd = exec.Command("kubectl", "get", "workspace", "cpu-exceed-test",
-				"-o", "jsonpath={.status.conditions[?(@.type=='TemplateValidation')].message}")
+				"-o", "jsonpath={.status.conditions[?(@.type=='Valid')].message}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(ContainSubstring("cpu"))
@@ -341,15 +341,15 @@ spec:
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("verifying TemplateValidation condition is True")
-			verifyTemplateValidation := func(g Gomega) {
+			By("verifying Valid condition is True")
+			verifyValid := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "workspace", "valid-overrides-test",
-					"-o", "jsonpath={.status.conditions[?(@.type=='TemplateValidation')].status}")
+					"-o", "jsonpath={.status.conditions[?(@.type=='Valid')].status}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("True"))
 			}
-			Eventually(verifyTemplateValidation).
+			Eventually(verifyValid).
 				WithPolling(1 * time.Second).
 				WithTimeout(10 * time.Second).
 				Should(Succeed())

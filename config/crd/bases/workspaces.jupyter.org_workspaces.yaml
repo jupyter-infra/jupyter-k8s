@@ -175,7 +175,7 @@ spec:
                   - "Available": the resource is fully functional and ready to use
                   - "Progressing": the resource is being created or updated
                   - "Degraded": the resource failed to reach or maintain its desired state
-                  - "TemplateValid": the template reference and overrides are valid (if using template)
+                  - "Valid": the workspace configuration passes all validation checks (template, quota, etc.)
 
                   The status of each condition is one of True, False, or Unknown.
                 items:
