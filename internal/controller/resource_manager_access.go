@@ -3,11 +3,13 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -19,8 +21,6 @@ func (rm *ResourceManager) GetAccessStrategyForWorkspace(
 	ctx context.Context,
 	workspace *workspacesv1alpha1.Workspace,
 ) (*workspacesv1alpha1.WorkspaceAccessStrategy, error) {
-	logger := logf.FromContext(ctx)
-
 	accessStrategyRef := workspace.Spec.AccessStrategy
 	if accessStrategyRef == nil {
 		// no-op: no AccessStrategy
@@ -42,7 +42,6 @@ func (rm *ResourceManager) GetAccessStrategyForWorkspace(
 
 	if err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("Access strategy not found", "name", accessStrategyRef.Name, "namespace", accessStrategyNamespace)
 			return nil, fmt.Errorf("access strategy %s not found in namespace %s", accessStrategyRef.Name, accessStrategyNamespace)
 		}
 		return nil, fmt.Errorf("failed to get access strategy: %w", err)
@@ -105,7 +104,11 @@ func (rm *ResourceManager) ensureAccessResourceExists(
 	// CASE 1: resource exists in status
 	if accessResourceStatus != nil {
 		existingObj := &unstructured.Unstructured{}
-		existingObj.SetKind(accessResourceStatus.Kind)
+
+		// Set the GVK before getting the resource
+		gvk := rm.getGroupVersionKind(accessResourceStatus.APIVersion, accessResourceStatus.Kind)
+		existingObj.SetGroupVersionKind(gvk)
+
 		lookupError := rm.client.Get(ctx, types.NamespacedName{
 			Namespace: accessResourceStatus.Namespace,
 			Name:      accessResourceStatus.Name,
@@ -146,9 +149,10 @@ func (rm *ResourceManager) ensureAccessResourceExists(
 			existingObj := &unstructured.Unstructured{}
 			existingObj.SetGroupVersionKind(obj.GroupVersionKind())
 			workspace.Status.AccessResources = append(workspace.Status.AccessResources, workspacesv1alpha1.AccessResourceStatus{
-				Kind:      obj.GetKind(),
-				Name:      obj.GetName(),
-				Namespace: obj.GetNamespace(),
+				Kind:       obj.GetKind(),
+				APIVersion: obj.GetAPIVersion(),
+				Name:       obj.GetName(),
+				Namespace:  obj.GetNamespace(),
 			})
 			if err := rm.client.Get(ctx, types.NamespacedName{
 				Namespace: obj.GetNamespace(),
@@ -169,15 +173,34 @@ func (rm *ResourceManager) ensureAccessResourceExists(
 		}
 	}
 	workspace.Status.AccessResources = append(workspace.Status.AccessResources, workspacesv1alpha1.AccessResourceStatus{
-		Kind:      obj.GetKind(),
-		Name:      obj.GetName(),
-		Namespace: obj.GetNamespace(),
+		Kind:       obj.GetKind(),
+		APIVersion: obj.GetAPIVersion(),
+		Name:       obj.GetName(),
+		Namespace:  obj.GetNamespace(),
 	})
 	logger.Info("Applied resource",
 		"kind", obj.GetKind(),
 		"name", obj.GetName(),
 		"namespace", obj.GetNamespace())
 	return nil
+}
+
+// getGroupVersionKind parses the API version and returns a GroupVersionKind struct
+func (rm *ResourceManager) getGroupVersionKind(apiVersion string, kind string) schema.GroupVersionKind {
+	var group, version string
+	parts := strings.Split(apiVersion, "/")
+	if len(parts) == 2 {
+		group = parts[0]
+		version = parts[1]
+	} else {
+		version = apiVersion
+	}
+
+	return schema.GroupVersionKind{
+		Group:   group,
+		Version: version,
+		Kind:    kind,
+	}
 }
 
 // EnsureAccessResourcesDeleted removes routing resources for the Workspace
@@ -197,7 +220,11 @@ func (rm *ResourceManager) EnsureAccessResourcesDeleted(
 		accessResource := workspace.Status.AccessResources[len(workspace.Status.AccessResources)-1]
 
 		existingAccessResource := &unstructured.Unstructured{}
-		existingAccessResource.SetGroupVersionKind(existingAccessResource.GroupVersionKind())
+
+		// Set the GVK before getting the resource
+		gvk := rm.getGroupVersionKind(accessResource.APIVersion, accessResource.Kind)
+		existingAccessResource.SetGroupVersionKind(gvk)
+
 		getAccessResourceErr := rm.client.Get(ctx, types.NamespacedName{
 			Name:      accessResource.Name,
 			Namespace: accessResource.Namespace,

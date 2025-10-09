@@ -90,6 +90,9 @@ type AccessResourceStatus struct {
 	// Kind of the Kubernetes resource
 	Kind string `json:"kind"`
 
+	// APIVersion of the Kubernetes resource
+	APIVersion string `json:"apiVersion"`
+
 	// Name of the resource
 	Name string `json:"name"`
 

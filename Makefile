@@ -500,7 +500,7 @@ deploy-aws-traefik-dex-internal:
 	)
 	@echo "Restarting deployments to use new images..."
 	kubectl rollout restart deployment -n jupyter-k8s-router \
-		traefik oauth2-proxy dex
+		traefik oauth2-proxy dex authmiddleware
 	@echo "All deployments to use new images..."
 	# Clean up temporary chart directory
 	rm -rf /tmp/jk8s-aws-traefik-dex
@@ -510,6 +510,20 @@ deploy-aws-traefik-dex-internal:
 .PHONY: deploy-aws-traefik-dex
 deploy-aws-traefik-dex:
 	$(MAKE) deploy-aws-traefik-dex-internal CLOUD_PROVIDER=aws
+
+.PHONY: apply-sample-routing
+apply-sample-routing:
+	@echo "Loading configuration from .env file and deploying..."
+	@( \
+		set -e; \
+		. ./.env; \
+		export DOMAIN=$$DOMAIN; \
+		kubectl apply -k config/samples_routing --dry-run=client -o yaml | envsubst | kubectl apply -f -; \
+	)
+
+.PHONY: delete-sample-routing
+delete-sample-routing:
+	kubectl delete -k config/samples_routing
 
 .PHONY: undeploy-aws
 undeploy-aws: ## Uninstall the Helm chart from remote cluster

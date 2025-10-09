@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
@@ -27,12 +28,19 @@ func (sm *StatusManager) updateStatus(
 	ctx context.Context,
 	workspace *workspacesv1alpha1.Workspace,
 	conditionsToUpdate *[]metav1.Condition,
+	snapshotStatus *workspacesv1alpha1.WorkspaceStatus,
 ) error {
 	logger := logf.FromContext(ctx)
 	if len(*conditionsToUpdate) > 0 {
 		// requesting to modify condition: overwrite
 		workspace.Status.Conditions = *conditionsToUpdate
 	}
+
+	if reflect.DeepEqual(workspace.Status, snapshotStatus) {
+		// no-op: status hasn't changed
+		return nil
+	}
+
 	if err := sm.client.Status().Update(ctx, workspace); err != nil {
 		return fmt.Errorf("failed to update Workspace.Status: %w", err)
 	}
@@ -52,6 +60,7 @@ func (sm *StatusManager) UpdateStartingStatus(
 	ctx context.Context,
 	workspace *workspacesv1alpha1.Workspace,
 	readiness WorkspaceRunningReadiness,
+	snapshotStatus *workspacesv1alpha1.WorkspaceStatus,
 ) error {
 	// ensure StartingCondition is set to True with the appropriate reason
 	startingReason := ReasonResourcesNotReady
@@ -108,11 +117,11 @@ func (sm *StatusManager) UpdateStartingStatus(
 		stoppedCondition,
 	}
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
 // UpdateErrorStatus sets the Degraded condition to true with the specified error reason and message
-func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, reason, message string) error {
+func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, reason, message string, snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
 	// Set DegradedCondition to true with the provided error reason and message
 	degradedCondition := NewCondition(
 		ConditionTypeDegraded,
@@ -121,11 +130,11 @@ func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, workspace *works
 		message,
 	)
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &[]metav1.Condition{degradedCondition})
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
 // UpdateRunningStatus sets the Available condition to true and Progressing to false
-func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
+func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
 	// ensure AvailableCondition is set to true with ReasonResourcesReady
 	availableCondition := NewCondition(
 		ConditionTypeAvailable,
@@ -167,7 +176,7 @@ func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, workspace *wor
 	}
 
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
 // WorkspaceStoppingReadiness wraps the readiness flag of underlying components
@@ -178,7 +187,7 @@ type WorkspaceStoppingReadiness struct {
 }
 
 // UpdateStoppingStatus sets Available to false and Progressing to true
-func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, readiness WorkspaceStoppingReadiness) error {
+func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, readiness WorkspaceStoppingReadiness, snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
 	stoppingReason := ReasonResourcesNotStopped
 	stoppingMessage := "Resources are still running"
 
@@ -234,11 +243,11 @@ func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, workspace *wo
 	}
 
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
 // UpdateStoppedStatus sets Available and Progressing to false, Stopped to true
-func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
+func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
 	// ensure AvailableCondition is set to false with ReasonDesiredStateStopped
 	availableCondition := NewCondition(
 		ConditionTypeAvailable,
@@ -282,5 +291,5 @@ func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, workspace *wor
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
 	workspace.Status.DeploymentName = ""
 	workspace.Status.ServiceName = ""
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }

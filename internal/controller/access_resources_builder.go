@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"text/template"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
@@ -57,9 +58,15 @@ func (b *AccessResourcesBuilder) BuildUnstructuredResource(
 	}
 	resourceYAML := resourceBuffer.String()
 
+	// First add apiVersion and kind to the YAML
+	yamlWithMeta := fmt.Sprintf("apiVersion: %s\nkind: %s\n%s",
+		accessResourceTemplate.ApiVersion,
+		accessResourceTemplate.Kind,
+		resourceYAML)
+
 	// Convert YAML to unstructured.Unstructured
 	obj := &unstructured.Unstructured{}
-	if err := yaml.Unmarshal([]byte(resourceYAML), obj); err != nil {
+	if err := yaml.Unmarshal([]byte(yamlWithMeta), obj); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal resource YAML: %w", err)
 	}
 
@@ -73,10 +80,20 @@ func (b *AccessResourcesBuilder) BuildUnstructuredResource(
 	}
 	obj.SetNamespace(targetNamespace)
 
-	// Set GVK
+	// Set Group-Version-Kind properly by parsing the API version
+	apiVersionParts := strings.Split(accessResourceTemplate.ApiVersion, "/")
+	var group, version string
+	if len(apiVersionParts) == 2 {
+		group = apiVersionParts[0]
+		version = apiVersionParts[1]
+	} else {
+		// Core API group uses version without group prefix
+		version = accessResourceTemplate.ApiVersion
+	}
+
 	obj.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "", // Will be parsed from ApiVersion
-		Version: accessResourceTemplate.ApiVersion,
+		Group:   group,
+		Version: version,
 		Kind:    accessResourceTemplate.Kind,
 	})
 

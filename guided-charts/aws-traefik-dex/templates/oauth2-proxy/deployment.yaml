@@ -51,12 +51,12 @@ spec:
         - --client-secret={{ .Values.dex.oauth2ProxyClientSecret }}
         - --cookie-secret=$(COOKIE_SECRET)
         - --email-domain=*
+        - --whitelist-domain={{ .Values.domain }}
         - --upstream=static://202
         - --reverse-proxy=true
         - --http-address=0.0.0.0:4180
         - --redirect-url=https://{{ .Values.domain }}/oauth2/callback
         - --oidc-issuer-url=https://{{ .Values.domain }}/dex
-        - --ssl-insecure-skip-verify=true
         - --cookie-secure=true
         - --cookie-samesite=lax
         - --cookie-refresh=1h
@@ -73,8 +73,9 @@ spec:
         - --scope=openid profile email groups
         - --skip-auth-preflight
         - --silence-ping-logging=true
-        - --whitelist-domain={{ .Values.domain }}
-        - --allowed-group=*
+        {{- range .Values.oauth2Proxy.skipAuthRegex }}
+        - --skip-auth-regex={{ . }}
+        {{- end }}
         env:
         - name: COOKIE_SECRET
           valueFrom:

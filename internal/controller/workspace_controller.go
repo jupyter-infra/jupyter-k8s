@@ -71,8 +71,7 @@ func (r *WorkspaceReconciler) SetStateMachine(sm *StateMachine) {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
-	logger.Info("Starting reconciliation",
-		"workspace", req.NamespacedName)
+	logger.Info("Starting reconciliation", "workspace", req.NamespacedName)
 
 	// Fetch the Workspace instance
 	workspace, err := r.getWorkspace(ctx, req)
@@ -92,7 +91,6 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Reconciliation completed successfully")
 	return result, nil
 }
 

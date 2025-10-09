@@ -14,6 +14,7 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 
 	// Get headers from request
 	user := r.Header.Get(HeaderAuthRequestUser)
+	preferredUsername := r.Header.Get(HeaderAuthRequestPreferredUsername)
 	groups := r.Header.Get(HeaderAuthRequestGroups)
 	fullPath := r.Header.Get(HeaderForwardedURI)
 	host := r.Header.Get(HeaderForwardedHost)
@@ -59,6 +60,7 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	// Create response with CSRF token
 	response := map[string]string{
 		"user":       user,
+		"username":   preferredUsername,
 		"groups":     groups,
 		"path":       fullPath,
 		"app_path":   appPath,
@@ -81,6 +83,14 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 
 		response["redirect"] = redirectURL
 	}
+
+	// Log successful authentication
+	s.logger.Info("Authentication successful",
+		"user", user,
+		"username", preferredUsername,
+		"path", appPath,
+		"groups", groups,
+		"redirect", redirectURL != "")
 
 	// Return JSON response
 	w.Header().Set("Content-Type", "application/json")

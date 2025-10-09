@@ -55,8 +55,10 @@ traefik:
   replicas: 1
   # Redirect HTTP to HTTPS
   redirectHttp: true
-  # Whether to configure traefik at 'debug' log level ('info' if omitted) 
+  # Whether to configure traefik at 'debug' log level ('info' if omitted)
   debug: true
+  # Allow cross-namespace middleware references
+  allowCrossNamespace: true
 
 # Dex configuration
 dex:
@@ -129,6 +131,8 @@ oauth2Proxy:
   dexCheck:
     # Maximum time to wait for Dex to be available in seconds
     timeout_seconds: 300
+  # Skip authentication for certain paths (useful for WebSockets)
+  skipAuthRegex: []
 
 # Authmiddleware configuration
 authmiddleware:
@@ -137,7 +141,7 @@ authmiddleware:
   # Number of replicas
   replicas: 1
   # Authmiddleware image settings
-  imagePullPolicy: IfNotPresent
+  imagePullPolicy: Always
   repository: docker.io
   imageName: jupyter-k8s-auth
   imageTag: latest

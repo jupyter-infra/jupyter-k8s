@@ -193,6 +193,9 @@ spec:
                   description: AccessResourceStatus defines the status of a resource
                     created from a template
                   properties:
+                    apiVersion:
+                      description: APIVersion of the Kubernetes resource
+                      type: string
                     kind:
                       description: Kind of the Kubernetes resource
                       type: string
@@ -203,6 +206,7 @@ spec:
                       description: Namespace of the resource
                       type: string
                   required:
+                  - apiVersion
                   - kind
                   - name
                   - namespace
