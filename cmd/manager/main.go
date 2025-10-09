@@ -42,7 +42,6 @@ func main() {
 	var probeAddr string
 	var applicationImagesPullPolicy string
 	var applicationImagesRegistry string
-	var webhookPort int
 	var requireTemplate bool
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -54,7 +53,6 @@ func main() {
 		"Image pull policy for Application containers (Always, IfNotPresent, or Never)")
 	flag.StringVar(&applicationImagesRegistry, "application-images-registry", "",
 		"Registry prefix for application images (e.g. example.com/my-registry)")
-	flag.IntVar(&webhookPort, "webhook-port", 9443, "The port the webhook endpoint binds to.")
 	flag.BoolVar(&requireTemplate, "require-template", false,
 		"Require all workspaces to reference a WorkspaceTemplate")
 	flag.Parse()
