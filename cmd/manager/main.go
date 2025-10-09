@@ -90,11 +90,11 @@ func main() {
 
 	// Setup health checks
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		fmt.Printf("Error setting up health check: %v\n", err)
+		setupLog.Error(err, "Error setting up health check")
 		os.Exit(1)
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		fmt.Printf("Error setting up ready check: %v\n", err)
+		setupLog.Error(err, "Error setting up ready check")
 		os.Exit(1)
 	}
 
@@ -106,13 +106,12 @@ func main() {
 
 	// Setup controllers
 	if err = controller.SetupWorkspaceController(mgr, controllerOpts); err != nil {
-		setupLog.Error(err, "Error setting up controller")
-		fmt.Printf("Error setting up workspace controller: %v\n", err)
+		setupLog.Error(err, "Error setting up workspace controller")
 		os.Exit(1)
 	}
 
 	if err = controller.SetupWorkspaceTemplateController(mgr); err != nil {
-		fmt.Printf("Error setting up workspace template controller: %v\n", err)
+		setupLog.Error(err, "Error setting up workspace template controller")
 		os.Exit(1)
 	}
 
