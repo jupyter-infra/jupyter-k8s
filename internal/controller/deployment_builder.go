@@ -90,7 +90,7 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacesv1alpha1.Workspac
 	if storageConfig != nil {
 		podSpec.Volumes = []corev1.Volume{
 			{
-				Name: "jupyter-storage",
+				Name: "workspace-storage",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: GeneratePVCName(workspace.Name),
@@ -113,7 +113,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacesv1alpha1
 	}
 
 	container := corev1.Container{
-		Name:            "jupyter",
+		Name:            "workspace",
 		Image:           image,
 		ImagePullPolicy: db.options.ApplicationImagesPullPolicy,
 		Ports: []corev1.ContainerPort{
@@ -134,7 +134,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacesv1alpha1
 	if storageConfig != nil {
 		container.VolumeMounts = []corev1.VolumeMount{
 			{
-				Name:      "jupyter-storage",
+				Name:      "workspace-storage",
 				MountPath: DefaultMountPath,
 			},
 		}

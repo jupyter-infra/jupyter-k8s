@@ -186,13 +186,13 @@ var _ = Describe("DeploymentBuilder", func() {
 
 			// Verify volume is added
 			Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(1))
-			Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal("jupyter-storage"))
+			Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal("workspace-storage"))
 			Expect(deployment.Spec.Template.Spec.Volumes[0].VolumeSource.PersistentVolumeClaim.ClaimName).To(Equal(GeneratePVCName(workspace.Name)))
 
 			// Verify volume mount is added to container
 			container := deployment.Spec.Template.Spec.Containers[0]
 			Expect(container.VolumeMounts).To(HaveLen(1))
-			Expect(container.VolumeMounts[0].Name).To(Equal("jupyter-storage"))
+			Expect(container.VolumeMounts[0].Name).To(Equal("workspace-storage"))
 			Expect(container.VolumeMounts[0].MountPath).To(Equal(DefaultMountPath))
 		})
 
