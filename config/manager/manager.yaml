@@ -63,11 +63,15 @@ spec:
         args:
           - --leader-elect
           - --health-probe-bind-address=:8081
+          - --webhook-port=9443
           - --application-images-pull-policy=IfNotPresent
           - --application-images-registry=docker.io/library
         image: controller:latest
         name: manager
-        ports: []
+        ports:
+        - containerPort: 9443
+          name: webhook
+          protocol: TCP
         securityContext:
           readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
@@ -95,7 +99,13 @@ spec:
           requests:
             cpu: 10m
             memory: 64Mi
-        volumeMounts: []
-      volumes: []
+        volumeMounts:
+        - name: webhook-certs
+          mountPath: /tmp/k8s-webhook-server/serving-certs
+          readOnly: true
+      volumes:
+      - name: webhook-certs
+        secret:
+          secretName: webhook-server-cert
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

@@ -3,12 +3,13 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	"net/http"
 	"os"
 	"strings"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	workspacemutator "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -19,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 var (
@@ -38,6 +40,7 @@ func main() {
 	var enableLeaderElection bool
 	var applicationImagesPullPolicy string
 	var applicationImagesRegistry string
+	var webhookPort int
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -47,17 +50,20 @@ func main() {
 		"Image pull policy for Application containers (Always, IfNotPresent, or Never)")
 	flag.StringVar(&applicationImagesRegistry, "application-images-registry", "",
 		"Registry prefix for application images (e.g. example.com/my-registry)")
+	flag.IntVar(&webhookPort, "webhook-port", 9443, "The port the webhook endpoint binds to.")
 	flag.Parse()
 
 	// Setup logger
-	log.SetLogger(zap.New(zap.UseDevMode(true)))
+	logger := zap.New(zap.UseDevMode(true))
+	log.SetLogger(logger)
+	setupLog := log.Log.WithName("setup")
 
-	fmt.Println("Starting Jupyter K8s Controller")
+	setupLog.Info("Starting Jupyter K8s Controller")
 
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
 	if err != nil {
-		fmt.Printf("Error getting kubeconfig: %v\n", err)
+		setupLog.Error(err, "Error getting kubeconfig")
 		os.Exit(1)
 	}
 
@@ -71,7 +77,7 @@ func main() {
 		LeaderElectionID: "jupyter-k8s-controller",
 	})
 	if err != nil {
-		fmt.Printf("Error creating manager: %v\n", err)
+		setupLog.Error(err, "Error creating manager")
 		os.Exit(1)
 	}
 
@@ -83,13 +89,25 @@ func main() {
 
 	// Setup controllers
 	if err = controller.SetupWorkspaceController(mgr, controllerOpts); err != nil {
-		fmt.Printf("Error setting up controller: %v\n", err)
+		setupLog.Error(err, "Error setting up controller")
 		os.Exit(1)
 	}
 
-	fmt.Println("Starting manager")
+	// Setup webhook
+	setupLog.Info("Registering webhooks")
+	mutator := &workspacemutator.WorkspaceMutator{}
+	mgr.GetWebhookServer().Register("/mutate-workspace", &admission.Webhook{Handler: mutator})
+	setupLog.Info("Registered webhook", "path", "/mutate-workspace", "type", "WorkspaceMutator")
+	mgr.GetWebhookServer().Register("/webhook-health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("OK"))
+	}))
+	setupLog.Info("Registered webhook", "path", "/webhook-health", "type", "HealthCheck")
+	setupLog.Info("All webhooks registered successfully")
+
+	setupLog.Info("Starting manager")
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
-		fmt.Printf("Error running manager: %v\n", err)
+		setupLog.Error(err, "Error running manager")
 		os.Exit(1)
 	}
 }
