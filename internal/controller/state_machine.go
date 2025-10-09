@@ -133,49 +133,13 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 	logger.Info("Attempting to bring Workspace status to 'Running'")
 
 	// Validate template BEFORE creating any resources
-	var resolvedTemplate *ResolvedTemplate
-	if workspace.Spec.TemplateRef != nil {
-		validation, err := sm.templateResolver.ValidateAndResolveTemplate(ctx, workspace)
-		if err != nil {
-			// System error (couldn't fetch template, etc.)
-			logger.Error(err, "Failed to validate template")
-			if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, err.Error()); statusErr != nil {
-				logger.Error(statusErr, "Failed to update error status")
-			}
-			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
-		}
-
-		if !validation.Valid {
-			// Validation failed - this is a SUCCESS (policy enforced)
-			logger.Info("Validation failed, rejecting workspace", "violations", len(validation.Violations))
-
-			// Record validation failure event
-			templateName := *workspace.Spec.TemplateRef
-			message := fmt.Sprintf("Validation failed for %s with %d violations", templateName, len(validation.Violations))
-			sm.recorder.Event(workspace, corev1.EventTypeWarning, "ValidationFailed", message)
-
-			if statusErr := sm.statusManager.SetInvalid(ctx, workspace, validation); statusErr != nil {
-				logger.Error(statusErr, "Failed to update validation status")
-			}
-			// No error returned - we successfully enforced policy
-			return ctrl.Result{}, nil
-		}
-
-		resolvedTemplate = validation.Template
-		logger.Info("Validation passed")
-
-		// Record successful validation event
-		templateName := *workspace.Spec.TemplateRef
-		message := "Validation passed for " + templateName
-		sm.recorder.Event(workspace, corev1.EventTypeNormal, "Validated", message)
-
-		if statusErr := sm.statusManager.SetValid(ctx, workspace); statusErr != nil {
-			logger.Error(statusErr, "Failed to update validation status")
-		}
+	resolvedTemplate, shouldContinue, err := sm.handleTemplateValidation(ctx, workspace)
+	if !shouldContinue {
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 	}
 
 	// Ensure PVC exists first (if storage is configured)
-	_, err := sm.resourceManager.EnsurePVCExists(ctx, workspace, resolvedTemplate)
+	_, err = sm.resourceManager.EnsurePVCExists(ctx, workspace, resolvedTemplate)
 	if err != nil {
 		pvcErr := fmt.Errorf("failed to ensure PVC exists: %w", err)
 		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, pvcErr.Error()); statusErr != nil {
@@ -239,4 +203,56 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 
 	// Requeue to check resource readiness again later
 	return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
+}
+
+// handleTemplateValidation validates the workspace's template reference and handles all validation outcomes.
+// If validation fails or encounters a system error, it updates the workspace status and returns shouldContinue=false.
+// On success, it returns the resolved template with shouldContinue=true.
+func (sm *StateMachine) handleTemplateValidation(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (template *ResolvedTemplate, shouldContinue bool, err error) {
+	logger := logf.FromContext(ctx)
+
+	// No template reference - continue with default configuration
+	if workspace.Spec.TemplateRef == nil {
+		return nil, true, nil
+	}
+
+	validation, err := sm.templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+	if err != nil {
+		// System error (couldn't fetch template, etc.)
+		logger.Error(err, "Failed to validate template")
+		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, err.Error()); statusErr != nil {
+			logger.Error(statusErr, "Failed to update error status")
+		}
+		return nil, false, err
+	}
+
+	if !validation.Valid {
+		// Validation failed - policy enforced, stop reconciliation
+		logger.Info("Validation failed, rejecting workspace", "violations", len(validation.Violations))
+
+		// Record validation failure event
+		templateName := *workspace.Spec.TemplateRef
+		message := fmt.Sprintf("Validation failed for %s with %d violations", templateName, len(validation.Violations))
+		sm.recorder.Event(workspace, corev1.EventTypeWarning, "ValidationFailed", message)
+
+		if statusErr := sm.statusManager.SetInvalid(ctx, workspace, validation); statusErr != nil {
+			logger.Error(statusErr, "Failed to update validation status")
+		}
+		// No error - successful policy enforcement
+		return nil, false, nil
+	}
+
+	// Validation passed
+	logger.Info("Validation passed")
+
+	// Record successful validation event
+	templateName := *workspace.Spec.TemplateRef
+	message := "Validation passed for " + templateName
+	sm.recorder.Event(workspace, corev1.EventTypeNormal, "Validated", message)
+
+	if statusErr := sm.statusManager.SetValid(ctx, workspace); statusErr != nil {
+		logger.Error(statusErr, "Failed to update validation status")
+	}
+
+	return validation.Template, true, nil
 }
