@@ -64,13 +64,14 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			g.Expect(podNames).To(HaveLen(1), "expected 1 controller pod running")
 			controllerPodName = podNames[0]
 
+			// Check pod is Ready (not just Running) - ensures webhook server is initialized
 			cmd = exec.Command("kubectl", "get",
-				"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
+				"pods", controllerPodName, "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}",
 				"-n", namespace,
 			)
-			status, err := utils.Run(cmd)
+			readyStatus, err := utils.Run(cmd)
 			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(status).To(Equal("Running"), "expected controller pod to be Running")
+			g.Expect(readyStatus).To(Equal("True"), "expected controller pod to be Ready (webhook server initialized)")
 		}
 		Eventually(verifyControllerUp, 2*time.Minute).Should(Succeed())
 

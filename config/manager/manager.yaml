@@ -71,22 +71,32 @@ spec:
         - containerPort: 9443
           name: webhook
           protocol: TCP
+        - containerPort: 8081
+          name: healthz
+          protocol: TCP
         securityContext:
           readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
           capabilities:
             drop:
             - "ALL"
+        startupProbe:
+          httpGet:
+            path: /readyz
+            port: healthz
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          failureThreshold: 12  # Allows up to 60 seconds for webhook/cert-manager initialization
         livenessProbe:
           httpGet:
             path: /healthz
-            port: 8081
+            port: healthz
           initialDelaySeconds: 15
           periodSeconds: 20
         readinessProbe:
           httpGet:
             path: /readyz
-            port: 8081
+            port: healthz
           initialDelaySeconds: 5
           periodSeconds: 10
         # TODO(user): Configure the resources accordingly based on the project requirements.
