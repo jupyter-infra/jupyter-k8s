@@ -123,10 +123,6 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
-              serviceAccountName:
-                description: ServiceAccountName specifies the ServiceAccount used
-                  by the pod
-                type: string
               storage:
                 description: Storage specifies the storage configuration
                 properties:
@@ -155,6 +151,15 @@ spec:
                 x-kubernetes-validations:
                 - message: storage is immutable
                   rule: self == oldSelf
+              templateRef:
+                description: |-
+                  TemplateRef references a WorkspaceTemplate to use as base configuration
+                  When set, template provides defaults and spec fields (Image, Resources, Storage.Size) act as overrides
+                  IMMUTABLE: Cannot be changed after workspace creation
+                type: string
+                x-kubernetes-validations:
+                - message: templateRef is immutable
+                  rule: self == oldSelf
             required:
             - displayName
             type: object
@@ -170,6 +175,7 @@ spec:
                   - "Available": the resource is fully functional and ready to use
                   - "Progressing": the resource is being created or updated
                   - "Degraded": the resource failed to reach or maintain its desired state
+                  - "Valid": the workspace configuration passes all validation checks (template, quota, etc.)
 
                   The status of each condition is one of True, False, or Unknown.
                 items:

@@ -7,6 +7,13 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
   - persistentvolumeclaims
   - services
   verbs:
@@ -44,14 +51,24 @@ rules:
 - apiGroups:
   - workspaces.jupyter.org
   resources:
-  - workspaces/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - workspaces.jupyter.org
-  resources:
   - workspaces/status
   verbs:
   - get
   - patch
+  - update
+- apiGroups:
+  - workspaces.jupyter.org
+  resources:
+  - workspacetemplates
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - workspaces.jupyter.org
+  resources:
+  - workspacetemplates/finalizers
+  verbs:
   - update

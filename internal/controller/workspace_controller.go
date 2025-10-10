@@ -43,8 +43,10 @@ type WorkspaceControllerOptions struct {
 // WorkspaceReconciler reconciles a Workspace object
 type WorkspaceReconciler struct {
 	client.Client
-	Scheme       *runtime.Scheme
-	stateMachine *StateMachine
+	Scheme        *runtime.Scheme
+	stateMachine  *StateMachine
+	statusManager *StatusManager
+	options       WorkspaceControllerOptions
 }
 
 // SetStateMachine sets the state machine for testing purposes
@@ -54,10 +56,10 @@ func (r *WorkspaceReconciler) SetStateMachine(sm *StateMachine) {
 
 // +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=workspaces,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=workspaces/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=workspaces/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -82,6 +84,25 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		logger.Error(err, "Failed to get Workspace")
 		return ctrl.Result{}, err
+	}
+
+	// Ensure template label is set if workspace uses a template
+	if workspace.Spec.TemplateRef != nil && *workspace.Spec.TemplateRef != "" {
+		if workspace.Labels == nil {
+			workspace.Labels = make(map[string]string)
+		}
+		expectedLabel := "workspaces.jupyter.org/template"
+		if workspace.Labels[expectedLabel] != *workspace.Spec.TemplateRef {
+			logger.Info("Adding template label to workspace", "template", *workspace.Spec.TemplateRef)
+			workspace.Labels[expectedLabel] = *workspace.Spec.TemplateRef
+			if err := r.Update(ctx, workspace); err != nil {
+				logger.Error(err, "Failed to update workspace with template label")
+				return ctrl.Result{}, err
+			}
+			logger.Info("Successfully added template label to workspace")
+			// Requeue to process with updated labels
+			return ctrl.Result{Requeue: true}, nil
+		}
 	}
 
 	// Delegate to state machine for business logic
@@ -112,22 +133,30 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	scheme := mgr.GetScheme()
 
 	// Create builders with options
-	deploymentBuilder := NewDeploymentBuilder(scheme, options)
+	deploymentBuilder := NewDeploymentBuilder(scheme, options, k8sClient)
 	serviceBuilder := NewServiceBuilder(scheme)
 	pvcBuilder := NewPVCBuilder(scheme)
+
+	// Create template resolver
+	templateResolver := NewTemplateResolver(k8sClient)
 
 	// Create managers
 	statusManager := NewStatusManager(k8sClient)
 	resourceManager := NewResourceManager(k8sClient, deploymentBuilder, serviceBuilder, pvcBuilder, statusManager)
 
-	// Create state machine
-	stateMachine := NewStateMachine(resourceManager, statusManager)
+	// Create event recorder
+	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
+
+	// Create state machine with template resolver and event recorder
+	stateMachine := NewStateMachine(resourceManager, statusManager, templateResolver, eventRecorder)
 
 	// Create reconciler with dependencies
 	reconciler := &WorkspaceReconciler{
-		Client:       k8sClient,
-		Scheme:       scheme,
-		stateMachine: stateMachine,
+		Client:        k8sClient,
+		Scheme:        scheme,
+		stateMachine:  stateMachine,
+		statusManager: statusManager,
+		options:       options,
 	}
 
 	return reconciler.SetupWithManager(mgr)

@@ -1,0 +1,11 @@
+apiVersion: workspaces.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  labels:
+    app.kubernetes.io/name: jupyter-k8s
+    app.kubernetes.io/managed-by: kustomize
+  name: workspace-with-template
+spec:
+  displayName: "Workspace Using Template"
+  templateRef: "production-notebook-template"
+  desiredStatus: Running

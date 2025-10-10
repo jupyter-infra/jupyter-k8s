@@ -116,6 +116,10 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 			echo "Creating Kind cluster '$(KIND_CLUSTER)'..."; \
 			$(KIND) create cluster --name $(KIND_CLUSTER) ;; \
 	esac
+	@echo "Installing cert-manager v1.13.0..."
+	@kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
+	@echo "Waiting for cert-manager to be ready..."
+	@kubectl wait --for=condition=Available --timeout=300s deployment/cert-manager-webhook -n cert-manager
 
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
@@ -125,13 +129,6 @@ test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expect
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
-	@case "$$($(KIND) get clusters)" in \
-		*"$(KIND_CLUSTER)"*) \
-			echo "Deleting Kind cluster '$(KIND_CLUSTER)'..."; \
-			$(KIND) delete cluster --name $(KIND_CLUSTER) ;; \
-		*) \
-			echo "Kind cluster '$(KIND_CLUSTER)' does not exist. Skipping deletion." ;; \
-	esac
 
 .PHONY: lint
 lint: golangci-lint helm-lint ## Run golangci-lint linter

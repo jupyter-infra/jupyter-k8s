@@ -7,8 +7,15 @@ metadata:
   name: workspace-with-storage
 spec:
   displayName: "Jupyter Server with Storage"
-  desiredStatus: "Running"
+  desiredStatus: Running
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
   storage:
     storageClassName: "standard"
-    size: "5Gi"
+    size: "1Gi"
     mountPath: "/home/jovyan/work"

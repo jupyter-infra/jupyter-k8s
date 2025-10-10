@@ -87,8 +87,6 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	var webhookPort int
-	flag.IntVar(&webhookPort, "webhook-port", 9443, "The port the webhook endpoint binds to.")
 	flag.StringVar(&applicationImagesPullPolicy, "application-images-pull-policy", "",
 		"Image pull policy for Application containers (Always, IfNotPresent, or Never)")
 	var applicationImagesRegistry string
@@ -215,6 +213,10 @@ func main() {
 	}))
 	setupLog.Info("Registered webhook", "path", "/webhook-health", "type", "HealthCheck")
 	setupLog.Info("All webhooks registered successfully")
+	if err := controller.SetupWorkspaceTemplateController(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WorkspaceTemplate")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

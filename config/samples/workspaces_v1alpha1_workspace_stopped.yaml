@@ -6,19 +6,13 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: workspace-stopped
 spec:
-  # Name of the server
   displayName: sample-stopped
-  # Container image to use
   image: jupyter/minimal-notebook:latest
-  # Set to Stopped to demonstrate the Stopped state
   desiredStatus: Stopped
-  # Optional: Service account name for the pod
-  serviceAccountName: default
-  # Optional: Resource requirements
   resources:
     requests:
-      memory: "256Mi"
-      cpu: "50m"
+      memory: "128Mi"
+      cpu: "100m"
     limits:
-      memory: "512Mi"
+      memory: "256Mi"
       cpu: "200m"
