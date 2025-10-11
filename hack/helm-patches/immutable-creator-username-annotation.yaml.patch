@@ -1,0 +1,33 @@
+{{- if .Values.vap.enable }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: workspace-immutable-creator-username
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:   ["workspaces.jupyter.org"]
+      apiVersions: ["v1alpha1"]
+      operations:  ["CREATE", "UPDATE"]
+      resources:   ["workspaces"]
+  validations:
+  - expression: |
+      (request.operation == 'CREATE' && 
+       (!has(object.metadata.annotations) || 
+        !('creator-username' in object.metadata.annotations))) ||
+      (request.operation == 'UPDATE' && 
+       has(object.metadata.annotations) &&
+       'creator-username' in object.metadata.annotations &&
+       oldObject.metadata.annotations['creator-username'] == object.metadata.annotations['creator-username'])
+    message: "Operation failed: The 'creator-username' annotation cannot be set manually and is immutable."
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: workspace-immutable-creator-username-binding
+spec:
+  policyName: workspace-immutable-creator-username
+  validationActions:
+  - Deny
+{{- end }}

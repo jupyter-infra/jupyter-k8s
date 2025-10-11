@@ -14,12 +14,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-// WorkspaceMutator is a mutating admission webhook that automatically adds a "created-by" annotation
+// WorkspaceMutator is a mutating admission webhook that automatically adds a "creator-username" annotation
 // to Workspace resources when they are created. This annotation tracks which user created the Workspace
 // and can be used for ownership-based access control and auditing.
 type WorkspaceMutator struct{}
 
-// Handle processes admission requests for Workspace resources and adds a "created-by" annotation
+// Handle processes admission requests for Workspace resources and adds a "creator-username" annotation
 // containing the sanitized username of the requesting user. This enables ownership tracking
 // and audit trails for workspace creation.
 func (m *WorkspaceMutator) Handle(ctx context.Context, req admission.Request) admission.Response {
@@ -55,17 +55,17 @@ func (m *WorkspaceMutator) Handle(ctx context.Context, req admission.Request) ad
 	}
 
 	sanitizedUsername := sanitizeUsername(req.UserInfo.Username)
-	logger.Info("Adding created-by annotation",
+	logger.Info("Adding creator-username annotation",
 		"workspace", req.Name,
 		"namespace", req.Namespace,
 		"user", sanitizedUsername)
 
 	var patch string
 	if annotations, ok := metadata["annotations"].(map[string]interface{}); ok && annotations != nil {
-		patch = `[{"op":"add","path":"/metadata/annotations/created-by","value":"` + sanitizedUsername + `"}]`
+		patch = `[{"op":"add","path":"/metadata/annotations/creator-username","value":"` + sanitizedUsername + `"}]`
 		logger.V(1).Info("Adding annotation to existing annotations", "patch", patch)
 	} else {
-		patch = `[{"op":"add","path":"/metadata/annotations","value":{"created-by":"` + sanitizedUsername + `"}}]`
+		patch = `[{"op":"add","path":"/metadata/annotations","value":{"creator-username":"` + sanitizedUsername + `"}}]`
 		logger.V(1).Info("Creating new annotations object", "patch", patch)
 	}
 	patchType := admissionv1.PatchTypeJSONPatch

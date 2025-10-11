@@ -1,14 +1,14 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: jupyter-k8s-webhook
+  name: mutating-webhook-configuration
   annotations:
     cert-manager.io/inject-ca-from: jupyter-k8s-system/jupyter-k8s-serving-cert
 webhooks:
 - name: workspaces.jupyter.org
   clientConfig:
     service:
-      name: jupyter-k8s-controller-manager
+      name: jupyter-k8s-webhook-service
       namespace: jupyter-k8s-system
       path: "/mutate-workspace"
       port: 9443

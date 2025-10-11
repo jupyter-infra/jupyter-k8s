@@ -18,6 +18,7 @@ var _ = Describe("CRD-Only Helm Resources", func() {
 	var excludeDirs = map[string]bool{
 		"samples": true,
 		"default": true,
+		"vap":     true, // VAP resources are managed by Helm patches
 	}
 
 	It("should include all CRD-only resources in the Helm chart", func() {
@@ -157,6 +158,16 @@ func shouldSkipResourceCheck(res helm.ResourceIdentifier) bool {
 
 	// Skip ServiceMonitor resources
 	if res.Kind == "ServiceMonitor" {
+		return true
+	}
+
+	// Skip cert-manager resources (conditionally included)
+	if res.Kind == "Certificate" || res.Kind == "Issuer" {
+		return true
+	}
+
+	// Skip webhook resources (conditionally included)
+	if res.Kind == "MutatingWebhookConfiguration" || res.Kind == "ValidatingWebhookConfiguration" {
 		return true
 	}
 

@@ -37,7 +37,7 @@ func TestWorkspaceMutator_Handle(t *testing.T) {
 				},
 			},
 			expectedAllowed: true,
-			expectedPatch:   `[{"op":"add","path":"/metadata/annotations","value":{"created-by":"test-user"}}]`,
+			expectedPatch:   `[{"op":"add","path":"/metadata/annotations","value":{"creator-username":"test-user"}}]`,
 		},
 		{
 			name: "successful mutation with existing annotations",
@@ -57,7 +57,7 @@ func TestWorkspaceMutator_Handle(t *testing.T) {
 				},
 			},
 			expectedAllowed: true,
-			expectedPatch:   `[{"op":"add","path":"/metadata/annotations/created-by","value":"test-user"}]`,
+			expectedPatch:   `[{"op":"add","path":"/metadata/annotations/creator-username","value":"test-user"}]`,
 		},
 		{
 			name: "username with special characters",
@@ -77,7 +77,7 @@ func TestWorkspaceMutator_Handle(t *testing.T) {
 				},
 			},
 			expectedAllowed: true,
-			expectedPatch:   `[{"op":"add","path":"/metadata/annotations","value":{"created-by":"user@domain.com"}}]`,
+			expectedPatch:   `[{"op":"add","path":"/metadata/annotations","value":{"creator-username":"user@domain.com"}}]`,
 		},
 		{
 			name: "non-workspace resource should be allowed without mutation",

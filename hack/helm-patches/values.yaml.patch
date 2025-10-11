@@ -4,3 +4,15 @@ application:
   # This controls how the JupyterServer containers pull their images
   imagesPullPolicy: IfNotPresent
   imagesRegistry: "docker.io/library"
+
+# [NAMESPACE]: Namespace configuration
+namespace: jupyter-k8s-system
+
+# [VAP]: ValidatingAdmissionPolicy configuration
+vap:
+  # Enable ValidatingAdmissionPolicies for workspace access control
+  enable: true
+  # Name prefix applied to all resources
+  namePrefix: jupyter-k8s-
+  # Cluster admin group name (used as-is, not prefixed)
+  clusterAdminGroup: cluster-workspace-admin

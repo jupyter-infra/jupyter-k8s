@@ -1,0 +1,49 @@
+{{- if .Values.vap.enable }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: workspace-creator-only-update
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:   ["workspaces.jupyter.org"]
+      apiVersions: ["v1alpha1"]
+      operations:  ["UPDATE"]
+      resources:   ["workspaces"]
+  validations:
+  - expression: |
+      !has(object.spec.sharedStatus) ||
+      object.spec.sharedStatus == 'public' ||
+      '{{ .Values.vap.clusterAdminGroup }}' in request.userInfo.groups ||
+      request.userInfo.username == 'system:serviceaccount:{{ .Values.namespace }}:{{ .Values.vap.namePrefix }}controller-manager' ||
+      (object.spec.sharedStatus == 'private' && 
+       (!has(object.metadata.annotations) ||
+        !('creator-username' in object.metadata.annotations) ||
+        object.metadata.annotations['creator-username'] == request.userInfo.username))
+    message: "Operation failed: Only the creator, operator service account, or {{ .Values.vap.clusterAdminGroup }} group can update a private space."
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: workspace-creator-only-delete
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:   ["workspaces.jupyter.org"]
+      apiVersions: ["v1alpha1"]
+      operations:  ["DELETE"]
+      resources:   ["workspaces"]
+  validations:
+  - expression: |
+      !has(oldObject.spec.sharedStatus) ||
+      oldObject.spec.sharedStatus == 'public' ||
+      '{{ .Values.vap.clusterAdminGroup }}' in request.userInfo.groups ||
+      request.userInfo.username == 'system:serviceaccount:{{ .Values.namespace }}:{{ .Values.vap.namePrefix }}controller-manager' ||
+      (oldObject.spec.sharedStatus == 'private' && 
+       (!has(oldObject.metadata.annotations) ||
+        !('creator-username' in oldObject.metadata.annotations) ||
+        oldObject.metadata.annotations['creator-username'] == request.userInfo.username))
+    message: "Operation failed: Only the creator, operator service account, or {{ .Values.vap.clusterAdminGroup }} group can delete a private space."
+{{- end }}

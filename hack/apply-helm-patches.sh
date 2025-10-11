@@ -59,14 +59,11 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
     # For values.yaml, we need more careful handling due to YAML structure
     echo "Applying patches to values.yaml..."
 
-    # Check if the application section already exists
-    if grep -q "^# \[APPLICATION\]" "${CHART_DIR}/values.yaml"; then
-        # Remove existing application section - from [APPLICATION] heading to the next section heading or end of file
-        sed -i '/^# \[APPLICATION\]/,/^# \[/{ /^# \[APPLICATION\]/d; /^# \[/!d; }' "${CHART_DIR}/values.yaml"
+    # Only add APPLICATION section if it doesn't exist
+    if ! grep -q "^# \[APPLICATION\]" "${CHART_DIR}/values.yaml"; then
+        # Append the entire application configuration from the patch file
+        cat "${PATCHES_DIR}/values.yaml.patch" >> "${CHART_DIR}/values.yaml"
     fi
-
-    # Append the entire application configuration from the patch file
-    cat "${PATCHES_DIR}/values.yaml.patch" >> "${CHART_DIR}/values.yaml"
 fi
 
 
@@ -75,27 +72,47 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
     MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
     if [ -f "${MANAGER_YAML}" ]; then
         echo "Applying patch to manager.yaml..."
-        # Find the line with args: followed by the line with range
-        if grep -q "args:" "${MANAGER_YAML}" && grep -q "{{- range .Values.controllerManager.container.args }}" "${MANAGER_YAML}"; then
-            # Check if the patch is already applied
-            if ! grep -q "application-image-registry" "${MANAGER_YAML}"; then
-                # Replace the whole args block with our patched version
-                sed -i '/args:/,/command:/ {
-                    /command:/!d
-                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"
-                }' "${MANAGER_YAML}"
-            fi
-        else
-            echo "Warning: Could not find proper args section in manager.yaml"
+        # Check if the patch is already applied
+        if ! grep -q "application-image-registry" "${MANAGER_YAML}"; then
+            # Create a temporary file with the replacement
+            TEMP_FILE=$(mktemp)
+            # Replace the args block with the patched version
+            awk '
+                /^          args:/ { 
+                    print "          args:"
+                    print "            {{- range .Values.controllerManager.container.args }}"
+                    print "            - {{ . }}"
+                    print "            {{- end }}"
+                    print "            - --application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"
+                    print "            - --application-images-registry={{ .Values.application.imagesRegistry }}"
+                    # Skip the original args block
+                    while (getline > 0 && !/^          command:/) continue
+                    print
+                    next
+                }
+                { print }
+            ' "${MANAGER_YAML}" > "${TEMP_FILE}"
+            mv "${TEMP_FILE}" "${MANAGER_YAML}"
         fi
     else
         echo "Warning: manager.yaml not found at ${MANAGER_YAML}"
     fi
 fi
 
+# Handle VAP files with full replacement
+echo "Creating VAP templates..."
+mkdir -p "${CHART_DIR}/templates/vap"
+for vap_file in "immutable-creator-username-annotation.yaml" "private-workspace-vap.yaml" "private-workspace-vap-binding.yaml"; do
+    if [ -f "${PATCHES_DIR}/${vap_file}.patch" ]; then
+        VAP_TARGET="${CHART_DIR}/templates/vap/${vap_file}"
+        echo "Creating ${vap_file} from patch..."
+        cp "${PATCHES_DIR}/${vap_file}.patch" "${VAP_TARGET}"
+    fi
+done
+
 # Process any additional patch files
 for patch_file in "${PATCHES_DIR}"/*.patch; do
-    if [ -f "$patch_file" ] && [ "$(basename "$patch_file")" != "values.yaml.patch" ] && [ "$(basename "$patch_file")" != "manager.yaml.patch" ]; then
+    if [ -f "$patch_file" ] && [ "$(basename "$patch_file")" != "values.yaml.patch" ] && [ "$(basename "$patch_file")" != "manager.yaml.patch" ] && [[ "$(basename "$patch_file")" != *"vap"* ]]; then
         file_name=$(basename "$patch_file" .patch)
         apply_patch "$file_name" "$(basename "$patch_file")"
     fi

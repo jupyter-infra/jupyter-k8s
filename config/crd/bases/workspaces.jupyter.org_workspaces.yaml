@@ -123,6 +123,16 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              serviceAccountName:
+                description: ServiceAccountName specifies the ServiceAccount used
+                  by the pod
+                type: string
+              sharedStatus:
+                description: SharedStatus specifies the sharing status of the workspace
+                enum:
+                - private
+                - public
+                type: string
               storage:
                 description: Storage specifies the storage configuration
                 properties:

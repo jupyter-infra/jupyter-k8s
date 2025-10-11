@@ -1,0 +1,25 @@
+{{- if .Values.vap.enable }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: workspace-creator-only-update-binding
+spec:
+  policyName: workspace-creator-only-update
+  validationActions:
+  - Deny
+  matchResources:
+    namespaceSelector:
+      matchExpressions: []
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: workspace-creator-only-delete-binding
+spec:
+  policyName: workspace-creator-only-delete
+  validationActions:
+  - Deny
+  matchResources:
+    namespaceSelector:
+      matchExpressions: []
+{{- end }}

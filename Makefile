@@ -493,14 +493,35 @@ deploy-aws-traefik-dex:
 .PHONY: undeploy-aws
 undeploy-aws: ## Uninstall the Helm chart from remote cluster
 	@echo "Undeploying Helm chart from remote AWS cluster..."
-	# Not specifying namespace to allow Helm to clean up resources across all namespaces
-	helm uninstall jk8s -n jupyter-k8s-system --ignore-not-found
-	helm uninstall jk8-aws-traefik-dex -n jupyter-k8s-router --ignore-not-found
-	helm uninstall traefik-crd --ignore-not-found
-	# CRDs with resource-policy: keep are not deleted by Helm, but we can find them by release name
-# 	@echo "Cleaning up CRDs with resource-policy: keep..."
-# 	kubectl get crds | grep jupyterservers | awk '{print $1}' | xargs -n1 kubectl delete crd
+	# Delete Helm releases
+	helm uninstall jupyter-k8s -n jupyter-k8s-system --ignore-not-found || true
+	helm uninstall jk8s -n jupyter-k8s-system --ignore-not-found || true
+	helm uninstall jk8-aws-traefik-dex -n jupyter-k8s-router --ignore-not-found || true
+	helm uninstall traefik-crd --ignore-not-found || true
+	# Delete namespaces
+	@echo "Deleting namespaces..."
+	kubectl delete namespace jupyter-k8s-system --ignore-not-found
+	kubectl delete namespace jupyter-k8s-router --ignore-not-found
+	# Delete cluster-scoped resources
+	@echo "Cleaning up cluster-scoped resources..."
+	kubectl delete clusterroles jupyter-k8s-manager-role jupyter-k8s-metrics-auth-role jupyter-k8s-leader-election-role jupyter-k8s-metrics-reader jupyter-k8s-workspace-admin-role jupyter-k8s-workspace-editor-role jupyter-k8s-workspace-viewer-role --ignore-not-found
+	kubectl delete clusterroles workspace-admin-role workspace-editor-role workspace-viewer-role --ignore-not-found
+	kubectl delete clusterrolebindings jupyter-k8s-manager-rolebinding jupyter-k8s-metrics-auth-rolebinding --ignore-not-found
+	# Clean up ValidatingAdmissionPolicies and ValidatingAdmissionPolicyBindings
+	@echo "Cleaning up ValidatingAdmissionPolicies and ValidatingAdmissionPolicyBindings..."
+	kubectl delete validatingadmissionpolicies workspace-creator-only-update workspace-creator-only-delete workspace-immutable-creator-username --ignore-not-found
+	kubectl delete validatingadmissionpolicybindings workspace-creator-only-update-binding workspace-creator-only-delete-binding workspace-immutable-creator-username-binding --ignore-not-found
+	# Clean up webhook configurations
+	@echo "Cleaning up webhook configurations..."
+	kubectl delete mutatingwebhookconfiguration jupyter-k8s-webhook jupyter-k8s-jupyter-k8s-webhook --ignore-not-found
+	kubectl delete validatingwebhookconfiguration jupyter-k8s-webhook --ignore-not-found
+	# Clean up CRDs
+	@echo "Cleaning up CRDs..."
+	kubectl delete crd workspaces.workspaces.jupyter.org workspacemanagers.workspaces.jupyter.org workspacetemplates.workspaces.jupyter.org workspaceexecutionprofiles.workspaces.jupyter.org workspaceshares.workspaces.jupyter.org --ignore-not-found
 	kubectl get crds --no-headers -o custom-columns=NAME:.metadata.name | grep traefik | xargs -r kubectl delete crd || true
+	# Verify cleanup
+	@echo "Verifying cleanup..."
+	@kubectl get all,secrets,configmaps,serviceaccounts,roles,rolebindings,clusterroles,clusterrolebindings,validatingadmissionpolicies,mutatingwebhookconfigurations,validatingwebhookconfigurations,crd --all-namespaces | grep -i jupyter || echo "No jupyter-k8s resources found"
 
 # Port forward to a specific Jupyter server
 .PHONY: port-forward

@@ -1,0 +1,4 @@
+resources:
+- immutable-creator-username-annotation.yaml
+- private-workspace-vap.yaml
+- private-workspace-vap-binding.yaml

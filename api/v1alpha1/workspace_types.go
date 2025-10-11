@@ -73,6 +73,15 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="templateRef is immutable"
 	// +optional
 	TemplateRef *string `json:"templateRef,omitempty"`
+
+	// SharedStatus specifies the sharing status of the workspace
+	// +kubebuilder:validation:Enum=private;public
+	// +optional
+	SharedStatus string `json:"sharedStatus,omitempty"`
+
+	// ServiceAccountName specifies the ServiceAccount used by the pod
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 }
 
 // WorkspaceStatus defines the observed state of Workspace.

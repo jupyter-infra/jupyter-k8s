@@ -1,0 +1,47 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: workspace-creator-only-update
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:   ["workspaces.jupyter.org"]
+      apiVersions: ["v1alpha1"]
+      operations:  ["UPDATE"]
+      resources:   ["workspaces"]
+  validations:
+  - expression: |
+      !has(object.spec.sharedStatus) ||
+      object.spec.sharedStatus == 'public' ||
+      'CLUSTER_ADMIN_GROUP' in request.userInfo.groups ||
+      request.userInfo.username == 'system:serviceaccount:NAMESPACE:NAMEPREFIXcontroller-manager' ||
+      (object.spec.sharedStatus == 'private' && 
+       (!has(object.metadata.annotations) ||
+        !('creator-username' in object.metadata.annotations) ||
+        object.metadata.annotations['creator-username'] == request.userInfo.username))
+    message: "Operation failed: Only the creator, operator service account, or CLUSTER_ADMIN_GROUP group can update a private space."
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: workspace-creator-only-delete
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:   ["workspaces.jupyter.org"]
+      apiVersions: ["v1alpha1"]
+      operations:  ["DELETE"]
+      resources:   ["workspaces"]
+  validations:
+  - expression: |
+      !has(oldObject.spec.sharedStatus) ||
+      oldObject.spec.sharedStatus == 'public' ||
+      'CLUSTER_ADMIN_GROUP' in request.userInfo.groups ||
+      request.userInfo.username == 'system:serviceaccount:NAMESPACE:NAMEPREFIXcontroller-manager' ||
+      (oldObject.spec.sharedStatus == 'private' && 
+       (!has(oldObject.metadata.annotations) ||
+        !('creator-username' in oldObject.metadata.annotations) ||
+        oldObject.metadata.annotations['creator-username'] == request.userInfo.username))
+    message: "Operation failed: Only the creator, operator service account, or CLUSTER_ADMIN_GROUP group can delete a private space."
