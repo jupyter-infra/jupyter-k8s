@@ -100,6 +100,22 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacesv1alpha1.Workspac
 		}
 	}
 
+	// Add additional volumes from spec
+	for _, vol := range workspace.Spec.Volumes {
+		if vol.Name == "workspace-storage" {
+			// Skip if name conflicts with primary storage
+			continue
+		}
+		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+			Name: vol.Name,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: vol.PersistentVolumeClaimName,
+				},
+			},
+		})
+	}
+
 	return podSpec
 }
 
@@ -141,6 +157,18 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacesv1alpha1
 				MountPath: DefaultMountPath,
 			},
 		}
+	}
+
+	// Add additional volume mounts from spec
+	for _, vol := range workspace.Spec.Volumes {
+		if vol.Name == "workspace-storage" {
+			// Skip if name conflicts with primary storage
+			continue
+		}
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      vol.Name,
+			MountPath: vol.MountPath,
+		})
 	}
 
 	return container

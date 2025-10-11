@@ -1,0 +1,14 @@
+apiVersion: workspaces.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  labels:
+    app.kubernetes.io/name: jupyter-k8s
+    app.kubernetes.io/managed-by: kustomize
+  name: workspace-with-container-config
+spec:
+  displayName: "Workspace with Custom Container Config"
+  image: "jupyter/scipy-notebook:latest"
+  desiredStatus: "Running"
+  containerConfig:
+    command: ["/bin/bash"]
+    args: ["-c", "start-notebook.sh --NotebookApp.token='' --NotebookApp.password=''"]

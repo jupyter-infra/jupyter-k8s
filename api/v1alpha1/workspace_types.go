@@ -25,6 +25,18 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// VolumeSpec defines a volume to mount from an existing PVC
+type VolumeSpec struct {
+	// Name is the name of the volume
+	Name string `json:"name"`
+
+	// PersistentVolumeClaimName is the name of the existing PVC to mount
+	PersistentVolumeClaimName string `json:"persistentVolumeClaimName"`
+
+	// MountPath is the path where the volume should be mounted
+	MountPath string `json:"mountPath"`
+}
+
 // StorageSpec defines the storage configuration for Workspace
 type StorageSpec struct {
 	// StorageClassName specifies the storage class to use for persistent storage
@@ -76,6 +88,9 @@ type WorkspaceSpec struct {
 	// Storage specifies the storage configuration
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage is immutable"
 	Storage *StorageSpec `json:"storage,omitempty"`
+
+	// Volumes specifies additional volumes to mount from existing PVCs
+	Volumes []VolumeSpec `json:"volumes,omitempty"`
 
 	// AccessStrategy specifies the WorkspaceAccessStrategy to use
 	// +optional

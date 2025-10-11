@@ -1,0 +1,14 @@
+apiVersion: workspaces.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  labels:
+    app.kubernetes.io/name: jupyter-k8s
+    app.kubernetes.io/managed-by: kustomize
+  name: workspace-with-node-selector
+spec:
+  displayName: "Workspace with Node Selector"
+  image: "jupyter/scipy-notebook:latest"
+  desiredStatus: "Running"
+  nodeSelector:
+    kubernetes.io/arch: "amd64"
+    node-type: "compute-optimized"
