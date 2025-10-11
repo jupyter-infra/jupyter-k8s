@@ -65,6 +65,21 @@ spec:
                 required:
                 - name
                 type: object
+              containerConfig:
+                description: ContainerConfig specifies container command and args
+                  configuration
+                properties:
+                  args:
+                    description: Args specifies the container arguments
+                    items:
+                      type: string
+                    type: array
+                  command:
+                    description: Command specifies the container command
+                    items:
+                      type: string
+                    type: array
+                type: object
               desiredStatus:
                 description: DesiredStatus specifies the desired operational status
                 enum:

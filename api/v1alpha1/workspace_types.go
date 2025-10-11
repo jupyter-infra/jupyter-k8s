@@ -37,6 +37,15 @@ type VolumeSpec struct {
 	MountPath string `json:"mountPath"`
 }
 
+// ContainerConfig defines container command and args configuration
+type ContainerConfig struct {
+	// Command specifies the container command
+	Command []string `json:"command,omitempty"`
+
+	// Args specifies the container arguments
+	Args []string `json:"args,omitempty"`
+}
+
 // StorageSpec defines the storage configuration for Workspace
 type StorageSpec struct {
 	// StorageClassName specifies the storage class to use for persistent storage
@@ -91,6 +100,9 @@ type WorkspaceSpec struct {
 
 	// Volumes specifies additional volumes to mount from existing PVCs
 	Volumes []VolumeSpec `json:"volumes,omitempty"`
+
+	// ContainerConfig specifies container command and args configuration
+	ContainerConfig *ContainerConfig `json:"containerConfig,omitempty"`
 
 	// AccessStrategy specifies the WorkspaceAccessStrategy to use
 	// +optional
