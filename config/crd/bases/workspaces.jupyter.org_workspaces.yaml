@@ -92,6 +92,12 @@ spec:
               image:
                 description: Image specifies the container image to use
                 type: string
+              nodeSelector:
+                additionalProperties:
+                  type: string
+                description: NodeSelector specifies node selection constraints for
+                  the workspace pod
+                type: object
               resources:
                 description: Resources specifies the resource requirements
                 properties:

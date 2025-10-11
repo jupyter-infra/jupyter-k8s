@@ -116,6 +116,11 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacesv1alpha1.Workspac
 		})
 	}
 
+	// Set node selector if specified
+	if len(workspace.Spec.NodeSelector) > 0 {
+		podSpec.NodeSelector = workspace.Spec.NodeSelector
+	}
+
 	return podSpec
 }
 

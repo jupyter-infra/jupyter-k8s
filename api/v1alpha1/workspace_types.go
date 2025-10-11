@@ -104,6 +104,9 @@ type WorkspaceSpec struct {
 	// ContainerConfig specifies container command and args configuration
 	ContainerConfig *ContainerConfig `json:"containerConfig,omitempty"`
 
+	// NodeSelector specifies node selection constraints for the workspace pod
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
 	// AccessStrategy specifies the WorkspaceAccessStrategy to use
 	// +optional
 	AccessStrategy *AccessStrategyRef `json:"accessStrategy,omitempty"`

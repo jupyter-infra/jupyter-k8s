@@ -408,6 +408,13 @@ func (in *WorkspaceSpec) DeepCopyInto(out *WorkspaceSpec) {
 		*out = new(ContainerConfig)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.NodeSelector != nil {
+		in, out := &in.NodeSelector, &out.NodeSelector
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.AccessStrategy != nil {
 		in, out := &in.AccessStrategy, &out.AccessStrategy
 		*out = new(AccessStrategyRef)
