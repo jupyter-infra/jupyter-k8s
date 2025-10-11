@@ -107,6 +107,10 @@ type WorkspaceSpec struct {
 	// NodeSelector specifies node selection constraints for the workspace pod
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
+	// Lifecycle specifies actions that the management system should take
+	// in response to container lifecycle events (for instance, lifecycle hooks)
+	Lifecycle *corev1.Lifecycle `json:"lifecycle,omitempty"`
+
 	// AccessStrategy specifies the WorkspaceAccessStrategy to use
 	// +optional
 	AccessStrategy *AccessStrategyRef `json:"accessStrategy,omitempty"`

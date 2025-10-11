@@ -415,6 +415,11 @@ func (in *WorkspaceSpec) DeepCopyInto(out *WorkspaceSpec) {
 			(*out)[key] = val
 		}
 	}
+	if in.Lifecycle != nil {
+		in, out := &in.Lifecycle, &out.Lifecycle
+		*out = new(v1.Lifecycle)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.AccessStrategy != nil {
 		in, out := &in.AccessStrategy, &out.AccessStrategy
 		*out = new(AccessStrategyRef)

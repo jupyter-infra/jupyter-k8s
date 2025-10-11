@@ -139,6 +139,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacesv1alpha1
 		ImagePullPolicy: db.options.ApplicationImagesPullPolicy,
 		Command:         db.getContainerCommand(workspace),
 		Args:            db.getContainerArgs(workspace),
+		Lifecycle:       workspace.Spec.Lifecycle,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "http",
