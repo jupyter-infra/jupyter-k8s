@@ -20,7 +20,6 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	"net/http"
 	"os"
 	"strings"
 
@@ -39,11 +38,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
-	workspacemutator "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -199,22 +196,6 @@ func main() {
 
 	if err := controller.SetupWorkspaceController(mgr, controllerOpts); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Workspace")
-		os.Exit(1)
-	}
-
-	// Setup webhook
-	setupLog.Info("Registering webhooks")
-	mutator := &workspacemutator.WorkspaceMutator{}
-	mgr.GetWebhookServer().Register("/mutate-workspace", &admission.Webhook{Handler: mutator})
-	setupLog.Info("Registered webhook", "path", "/mutate-workspace", "type", "WorkspaceMutator")
-	mgr.GetWebhookServer().Register("/webhook-health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
-	}))
-	setupLog.Info("Registered webhook", "path", "/webhook-health", "type", "HealthCheck")
-	setupLog.Info("All webhooks registered successfully")
-	if err := controller.SetupWorkspaceTemplateController(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "WorkspaceTemplate")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

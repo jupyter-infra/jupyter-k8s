@@ -1,6 +1,0 @@
-resources:
-- certificate.yaml
-- issuer.yaml
-
-configurations:
-- kustomizeconfig.yaml
