@@ -3,7 +3,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"strings"
 
@@ -15,6 +14,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -36,10 +36,13 @@ func init() {
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
+	var probeAddr string
 	var applicationImagesPullPolicy string
 	var applicationImagesRegistry string
+	var requireTemplate bool
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -47,31 +50,46 @@ func main() {
 		"Image pull policy for Application containers (Always, IfNotPresent, or Never)")
 	flag.StringVar(&applicationImagesRegistry, "application-images-registry", "",
 		"Registry prefix for application images (e.g. example.com/my-registry)")
+	flag.BoolVar(&requireTemplate, "require-template", false,
+		"Require all workspaces to reference a WorkspaceTemplate")
 	flag.Parse()
 
 	// Setup logger
-	log.SetLogger(zap.New(zap.UseDevMode(true)))
+	logger := zap.New(zap.UseDevMode(true))
+	log.SetLogger(logger)
+	setupLog := log.Log.WithName("setup")
 
-	fmt.Println("Starting Jupyter K8s Controller")
+	setupLog.Info("Starting Jupyter K8s Controller")
 
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
 	if err != nil {
-		fmt.Printf("Error getting kubeconfig: %v\n", err)
+		setupLog.Error(err, "Error getting kubeconfig")
 		os.Exit(1)
 	}
 
 	// Create a new manager
 	mgr, err := manager.New(cfg, manager.Options{
-		Scheme:         scheme,
-		LeaderElection: enableLeaderElection,
+		Scheme:                 scheme,
+		LeaderElection:         enableLeaderElection,
+		HealthProbeBindAddress: probeAddr,
 		// TODO: Add hash/random suffix to LeaderElectionID to prevent conflicts
 		// Other operators use patterns like "jupyter-k8s-controller-<hash>" to ensure
 		// uniqueness when multiple operators might be deployed in the same cluster
 		LeaderElectionID: "jupyter-k8s-controller",
 	})
 	if err != nil {
-		fmt.Printf("Error creating manager: %v\n", err)
+		setupLog.Error(err, "Error creating manager")
+		os.Exit(1)
+	}
+
+	// Setup health checks
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		setupLog.Error(err, "Error setting up health check")
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		setupLog.Error(err, "Error setting up ready check")
 		os.Exit(1)
 	}
 
@@ -83,13 +101,18 @@ func main() {
 
 	// Setup controllers
 	if err = controller.SetupWorkspaceController(mgr, controllerOpts); err != nil {
-		fmt.Printf("Error setting up controller: %v\n", err)
+		setupLog.Error(err, "Error setting up workspace controller")
 		os.Exit(1)
 	}
 
-	fmt.Println("Starting manager")
+	if err = controller.SetupWorkspaceTemplateController(mgr); err != nil {
+		setupLog.Error(err, "Error setting up workspace template controller")
+		os.Exit(1)
+	}
+
+	setupLog.Info("Starting manager")
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
-		fmt.Printf("Error running manager: %v\n", err)
+		setupLog.Error(err, "Error running manager")
 		os.Exit(1)
 	}
 }
