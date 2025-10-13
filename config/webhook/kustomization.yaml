@@ -1,0 +1,6 @@
+resources:
+- webhook-config.yaml
+- service.yaml
+
+configurations:
+- kustomizeconfig.yaml

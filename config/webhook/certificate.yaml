@@ -1,0 +1,20 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: jupyter-k8s-webhook-cert
+  namespace: jupyter-k8s-system
+spec:
+  secretName: jupyter-k8s-webhook-certs
+  duration: 2160h  # 90 days
+  renewBefore: 360h  # 15 days
+  privateKey:
+    rotationPolicy: Always
+  subject:
+    organizations:
+      - jupyter-k8s-operator
+  commonName: jupyter-k8s-webhook
+  dnsNames:
+    - jupyter-k8s-controller-manager.jupyter-k8s-system.svc
+  issuerRef:
+    name: jupyter-k8s-issuer
+    kind: Issuer

@@ -6,21 +6,27 @@ import (
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // StateMachine handles the state transitions for Workspace
 type StateMachine struct {
-	resourceManager *ResourceManager
-	statusManager   *StatusManager
+	resourceManager  *ResourceManager
+	statusManager    *StatusManager
+	templateResolver *TemplateResolver
+	recorder         record.EventRecorder
 }
 
 // NewStateMachine creates a new StateMachine
-func NewStateMachine(resourceManager *ResourceManager, statusManager *StatusManager) *StateMachine {
+func NewStateMachine(resourceManager *ResourceManager, statusManager *StatusManager, templateResolver *TemplateResolver, recorder record.EventRecorder) *StateMachine {
 	return &StateMachine{
-		resourceManager: resourceManager,
-		statusManager:   statusManager,
+		resourceManager:  resourceManager,
+		statusManager:    statusManager,
+		templateResolver: templateResolver,
+		recorder:         recorder,
 	}
 }
 
@@ -114,11 +120,15 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 		} else {
 			// All resources are fully deleted, update to stopped status
 			logger.Info("Deployment and Service are both deleted, updating to Stopped status")
+      
+      // Record workspace stopped event
+		  sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceStopped", "Workspace has been stopped")
+      
 			if err := sm.statusManager.UpdateStoppedStatus(ctx, workspace, snapshotStatus); err != nil {
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
-		}
+    }
 	}
 
 	// If EITHER deployment OR service is still in the process of being deleted
@@ -155,8 +165,14 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	logger := logf.FromContext(ctx)
 	logger.Info("Attempting to bring Workspace status to 'Running'")
 
+	// Validate template BEFORE creating any resources
+	resolvedTemplate, shouldContinue, err := sm.handleTemplateValidation(ctx, workspace)
+	if !shouldContinue {
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+	}
+
 	// Ensure PVC exists first (if storage is configured)
-	_, err := sm.resourceManager.EnsurePVCExists(ctx, workspace)
+	_, err = sm.resourceManager.EnsurePVCExists(ctx, workspace, resolvedTemplate)
 	if err != nil {
 		pvcErr := fmt.Errorf("failed to ensure PVC exists: %w", err)
 		if statusErr := sm.statusManager.UpdateErrorStatus(
@@ -166,10 +182,11 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, pvcErr
 	}
 
-	// Ensure deployment exists
-	// EnsureDeploymentExists only ensures the API request is accepted by K8s
-	// It does not wait for the deployment to be fully ready
-	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace)
+	// Ensure deployment exists (pass the resolved template)
+	// EnsureDeploymentExists internally fetches the deployment and returns it with current status
+	// On first reconciliation: creates deployment (status will be empty initially)
+	// On subsequent reconciliations: returns existing deployment with populated status
+	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace, resolvedTemplate)
 	if err != nil {
 		deployErr := fmt.Errorf("failed to ensure deployment exists: %w", err)
 		// Update error condition
@@ -180,9 +197,8 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, deployErr
 	}
 
-	// Ensure service exists - this is an asynchronous operation
-	// EnsureServiceExists only ensures the API request is accepted by K8s
-	// It does not wait for the service to be fully ready
+	// Ensure service exists
+	// EnsureServiceExists internally fetches the service and returns it with current status
 	service, err := sm.resourceManager.EnsureServiceExists(ctx, workspace)
 	if err != nil {
 		serviceErr := fmt.Errorf("failed to ensure service exists: %w", err)
@@ -208,6 +224,10 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 
 		// Then only update to running status
 		logger.Info("Deployment and Service are both ready, updating to Running status")
+    
+		// Record workspace running event
+		sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceRunning", "Workspace is now running")
+    
 		if err := sm.statusManager.UpdateRunningStatus(ctx, workspace, snapshotStatus); err != nil {
 			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 		}
@@ -231,4 +251,56 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 
 	// Requeue to check resource readiness again later
 	return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
+}
+
+// handleTemplateValidation validates the workspace's template reference and handles all validation outcomes.
+// If validation fails or encounters a system error, it updates the workspace status and returns shouldContinue=false.
+// On success, it returns the resolved template with shouldContinue=true.
+func (sm *StateMachine) handleTemplateValidation(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (template *ResolvedTemplate, shouldContinue bool, err error) {
+	logger := logf.FromContext(ctx)
+
+	// No template reference - continue with default configuration
+	if workspace.Spec.TemplateRef == nil {
+		return nil, true, nil
+	}
+
+	validation, err := sm.templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+	if err != nil {
+		// System error (couldn't fetch template, etc.)
+		logger.Error(err, "Failed to validate template")
+		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, err.Error()); statusErr != nil {
+			logger.Error(statusErr, "Failed to update error status")
+		}
+		return nil, false, err
+	}
+
+	if !validation.Valid {
+		// Validation failed - policy enforced, stop reconciliation
+		logger.Info("Validation failed, rejecting workspace", "violations", len(validation.Violations))
+
+		// Record validation failure event
+		templateName := *workspace.Spec.TemplateRef
+		message := fmt.Sprintf("Validation failed for %s with %d violations", templateName, len(validation.Violations))
+		sm.recorder.Event(workspace, corev1.EventTypeWarning, "ValidationFailed", message)
+
+		if statusErr := sm.statusManager.SetInvalid(ctx, workspace, validation); statusErr != nil {
+			logger.Error(statusErr, "Failed to update validation status")
+		}
+		// No error - successful policy enforcement
+		return nil, false, nil
+	}
+
+	// Validation passed
+	logger.Info("Validation passed")
+
+	// Record successful validation event
+	templateName := *workspace.Spec.TemplateRef
+	message := "Validation passed for " + templateName
+	sm.recorder.Event(workspace, corev1.EventTypeNormal, "Validated", message)
+
+	if statusErr := sm.statusManager.SetValid(ctx, workspace); statusErr != nil {
+		logger.Error(statusErr, "Failed to update validation status")
+	}
+
+	return validation.Template, true, nil
 }

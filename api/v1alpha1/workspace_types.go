@@ -70,9 +70,6 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:Enum=Running;Stopped
 	DesiredStatus string `json:"desiredStatus,omitempty"`
 
-	// ServiceAccountName specifies the ServiceAccount used by the pod
-	ServiceAccountName string `json:"serviceAccountName,omitempty"`
-
 	// Resources specifies the resource requirements
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
@@ -83,6 +80,13 @@ type WorkspaceSpec struct {
 	// AccessStrategy specifies the WorkspaceAccessStrategy to use
 	// +optional
 	AccessStrategy *AccessStrategyRef `json:"accessStrategy,omitempty"`
+  
+	// TemplateRef references a WorkspaceTemplate to use as base configuration
+	// When set, template provides defaults and spec fields (Image, Resources, Storage.Size) act as overrides
+	// IMMUTABLE: Cannot be changed after workspace creation
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="templateRef is immutable"
+	// +optional
+	TemplateRef *string `json:"templateRef,omitempty"`
 }
 
 // AccessResourceStatus defines the status of a resource created from a template
@@ -98,6 +102,7 @@ type AccessResourceStatus struct {
 
 	// Namespace of the resource
 	Namespace string `json:"namespace"`
+
 }
 
 // WorkspaceStatus defines the observed state of Workspace.
@@ -137,6 +142,7 @@ type WorkspaceStatus struct {
 	// - "Available": the resource is fully functional and ready to use
 	// - "Progressing": the resource is being created or updated
 	// - "Degraded": the resource failed to reach or maintain its desired state
+	// - "Valid": the workspace configuration passes all validation checks (template, quota, etc.)
 	//
 	// The status of each condition is one of True, False, or Unknown.
 	// +listType=map

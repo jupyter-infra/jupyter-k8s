@@ -87,10 +87,10 @@ func (rm *ResourceManager) getPVC(ctx context.Context, workspace *workspacesv1al
 }
 
 // CreateDeployment creates a new deployment for the Workspace
-func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*appsv1.Deployment, error) {
+func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
 	logger := logf.FromContext(ctx)
 
-	deployment, err := rm.deploymentBuilder.BuildDeployment(workspace)
+	deployment, err := rm.deploymentBuilder.BuildDeployment(ctx, workspace, resolvedTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build deployment: %w", err)
 	}
@@ -113,8 +113,6 @@ func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *work
 	if err := rm.client.Create(ctx, deployment); err != nil {
 		return nil, fmt.Errorf("failed to create deployment: %w", err)
 	}
-	logger.Info("Successfully initiated creating of Deployment",
-		"deployment", deployment.Name)
 
 	return deployment, nil
 }
@@ -136,17 +134,14 @@ func (rm *ResourceManager) createService(ctx context.Context, workspace *workspa
 		return nil, fmt.Errorf("failed to create service: %w", err)
 	}
 
-	logger.Info("Successfully initated creation of Service",
-		"service", service.Name)
-
 	return service, nil
 }
 
 // createPVC creates a new PVC for the Workspace
-func (rm *ResourceManager) createPVC(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*corev1.PersistentVolumeClaim, error) {
+func (rm *ResourceManager) createPVC(ctx context.Context, workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
 	logger := logf.FromContext(ctx)
 
-	pvc, err := rm.pvcBuilder.BuildPVC(workspace)
+	pvc, err := rm.pvcBuilder.BuildPVC(workspace, resolvedTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build PVC: %w", err)
 	}
@@ -163,9 +158,6 @@ func (rm *ResourceManager) createPVC(ctx context.Context, workspace *workspacesv
 		return nil, fmt.Errorf("failed to create PVC: %w", err)
 	}
 
-	logger.Info("Successfully initiated creation of PVC",
-		"pvc", pvc.Name)
-
 	return pvc, nil
 }
 
@@ -181,9 +173,6 @@ func (rm *ResourceManager) deleteDeployment(ctx context.Context, deployment *app
 		return fmt.Errorf("failed to delete deployment: %w", err)
 	}
 
-	logger.Info("Successfully initiated deletion of Deployment",
-		"deployment", deployment.Name)
-
 	return nil
 }
 
@@ -198,9 +187,6 @@ func (rm *ResourceManager) deleteService(ctx context.Context, service *corev1.Se
 	if err := rm.client.Delete(ctx, service); err != nil {
 		return fmt.Errorf("failed to delete service: %w", err)
 	}
-
-	logger.Info("Successfully initiated deletion of Service",
-		"service", service.Name)
 
 	return nil
 }
@@ -260,11 +246,11 @@ func (rm *ResourceManager) IsServiceMissingOrDeleting(service *corev1.Service) b
 }
 
 // EnsureDeploymentExists creates a deployment if it doesn't exist
-func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*appsv1.Deployment, error) {
+func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
 	deployment, err := rm.getDeployment(ctx, workspace)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return rm.createDeployment(ctx, workspace)
+			return rm.createDeployment(ctx, workspace, resolvedTemplate)
 		}
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
@@ -315,15 +301,20 @@ func (rm *ResourceManager) EnsureServiceDeleted(ctx context.Context, workspace *
 }
 
 // EnsurePVCExists creates a PVC if it doesn't exist
-func (rm *ResourceManager) EnsurePVCExists(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*corev1.PersistentVolumeClaim, error) {
-	if workspace.Spec.Storage == nil {
-		return nil, nil // No storage requested
+// It uses workspace storage if specified, otherwise falls back to template storage configuration
+func (rm *ResourceManager) EnsurePVCExists(ctx context.Context, workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
+	// Check if storage is needed from either workspace or template
+	hasStorage := workspace.Spec.Storage != nil ||
+		(resolvedTemplate != nil && resolvedTemplate.StorageConfiguration != nil)
+
+	if !hasStorage {
+		return nil, nil // No storage requested from either source
 	}
 
 	pvc, err := rm.getPVC(ctx, workspace)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return rm.createPVC(ctx, workspace)
+			return rm.createPVC(ctx, workspace, resolvedTemplate)
 		}
 		return nil, fmt.Errorf("failed to get PVC: %w", err)
 	}

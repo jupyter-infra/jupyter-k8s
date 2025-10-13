@@ -1,5 +1,8 @@
 ## Append samples of your project ##
 resources:
-- servers_v1alpha1_workspace.yaml
-- servers_v1alpha1_workspace_stopped.yaml
+- workspaces_v1alpha1_workspace.yaml
+- workspaces_v1alpha1_workspace_stopped.yaml
+- workspaces_v1alpha1_workspace_with_storage.yaml
+- workspaces_v1alpha1_workspace_with_template.yaml
+- workspaces_v1alpha1_workspacetemplate_production.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

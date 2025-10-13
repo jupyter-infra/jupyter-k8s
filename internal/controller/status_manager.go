@@ -133,6 +133,82 @@ func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, workspace *works
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
+// SetValid sets the Valid condition to true when all policy checks pass
+func (sm *StatusManager) SetValid(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
+	validCondition := NewCondition(
+		ConditionTypeValid,
+		metav1.ConditionTrue,
+		ReasonAllChecksPass,
+		"All validation checks passed",
+	)
+
+	// Successful validation means no system errors
+	degradedCondition := NewCondition(
+		ConditionTypeDegraded,
+		metav1.ConditionFalse,
+		ReasonNoError,
+		"No errors detected",
+	)
+
+	conditions := []metav1.Condition{validCondition, degradedCondition}
+	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
+}
+
+// SetInvalid sets the Valid condition to false when policy validation fails
+func (sm *StatusManager) SetInvalid(ctx context.Context, workspace *workspacesv1alpha1.Workspace, validation *TemplateValidationResult) error {
+	// Build violation message
+	message := fmt.Sprintf("Validation failed: %d violation(s)", len(validation.Violations))
+	if len(validation.Violations) > 0 {
+		// Include first violation in message for visibility
+		v := validation.Violations[0]
+		message = fmt.Sprintf("%s. First: %s at %s (allowed: %s, actual: %s)",
+			message, v.Message, v.Field, v.Allowed, v.Actual)
+	}
+
+	validCondition := NewCondition(
+		ConditionTypeValid,
+		metav1.ConditionFalse,
+		ReasonTemplateViolation,
+		message,
+	)
+
+	// Policy violations are user errors, not system degradation
+	// Degraded is for system issues (controller failures, k8s API errors, etc.)
+	// Invalid config should only affect Available, not Degraded
+	degradedCondition := NewCondition(
+		ConditionTypeDegraded,
+		metav1.ConditionFalse,
+		ReasonTemplateViolation,
+		"No system errors detected",
+	)
+
+	availableCondition := NewCondition(
+		ConditionTypeAvailable,
+		metav1.ConditionFalse,
+		ReasonTemplateViolation,
+		"Validation failed",
+	)
+
+	// Set Progressing to false
+	progressingCondition := NewCondition(
+		ConditionTypeProgressing,
+		metav1.ConditionFalse,
+		ReasonTemplateViolation,
+		"Validation failed",
+	)
+
+	conditions := []metav1.Condition{
+		validCondition,
+		degradedCondition,
+		availableCondition,
+		progressingCondition,
+	}
+
+	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
+}
+
 // UpdateRunningStatus sets the Available condition to true and Progressing to false
 func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
 	// ensure AvailableCondition is set to true with ReasonResourcesReady

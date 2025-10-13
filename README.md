@@ -76,6 +76,72 @@ kubectl apply -k config/samples/
 
 >**NOTE**: Ensure that the samples has default values to test it out.
 
+### Workspace Templates
+
+Jupyter Workspace Templates provide standardized, reusable configurations for Jupyter Workspaces. Platform administrators can define approved environments with resource limits, allowed container images, storage configuration, and environment variables, while giving users flexibility within those boundaries.
+
+**Immutability:** Both `WorkspaceTemplate.spec` AND `Workspace.templateRef` are immutable after creation (enforced by CEL validation). To update a template, create a new version with a different name (e.g., `production-v2`). This ensures workspaces maintain stable, predictable configurations throughout their lifecycle.
+
+**Deletion Protection:** WorkspaceTemplates use a lazy finalizer pattern following Kubernetes best practices:
+- Finalizers are automatically added when first workspace references the template
+- Templates cannot be deleted while active workspaces use them
+- Finalizers are automatically removed when all workspaces are deleted
+- This prevents orphaned workspaces without burdening unused templates
+
+To delete a template:
+1. Delete all workspaces using the template: `kubectl delete workspace <name>`
+2. Wait for workspaces to finish deleting (they will complete in background)
+3. Delete the template: `kubectl delete workspacetemplate <name>`
+
+Templates are validated by the controller during reconciliation. Invalid workspaces are created but marked with `Valid=False` condition and will not deploy pods until validation passes. This ensures no compute resources are wasted on invalid configurations.
+
+**Validation Rules**
+- Allowed Images: Only container images in the `allowedImages` list are permitted
+- Resource Bounds: CPU, memory, and GPU requests/limits must be within `resourceBounds` (min/max)
+- Storage Bounds: Workspace storage must be within `primaryStorage.minSize` and `maxSize`
+
+**Cluster-Scoped Templates**
+
+WorkspaceTemplates are cluster-scoped resources, meaning they can be referenced by Workspaces in any namespace. This allows platform administrators to define organization-wide templates accessible across all teams.
+
+**Configuration Inheritance**
+
+Workspaces inherit configuration from templates when not explicitly specified:
+- Storage: If workspace doesn't specify storage, uses template's `primaryStorage.defaultSize`
+- Resources: If workspace doesn't specify resources, uses template's `defaultResources`
+- Image: If workspace doesn't specify image, uses template's `defaultImage`
+
+**Overriding Template Defaults**
+
+Workspaces can override template values by specifying them directly in the spec (must still satisfy validation rules):
+```yaml
+spec:
+  templateRef: "production-notebook-template"
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "384Mi"
+  storage:
+    size: "5Gi"
+```
+
+**Create a template with resource limits and security policies:**
+```sh
+kubectl apply -f config/samples/workspaces_v1alpha1_workspacetemplate_production.yaml
+kubectl get workspacetemplates
+```
+
+**Create a workspace using the template:**
+```sh
+kubectl apply -f config/samples/workspaces_v1alpha1_workspace_with_template.yaml
+```
+
+**Check validation status:**
+```sh
+kubectl get workspace workspace-with-template -o jsonpath='{.status.conditions[?(@.type=="Valid")]}'
+```
+
+
 ### To Uninstall
 **Delete the instances (CRs) from the cluster:**
 
@@ -194,7 +260,7 @@ make test
 
 **Generate the helm chart**
 ```sh
-test helm-generate
+make helm-generate
 ```
 
 **Run the end-to-end tests**

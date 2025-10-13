@@ -20,6 +20,9 @@ const (
 
 	// ConditionTypeStopped indicates if the Workspace is in a stopped state
 	ConditionTypeStopped = "Stopped"
+
+	// ConditionTypeValid indicates if the Workspace configuration passes all validation checks
+	ConditionTypeValid = "Valid"
 )
 
 // Condition reasons for Workspace resources
@@ -42,6 +45,12 @@ const (
 	ReasonDeploymentError = "ComputeError"
 	ReasonServiceError    = "ServiceError"
 	ReasonNoError         = "NoError"
+
+	// ConditionTypeValid reasons
+	ReasonAllChecksPass          = "AllChecksPass"
+	ReasonTemplateViolation      = "TemplateViolation"
+	ReasonExecutionProfileDenied = "ExecutionProfileDenied" // Future use
+	ReasonQuotaExceeded          = "QuotaExceeded"          // Future use
 )
 
 // NewCondition creates a new condition with the specified status

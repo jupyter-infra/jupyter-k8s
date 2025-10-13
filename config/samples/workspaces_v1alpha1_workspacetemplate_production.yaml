@@ -1,0 +1,37 @@
+# Example WorkspaceTemplate for production use
+apiVersion: workspaces.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: production-notebook-template
+spec:
+  displayName: "Production Jupyter Notebook"
+  description: "Secure, resource-controlled notebook for production workloads"
+  defaultImage: "jk8s-application-jupyter-uv:latest"
+  allowedImages:
+    - "jk8s-application-jupyter-uv:latest"
+  defaultResources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  resourceBounds:
+    cpu:
+      min: "100m"
+      max: "2"
+    memory:
+      min: "128Mi"
+      max: "4Gi"
+    gpu:
+      min: "0"
+      max: "1"
+  primaryStorage:
+    defaultSize: "1Gi"
+    minSize: "100Mi"
+    maxSize: "20Gi"
+  environmentVariables:
+    - name: JUPYTER_ENABLE_LAB
+      value: "yes"
+    - name: ENVIRONMENT
+      value: "production"
