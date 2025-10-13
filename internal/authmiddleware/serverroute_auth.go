@@ -54,18 +54,8 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	// passing full_path would fallback to `app_path` anyway
 	s.cookieManager.SetCookie(w, token, appPath)
 
-	// Generate CSRF token for the form
-	csrfToken := s.cookieManager.GenerateCSRFToken(r)
-
-	// Create response with CSRF token
-	response := map[string]string{
-		"user":       user,
-		"username":   preferredUsername,
-		"groups":     groups,
-		"path":       fullPath,
-		"app_path":   appPath,
-		"csrf_token": csrfToken,
-	}
+	// Create empty response
+	response := map[string]string{}
 
 	// Determine redirect URL if provided in query
 	redirectURL := r.URL.Query().Get("redirect")

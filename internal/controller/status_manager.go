@@ -53,6 +53,7 @@ type WorkspaceRunningReadiness struct {
 	computeReady         bool
 	serviceReady         bool
 	accessResourcesReady bool
+	TemplateValid        bool
 }
 
 // UpdateStartingStatus sets Available to false and Progressing to true
@@ -133,30 +134,12 @@ func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, workspace *works
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
-// SetValid sets the Valid condition to true when all policy checks pass
-func (sm *StatusManager) SetValid(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
-	validCondition := NewCondition(
-		ConditionTypeValid,
-		metav1.ConditionTrue,
-		ReasonAllChecksPass,
-		"All validation checks passed",
-	)
-
-	// Successful validation means no system errors
-	degradedCondition := NewCondition(
-		ConditionTypeDegraded,
-		metav1.ConditionFalse,
-		ReasonNoError,
-		"No errors detected",
-	)
-
-	conditions := []metav1.Condition{validCondition, degradedCondition}
-	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
-}
-
 // SetInvalid sets the Valid condition to false when policy validation fails
-func (sm *StatusManager) SetInvalid(ctx context.Context, workspace *workspacesv1alpha1.Workspace, validation *TemplateValidationResult) error {
+func (sm *StatusManager) SetInvalid(
+	ctx context.Context,
+	workspace *workspacesv1alpha1.Workspace,
+	validation *TemplateValidationResult,
+	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
 	// Build violation message
 	message := fmt.Sprintf("Validation failed: %d violation(s)", len(validation.Violations))
 	if len(validation.Violations) > 0 {
@@ -205,8 +188,20 @@ func (sm *StatusManager) SetInvalid(ctx context.Context, workspace *workspacesv1
 		progressingCondition,
 	}
 
+	// checks whether a template is set
+	// if it is, it MUST have been validated before,
+	// set to valid.
+	if *workspace.Spec.TemplateRef != "" {
+		conditions = append(conditions, NewCondition(
+			ConditionTypeValid,
+			metav1.ConditionTrue,
+			ReasonAllChecksPass,
+			"All validation checks passed",
+		))
+	}
+
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
 // UpdateRunningStatus sets the Available condition to true and Progressing to false
@@ -243,12 +238,24 @@ func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, workspace *wor
 		"Workspace is running",
 	)
 
-	// Apply all conditions
+	// apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+	}
+
+	// checks whether a template is set
+	// if it is, it MUST have been validated before,
+	// set to valid.
+	if *workspace.Spec.TemplateRef != "" {
+		conditions = append(conditions, NewCondition(
+			ConditionTypeValid,
+			metav1.ConditionTrue,
+			ReasonAllChecksPass,
+			"All validation checks passed",
+		))
 	}
 
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)

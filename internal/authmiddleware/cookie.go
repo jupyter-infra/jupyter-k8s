@@ -30,7 +30,6 @@ type CookieHandler interface {
 	GetCookie(r *http.Request, path string) (string, error)
 	ClearCookie(w http.ResponseWriter, path string)
 	CSRFProtect() func(http.Handler) http.Handler
-	GenerateCSRFToken(r *http.Request) string
 }
 
 // CookieManager handles cookie operations
@@ -234,23 +233,4 @@ func (m *CookieManager) GetCSRFCookiePath(path string) string {
 // which still uses only 3 parameters
 func (m *CookieManager) getCookieName(baseName string, path string, regexPattern string) string {
 	return GetCookieName(baseName, path, regexPattern, m.maxCookiePaths)
-}
-
-// GenerateCSRFToken generates a CSRF token for the given request
-func (m *CookieManager) GenerateCSRFToken(r *http.Request) string {
-	return csrf.Token(r)
-}
-
-// MaskCSRFToken masks a CSRF token for use in a form/AJAX request
-func (m *CookieManager) MaskCSRFToken(token string) string {
-	// Since csrf.MaskToken is not directly accessible, we implement a simplified version
-	// that just returns the token as-is
-	return token
-}
-
-// UnmaskCSRFToken unmasks a CSRF token from a form/AJAX request
-func (m *CookieManager) UnmaskCSRFToken(token string) (string, error) {
-	// Since we're not actually masking tokens in our simplified implementation,
-	// just return the token as-is
-	return token, nil
 }

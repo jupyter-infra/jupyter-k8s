@@ -351,9 +351,6 @@ func TestAuthIsNotProtectedByCSRF(t *testing.T) {
 			}
 		},
 		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {},
-		GenerateCSRFTokenFunc: func(r *http.Request) string {
-			return "test-token"
-		},
 	}
 
 	// Create JWT manager mock

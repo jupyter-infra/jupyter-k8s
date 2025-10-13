@@ -148,21 +148,19 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 
 	// Create managers
 	statusManager := NewStatusManager(k8sClient)
-	templateResolver := NewTemplateResolver(k8sClient)
 	resourceManager := NewResourceManager(
 		k8sClient,
 		scheme,
-		NewDeploymentBuilder(scheme, options),
+		NewDeploymentBuilder(scheme, options, k8sClient),
 		NewServiceBuilder(scheme),
 		NewPVCBuilder(scheme),
 		NewAccessResourcesBuilder(),
 		statusManager,
 	)
 
-	// Create event recorder
+	// Create state machine
+	templateResolver := NewTemplateResolver(k8sClient)
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
-
-	// Create state machine with template resolver and event recorder
 	stateMachine := NewStateMachine(resourceManager, statusManager, templateResolver, eventRecorder)
 
 	// Create reconciler with dependencies

@@ -10,6 +10,13 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
   - persistentvolumeclaims
   - services
   verbs:
@@ -57,4 +64,20 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - workspaces.jupyter.org
+  resources:
+  - workspacetemplates
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - workspaces.jupyter.org
+  resources:
+  - workspacetemplates/finalizers
+  verbs:
+  - update
 {{- end -}}

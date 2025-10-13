@@ -80,7 +80,7 @@ type WorkspaceSpec struct {
 	// AccessStrategy specifies the WorkspaceAccessStrategy to use
 	// +optional
 	AccessStrategy *AccessStrategyRef `json:"accessStrategy,omitempty"`
-  
+
 	// TemplateRef references a WorkspaceTemplate to use as base configuration
 	// When set, template provides defaults and spec fields (Image, Resources, Storage.Size) act as overrides
 	// IMMUTABLE: Cannot be changed after workspace creation
@@ -102,7 +102,6 @@ type AccessResourceStatus struct {
 
 	// Namespace of the resource
 	Namespace string `json:"namespace"`
-
 }
 
 // WorkspaceStatus defines the observed state of Workspace.

@@ -49,11 +49,10 @@ func (m *MockJWTHandler) ShouldRefreshToken(claims *Claims) bool {
 
 // MockCookieHandler implements the CookieHandler interface for testing
 type MockCookieHandler struct {
-	SetCookieFunc         func(w http.ResponseWriter, token string, path string)
-	GetCookieFunc         func(r *http.Request, path string) (string, error)
-	ClearCookieFunc       func(w http.ResponseWriter, path string)
-	CSRFProtectFunc       func() func(http.Handler) http.Handler
-	GenerateCSRFTokenFunc func(r *http.Request) string
+	SetCookieFunc   func(w http.ResponseWriter, token string, path string)
+	GetCookieFunc   func(r *http.Request, path string) (string, error)
+	ClearCookieFunc func(w http.ResponseWriter, path string)
+	CSRFProtectFunc func() func(http.Handler) http.Handler
 }
 
 // Ensure MockCookieHandler implements the CookieHandler interface
@@ -91,12 +90,4 @@ func (m *MockCookieHandler) CSRFProtect() func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-// GenerateCSRFToken calls the mock implementation
-func (m *MockCookieHandler) GenerateCSRFToken(r *http.Request) string {
-	if m.GenerateCSRFTokenFunc != nil {
-		return m.GenerateCSRFTokenFunc(r)
-	}
-	return "mock-csrf-token"
 }

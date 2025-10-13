@@ -90,7 +90,15 @@ var _ = Describe("Event Recording", func() {
 			deploymentBuilder := NewDeploymentBuilder(k8sClient.Scheme(), options, k8sClient)
 			serviceBuilder := NewServiceBuilder(k8sClient.Scheme())
 			pvcBuilder := NewPVCBuilder(k8sClient.Scheme())
-			resourceManager := NewResourceManager(k8sClient, deploymentBuilder, serviceBuilder, pvcBuilder, statusManager)
+			accessResourceBuilder := NewAccessResourcesBuilder()
+			resourceManager := NewResourceManager(
+				k8sClient,
+				k8sClient.Scheme(),
+				deploymentBuilder,
+				serviceBuilder,
+				pvcBuilder,
+				accessResourceBuilder,
+				statusManager)
 			stateMachine = NewStateMachine(resourceManager, statusManager, templateResolver, fakeRecorder)
 
 			By("reconciling the workspace")
@@ -153,7 +161,15 @@ var _ = Describe("Event Recording", func() {
 			deploymentBuilder := NewDeploymentBuilder(k8sClient.Scheme(), options, k8sClient)
 			serviceBuilder := NewServiceBuilder(k8sClient.Scheme())
 			pvcBuilder := NewPVCBuilder(k8sClient.Scheme())
-			resourceManager := NewResourceManager(k8sClient, deploymentBuilder, serviceBuilder, pvcBuilder, statusManager)
+			accessResourceBuilder := NewAccessResourcesBuilder()
+			resourceManager := NewResourceManager(
+				k8sClient,
+				k8sClient.Scheme(),
+				deploymentBuilder,
+				serviceBuilder,
+				pvcBuilder,
+				accessResourceBuilder,
+				statusManager)
 			stateMachine = NewStateMachine(resourceManager, statusManager, templateResolver, fakeRecorder)
 
 			By("reconciling the workspace")
@@ -225,7 +241,15 @@ var _ = Describe("Event Recording", func() {
 			deploymentBuilder := NewDeploymentBuilder(k8sClient.Scheme(), options, k8sClient)
 			serviceBuilder := NewServiceBuilder(k8sClient.Scheme())
 			pvcBuilder := NewPVCBuilder(k8sClient.Scheme())
-			resourceManager := NewResourceManager(k8sClient, deploymentBuilder, serviceBuilder, pvcBuilder, statusManager)
+			accessResourceBuilder := NewAccessResourcesBuilder()
+			resourceManager := NewResourceManager(
+				k8sClient,
+				k8sClient.Scheme(),
+				deploymentBuilder,
+				serviceBuilder,
+				pvcBuilder,
+				accessResourceBuilder,
+				statusManager)
 			stateMachine = NewStateMachine(resourceManager, statusManager, templateResolver, fakeRecorder)
 
 			By("reconciling the workspace")

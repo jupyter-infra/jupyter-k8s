@@ -182,7 +182,6 @@ func TestHandleAuthHappyPath(t *testing.T) {
 	generatedToken := "generated-jwt-token"
 	tokenGenerated := false
 	cookieSet := false
-	csrfTokenGenerated := false
 
 	// Create JWT handler mock
 	jwtHandler := &MockJWTHandler{
@@ -217,10 +216,6 @@ func TestHandleAuthHappyPath(t *testing.T) {
 				t.Errorf("Expected path '%s', got '%s'", testAppPath, path)
 			}
 		},
-		GenerateCSRFTokenFunc: func(r *http.Request) string {
-			csrfTokenGenerated = true
-			return "test-csrf-token"
-		},
 	}
 
 	// Create server with mocks
@@ -250,30 +245,10 @@ func TestHandleAuthHappyPath(t *testing.T) {
 	if !cookieSet {
 		t.Error("Cookie was not set")
 	}
-	if !csrfTokenGenerated {
-		t.Error("CSRF token was not generated")
-	}
 
 	// Check JSON response
 	var response map[string]string
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse JSON response: %v", err)
-	}
-
-	// Check redirect URL in response
-	expectedRedirect := "https://example.com/dashboard"
-	if response["redirect"] != expectedRedirect {
-		t.Errorf("Expected redirect URL '%s', got '%s'", expectedRedirect, response["redirect"])
-	}
-
-	// Check other fields
-	if response["user"] != "user1" {
-		t.Errorf("Expected user 'user1', got '%s'", response["user"])
-	}
-	if response["groups"] != "org1:team1,org1:team2" {
-		t.Errorf("Expected groups 'org1:team1,org1:team2', got '%s'", response["groups"])
-	}
-	if response["csrf_token"] != "test-csrf-token" {
-		t.Errorf("Expected csrf_token 'test-csrf-token', got '%s'", response["csrf_token"])
 	}
 }

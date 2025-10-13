@@ -124,7 +124,7 @@ func (m *JWTManager) RefreshToken(claims *Claims) (string, error) {
 	now := time.Now().UTC()
 	claims.RegisteredClaims = jwt5.RegisteredClaims{
 		ExpiresAt: jwt5.NewNumericDate(now.Add(m.expiration)),
-		IssuedAt:  jwt5.NewNumericDate(now),
+		IssuedAt:  claims.IssuedAt, // keep the original issue date
 		NotBefore: jwt5.NewNumericDate(now),
 		Issuer:    m.issuer,
 		Audience:  []string{m.audience},

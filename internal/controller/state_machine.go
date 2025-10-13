@@ -120,15 +120,15 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 		} else {
 			// All resources are fully deleted, update to stopped status
 			logger.Info("Deployment and Service are both deleted, updating to Stopped status")
-      
-      // Record workspace stopped event
-		  sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceStopped", "Workspace has been stopped")
-      
+
+			// Record workspace stopped event
+			sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceStopped", "Workspace has been stopped")
+
 			if err := sm.statusManager.UpdateStoppedStatus(ctx, workspace, snapshotStatus); err != nil {
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
-    }
+		}
 	}
 
 	// If EITHER deployment OR service is still in the process of being deleted
@@ -166,7 +166,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	logger.Info("Attempting to bring Workspace status to 'Running'")
 
 	// Validate template BEFORE creating any resources
-	resolvedTemplate, shouldContinue, err := sm.handleTemplateValidation(ctx, workspace)
+	resolvedTemplate, shouldContinue, err := sm.handleTemplateValidation(ctx, workspace, snapshotStatus)
 	if !shouldContinue {
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 	}
@@ -224,10 +224,10 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 
 		// Then only update to running status
 		logger.Info("Deployment and Service are both ready, updating to Running status")
-    
+
 		// Record workspace running event
 		sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceRunning", "Workspace is now running")
-    
+
 		if err := sm.statusManager.UpdateRunningStatus(ctx, workspace, snapshotStatus); err != nil {
 			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 		}
@@ -256,7 +256,10 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 // handleTemplateValidation validates the workspace's template reference and handles all validation outcomes.
 // If validation fails or encounters a system error, it updates the workspace status and returns shouldContinue=false.
 // On success, it returns the resolved template with shouldContinue=true.
-func (sm *StateMachine) handleTemplateValidation(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (template *ResolvedTemplate, shouldContinue bool, err error) {
+func (sm *StateMachine) handleTemplateValidation(
+	ctx context.Context,
+	workspace *workspacesv1alpha1.Workspace,
+	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) (template *ResolvedTemplate, shouldContinue bool, err error) {
 	logger := logf.FromContext(ctx)
 
 	// No template reference - continue with default configuration
@@ -268,7 +271,8 @@ func (sm *StateMachine) handleTemplateValidation(ctx context.Context, workspace 
 	if err != nil {
 		// System error (couldn't fetch template, etc.)
 		logger.Error(err, "Failed to validate template")
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, err.Error()); statusErr != nil {
+		if statusErr := sm.statusManager.UpdateErrorStatus(
+			ctx, workspace, ReasonDeploymentError, err.Error(), snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
 		return nil, false, err
@@ -283,7 +287,7 @@ func (sm *StateMachine) handleTemplateValidation(ctx context.Context, workspace 
 		message := fmt.Sprintf("Validation failed for %s with %d violations", templateName, len(validation.Violations))
 		sm.recorder.Event(workspace, corev1.EventTypeWarning, "ValidationFailed", message)
 
-		if statusErr := sm.statusManager.SetInvalid(ctx, workspace, validation); statusErr != nil {
+		if statusErr := sm.statusManager.SetInvalid(ctx, workspace, validation, snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update validation status")
 		}
 		// No error - successful policy enforcement
@@ -297,10 +301,6 @@ func (sm *StateMachine) handleTemplateValidation(ctx context.Context, workspace 
 	templateName := *workspace.Spec.TemplateRef
 	message := "Validation passed for " + templateName
 	sm.recorder.Event(workspace, corev1.EventTypeNormal, "Validated", message)
-
-	if statusErr := sm.statusManager.SetValid(ctx, workspace); statusErr != nil {
-		logger.Error(statusErr, "Failed to update validation status")
-	}
 
 	return validation.Template, true, nil
 }

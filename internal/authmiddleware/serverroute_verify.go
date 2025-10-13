@@ -24,7 +24,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get token from cookie, try path-specific cookie first, then fall back to default
+	// Get path-specific cookie by hashing full path, retrieve embedded JWT
 	token, err := s.cookieManager.GetCookie(r, requestPath)
 	if err != nil {
 		s.logger.Info("No auth cookie found", "error", err, "path", requestPath)
