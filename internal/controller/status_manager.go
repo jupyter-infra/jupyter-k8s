@@ -110,13 +110,23 @@ func (sm *StatusManager) UpdateStartingStatus(
 		"Workspace is starting",
 	)
 
+	// if we got here, validation passed
+	validCondition := NewCondition(
+		ConditionTypeValid,
+		metav1.ConditionTrue,
+		ReasonAllChecksPass,
+		"All validation checks passed",
+	)
+
 	// Apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+		validCondition,
 	}
+
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
@@ -188,18 +198,6 @@ func (sm *StatusManager) SetInvalid(
 		progressingCondition,
 	}
 
-	// checks whether a template is set
-	// if it is, it MUST have been validated before,
-	// set to valid.
-	if *workspace.Spec.TemplateRef != "" {
-		conditions = append(conditions, NewCondition(
-			ConditionTypeValid,
-			metav1.ConditionTrue,
-			ReasonAllChecksPass,
-			"All validation checks passed",
-		))
-	}
-
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
@@ -238,24 +236,21 @@ func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, workspace *wor
 		"Workspace is running",
 	)
 
+	// if we got here, validation passed
+	validCondition := NewCondition(
+		ConditionTypeValid,
+		metav1.ConditionTrue,
+		ReasonAllChecksPass,
+		"All validation checks passed",
+	)
+
 	// apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
-	}
-
-	// checks whether a template is set
-	// if it is, it MUST have been validated before,
-	// set to valid.
-	if *workspace.Spec.TemplateRef != "" {
-		conditions = append(conditions, NewCondition(
-			ConditionTypeValid,
-			metav1.ConditionTrue,
-			ReasonAllChecksPass,
-			"All validation checks passed",
-		))
+		validCondition,
 	}
 
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
@@ -317,12 +312,21 @@ func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, workspace *wo
 		stoppingMessage,
 	)
 
+	// if we got here, validation passed
+	validCondition := NewCondition(
+		ConditionTypeValid,
+		metav1.ConditionTrue,
+		ReasonAllChecksPass,
+		"All validation checks passed",
+	)
+
 	// Apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+		validCondition,
 	}
 
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
@@ -363,12 +367,21 @@ func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, workspace *wor
 		"Workspace is stopped",
 	)
 
+	// if we got here, validation passed
+	validCondition := NewCondition(
+		ConditionTypeValid,
+		metav1.ConditionTrue,
+		ReasonAllChecksPass,
+		"All validation checks passed",
+	)
+
 	// Apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+		validCondition,
 	}
 
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)

@@ -39,6 +39,9 @@ type WorkspaceControllerOptions struct {
 
 	// Registry is the prefix to use for all application images
 	ApplicationImagesRegistry string
+
+	// Flag to indicate whether to watch traefik resource (for AccessStrategy)
+	WatchTraefik bool
 }
 
 // WorkspaceReconciler reconciles a Workspace object
@@ -118,27 +121,31 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Create an IngressRoute unstructured object for watching
-	ingressRouteGVK := &unstructured.Unstructured{}
-	ingressRouteGVK.SetAPIVersion("traefik.io/v1alpha1")
-	ingressRouteGVK.SetKind("IngressRoute")
-
-	// Create a Middleware unstructured object for watching
-	middlewareGVK := &unstructured.Unstructured{}
-	middlewareGVK.SetAPIVersion("traefik.io/v1alpha1")
-	middlewareGVK.SetKind("Middleware")
-
-	return ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&workspacesv1alpha1.Workspace{}).
 		Named("workspace").
 		// Watch for standard Kubernetes resources
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
-		Owns(&corev1.PersistentVolumeClaim{}).
-		// Watch for Traefik resources created by templates
-		Owns(ingressRouteGVK).
-		Owns(middlewareGVK).
-		Complete(r)
+		Owns(&corev1.PersistentVolumeClaim{})
+
+	// Optional traefik configuration
+	// require traefik CRD to be installed
+	if r.options.WatchTraefik {
+		// Create an IngressRoute unstructured object for watching
+		ingressRouteGVK := &unstructured.Unstructured{}
+		ingressRouteGVK.SetAPIVersion("traefik.io/v1alpha1")
+		ingressRouteGVK.SetKind("IngressRoute")
+
+		// Create a Middleware unstructured object for watching
+		middlewareGVK := &unstructured.Unstructured{}
+		middlewareGVK.SetAPIVersion("traefik.io/v1alpha1")
+		middlewareGVK.SetKind("Middleware")
+
+		builder.Owns(ingressRouteGVK).Owns(middlewareGVK)
+	}
+
+	return builder.Complete(r)
 }
 
 // SetupWorkspaceController sets up the controller with the Manager and specified options

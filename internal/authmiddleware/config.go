@@ -19,11 +19,12 @@ const (
 	EnvTrustedProxies  = "TRUSTED_PROXIES"
 
 	// Auth configuration
-	EnvJwtSigningKey    = "JWT_SIGNING_KEY"
-	EnvJwtIssuer        = "JWT_ISSUER"
-	EnvJwtAudience      = "JWT_AUDIENCE"
-	EnvJwtExpiration    = "JWT_EXPIRATION"
-	EnvJwtRefreshWindow = "JWT_REFRESH_WINDOW"
+	EnvJwtSigningKey     = "JWT_SIGNING_KEY"
+	EnvJwtIssuer         = "JWT_ISSUER"
+	EnvJwtAudience       = "JWT_AUDIENCE"
+	EnvJwtExpiration     = "JWT_EXPIRATION"
+	EnvJwtRefreshWindow  = "JWT_REFRESH_WINDOW"
+	EnvJwtRefreshHorizon = "JWT_REFRESH_HORIZON"
 
 	// Cookie configuration
 	EnvCookieName     = "COOKIE_NAME"
@@ -59,10 +60,11 @@ const (
 	// DefaultTrustedProxies is a slice, defined in createDefaultConfig
 
 	// Auth defaults
-	DefaultJwtIssuer        = "workspaces-auth"
-	DefaultJwtAudience      = "workspace-users"
-	DefaultJwtExpiration    = 1 * time.Hour
-	DefaultJwtRefreshWindow = 15 * time.Minute // 25% of the default expiration
+	DefaultJwtIssuer         = "workspaces-auth"
+	DefaultJwtAudience       = "workspace-users"
+	DefaultJwtExpiration     = 1 * time.Hour
+	DefaultJwtRefreshWindow  = 15 * time.Minute // 25% of the default expiration
+	DefaultJwtRefreshHorizon = 12 * time.Hour
 
 	// Cookie defaults
 	DefaultCookieName     = "workspace_auth"
@@ -96,11 +98,12 @@ type Config struct {
 	TrustedProxies  []string
 
 	// Auth configuration
-	JWTSigningKey    string
-	JWTIssuer        string
-	JWTAudience      string
-	JWTExpiration    time.Duration
-	JWTRefreshWindow time.Duration // Window before expiration when tokens should be refreshed
+	JWTSigningKey     string
+	JWTIssuer         string
+	JWTAudience       string
+	JWTExpiration     time.Duration
+	JWTRefreshWindow  time.Duration
+	JWTRefreshHorizon time.Duration
 
 	// Cookie configuration
 	CookieName     string
@@ -166,10 +169,11 @@ func createDefaultConfig() *Config {
 		TrustedProxies:  []string{"127.0.0.1", "::1"}, // Default trusted proxies
 
 		// Auth defaults
-		JWTIssuer:        DefaultJwtIssuer,
-		JWTAudience:      DefaultJwtAudience,
-		JWTExpiration:    DefaultJwtExpiration,
-		JWTRefreshWindow: DefaultJwtRefreshWindow,
+		JWTIssuer:         DefaultJwtIssuer,
+		JWTAudience:       DefaultJwtAudience,
+		JWTExpiration:     DefaultJwtExpiration,
+		JWTRefreshWindow:  DefaultJwtRefreshWindow,
+		JWTRefreshHorizon: DefaultJwtRefreshHorizon,
 
 		// Cookie defaults
 		CookieName:     DefaultCookieName,
@@ -268,9 +272,22 @@ func applyJWTConfig(config *Config) error {
 		config.JWTRefreshWindow = d
 	}
 
+	if refreshHorizon := os.Getenv(EnvJwtRefreshHorizon); refreshHorizon != "" {
+		d, err := time.ParseDuration(refreshHorizon)
+		if err != nil {
+			return fmt.Errorf("invalid %s: %w", EnvJwtRefreshHorizon, err)
+		}
+		config.JWTRefreshHorizon = d
+	}
+
 	// Validate that JWTExpiration >= JWTRefreshWindow
 	if config.JWTRefreshWindow > config.JWTExpiration {
 		return fmt.Errorf("JWT refresh window (%s) must be less than or equal to JWT expiration (%s)",
+			config.JWTRefreshWindow, config.JWTExpiration)
+	}
+
+	if config.JWTExpiration > config.JWTRefreshHorizon {
+		return fmt.Errorf("JWT refresh horizon (%s) must be greater or equal to JWT expiration (%s)",
 			config.JWTRefreshWindow, config.JWTExpiration)
 	}
 

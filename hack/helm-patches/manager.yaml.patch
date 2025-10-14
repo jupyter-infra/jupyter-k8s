@@ -4,3 +4,6 @@
             {{- end }}
             - --application-images-pull-policy={{ .Values.application.imagesPullPolicy }}
             - --application-images-registry={{ .Values.application.imagesRegistry }}
+            {{- if .Values.traefik.enable }}
+            - --watch-traefik
+            {{- end}}

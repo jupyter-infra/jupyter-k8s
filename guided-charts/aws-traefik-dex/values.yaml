@@ -160,6 +160,7 @@ authmiddleware:
   jwtAudience: "workspace-users"
   jwtExpiration: "1h"
   jwtRefreshWindow: "15m"
+  jwtRefreshHorizon: "12h"
   # Cookie configuration
   cookieName: "workspace_auth"
   cookieSecure: "true"

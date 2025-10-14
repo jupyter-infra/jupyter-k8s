@@ -83,6 +83,8 @@ spec:
             value: "{{ .Values.authmiddleware.jwtExpiration }}"
           - name: JWT_REFRESH_WINDOW
             value: "{{ .Values.authmiddleware.jwtRefreshWindow }}"
+          - name: JWT_REFRESH_HORIZON
+            value: "{{ .Values.authmiddleware.jwtRefreshHorizon }}"
           - name: COOKIE_NAME
             value: "{{ .Values.authmiddleware.cookieName }}"
           - name: COOKIE_SECURE

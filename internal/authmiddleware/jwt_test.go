@@ -450,6 +450,7 @@ func TestRefreshToken(t *testing.T) {
 func TestShouldRefreshToken(t *testing.T) {
 	// Set default refresh window for all tests
 	const refreshWindow = 15 * time.Minute
+	const refreshHorizon = 12 * time.Hour
 
 	// Get current time for test cases
 	now := time.Now().UTC()
@@ -478,6 +479,7 @@ func TestShouldRefreshToken(t *testing.T) {
 			name: "expired token",
 			claims: &Claims{
 				RegisteredClaims: jwt5.RegisteredClaims{
+					IssuedAt:  jwt5.NewNumericDate(now.Add(-6 * time.Hour)),
 					ExpiresAt: jwt5.NewNumericDate(now.Add(-10 * time.Minute)),
 				},
 			},
@@ -487,6 +489,7 @@ func TestShouldRefreshToken(t *testing.T) {
 			name: "token not in refresh window",
 			claims: &Claims{
 				RegisteredClaims: jwt5.RegisteredClaims{
+					IssuedAt:  jwt5.NewNumericDate(now.Add(-6 * time.Hour)),
 					ExpiresAt: jwt5.NewNumericDate(now.Add(20 * time.Minute)),
 				},
 			},
@@ -496,6 +499,7 @@ func TestShouldRefreshToken(t *testing.T) {
 			name: "token within refresh window",
 			claims: &Claims{
 				RegisteredClaims: jwt5.RegisteredClaims{
+					IssuedAt:  jwt5.NewNumericDate(now.Add(-6 * time.Hour)),
 					ExpiresAt: jwt5.NewNumericDate(now.Add(10 * time.Minute)),
 				},
 			},
@@ -505,10 +509,21 @@ func TestShouldRefreshToken(t *testing.T) {
 			name: "token at edge of refresh window",
 			claims: &Claims{
 				RegisteredClaims: jwt5.RegisteredClaims{
+					IssuedAt:  jwt5.NewNumericDate(now.Add(-6 * time.Hour)),
 					ExpiresAt: jwt5.NewNumericDate(now.Add(15 * time.Minute)),
 				},
 			},
 			want: true,
+		},
+		{
+			name: "token in refresh window but beyond refresh horizon",
+			claims: &Claims{
+				RegisteredClaims: jwt5.RegisteredClaims{
+					IssuedAt:  jwt5.NewNumericDate(now.Add(-24 * time.Hour)),
+					ExpiresAt: jwt5.NewNumericDate(now.Add(5 * time.Minute)),
+				},
+			},
+			want: false,
 		},
 	}
 
@@ -516,11 +531,12 @@ func TestShouldRefreshToken(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a JWT manager with the configured refresh window
 			cfg := &Config{
-				JWTSigningKey:    "test-key",
-				JWTIssuer:        "test-issuer",
-				JWTAudience:      "test-audience",
-				JWTExpiration:    60 * time.Minute,
-				JWTRefreshWindow: refreshWindow,
+				JWTSigningKey:     "test-key",
+				JWTIssuer:         "test-issuer",
+				JWTAudience:       "test-audience",
+				JWTExpiration:     60 * time.Minute,
+				JWTRefreshWindow:  refreshWindow,
+				JWTRefreshHorizon: refreshHorizon,
 			}
 			jwtManager := NewJWTManager(cfg)
 
@@ -540,31 +556,35 @@ func TestShouldRefreshTokenWithDifferentWindows(t *testing.T) {
 	// Create a token that expires in 30 minutes
 	claims := &Claims{
 		RegisteredClaims: jwt5.RegisteredClaims{
+			IssuedAt:  jwt5.NewNumericDate(now.Add(-120 * time.Minute)),
 			ExpiresAt: jwt5.NewNumericDate(now.Add(30 * time.Minute)),
 		},
 	}
 
 	// Test with different refresh windows
 	testCases := []struct {
-		refreshWindow time.Duration
-		want          bool
+		refreshWindow  time.Duration
+		refreshHorizon time.Duration
+		want           bool
 	}{
-		{5 * time.Minute, false},  // 5 minute window, token not due for refresh
-		{25 * time.Minute, false}, // 25 minute window, token not due for refresh
-		{30 * time.Minute, true},  // 30 minute window, token exactly at the refresh boundary
-		{35 * time.Minute, true},  // 35 minute window, token within refresh window
-		{60 * time.Minute, true},  // Full expiration time, token definitely within window
+		{5 * time.Minute, 12 * time.Hour, false},  // 5 minute window, 12 hours horizon, token not due for refresh
+		{25 * time.Minute, 12 * time.Hour, false}, // 25 minute window, 12 hours horizon, token not due for refresh
+		{30 * time.Minute, 12 * time.Hour, true},  // 30 minute window, 12 hours horizon, token exactly at the refresh boundary
+		{35 * time.Minute, 12 * time.Hour, true},  // 35 minute window, 12 hours horizon, token within refresh window
+		{60 * time.Minute, 12 * time.Hour, true},  // Full expiration time, 12 hours horizon, token definitely within window
+		{35 * time.Minute, 1 * time.Hour, false},  // 35 minute window, 1 hour horizon, should not refresh
 	}
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("refresh window %v", tc.refreshWindow), func(t *testing.T) {
 			// Create a JWT manager with this specific refresh window
 			cfg := &Config{
-				JWTSigningKey:    "test-key",
-				JWTIssuer:        "test-issuer",
-				JWTAudience:      "test-audience",
-				JWTExpiration:    60 * time.Minute,
-				JWTRefreshWindow: tc.refreshWindow,
+				JWTSigningKey:     "test-key",
+				JWTIssuer:         "test-issuer",
+				JWTAudience:       "test-audience",
+				JWTExpiration:     60 * time.Minute,
+				JWTRefreshWindow:  tc.refreshWindow,
+				JWTRefreshHorizon: tc.refreshHorizon,
 			}
 			jwtManager := NewJWTManager(cfg)
 

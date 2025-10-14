@@ -29,21 +29,23 @@ type JWTHandler interface {
 
 // JWTManager handles JWT token creation and validation
 type JWTManager struct {
-	signingKey    []byte
-	issuer        string
-	audience      string
-	expiration    time.Duration
-	refreshWindow time.Duration
+	signingKey     []byte
+	issuer         string
+	audience       string
+	expiration     time.Duration
+	refreshWindow  time.Duration
+	refreshHorizon time.Duration
 }
 
 // NewJWTManager creates a new JWTManager
 func NewJWTManager(cfg *Config) *JWTManager {
 	return &JWTManager{
-		signingKey:    []byte(cfg.JWTSigningKey),
-		issuer:        cfg.JWTIssuer,
-		audience:      cfg.JWTAudience,
-		expiration:    cfg.JWTExpiration,
-		refreshWindow: cfg.JWTRefreshWindow,
+		signingKey:     []byte(cfg.JWTSigningKey),
+		issuer:         cfg.JWTIssuer,
+		audience:       cfg.JWTAudience,
+		expiration:     cfg.JWTExpiration,
+		refreshWindow:  cfg.JWTRefreshWindow,
+		refreshHorizon: cfg.JWTRefreshHorizon,
 	}
 }
 
@@ -153,12 +155,20 @@ func (m *JWTManager) ShouldRefreshToken(claims *Claims) bool {
 	now := time.Now().UTC()
 	expiryTime := claims.ExpiresAt.Time
 	remainingTime := expiryTime.Sub(now)
-
 	// If token is already expired, don't attempt to refresh it
 	if remainingTime <= 0 {
 		return false
 	}
 
-	// Refresh if the remaining time is less than the refresh window
-	return remainingTime <= m.refreshWindow
+	// Do not refresh if not yet in refresh window (issued or refreshed recently)
+	if remainingTime > m.refreshWindow {
+		return false
+	}
+
+	// Calculate time since original issuance
+	originalIssueTime := claims.IssuedAt.Time
+	timeSinceOriginalIssuance := now.Sub(originalIssueTime)
+
+	// Refresh only if within the
+	return timeSinceOriginalIssuance < m.refreshHorizon
 }

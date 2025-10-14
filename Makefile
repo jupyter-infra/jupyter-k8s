@@ -98,8 +98,12 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 # CERT_MANAGER_INSTALL_SKIP=true
 
 # Cluster names for different environments
-KIND_CLUSTER ?= jupyter-k8s-test-e2e  # Used for automated e2e tests
-DEV_KIND_CLUSTER ?= jupyter-k8s-dev  # Used for manual development
+
+# Used for automated e2e tests
+KIND_CLUSTER ?= jupyter-k8s-test-e2e
+
+# Used for manual development
+DEV_KIND_CLUSTER ?= jupyter-k8s-dev
 
 # Set this variable to true to use local kind cluster for deployment
 USE_KIND ?= false
@@ -117,10 +121,19 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 			echo "Creating Kind cluster '$(KIND_CLUSTER)'..."; \
 			$(KIND) create cluster --name $(KIND_CLUSTER) ;; \
 	esac
-	@echo "Installing cert-manager v1.13.0..."
-	@kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
-	@echo "Waiting for cert-manager to be ready..."
-	@kubectl wait --for=condition=Available --timeout=300s deployment/cert-manager-webhook -n cert-manager
+	@if ! kubectl get namespace cert-manager > /dev/null 2>&1; then \
+		echo "Installing cert-manager"; \
+		helm repo add jetstack https://charts.jetstack.io; \
+		helm repo update; \
+		helm install cert-manager jetstack/cert-manager \
+			--namespace cert-manager \
+			--create-namespace \
+			--set installCRDs=true; \
+		echo "Waiting for cert-manager to be ready..."; \
+		kubectl wait --for=condition=Available --timeout=300s deployment/cert-manager-webhook -n cert-manager; \
+	else \
+		echo "cert-manager is already installed, skipping installation"; \
+	fi
 
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
@@ -297,6 +310,19 @@ setup-kind: ## Set up a Kind cluster for development if it does not exist
 	else \
 		echo "Local registry is already running."; \
 	fi
+	@if ! kubectl get namespace cert-manager > /dev/null 2>&1; then \
+		echo "Installing cert-manager"; \
+		helm repo add jetstack https://charts.jetstack.io; \
+		helm repo update; \
+		helm install cert-manager jetstack/cert-manager \
+			--namespace cert-manager \
+			--create-namespace \
+			--set installCRDs=true; \
+		echo "Waiting for cert-manager to be ready..."; \
+		kubectl wait --for=condition=Available --timeout=300s deployment/cert-manager-webhook -n cert-manager; \
+	else \
+		echo "cert-manager is already installed, skipping installation"; \
+	fi
 
 .PHONY: teardown-kind
 teardown-kind: ## Tear down the Kind cluster, registry, and clean up images
@@ -365,6 +391,33 @@ setup-aws-internal: ## Setup connection to remote cluster
 	@echo "Creating ECR repository for auth middleware if it doesn't exist..."
 	aws ecr describe-repositories --repository-names $(ECR_REPOSITORY_AUTH) --region $(AWS_REGION) > /dev/null || \
 	aws ecr create-repository --repository-name $(ECR_REPOSITORY_AUTH) --region $(AWS_REGION)
+
+	@if ! kubectl get namespace cert-manager > /dev/null 2>&1; then \
+		echo "Installing cert-manager"; \
+		helm repo add jetstack https://charts.jetstack.io; \
+		helm repo update; \
+		helm install cert-manager jetstack/cert-manager \
+			--namespace cert-manager \
+			--create-namespace \
+			--set installCRDs=true; \
+		echo "Waiting for cert-manager to be ready..."; \
+		kubectl wait --for=condition=Available --timeout=300s deployment/cert-manager-webhook -n cert-manager; \
+	else \
+		echo "cert-manager is already installed, skipping installation"; \
+	fi
+
+	@if ! kubectl get crds | grep traefik > /dev/null 2>&1; then \
+		echo "Installing traefik"; \
+		helm repo add traefik https://traefik.github.io/charts; \
+		helm repo update; \
+		helm install traefik-crd traefik/traefik-crds \
+			--namespace traefik \
+  			--create-namespace; \
+		echo "Successfully installed traefik CRDs"; \
+	else \
+		echo "traefik is already installed, skipping installation"; \
+	fi
+
 	@echo "Remote AWS setup complete. Credentials added to ~/.kube/config"
 
 .PHONY: setup-aws
@@ -420,7 +473,8 @@ deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remot
 		--set controllerManager.container.image.repository=$(ECR_REGISTRY)/$(ECR_REPOSITORY) \
 		--set controllerManager.container.image.tag=latest \
 		--set application.imagesPullPolicy=Always \
-		--set application.imagesRegistry=$(ECR_REGISTRY)
+		--set application.imagesRegistry=$(ECR_REGISTRY) \
+		--set traefik.enable=true
 	@echo "Helm chart jupyter-k8s deployed successfully to remote AWS cluster"
 	@echo "Restarting deployments to use new images..."
 	kubectl rollout restart deployment -n jupyter-k8s-system jupyter-k8s-controller-manager
@@ -445,8 +499,6 @@ deploy-aws-traefik-dex-internal:
 		rm -rf /tmp/jk8s-aws-traefik-dex; \
 		mkdir /tmp/jk8s-aws-traefik-dex; \
 		cp -r guided-charts/aws-traefik-dex/ /tmp/jk8s-aws-traefik-dex/; \
-		echo 'Installing traefik CRDs first'; \
-		helm upgrade --install traefik-crd traefik/traefik-crds; \
 		echo 'Deploying AWS traefik dex helm chart'; \
 		HELM_ARGS="--set domain=$$DOMAIN \
 			--set certManager.email=$$LETSENCRYPT_EMAIL \
@@ -530,9 +582,6 @@ undeploy-aws: ## Uninstall the Helm chart from remote cluster
 	helm uninstall jk8-aws-traefik-dex -n jupyter-k8s-router --ignore-not-found
 	helm uninstall traefik-crd --ignore-not-found
 	# CRDs with resource-policy: keep are not deleted by Helm, but we can find them by release name
-# 	@echo "Cleaning up CRDs with resource-policy: keep..."
-# 	kubectl get crds | grep jupyterservers | awk '{print $1}' | xargs -n1 kubectl delete crd
-	kubectl get crds --no-headers -o custom-columns=NAME:.metadata.name | grep traefik | xargs -r kubectl delete crd || true
 
 # Port forward to a specific Jupyter server
 .PHONY: port-forward

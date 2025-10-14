@@ -173,22 +173,22 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("verifying Valid condition is True")
+			By("verifying Valid condition is True within 10s (before compute is ready)")
 			verifyValid := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "workspace", "workspace-with-template",
-					"-o", "jsonpath={.status.conditions[?(@.type=='Valid')].status}")
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("True"))
 			}
 			Eventually(verifyValid).
 				WithPolling(1 * time.Second).
-				WithTimeout(10 * time.Second).
+				WithTimeout(10 * time.Second). // valid state should be set fast, before compute is ready
 				Should(Succeed())
 
 			By("verifying Degraded condition is False")
 			cmd = exec.Command("kubectl", "get", "workspace", "workspace-with-template",
-				"-o", "jsonpath={.status.conditions[?(@.type=='Degraded')].status}")
+				"-o", "jsonpath={.status.conditions[?(@.type==\"Degraded\")].status}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("False"))
@@ -239,7 +239,7 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			By("waiting for Valid condition to be False")
 			verifyTemplateRejected := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "workspace", "test-rejected-workspace",
-					"-o", "jsonpath={.status.conditions[?(@.type=='Valid')].status}")
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("False"))
@@ -251,7 +251,7 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 
 			By("verifying Degraded condition is False (policy violation is not system degradation)")
 			cmd := exec.Command("kubectl", "get", "workspace", "test-rejected-workspace",
-				"-o", "jsonpath={.status.conditions[?(@.type=='Degraded')].status}")
+				"-o", "jsonpath={.status.conditions[?(@.type==\"Degraded\")].status}")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("False"))
@@ -301,7 +301,7 @@ spec:
 
 			By("verifying status message explains which bound was exceeded")
 			cmd = exec.Command("kubectl", "get", "workspace", "cpu-exceed-test",
-				"-o", "jsonpath={.status.conditions[?(@.type=='Valid')].message}")
+				"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].message}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(ContainSubstring("cpu"))
@@ -345,19 +345,19 @@ spec:
 			By("verifying Valid condition is True")
 			verifyValid := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "workspace", "valid-overrides-test",
-					"-o", "jsonpath={.status.conditions[?(@.type=='Valid')].status}")
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("True"))
 			}
 			Eventually(verifyValid).
 				WithPolling(1 * time.Second).
-				WithTimeout(10 * time.Second).
+				WithTimeout(10 * time.Second). // valid should be set fast on update
 				Should(Succeed())
 
 			By("verifying Degraded condition is False")
 			cmd = exec.Command("kubectl", "get", "workspace", "valid-overrides-test",
-				"-o", "jsonpath={.status.conditions[?(@.type=='Degraded')].status}")
+				"-o", "jsonpath={.status.conditions[?(@.type==\"Degraded\")].status}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("False"))

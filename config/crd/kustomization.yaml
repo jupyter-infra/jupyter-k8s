@@ -4,12 +4,13 @@
 resources:
 - bases/workspaces.jupyter.org_workspaces.yaml
 - bases/workspaces.jupyter.org_workspacetemplates.yaml
+- bases/workspaces.jupyter.org_workspaceaccessstrategies.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
 # patches here are for enabling the conversion webhook for each CRD
-+kubebuilder:scaffold:crdkustomizewebhookpatch
+# +kubebuilder:scaffold:crdkustomizewebhookpatch
 
 # [WEBHOOK] To enable webhook, uncomment the following section
 # the following config is for teaching kustomize how to do kustomization for CRDs.
