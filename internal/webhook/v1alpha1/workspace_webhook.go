@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 )
 
 // nolint:unused
@@ -71,13 +72,13 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 	// Extract user info from request context
 	if req, err := admission.RequestFromContext(ctx); err == nil {
 		// Only set created-by if it doesn't exist (CREATE operation)
-		if _, exists := workspace.Annotations["created-by"]; !exists {
-			workspace.Annotations["created-by"] = req.UserInfo.Username
+		if _, exists := workspace.Annotations[controller.AnnotationCreatedBy]; !exists {
+			workspace.Annotations[controller.AnnotationCreatedBy] = req.UserInfo.Username
 			workspacelog.Info("Added created-by annotation", "workspace", workspace.GetName(), "user", req.UserInfo.Username)
 		}
 
 		// Always set last-updated-by (CREATE and UPDATE operations)
-		workspace.Annotations["last-updated-by"] = req.UserInfo.Username
+		workspace.Annotations[controller.AnnotationLastUpdatedBy] = req.UserInfo.Username
 		workspacelog.Info("Added last-updated-by annotation", "workspace", workspace.GetName(), "user", req.UserInfo.Username)
 	}
 

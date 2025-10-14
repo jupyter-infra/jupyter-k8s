@@ -429,17 +429,18 @@ spec:
                   rule: self == oldSelf
               volumes:
                 description: Volumes specifies additional volumes to mount from existing
-                  PVCs
+                  PersistantVolumeClaims
                 items:
                   description: VolumeSpec defines a volume to mount from an existing
                     PVC
                   properties:
                     mountPath:
                       description: MountPath is the path where the volume should be
-                        mounted
+                        mounted (Unix-style path, e.g. /data)
                       type: string
                     name:
-                      description: Name is the name of the volume
+                      description: Name is a unique identifier for this volume within
+                        the pod (maps to pod.spec.volumes[].name)
                       type: string
                     persistentVolumeClaimName:
                       description: PersistentVolumeClaimName is the name of the existing

@@ -27,13 +27,13 @@ import (
 
 // VolumeSpec defines a volume to mount from an existing PVC
 type VolumeSpec struct {
-	// Name is the name of the volume
+	// Name is a unique identifier for this volume within the pod (maps to pod.spec.volumes[].name)
 	Name string `json:"name"`
 
 	// PersistentVolumeClaimName is the name of the existing PVC to mount
 	PersistentVolumeClaimName string `json:"persistentVolumeClaimName"`
 
-	// MountPath is the path where the volume should be mounted
+	// MountPath is the path where the volume should be mounted (Unix-style path, e.g. /data)
 	MountPath string `json:"mountPath"`
 }
 
@@ -98,7 +98,7 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage is immutable"
 	Storage *StorageSpec `json:"storage,omitempty"`
 
-	// Volumes specifies additional volumes to mount from existing PVCs
+	// Volumes specifies additional volumes to mount from existing PersistantVolumeClaims
 	Volumes []VolumeSpec `json:"volumes,omitempty"`
 
 	// ContainerConfig specifies container command and args configuration

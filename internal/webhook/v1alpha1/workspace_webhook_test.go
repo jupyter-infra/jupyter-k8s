@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 )
 
 var _ = Describe("Workspace Webhook", func() {
@@ -63,28 +64,28 @@ var _ = Describe("Workspace Webhook", func() {
 
 			err := defaulter.Default(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(workspace.Annotations).To(HaveKey("created-by"))
-			Expect(workspace.Annotations["created-by"]).To(Equal("test-user"))
-			Expect(workspace.Annotations).To(HaveKey("last-updated-by"))
-			Expect(workspace.Annotations["last-updated-by"]).To(Equal("test-user"))
+			Expect(workspace.Annotations).To(HaveKey(controller.AnnotationCreatedBy))
+			Expect(workspace.Annotations[controller.AnnotationCreatedBy]).To(Equal("test-user"))
+			Expect(workspace.Annotations).To(HaveKey(controller.AnnotationLastUpdatedBy))
+			Expect(workspace.Annotations[controller.AnnotationLastUpdatedBy]).To(Equal("test-user"))
 		})
 
 		It("should not overwrite existing created-by annotation", func() {
-			workspace.Annotations = map[string]string{"created-by": "original-user"}
+			workspace.Annotations = map[string]string{controller.AnnotationCreatedBy: "original-user"}
 			userInfo := &authenticationv1.UserInfo{Username: "new-user"}
 			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
 			ctx = admission.NewContextWithRequest(ctx, req)
 
 			err := defaulter.Default(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(workspace.Annotations["created-by"]).To(Equal("original-user"))
-			Expect(workspace.Annotations["last-updated-by"]).To(Equal("new-user"))
+			Expect(workspace.Annotations[controller.AnnotationCreatedBy]).To(Equal("original-user"))
+			Expect(workspace.Annotations[controller.AnnotationLastUpdatedBy]).To(Equal("new-user"))
 		})
 
 		It("should preserve existing annotations", func() {
 			workspace.Annotations = map[string]string{
-				"custom-annotation": "custom-value",
-				"created-by":        "original-user",
+				"custom-annotation":            "custom-value",
+				controller.AnnotationCreatedBy: "original-user",
 			}
 			userInfo := &authenticationv1.UserInfo{Username: "new-user"}
 			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
@@ -93,8 +94,8 @@ var _ = Describe("Workspace Webhook", func() {
 			err := defaulter.Default(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspace.Annotations["custom-annotation"]).To(Equal("custom-value"))
-			Expect(workspace.Annotations["created-by"]).To(Equal("original-user"))
-			Expect(workspace.Annotations["last-updated-by"]).To(Equal("new-user"))
+			Expect(workspace.Annotations[controller.AnnotationCreatedBy]).To(Equal("original-user"))
+			Expect(workspace.Annotations[controller.AnnotationLastUpdatedBy]).To(Equal("new-user"))
 		})
 
 		It("should handle missing user info gracefully", func() {
