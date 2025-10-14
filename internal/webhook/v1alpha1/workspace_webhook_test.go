@@ -17,71 +17,145 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	admissionv1 "k8s.io/api/admission/v1"
+	authenticationv1 "k8s.io/api/authentication/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	// TODO (user): Add any additional imports if needed
 )
 
 var _ = Describe("Workspace Webhook", func() {
 	var (
-		obj       *workspacesv1alpha1.Workspace
-		oldObj    *workspacesv1alpha1.Workspace
-		validator WorkspaceCustomValidator
+		workspace *workspacesv1alpha1.Workspace
 		defaulter WorkspaceCustomDefaulter
+		validator WorkspaceCustomValidator
+		ctx       context.Context
 	)
 
 	BeforeEach(func() {
-		obj = &workspacesv1alpha1.Workspace{}
-		oldObj = &workspacesv1alpha1.Workspace{}
-		validator = WorkspaceCustomValidator{}
-		Expect(validator).NotTo(BeNil(), "Expected validator to be initialized")
+		workspace = &workspacesv1alpha1.Workspace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-workspace",
+				Namespace: "default",
+			},
+			Spec: workspacesv1alpha1.WorkspaceSpec{
+				DisplayName:   "Test Workspace",
+				Image:         "jupyter/base-notebook:latest",
+				DesiredStatus: "Running",
+			},
+		}
 		defaulter = WorkspaceCustomDefaulter{}
-		Expect(defaulter).NotTo(BeNil(), "Expected defaulter to be initialized")
-		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")
-		Expect(obj).NotTo(BeNil(), "Expected obj to be initialized")
-		// TODO (user): Add any setup logic common to all tests
+		validator = WorkspaceCustomValidator{}
+		ctx = context.Background()
 	})
 
-	AfterEach(func() {
-		// TODO (user): Add any teardown logic common to all tests
+	Context("Defaulter", func() {
+		It("should add created-by annotation when none exists", func() {
+			userInfo := &authenticationv1.UserInfo{Username: "test-user"}
+			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
+			ctx = admission.NewContextWithRequest(ctx, req)
+
+			err := defaulter.Default(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspace.Annotations).To(HaveKey("created-by"))
+			Expect(workspace.Annotations["created-by"]).To(Equal("test-user"))
+			Expect(workspace.Annotations).To(HaveKey("last-updated-by"))
+			Expect(workspace.Annotations["last-updated-by"]).To(Equal("test-user"))
+		})
+
+		It("should not overwrite existing created-by annotation", func() {
+			workspace.Annotations = map[string]string{"created-by": "original-user"}
+			userInfo := &authenticationv1.UserInfo{Username: "new-user"}
+			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
+			ctx = admission.NewContextWithRequest(ctx, req)
+
+			err := defaulter.Default(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspace.Annotations["created-by"]).To(Equal("original-user"))
+			Expect(workspace.Annotations["last-updated-by"]).To(Equal("new-user"))
+		})
+
+		It("should preserve existing annotations", func() {
+			workspace.Annotations = map[string]string{
+				"custom-annotation": "custom-value",
+				"created-by":        "original-user",
+			}
+			userInfo := &authenticationv1.UserInfo{Username: "new-user"}
+			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
+			ctx = admission.NewContextWithRequest(ctx, req)
+
+			err := defaulter.Default(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspace.Annotations["custom-annotation"]).To(Equal("custom-value"))
+			Expect(workspace.Annotations["created-by"]).To(Equal("original-user"))
+			Expect(workspace.Annotations["last-updated-by"]).To(Equal("new-user"))
+		})
+
+		It("should handle missing user info gracefully", func() {
+			err := defaulter.Default(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			// Webhook initializes empty annotations map but doesn't add user annotations
+			Expect(workspace.Annotations).To(Equal(map[string]string{}))
+		})
+
+		It("should return error for wrong object type", func() {
+			wrongObj := &runtime.Unknown{}
+			err := defaulter.Default(ctx, wrongObj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("expected an Workspace object"))
+		})
 	})
 
-	Context("When creating Workspace under Defaulting Webhook", func() {
-		// TODO (user): Add logic for defaulting webhooks
-		// Example:
-		// It("Should apply defaults when a required field is empty", func() {
-		//     By("simulating a scenario where defaults should be applied")
-		//     obj.SomeFieldWithDefault = ""
-		//     By("calling the Default method to apply defaults")
-		//     defaulter.Default(ctx, obj)
-		//     By("checking that the default values are set")
-		//     Expect(obj.SomeFieldWithDefault).To(Equal("default_value"))
-		// })
-	})
+	Context("Validator", func() {
+		It("should validate workspace creation successfully", func() {
+			warnings, err := validator.ValidateCreate(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
 
-	Context("When creating or updating Workspace under Validating Webhook", func() {
-		// TODO (user): Add logic for validating webhooks
-		// Example:
-		// It("Should deny creation if a required field is missing", func() {
-		//     By("simulating an invalid creation scenario")
-		//     obj.SomeRequiredField = ""
-		//     Expect(validator.ValidateCreate(ctx, obj)).Error().To(HaveOccurred())
-		// })
-		//
-		// It("Should admit creation if all required fields are present", func() {
-		//     By("simulating an invalid creation scenario")
-		//     obj.SomeRequiredField = "valid_value"
-		//     Expect(validator.ValidateCreate(ctx, obj)).To(BeNil())
-		// })
-		//
-		// It("Should validate updates correctly", func() {
-		//     By("simulating a valid update scenario")
-		//     oldObj.SomeRequiredField = "updated_value"
-		//     obj.SomeRequiredField = "updated_value"
-		//     Expect(validator.ValidateUpdate(ctx, oldObj, obj)).To(BeNil())
-		// })
-	})
+		It("should validate workspace update successfully", func() {
+			oldWorkspace := workspace.DeepCopy()
+			workspace.Spec.DisplayName = "Updated Workspace"
 
+			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("should validate workspace deletion successfully", func() {
+			warnings, err := validator.ValidateDelete(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("should return error for wrong object type in create", func() {
+			wrongObj := &runtime.Unknown{}
+			warnings, err := validator.ValidateCreate(ctx, wrongObj)
+			Expect(err).To(HaveOccurred())
+			Expect(warnings).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("expected a Workspace object"))
+		})
+
+		It("should return error for wrong object type in update", func() {
+			wrongObj := &runtime.Unknown{}
+			warnings, err := validator.ValidateUpdate(ctx, workspace, wrongObj)
+			Expect(err).To(HaveOccurred())
+			Expect(warnings).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("expected a Workspace object"))
+		})
+
+		It("should return error for wrong object type in delete", func() {
+			wrongObj := &runtime.Unknown{}
+			warnings, err := validator.ValidateDelete(ctx, wrongObj)
+			Expect(err).To(HaveOccurred())
+			Expect(warnings).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("expected a Workspace object"))
+		})
+	})
 })
