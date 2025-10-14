@@ -3,13 +3,11 @@ package main
 
 import (
 	"flag"
-	"net/http"
 	"os"
 	"strings"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
-	workspacemutator "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -21,7 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 var (
@@ -112,18 +109,6 @@ func main() {
 		setupLog.Error(err, "Error setting up workspace template controller")
 		os.Exit(1)
 	}
-
-	// Setup webhook
-	setupLog.Info("Registering webhooks")
-	mutator := &workspacemutator.WorkspaceMutator{}
-	mgr.GetWebhookServer().Register("/mutate-workspace", &admission.Webhook{Handler: mutator})
-	setupLog.Info("Registered webhook", "path", "/mutate-workspace", "type", "WorkspaceMutator")
-	mgr.GetWebhookServer().Register("/webhook-health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
-	}))
-	setupLog.Info("Registered webhook", "path", "/webhook-health", "type", "HealthCheck")
-	setupLog.Info("All webhooks registered successfully")
 
 	setupLog.Info("Starting manager")
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
