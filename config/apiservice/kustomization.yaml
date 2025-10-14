@@ -1,0 +1,4 @@
+resources:
+- apiservice.yaml
+- service.yaml
+- certificate.yaml
