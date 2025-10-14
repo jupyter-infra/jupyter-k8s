@@ -67,36 +67,23 @@ spec:
           - --application-images-registry=docker.io/library
         image: controller:latest
         name: manager
-        ports:
-        - containerPort: 9443
-          name: webhook
-          protocol: TCP
-        - containerPort: 8081
-          name: healthz
-          protocol: TCP
+        ports: []
         securityContext:
           readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
           capabilities:
             drop:
             - "ALL"
-        startupProbe:
-          httpGet:
-            path: /readyz
-            port: healthz
-          initialDelaySeconds: 0
-          periodSeconds: 5
-          failureThreshold: 12  # Allows up to 60 seconds for webhook/cert-manager initialization
         livenessProbe:
           httpGet:
             path: /healthz
-            port: healthz
+            port: 8081
           initialDelaySeconds: 15
           periodSeconds: 20
         readinessProbe:
           httpGet:
             path: /readyz
-            port: healthz
+            port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
         # TODO(user): Configure the resources accordingly based on the project requirements.
@@ -108,13 +95,7 @@ spec:
           requests:
             cpu: 10m
             memory: 64Mi
-        volumeMounts:
-        - name: webhook-certs
-          mountPath: /tmp/k8s-webhook-server/serving-certs
-          readOnly: true
-      volumes:
-      - name: webhook-certs
-        secret:
-          secretName: webhook-server-cert
+        volumeMounts: []
+      volumes: []
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

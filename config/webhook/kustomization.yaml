@@ -1,5 +1,5 @@
 resources:
-- webhook-config.yaml
+- manifests.yaml
 - service.yaml
 
 configurations:
