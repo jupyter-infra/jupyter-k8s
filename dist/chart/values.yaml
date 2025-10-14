@@ -3,8 +3,8 @@ controllerManager:
   replicas: 1
   container:
     image:
-      repository: controller
-      tag: latest
+      repository: 871762481636.dkr.ecr.us-west-2.amazonaws.com/jupyter-k8s
+      tag: v0.3.0
     imagePullPolicy: IfNotPresent
     args:
       - "--leader-elect"
