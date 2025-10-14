@@ -124,6 +124,9 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacesv1alpha1
 			},
 		},
 		Resources: resources,
+		// Default environment variables
+		Env: []corev1.EnvVar{},
+		// TODO: Add probes
 	}
 
 	if resolvedTemplate != nil && len(resolvedTemplate.EnvironmentVariables) > 0 {

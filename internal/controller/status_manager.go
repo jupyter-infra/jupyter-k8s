@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
@@ -27,18 +28,19 @@ func (sm *StatusManager) updateStatus(
 	ctx context.Context,
 	workspace *workspacesv1alpha1.Workspace,
 	conditionsToUpdate *[]metav1.Condition,
-	updateResourceNames bool,
+	snapshotStatus *workspacesv1alpha1.WorkspaceStatus,
 ) error {
 	logger := logf.FromContext(ctx)
-
-	if !updateResourceNames && len(*conditionsToUpdate) == 0 {
-		logger.Info("no-op: Workspace.Status is up-to-date")
-		return nil
-	}
 	if len(*conditionsToUpdate) > 0 {
 		// requesting to modify condition: overwrite
 		workspace.Status.Conditions = *conditionsToUpdate
 	}
+
+	if reflect.DeepEqual(workspace.Status, snapshotStatus) {
+		// no-op: status hasn't changed
+		return nil
+	}
+
 	if err := sm.client.Status().Update(ctx, workspace); err != nil {
 		return fmt.Errorf("failed to update Workspace.Status: %w", err)
 	}
@@ -46,26 +48,33 @@ func (sm *StatusManager) updateStatus(
 	return nil
 }
 
+// WorkspaceRunningReadiness wraps the readiness flag of underlying components
+type WorkspaceRunningReadiness struct {
+	computeReady         bool
+	serviceReady         bool
+	accessResourcesReady bool
+	TemplateValid        bool
+}
+
 // UpdateStartingStatus sets Available to false and Progressing to true
 func (sm *StatusManager) UpdateStartingStatus(
 	ctx context.Context,
 	workspace *workspacesv1alpha1.Workspace,
-	computeReady bool,
-	serviceReady bool,
-	computeName string,
-	serviceName string,
+	readiness WorkspaceRunningReadiness,
+	snapshotStatus *workspacesv1alpha1.WorkspaceStatus,
 ) error {
 	// ensure StartingCondition is set to True with the appropriate reason
-
 	startingReason := ReasonResourcesNotReady
 	startingMessage := "Workspace is starting"
 
-	if computeReady && serviceReady {
+	if readiness.computeReady && readiness.serviceReady && readiness.accessResourcesReady {
 		return fmt.Errorf("invalid call: not all resources should be ready in method UpdateStartingStatus")
-	} else if serviceReady {
+	}
+
+	if !readiness.computeReady {
 		startingReason = ReasonComputeNotReady
 		startingMessage = "Compute is not ready"
-	} else if computeReady {
+	} else if !readiness.serviceReady {
 		startingReason = ReasonServiceNotReady
 		startingMessage = "Service is not ready"
 	}
@@ -101,24 +110,29 @@ func (sm *StatusManager) UpdateStartingStatus(
 		"Workspace is starting",
 	)
 
+	// if we got here, validation passed
+	validCondition := NewCondition(
+		ConditionTypeValid,
+		metav1.ConditionTrue,
+		ReasonAllChecksPass,
+		"All validation checks passed",
+	)
+
 	// Apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+		validCondition,
 	}
+
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
-	shouldUpdateResourceNames := workspace.Status.DeploymentName != computeName || workspace.Status.ServiceName != serviceName
-	if shouldUpdateResourceNames {
-		workspace.Status.DeploymentName = computeName
-		workspace.Status.ServiceName = serviceName
-	}
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, shouldUpdateResourceNames)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
 // UpdateErrorStatus sets the Degraded condition to true with the specified error reason and message
-func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, reason, message string) error {
+func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, reason, message string, snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
 	// Set DegradedCondition to true with the provided error reason and message
 	degradedCondition := NewCondition(
 		ConditionTypeDegraded,
@@ -127,33 +141,15 @@ func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, workspace *works
 		message,
 	)
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &[]metav1.Condition{degradedCondition})
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
-}
-
-// SetValid sets the Valid condition to true when all policy checks pass
-func (sm *StatusManager) SetValid(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
-	validCondition := NewCondition(
-		ConditionTypeValid,
-		metav1.ConditionTrue,
-		ReasonAllChecksPass,
-		"All validation checks passed",
-	)
-
-	// Successful validation means no system errors
-	degradedCondition := NewCondition(
-		ConditionTypeDegraded,
-		metav1.ConditionFalse,
-		ReasonNoError,
-		"No errors detected",
-	)
-
-	conditions := []metav1.Condition{validCondition, degradedCondition}
-	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
 // SetInvalid sets the Valid condition to false when policy validation fails
-func (sm *StatusManager) SetInvalid(ctx context.Context, workspace *workspacesv1alpha1.Workspace, validation *TemplateValidationResult) error {
+func (sm *StatusManager) SetInvalid(
+	ctx context.Context,
+	workspace *workspacesv1alpha1.Workspace,
+	validation *TemplateValidationResult,
+	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
 	// Build violation message
 	message := fmt.Sprintf("Validation failed: %d violation(s)", len(validation.Violations))
 	if len(validation.Violations) > 0 {
@@ -203,11 +199,11 @@ func (sm *StatusManager) SetInvalid(ctx context.Context, workspace *workspacesv1
 	}
 
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
 // UpdateRunningStatus sets the Available condition to true and Progressing to false
-func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
+func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
 	// ensure AvailableCondition is set to true with ReasonResourcesReady
 	availableCondition := NewCondition(
 		ConditionTypeAvailable,
@@ -240,29 +236,45 @@ func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, workspace *wor
 		"Workspace is running",
 	)
 
-	// Apply all conditions
+	// if we got here, validation passed
+	validCondition := NewCondition(
+		ConditionTypeValid,
+		metav1.ConditionTrue,
+		ReasonAllChecksPass,
+		"All validation checks passed",
+	)
+
+	// apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+		validCondition,
 	}
 
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
+}
+
+// WorkspaceStoppingReadiness wraps the readiness flag of underlying components
+type WorkspaceStoppingReadiness struct {
+	computeStopped         bool
+	serviceStopped         bool
+	accessResourcesStopped bool
 }
 
 // UpdateStoppingStatus sets Available to false and Progressing to true
-func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, computeStopped bool, serviceStopped bool) error {
+func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, readiness WorkspaceStoppingReadiness, snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
 	stoppingReason := ReasonResourcesNotStopped
 	stoppingMessage := "Resources are still running"
 
-	if computeStopped && serviceStopped {
+	if readiness.computeStopped && readiness.serviceStopped {
 		return fmt.Errorf("invalid call: not all resources should be stopped in method UpdateStoppingStatus")
-	} else if serviceStopped {
+	} else if readiness.serviceStopped {
 		stoppingReason = ReasonComputeNotStopped
 		stoppingMessage = "Compute is still running"
-	} else if computeStopped {
+	} else if readiness.computeStopped {
 		stoppingReason = ReasonServiceNotStopped
 		stoppingMessage = "Service is still up"
 	}
@@ -300,20 +312,29 @@ func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, workspace *wo
 		stoppingMessage,
 	)
 
+	// if we got here, validation passed
+	validCondition := NewCondition(
+		ConditionTypeValid,
+		metav1.ConditionTrue,
+		ReasonAllChecksPass,
+		"All validation checks passed",
+	)
+
 	// Apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+		validCondition,
 	}
 
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, false)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
 // UpdateStoppedStatus sets Available and Progressing to false, Stopped to true
-func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
+func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
 	// ensure AvailableCondition is set to false with ReasonDesiredStateStopped
 	availableCondition := NewCondition(
 		ConditionTypeAvailable,
@@ -346,16 +367,25 @@ func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, workspace *wor
 		"Workspace is stopped",
 	)
 
+	// if we got here, validation passed
+	validCondition := NewCondition(
+		ConditionTypeValid,
+		metav1.ConditionTrue,
+		ReasonAllChecksPass,
+		"All validation checks passed",
+	)
+
 	// Apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+		validCondition,
 	}
 
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
 	workspace.Status.DeploymentName = ""
 	workspace.Status.ServiceName = ""
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, true)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }

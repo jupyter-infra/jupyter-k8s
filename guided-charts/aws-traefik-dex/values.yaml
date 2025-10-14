@@ -55,8 +55,10 @@ traefik:
   replicas: 1
   # Redirect HTTP to HTTPS
   redirectHttp: true
-  # Whether to configure traefik at 'debug' log level ('info' if omitted) 
+  # Whether to configure traefik at 'debug' log level ('info' if omitted)
   debug: true
+  # Allow cross-namespace middleware references
+  allowCrossNamespace: true
 
 # Dex configuration
 dex:
@@ -129,3 +131,53 @@ oauth2Proxy:
   dexCheck:
     # Maximum time to wait for Dex to be available in seconds
     timeout_seconds: 300
+  # Skip authentication for certain paths (useful for WebSockets)
+  skipAuthRegex: []
+
+# Authmiddleware configuration
+authmiddleware:
+  # Whether to deploy the authmiddleware component
+  enabled: true
+  # Number of replicas
+  replicas: 1
+  # Authmiddleware image settings
+  imagePullPolicy: Always
+  repository: docker.io
+  imageName: jupyter-k8s-auth
+  imageTag: latest
+  # Resource limits and requests
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+  # JWT configuration
+  # Required: must be provided as base64 encoded string (generate with: openssl rand -base64 32)
+  jwtSigningKey: ""
+  jwtIssuer: "jupyter-k8s-auth"
+  jwtAudience: "workspace-users"
+  jwtExpiration: "1h"
+  jwtRefreshWindow: "15m"
+  jwtRefreshHorizon: "12h"
+  # Cookie configuration
+  cookieName: "workspace_auth"
+  cookieSecure: "true"
+  cookiePath: "/"
+  cookieMaxAge: "24h"
+  cookieHttpOnly: "true"
+  cookieSameSite: "lax"
+  # Path configuration
+  pathRegexPattern: "^(/workspaces/[^/]+/[^/]+)(?:/.*)?$"
+  maxCookiePaths: "20"
+  # CSRF configuration
+  # Required: must be provided as base64 encoded string (generate with: openssl rand -base64 32)
+  csrfAuthKey: ""
+  csrfCookieName: "workspace_csrf"
+  csrfCookieMaxAge: "1h"
+  csrfCookieSecure: "true"
+  # Server configuration
+  readTimeout: "10s"
+  writeTimeout: "10s"
+  shutdownTimeout: "30s"

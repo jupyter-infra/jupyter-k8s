@@ -1,6 +1,7 @@
 package crdonly_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,8 +17,9 @@ var _ = Describe("CRD-Only Helm Resources", func() {
 
 	// Directories to exclude from scanning
 	var excludeDirs = map[string]bool{
-		"samples": true,
-		"default": true,
+		"samples":         true,
+		"default":         true,
+		"samples_routing": true,
 	}
 
 	It("should include all CRD-only resources in the Helm chart", func() {
@@ -81,22 +83,43 @@ var _ = Describe("CRD-Only Helm Resources", func() {
 		Expect(allConfigResources).NotTo(BeEmpty(), "No resources found in config directories")
 		Expect(allHelmResources).NotTo(BeEmpty(), "No resources found in Helm templates")
 
+		allConfigKeys := make(map[string]bool)
+		allHelmKeys := make(map[string]bool)
+
+		for r := range allConfigResources {
+			key := fmt.Sprintf("%s:%s", r.Kind, r.Name)
+			allConfigKeys[key] = true
+		}
+		for r := range allHelmResources {
+			key := fmt.Sprintf("%s:%s", r.Kind, r.Name)
+			allHelmKeys[key] = true
+		}
+
 		// Check that all config resources exist in Helm resources
 		// We create a list of missing resources for better error reporting
 		missingResources := []string{}
-		for res := range allConfigResources {
-			// Skip CRDs since those are handled differently
-			if res.Kind == "CustomResourceDefinition" {
-				continue
-			}
 
-			// Skip resources with special transformations
-			if shouldSkipResourceCheck(res) {
-				continue
-			}
+		// keepMe: helpful for debug when test fail
+		println("Helm keys -----")
+		for key := range allHelmKeys {
+			println(key)
+		}
+		println("-----")
 
-			if _, exists := allHelmResources[res]; !exists {
-				missingResources = append(missingResources, res.String())
+		for key := range allConfigKeys {
+			// first: lookup exact resource name (will match CRDs)
+			if _, exists := allHelmKeys[key]; !exists {
+				parts := strings.Split(key, ":")
+
+				// second: if not found, lookup with 'jupyter-k8s-' prefix
+				prefixedKey := fmt.Sprintf("%s:jupyter-k8s-%s", parts[0], parts[1])
+				if _, prefixedExists := allHelmKeys[prefixedKey]; !prefixedExists {
+
+					// third: if still not found, check resources that are not translated
+					if !shouldSkipResourceCheck(parts[0], parts[1]) {
+						missingResources = append(missingResources, key)
+					}
+				}
 			}
 		}
 
@@ -106,76 +129,22 @@ var _ = Describe("CRD-Only Helm Resources", func() {
 })
 
 // shouldSkipResourceCheck returns true if the resource should be skipped in comparisons
-func shouldSkipResourceCheck(res helm.ResourceIdentifier) bool {
-	// Skip resources that are transformed during template rendering
 
-	// Skip namespace resources as they are handled differently in Helm
-	if res.Kind == "Namespace" {
+func shouldSkipResourceCheck(resKind string, resName string) bool {
+	switch resKind {
+	case "Namespace":
 		return true
-	}
-
-	// Skip system namespace resources - they are transformed in Helm templates
-	// In the config they often have 'system' namespace but in Helm they use release namespace
-	if res.Namespace == "system" {
+	case "NetworkPolicy":
+		// FIXME: consider enabling network policy in /config/default/kustomization.yaml
 		return true
-	}
-
-	// Skip kube-system namespace resources
-	if res.Namespace == "kube-system" {
+	case "ServiceMonitor":
 		return true
-	}
-
-	// Skip resources with special prefixes that get transformed
-	if strings.HasPrefix(res.Name, "manager-") {
-		return true
-	}
-
-	if strings.HasPrefix(res.Name, "controller-manager-") {
-		return true
-	}
-
-	// Skip Role and ClusterRole resources as they often get transformed
-	if res.Kind == "Role" || res.Kind == "ClusterRole" ||
-		res.Kind == "RoleBinding" || res.Kind == "ClusterRoleBinding" {
-		return true
-	}
-
-	// Skip ServiceAccount resources
-	if res.Kind == "ServiceAccount" {
-		return true
-	}
-
-	// Skip NetworkPolicy resources
-	if res.Kind == "NetworkPolicy" {
-		return true
-	}
-
-	// Skip Deployment resources
-	if res.Kind == "Deployment" {
-		return true
-	}
-
-	// Skip ServiceMonitor resources
-	if res.Kind == "ServiceMonitor" {
-		return true
-	}
-
-	// Explicitly skip common Kubernetes resources that are transformed
-	skipResources := []string{
-		"leader-election-role",
-		"leader-election-rolebinding",
-		"metrics-reader",
-		"manager-role",
-		"metrics-auth-role",
-		"metrics-auth-rolebinding",
-		"manager-rolebinding",
-		"allow-metrics-traffic",
-	}
-	for _, name := range skipResources {
-		if res.Name == name {
+	case "Service":
+		if resName == "controller-manager" {
 			return true
 		}
+		return false
+	default:
+		return false
 	}
-
-	return false
 }

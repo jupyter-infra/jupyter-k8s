@@ -66,8 +66,10 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
-	var applicationImagesPullPolicy string
 	var tlsOpts []func(*tls.Config)
+	var applicationImagesPullPolicy string
+	var applicationImagesRegistry string
+	var watchTraefik bool
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -87,9 +89,9 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.StringVar(&applicationImagesPullPolicy, "application-images-pull-policy", "",
 		"Image pull policy for Application containers (Always, IfNotPresent, or Never)")
-	var applicationImagesRegistry string
 	flag.StringVar(&applicationImagesRegistry, "application-images-registry", "",
 		"Registry prefix for application images (e.g. example.com/my-registry)")
+	flag.BoolVar(&watchTraefik, "watch-traefik", false, "Watch traefik sub-resources")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -193,6 +195,7 @@ func main() {
 	controllerOpts := controller.WorkspaceControllerOptions{
 		ApplicationImagesPullPolicy: getImagePullPolicy(applicationImagesPullPolicy),
 		ApplicationImagesRegistry:   applicationImagesRegistry,
+		WatchTraefik:                watchTraefik,
 	}
 
 	if err := controller.SetupWorkspaceController(mgr, controllerOpts); err != nil {

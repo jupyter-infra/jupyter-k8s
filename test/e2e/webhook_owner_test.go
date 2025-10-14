@@ -133,7 +133,7 @@ spec:
 			Expect(podName).NotTo(BeEmpty())
 
 			By("checking webhook logs for successful processing")
-			cmd = exec.Command("kubectl", "logs", podName, "-n", "jupyter-k8s-system", "--tail=100")
+			cmd = exec.Command("kubectl", "logs", podName, "-n", "jupyter-k8s-system", "--tail=50")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			logs := string(output)

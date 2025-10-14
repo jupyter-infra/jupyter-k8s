@@ -115,6 +115,7 @@ spec:
           - "--metrics.prometheus.entrypoint=metrics"
           - "--providers.kubernetescrd"
           - "--providers.kubernetescrd.allowexternalnameservices=true"
+          - "--providers.kubernetescrd.allowcrossnamespace={{ .Values.traefik.allowCrossNamespace }}"
           - "--providers.kubernetesingress"
           - "--entrypoints.websecure.http.tls=true"
         {{- if .Values.traefik.debug }}

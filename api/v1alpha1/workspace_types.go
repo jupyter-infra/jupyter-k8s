@@ -43,6 +43,16 @@ type StorageSpec struct {
 	MountPath string `json:"mountPath,omitempty"`
 }
 
+// AccessStrategyRef defines a reference to a WorkspaceAccessStrategy
+type AccessStrategyRef struct {
+	// Name of the WorkspaceAccessStrategy
+	Name string `json:"name"`
+
+	// Namespace where the WorkspaceAccessStrategy is located
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
 // WorkspaceSpec defines the desired state of Workspace
 type WorkspaceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -67,12 +77,31 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage is immutable"
 	Storage *StorageSpec `json:"storage,omitempty"`
 
+	// AccessStrategy specifies the WorkspaceAccessStrategy to use
+	// +optional
+	AccessStrategy *AccessStrategyRef `json:"accessStrategy,omitempty"`
+
 	// TemplateRef references a WorkspaceTemplate to use as base configuration
 	// When set, template provides defaults and spec fields (Image, Resources, Storage.Size) act as overrides
 	// IMMUTABLE: Cannot be changed after workspace creation
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="templateRef is immutable"
 	// +optional
 	TemplateRef *string `json:"templateRef,omitempty"`
+}
+
+// AccessResourceStatus defines the status of a resource created from a template
+type AccessResourceStatus struct {
+	// Kind of the Kubernetes resource
+	Kind string `json:"kind"`
+
+	// APIVersion of the Kubernetes resource
+	APIVersion string `json:"apiVersion"`
+
+	// Name of the resource
+	Name string `json:"name"`
+
+	// Namespace of the resource
+	Namespace string `json:"namespace"`
 }
 
 // WorkspaceStatus defines the observed state of Workspace.
@@ -90,6 +119,20 @@ type WorkspaceStatus struct {
 	// ServiceName is the name of the service exposing the Workspace
 	// +optional
 	ServiceName string `json:"serviceName,omitempty"`
+
+	// AccessURL is the URL at which the workspace can be accessed
+	// +optional
+	AccessURL string `json:"accessURL,omitempty"`
+
+	// AccessResourceSelector is a label selector that can be used to find all resources
+	// created from the workspace's AccessStrategy templates
+	// +optional
+	AccessResourceSelector string `json:"accessResourceSelector,omitempty"`
+
+	// AccessResources provides status details of individual resources created from
+	// the workspace's AccessStrategy templates
+	// +optional
+	AccessResources []AccessResourceStatus `json:"accessResources,omitempty"`
 
 	// Conditions represent the current state of the Workspace resource.
 	// Each condition has a unique type and reflects the status of a specific aspect of the resource.

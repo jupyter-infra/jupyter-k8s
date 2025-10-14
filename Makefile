@@ -33,6 +33,7 @@ ifeq ($(CLOUD_PROVIDER),aws)
 	AWS_ACCOUNT_ID := $(shell aws sts get-caller-identity --query "Account" --output text)
 	ECR_REGISTRY := $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
 	ECR_REPOSITORY := jupyter-k8s
+	ECR_REPOSITORY_AUTH := jupyter-k8s-auth
 	EKS_CLUSTER_NAME ?= jupyter-k8s-cluster
 	EKS_CONTEXT := arn:aws:eks:$(AWS_REGION):$(AWS_ACCOUNT_ID):cluster/$(EKS_CLUSTER_NAME)
 endif
@@ -97,8 +98,12 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 # CERT_MANAGER_INSTALL_SKIP=true
 
 # Cluster names for different environments
-KIND_CLUSTER ?= jupyter-k8s-test-e2e  # Used for automated e2e tests
-DEV_KIND_CLUSTER ?= jupyter-k8s-dev  # Used for manual development
+
+# Used for automated e2e tests
+KIND_CLUSTER ?= jupyter-k8s-test-e2e
+
+# Used for manual development
+DEV_KIND_CLUSTER ?= jupyter-k8s-dev
 
 # Set this variable to true to use local kind cluster for deployment
 USE_KIND ?= false
@@ -116,10 +121,19 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 			echo "Creating Kind cluster '$(KIND_CLUSTER)'..."; \
 			$(KIND) create cluster --name $(KIND_CLUSTER) ;; \
 	esac
-	@echo "Installing cert-manager v1.13.0..."
-	@kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
-	@echo "Waiting for cert-manager to be ready..."
-	@kubectl wait --for=condition=Available --timeout=300s deployment/cert-manager-webhook -n cert-manager
+	@if ! kubectl get namespace cert-manager > /dev/null 2>&1; then \
+		echo "Installing cert-manager"; \
+		helm repo add jetstack https://charts.jetstack.io; \
+		helm repo update; \
+		helm install cert-manager jetstack/cert-manager \
+			--namespace cert-manager \
+			--create-namespace \
+			--set installCRDs=true; \
+		echo "Waiting for cert-manager to be ready..."; \
+		kubectl wait --for=condition=Available --timeout=300s deployment/cert-manager-webhook -n cert-manager; \
+	else \
+		echo "cert-manager is already installed, skipping installation"; \
+	fi
 
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
@@ -211,7 +225,9 @@ helm-lint: ## Lint the Helm chart
 		--set github.orgs[0].teams[0]=ace-devs \
 		--set githubRbac.orgs[0].name=some-org \
 		--set githubRbac.orgs[0].teams[0]=ace-devs \
-		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET)
+		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
+		--set authmiddleware.jwtSigningKey=some-signing-key \
+		--set authmiddleware.csrfAuthKey=some-auth-key
 
 .PHONY: helm-test
 helm-test: ## Test the Helm chart with helm template
@@ -239,7 +255,9 @@ helm-test-aws-traefik-dex: ## Test the Helm chart with guided mode (aws-traefik-
 		--set github.orgs[0].teams[0]=ace-devs \
 		--set githubRbac.orgs[0].name=some-org \
 		--set githubRbac.orgs[0].teams[0]=ace-devs \
-		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET)
+		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
+		--set authmiddleware.jwtSigningKey=some-signing-key \
+		--set authmiddleware.csrfAuthKey=some-auth-key
 	# Clean up temporary chart directory
 	rm -rf /tmp/helm-test-chart
 	# Run helm tests to verify resources
@@ -291,6 +309,19 @@ setup-kind: ## Set up a Kind cluster for development if it does not exist
 		$(CONTAINER_TOOL) run -d --restart=always -p 5000:5000 --name registry registry:2; \
 	else \
 		echo "Local registry is already running."; \
+	fi
+	@if ! kubectl get namespace cert-manager > /dev/null 2>&1; then \
+		echo "Installing cert-manager"; \
+		helm repo add jetstack https://charts.jetstack.io; \
+		helm repo update; \
+		helm install cert-manager jetstack/cert-manager \
+			--namespace cert-manager \
+			--create-namespace \
+			--set installCRDs=true; \
+		echo "Waiting for cert-manager to be ready..."; \
+		kubectl wait --for=condition=Available --timeout=300s deployment/cert-manager-webhook -n cert-manager; \
+	else \
+		echo "cert-manager is already installed, skipping installation"; \
 	fi
 
 .PHONY: teardown-kind
@@ -353,9 +384,40 @@ setup-aws-internal: ## Setup connection to remote cluster
 		echo "EKS_CLUSTER_NAME not provided. Please set it when running this command."; \
 		exit 1; \
 	fi
-	@echo "Creating ECR repository if it doesn't exist..."
+	@echo "Creating ECR repository for controller if it doesn't exist..."
 	aws ecr describe-repositories --repository-names $(ECR_REPOSITORY) --region $(AWS_REGION) > /dev/null || \
 	aws ecr create-repository --repository-name $(ECR_REPOSITORY) --region $(AWS_REGION)
+
+	@echo "Creating ECR repository for auth middleware if it doesn't exist..."
+	aws ecr describe-repositories --repository-names $(ECR_REPOSITORY_AUTH) --region $(AWS_REGION) > /dev/null || \
+	aws ecr create-repository --repository-name $(ECR_REPOSITORY_AUTH) --region $(AWS_REGION)
+
+	@if ! kubectl get namespace cert-manager > /dev/null 2>&1; then \
+		echo "Installing cert-manager"; \
+		helm repo add jetstack https://charts.jetstack.io; \
+		helm repo update; \
+		helm install cert-manager jetstack/cert-manager \
+			--namespace cert-manager \
+			--create-namespace \
+			--set installCRDs=true; \
+		echo "Waiting for cert-manager to be ready..."; \
+		kubectl wait --for=condition=Available --timeout=300s deployment/cert-manager-webhook -n cert-manager; \
+	else \
+		echo "cert-manager is already installed, skipping installation"; \
+	fi
+
+	@if ! kubectl get crds | grep traefik > /dev/null 2>&1; then \
+		echo "Installing traefik"; \
+		helm repo add traefik https://traefik.github.io/charts; \
+		helm repo update; \
+		helm install traefik-crd traefik/traefik-crds \
+			--namespace traefik \
+  			--create-namespace; \
+		echo "Successfully installed traefik CRDs"; \
+	else \
+		echo "traefik is already installed, skipping installation"; \
+	fi
+
 	@echo "Remote AWS setup complete. Credentials added to ~/.kube/config"
 
 .PHONY: setup-aws
@@ -387,6 +449,11 @@ load-images-aws-internal: manifests generate fmt vet ## Build and push container
 	$(CONTAINER_TOOL) push $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest
 	@echo "Controller image built and pushed successfully to $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest"
 
+	@echo "Building auth middleware image..."
+	$(CONTAINER_TOOL) build $(BUILD_OPTS) --platform=linux/amd64 -t $(ECR_REGISTRY)/$(ECR_REPOSITORY_AUTH):latest -f images/authmiddleware/Dockerfile .
+	$(CONTAINER_TOOL) push $(ECR_REGISTRY)/$(ECR_REPOSITORY_AUTH):latest
+	@echo "Auth middleware image built and pushed successfully to $(ECR_REGISTRY)/$(ECR_REPOSITORY_AUTH):latest"
+
 	@echo "Building application images..."
 	$(MAKE) -C images push-all-aws CLOUD_PROVIDER=aws CONTAINER_TOOL=$(CONTAINER_TOOL)
 	@echo "All images built and pushed successfully to $(ECR_REGISTRY)"
@@ -406,7 +473,8 @@ deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remot
 		--set controllerManager.container.image.repository=$(ECR_REGISTRY)/$(ECR_REPOSITORY) \
 		--set controllerManager.container.image.tag=latest \
 		--set application.imagesPullPolicy=Always \
-		--set application.imagesRegistry=$(ECR_REGISTRY)
+		--set application.imagesRegistry=$(ECR_REGISTRY) \
+		--set traefik.enable=true
 	@echo "Helm chart jupyter-k8s deployed successfully to remote AWS cluster"
 	@echo "Restarting deployments to use new images..."
 	kubectl rollout restart deployment -n jupyter-k8s-system jupyter-k8s-controller-manager
@@ -431,8 +499,6 @@ deploy-aws-traefik-dex-internal:
 		rm -rf /tmp/jk8s-aws-traefik-dex; \
 		mkdir /tmp/jk8s-aws-traefik-dex; \
 		cp -r guided-charts/aws-traefik-dex/ /tmp/jk8s-aws-traefik-dex/; \
-		echo 'Installing traefik CRDs first'; \
-		helm upgrade --install traefik-crd traefik/traefik-crds; \
 		echo 'Deploying AWS traefik dex helm chart'; \
 		HELM_ARGS="--set domain=$$DOMAIN \
 			--set certManager.email=$$LETSENCRYPT_EMAIL \
@@ -443,7 +509,11 @@ deploy-aws-traefik-dex-internal:
 			--set github.orgs[0].teams[0]=$$GITHUB_TEAM \
 			--set githubRbac.orgs[0].name=$$GITHUB_ORG_NAME \
 			--set githubRbac.orgs[0].teams[0]=$$GITHUB_TEAM \
-			--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET)"; \
+			--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
+			--set authmiddleware.repository=$(ECR_REGISTRY) \
+			--set authmiddleware.imageName=$(ECR_REPOSITORY_AUTH) \
+			--set authmiddleware.jwtSigningKey=$$JWT_SIGNING_KEY \
+			--set authmiddleware.csrfAuthKey=$$CSRF_AUTH_KEY"; \
 		\
 		if [ ! -z "$$DEX_OAUTH2_SECRET" ]; then \
 			HELM_ARGS="$$HELM_ARGS --set dex.oauth2ProxyClientSecret=$$DEX_OAUTH2_SECRET"; \
@@ -479,7 +549,7 @@ deploy-aws-traefik-dex-internal:
 	)
 	@echo "Restarting deployments to use new images..."
 	kubectl rollout restart deployment -n jupyter-k8s-router \
-		traefik oauth2-proxy dex
+		traefik oauth2-proxy dex authmiddleware
 	@echo "All deployments to use new images..."
 	# Clean up temporary chart directory
 	rm -rf /tmp/jk8s-aws-traefik-dex
@@ -490,6 +560,20 @@ deploy-aws-traefik-dex-internal:
 deploy-aws-traefik-dex:
 	$(MAKE) deploy-aws-traefik-dex-internal CLOUD_PROVIDER=aws
 
+.PHONY: apply-sample-routing
+apply-sample-routing:
+	@echo "Loading configuration from .env file and deploying..."
+	@( \
+		set -e; \
+		. ./.env; \
+		export DOMAIN=$$DOMAIN; \
+		kubectl apply -k config/samples_routing --dry-run=client -o yaml | envsubst | kubectl apply -f -; \
+	)
+
+.PHONY: delete-sample-routing
+delete-sample-routing:
+	kubectl delete -k config/samples_routing
+
 .PHONY: undeploy-aws
 undeploy-aws: ## Uninstall the Helm chart from remote cluster
 	@echo "Undeploying Helm chart from remote AWS cluster..."
@@ -498,9 +582,6 @@ undeploy-aws: ## Uninstall the Helm chart from remote cluster
 	helm uninstall jk8-aws-traefik-dex -n jupyter-k8s-router --ignore-not-found
 	helm uninstall traefik-crd --ignore-not-found
 	# CRDs with resource-policy: keep are not deleted by Helm, but we can find them by release name
-# 	@echo "Cleaning up CRDs with resource-policy: keep..."
-# 	kubectl get crds | grep jupyterservers | awk '{print $1}' | xargs -n1 kubectl delete crd
-	kubectl get crds --no-headers -o custom-columns=NAME:.metadata.name | grep traefik | xargs -r kubectl delete crd || true
 
 # Port forward to a specific Jupyter server
 .PHONY: port-forward

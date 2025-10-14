@@ -31,21 +31,23 @@ func NewStateMachine(resourceManager *ResourceManager, statusManager *StatusMana
 }
 
 // ReconcileDesiredState handles the state machine logic for Workspace
-func (sm *StateMachine) ReconcileDesiredState(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (ctrl.Result, error) {
+func (sm *StateMachine) ReconcileDesiredState(
+	ctx context.Context, workspace *workspacesv1alpha1.Workspace) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
 	desiredStatus := sm.getDesiredStatus(workspace)
-	logger.Info("Reconciling desired state", "desiredStatus", desiredStatus)
+	snapshotStatus := workspace.DeepCopy().Status
 
 	switch desiredStatus {
 	case "Stopped":
-		return sm.reconcileDesiredStoppedStatus(ctx, workspace)
+		return sm.reconcileDesiredStoppedStatus(ctx, workspace, &snapshotStatus)
 	case "Running":
-		return sm.reconcileDesiredRunningStatus(ctx, workspace)
+		return sm.reconcileDesiredRunningStatus(ctx, workspace, &snapshotStatus)
 	default:
 		err := fmt.Errorf("unknown desired status: %s", desiredStatus)
 		// Update error condition
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, err.Error()); statusErr != nil {
+		if statusErr := sm.statusManager.UpdateErrorStatus(
+			ctx, workspace, ReasonDeploymentError, err.Error(), &snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
 		return ctrl.Result{RequeueAfter: LongRequeueDelay}, err
@@ -60,9 +62,19 @@ func (sm *StateMachine) getDesiredStatus(workspace *workspacesv1alpha1.Workspace
 	return workspace.Spec.DesiredStatus
 }
 
-func (sm *StateMachine) reconcileDesiredStoppedStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (ctrl.Result, error) {
+func (sm *StateMachine) reconcileDesiredStoppedStatus(
+	ctx context.Context,
+	workspace *workspacesv1alpha1.Workspace,
+	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 	logger.Info("Attempting to bring Workspace status to 'Stopped'")
+
+	// Remove access strategy resources first
+	accessError := sm.ReconcileAccessForDesiredStoppedStatus(ctx, workspace)
+	if accessError != nil {
+		logger.Error(accessError, "Failed to remove access strategy resources")
+		// Continue with deletion of other resources, don't block on access strategy
+	}
 
 	// Ensure deployment is deleted - this is an asynchronous operation
 	// EnsureDeploymentDeleted only ensures the delete API request is accepted by K8s
@@ -71,7 +83,8 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(ctx context.Context, works
 	if deploymentErr != nil {
 		err := fmt.Errorf("failed to get deployment: %w", deploymentErr)
 		// Update error condition
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, err.Error()); statusErr != nil {
+		if statusErr := sm.statusManager.UpdateErrorStatus(
+			ctx, workspace, ReasonDeploymentError, err.Error(), snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
@@ -84,7 +97,8 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(ctx context.Context, works
 	if serviceErr != nil {
 		err := fmt.Errorf("failed to get service: %w", serviceErr)
 		// Update error condition
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonServiceError, err.Error()); statusErr != nil {
+		if statusErr := sm.statusManager.UpdateErrorStatus(
+			ctx, workspace, ReasonServiceError, err.Error(), snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
@@ -96,23 +110,38 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(ctx context.Context, works
 	serviceDeleted := sm.resourceManager.IsServiceMissingOrDeleting(service)
 
 	if deploymentDeleted && serviceDeleted {
-		// Both resources are fully deleted, update to stopped status
-		logger.Info("Deployment and Service are both deleted, updating to Stopped status")
+		// Flag as Error if AccessResources failed to delete
+		if accessError != nil {
+			if statusErr := sm.statusManager.UpdateErrorStatus(
+				ctx, workspace, ReasonServiceError, accessError.Error(), snapshotStatus); statusErr != nil {
+				logger.Error(statusErr, "Failed to update error status")
+			}
+			return ctrl.Result{RequeueAfter: PollRequeueDelay}, accessError
+		} else {
+			// All resources are fully deleted, update to stopped status
+			logger.Info("Deployment and Service are both deleted, updating to Stopped status")
 
-		// Record workspace stopped event
-		sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceStopped", "Workspace has been stopped")
+			// Record workspace stopped event
+			sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceStopped", "Workspace has been stopped")
 
-		if err := sm.statusManager.UpdateStoppedStatus(ctx, workspace); err != nil {
-			return ctrl.Result{}, err
+			if err := sm.statusManager.UpdateStoppedStatus(ctx, workspace, snapshotStatus); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, nil
 	}
 
 	// If EITHER deployment OR service is still in the process of being deleted
 	// Update status to Stopping and requeue to check again later
 	if deploymentDeleted || serviceDeleted {
 		logger.Info("Resources still being deleted", "deploymentDeleted", deploymentDeleted, "serviceDeleted", serviceDeleted)
-		if err := sm.statusManager.UpdateStoppingStatus(ctx, workspace, deploymentDeleted, serviceDeleted); err != nil {
+		readiness := WorkspaceStoppingReadiness{
+			computeStopped:         deploymentDeleted,
+			serviceStopped:         serviceDeleted,
+			accessResourcesStopped: true,
+		}
+		if err := sm.statusManager.UpdateStoppingStatus(
+			ctx, workspace, readiness, snapshotStatus); err != nil {
 			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 		}
 		// Requeue to check deletion progress again later
@@ -122,18 +151,22 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(ctx context.Context, works
 	// This should not happen, return an error
 	err := fmt.Errorf("unexpected state: both deployment and service should be in deletion process")
 	// Update error condition
-	if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, err.Error()); statusErr != nil {
+	if statusErr := sm.statusManager.UpdateErrorStatus(
+		ctx, workspace, ReasonDeploymentError, err.Error(), snapshotStatus); statusErr != nil {
 		logger.Error(statusErr, "Failed to update error status")
 	}
 	return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 }
 
-func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (ctrl.Result, error) {
+func (sm *StateMachine) reconcileDesiredRunningStatus(
+	ctx context.Context,
+	workspace *workspacesv1alpha1.Workspace,
+	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 	logger.Info("Attempting to bring Workspace status to 'Running'")
 
 	// Validate template BEFORE creating any resources
-	resolvedTemplate, shouldContinue, err := sm.handleTemplateValidation(ctx, workspace)
+	resolvedTemplate, shouldContinue, err := sm.handleTemplateValidation(ctx, workspace, snapshotStatus)
 	if !shouldContinue {
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 	}
@@ -142,7 +175,8 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 	_, err = sm.resourceManager.EnsurePVCExists(ctx, workspace, resolvedTemplate)
 	if err != nil {
 		pvcErr := fmt.Errorf("failed to ensure PVC exists: %w", err)
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, pvcErr.Error()); statusErr != nil {
+		if statusErr := sm.statusManager.UpdateErrorStatus(
+			ctx, workspace, ReasonDeploymentError, pvcErr.Error(), snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, pvcErr
@@ -156,7 +190,8 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 	if err != nil {
 		deployErr := fmt.Errorf("failed to ensure deployment exists: %w", err)
 		// Update error condition
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, deployErr.Error()); statusErr != nil {
+		if statusErr := sm.statusManager.UpdateErrorStatus(
+			ctx, workspace, ReasonDeploymentError, deployErr.Error(), snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, deployErr
@@ -168,7 +203,8 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 	if err != nil {
 		serviceErr := fmt.Errorf("failed to ensure service exists: %w", err)
 		// Update error condition
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonServiceError, serviceErr.Error()); statusErr != nil {
+		if statusErr := sm.statusManager.UpdateErrorStatus(
+			ctx, workspace, ReasonServiceError, serviceErr.Error(), snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, serviceErr
@@ -180,14 +216,19 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 	deploymentReady := sm.resourceManager.IsDeploymentAvailable(deployment)
 	serviceReady := sm.resourceManager.IsServiceAvailable(service)
 
+	// Apply access strategy when compute and service resources are ready
 	if deploymentReady && serviceReady {
-		// Both resources are ready, update to running status
+		if err := sm.ReconcileAccessForDesiredRunningStatus(ctx, workspace, service); err != nil {
+			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+		}
+
+		// Then only update to running status
 		logger.Info("Deployment and Service are both ready, updating to Running status")
 
 		// Record workspace running event
 		sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceRunning", "Workspace is now running")
 
-		if err := sm.statusManager.UpdateRunningStatus(ctx, workspace); err != nil {
+		if err := sm.statusManager.UpdateRunningStatus(ctx, workspace, snapshotStatus); err != nil {
 			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 		}
 		return ctrl.Result{}, nil
@@ -196,8 +237,15 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 	// Resources are being created/started but not fully ready yet
 	// Update status to Starting and requeue to check again later
 	logger.Info("Resources not fully ready", "deploymentReady", deploymentReady, "serviceReady", serviceReady)
+	workspace.Status.DeploymentName = deployment.GetName()
+	workspace.Status.ServiceName = service.GetName()
+	readiness := WorkspaceRunningReadiness{
+		computeReady:         deploymentReady,
+		serviceReady:         serviceReady,
+		accessResourcesReady: false,
+	}
 	if err := sm.statusManager.UpdateStartingStatus(
-		ctx, workspace, deploymentReady, serviceReady, deployment.GetName(), service.GetName()); err != nil {
+		ctx, workspace, readiness, snapshotStatus); err != nil {
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 	}
 
@@ -208,7 +256,10 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(ctx context.Context, works
 // handleTemplateValidation validates the workspace's template reference and handles all validation outcomes.
 // If validation fails or encounters a system error, it updates the workspace status and returns shouldContinue=false.
 // On success, it returns the resolved template with shouldContinue=true.
-func (sm *StateMachine) handleTemplateValidation(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (template *ResolvedTemplate, shouldContinue bool, err error) {
+func (sm *StateMachine) handleTemplateValidation(
+	ctx context.Context,
+	workspace *workspacesv1alpha1.Workspace,
+	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) (template *ResolvedTemplate, shouldContinue bool, err error) {
 	logger := logf.FromContext(ctx)
 
 	// No template reference - continue with default configuration
@@ -220,7 +271,8 @@ func (sm *StateMachine) handleTemplateValidation(ctx context.Context, workspace 
 	if err != nil {
 		// System error (couldn't fetch template, etc.)
 		logger.Error(err, "Failed to validate template")
-		if statusErr := sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, err.Error()); statusErr != nil {
+		if statusErr := sm.statusManager.UpdateErrorStatus(
+			ctx, workspace, ReasonDeploymentError, err.Error(), snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
 		return nil, false, err
@@ -235,7 +287,7 @@ func (sm *StateMachine) handleTemplateValidation(ctx context.Context, workspace 
 		message := fmt.Sprintf("Validation failed for %s with %d violations", templateName, len(validation.Violations))
 		sm.recorder.Event(workspace, corev1.EventTypeWarning, "ValidationFailed", message)
 
-		if statusErr := sm.statusManager.SetInvalid(ctx, workspace, validation); statusErr != nil {
+		if statusErr := sm.statusManager.SetInvalid(ctx, workspace, validation, snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update validation status")
 		}
 		// No error - successful policy enforcement
@@ -249,10 +301,6 @@ func (sm *StateMachine) handleTemplateValidation(ctx context.Context, workspace 
 	templateName := *workspace.Spec.TemplateRef
 	message := "Validation passed for " + templateName
 	sm.recorder.Event(workspace, corev1.EventTypeNormal, "Validated", message)
-
-	if statusErr := sm.statusManager.SetValid(ctx, workspace); statusErr != nil {
-		logger.Error(statusErr, "Failed to update validation status")
-	}
 
 	return validation.Template, true, nil
 }

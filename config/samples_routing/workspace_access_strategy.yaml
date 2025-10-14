@@ -1,0 +1,60 @@
+apiVersion: workspaces.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: sample-access-strategy
+  namespace: default
+spec:
+  displayName: JupyterLab Routing Strategy
+  accessResourceNamespace: default
+  accessResourceTemplates:
+    # The authorized route - tries token verification on already authenticated requests
+    - kind: IngressRoute
+      apiVersion: traefik.io/v1alpha1
+      namePrefix: authorized-route
+      template: |
+        spec:
+          entryPoints:
+            - websecure
+          routes:
+            - match: "Host(`$DOMAIN`) && PathPrefix(`/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}`)"
+              kind: Rule
+              priority: 100
+              middlewares:
+                - name: auth-headers
+                  namespace: jupyter-k8s-router
+                - name: authmiddleware-verify
+                  namespace: jupyter-k8s-router
+              services:
+                - name: "{{ .Service.Name }}"
+                  namespace: "{{ .Service.Namespace }}"
+                  port: 8888
+
+    # The unauthorized route - handles auth path for initial authentication
+    - kind: IngressRoute
+      apiVersion: traefik.io/v1alpha1
+      namePrefix: unauthorized-route
+      template: |
+        spec:
+          entryPoints:
+            - websecure
+          routes:
+            - match: "Host(`$DOMAIN`) && PathPrefix(`/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/auth`)"
+              kind: Rule
+              priority: 110  # Higher priority specifically for auth paths
+              middlewares:
+                - name: auth-headers
+                  namespace: jupyter-k8s-router
+                - name: oauth-auth-redirect
+                  namespace: jupyter-k8s-router
+                - name: authmiddleware-auth
+                  namespace: jupyter-k8s-router
+                - name: strip-auth-suffix
+                  namespace: jupyter-k8s-router
+              services:
+                - name: "{{ .Service.Name }}"
+                  namespace: "{{ .Service.Namespace }}"
+                  port: 8888
+  mergeEnv:
+    - name: JUPYTER_BASE_URL
+      valueTemplate: "/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
+  accessURLTemplate: "https://$DOMAIN/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/auth"

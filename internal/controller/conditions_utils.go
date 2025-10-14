@@ -75,7 +75,7 @@ func GetNewConditionsOrEmptyIfUnchanged(
 	}
 
 	if !updated {
-		logger.Info("Found no condition to update", "Unchanged Conditions", unchangedConditionNames)
+		// do NOT log here
 		return []metav1.Condition{}
 	} else {
 		logger.Info(

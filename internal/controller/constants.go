@@ -18,8 +18,13 @@ const (
 	DefaultMountPath = "/home/jovyan"
 
 	// Label keys
-	AppLabel       = "app"
-	WorkspaceLabel = "workspace.workspaces.jupyter.org/name"
+	AppLabel = "app"
+
+	// Access strategy label keys
+	LabelWorkspaceName           = "workspaces.jupyter.org/workspaceName"
+	LabelWorkspaceNamespace      = "workspaces.jupyter.org/workspaceNamespace"
+	LabelAccessStrategyName      = "workspaces.jupyter.org/accessStrategyName"
+	LabelAccessStrategyNamespace = "workspaces.jupyter.org/accessStrategyNamespace"
 
 	// Label values
 	AppLabelValue = "jupyter"
@@ -59,7 +64,7 @@ func GeneratePVCName(workspaceName string) string {
 // GenerateLabels creates consistent labels for resources
 func GenerateLabels(workspaceName string) map[string]string {
 	return map[string]string{
-		AppLabel:       AppLabelValue,
-		WorkspaceLabel: workspaceName,
+		AppLabel:           AppLabelValue,
+		LabelWorkspaceName: workspaceName,
 	}
 }

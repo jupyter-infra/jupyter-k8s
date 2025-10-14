@@ -52,6 +52,19 @@ spec:
           spec:
             description: spec defines the desired state of Workspace
             properties:
+              accessStrategy:
+                description: AccessStrategy specifies the WorkspaceAccessStrategy
+                  to use
+                properties:
+                  name:
+                    description: Name of the WorkspaceAccessStrategy
+                    type: string
+                  namespace:
+                    description: Namespace where the WorkspaceAccessStrategy is located
+                    type: string
+                required:
+                - name
+                type: object
               desiredStatus:
                 description: DesiredStatus specifies the desired operational status
                 enum:
@@ -166,6 +179,41 @@ spec:
           status:
             description: status defines the observed state of Workspace
             properties:
+              accessResourceSelector:
+                description: |-
+                  AccessResourceSelector is a label selector that can be used to find all resources
+                  created from the workspace's AccessStrategy templates
+                type: string
+              accessResources:
+                description: |-
+                  AccessResources provides status details of individual resources created from
+                  the workspace's AccessStrategy templates
+                items:
+                  description: AccessResourceStatus defines the status of a resource
+                    created from a template
+                  properties:
+                    apiVersion:
+                      description: APIVersion of the Kubernetes resource
+                      type: string
+                    kind:
+                      description: Kind of the Kubernetes resource
+                      type: string
+                    name:
+                      description: Name of the resource
+                      type: string
+                    namespace:
+                      description: Namespace of the resource
+                      type: string
+                  required:
+                  - apiVersion
+                  - kind
+                  - name
+                  - namespace
+                  type: object
+                type: array
+              accessURL:
+                description: AccessURL is the URL at which the workspace can be accessed
+                type: string
               conditions:
                 description: |-
                   Conditions represent the current state of the Workspace resource.

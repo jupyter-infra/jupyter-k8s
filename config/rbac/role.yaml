@@ -37,9 +37,10 @@ rules:
   - update
   - watch
 - apiGroups:
-  - workspaces.jupyter.org
+  - traefik.io
   resources:
-  - workspaces
+  - ingressroutes
+  - middlewares
   verbs:
   - create
   - delete
@@ -51,11 +52,15 @@ rules:
 - apiGroups:
   - workspaces.jupyter.org
   resources:
-  - workspaces/status
+  - '*'
   verbs:
+  - create
+  - delete
   - get
+  - list
   - patch
   - update
+  - watch
 - apiGroups:
   - workspaces.jupyter.org
   resources:

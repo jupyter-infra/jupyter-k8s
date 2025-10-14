@@ -1,0 +1,21 @@
+apiVersion: workspaces.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: sample-workspace-with-access
+  namespace: default
+spec:
+  displayName: "Sample Workspace with Access Strategy"
+  # Container image to use
+  # Using the built-in 'uv' image shortcut
+  image: uv
+  desiredStatus: Running
+  accessStrategy:
+    name: sample-access-strategy
+    namespace: default
+  resources:
+    limits:
+      cpu: "1"
+      memory: "2Gi"
+    requests:
+      cpu: "0.5"
+      memory: "1Gi"

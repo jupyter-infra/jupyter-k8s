@@ -40,6 +40,7 @@ func main() {
 	var applicationImagesPullPolicy string
 	var applicationImagesRegistry string
 	var requireTemplate bool
+	var watchTraefik bool
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -52,6 +53,7 @@ func main() {
 		"Registry prefix for application images (e.g. example.com/my-registry)")
 	flag.BoolVar(&requireTemplate, "require-template", false,
 		"Require all workspaces to reference a WorkspaceTemplate")
+	flag.BoolVar(&watchTraefik, "watch-traefik", false, "Watch traefik sub-resources")
 	flag.Parse()
 
 	// Setup logger
@@ -97,6 +99,7 @@ func main() {
 	controllerOpts := controller.WorkspaceControllerOptions{
 		ApplicationImagesPullPolicy: getImagePullPolicy(applicationImagesPullPolicy),
 		ApplicationImagesRegistry:   applicationImagesRegistry,
+		WatchTraefik:                watchTraefik,
 	}
 
 	// Setup controllers

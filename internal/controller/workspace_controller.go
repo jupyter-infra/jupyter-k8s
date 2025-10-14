@@ -22,6 +22,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,6 +39,9 @@ type WorkspaceControllerOptions struct {
 
 	// Registry is the prefix to use for all application images
 	ApplicationImagesRegistry string
+
+	// Flag to indicate whether to watch traefik resource (for AccessStrategy)
+	WatchTraefik bool
 }
 
 // WorkspaceReconciler reconciles a Workspace object
@@ -54,11 +58,12 @@ func (r *WorkspaceReconciler) SetStateMachine(sm *StateMachine) {
 	r.stateMachine = sm
 }
 
-// +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=workspaces,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=workspaces/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=*,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=traefik.io,resources=ingressroutes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=traefik.io,resources=middlewares,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -72,8 +77,7 @@ func (r *WorkspaceReconciler) SetStateMachine(sm *StateMachine) {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
-	logger.Info("Starting reconciliation",
-		"workspace", req.NamespacedName)
+	logger.Info("Starting reconciliation", "workspace", req.NamespacedName)
 
 	// Fetch the Workspace instance
 	workspace, err := r.getWorkspace(ctx, req)
@@ -112,19 +116,36 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Reconciliation completed successfully")
 	return result, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&workspacesv1alpha1.Workspace{}).
 		Named("workspace").
+		// Watch for standard Kubernetes resources
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
-		Owns(&corev1.PersistentVolumeClaim{}).
-		Complete(r)
+		Owns(&corev1.PersistentVolumeClaim{})
+
+	// Optional traefik configuration
+	// require traefik CRD to be installed
+	if r.options.WatchTraefik {
+		// Create an IngressRoute unstructured object for watching
+		ingressRouteGVK := &unstructured.Unstructured{}
+		ingressRouteGVK.SetAPIVersion("traefik.io/v1alpha1")
+		ingressRouteGVK.SetKind("IngressRoute")
+
+		// Create a Middleware unstructured object for watching
+		middlewareGVK := &unstructured.Unstructured{}
+		middlewareGVK.SetAPIVersion("traefik.io/v1alpha1")
+		middlewareGVK.SetKind("Middleware")
+
+		builder.Owns(ingressRouteGVK).Owns(middlewareGVK)
+	}
+
+	return builder.Complete(r)
 }
 
 // SetupWorkspaceController sets up the controller with the Manager and specified options
@@ -132,22 +153,21 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	k8sClient := mgr.GetClient()
 	scheme := mgr.GetScheme()
 
-	// Create builders with options
-	deploymentBuilder := NewDeploymentBuilder(scheme, options, k8sClient)
-	serviceBuilder := NewServiceBuilder(scheme)
-	pvcBuilder := NewPVCBuilder(scheme)
-
-	// Create template resolver
-	templateResolver := NewTemplateResolver(k8sClient)
-
 	// Create managers
 	statusManager := NewStatusManager(k8sClient)
-	resourceManager := NewResourceManager(k8sClient, deploymentBuilder, serviceBuilder, pvcBuilder, statusManager)
+	resourceManager := NewResourceManager(
+		k8sClient,
+		scheme,
+		NewDeploymentBuilder(scheme, options, k8sClient),
+		NewServiceBuilder(scheme),
+		NewPVCBuilder(scheme),
+		NewAccessResourcesBuilder(),
+		statusManager,
+	)
 
-	// Create event recorder
+	// Create state machine
+	templateResolver := NewTemplateResolver(k8sClient)
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
-
-	// Create state machine with template resolver and event recorder
 	stateMachine := NewStateMachine(resourceManager, statusManager, templateResolver, eventRecorder)
 
 	// Create reconciler with dependencies

@@ -3,6 +3,9 @@ module github.com/jupyter-ai-contrib/jupyter-k8s
 go 1.24.5
 
 require (
+	github.com/golang-jwt/jwt/v5 v5.2.2
+	github.com/gorilla/csrf v1.7.3
+	github.com/gorilla/securecookie v1.1.2
 	github.com/onsi/ginkgo/v2 v2.25.1
 	github.com/onsi/gomega v1.38.1
 	github.com/stretchr/testify v1.10.0
