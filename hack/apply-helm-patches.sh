@@ -17,6 +17,15 @@ fi
 
 echo "Applying custom patches to Helm chart files..."
 
+# Copy apiservice resources (kubebuilder helm plugin doesn't handle these)
+if [ -d "${SCRIPT_DIR}/../config/apiservice" ]; then
+    echo "Copying apiservice resources..."
+    mkdir -p "${CHART_DIR}/templates/apiservice"
+    cp "${SCRIPT_DIR}/../config/apiservice"/*.yaml "${CHART_DIR}/templates/apiservice/"
+    # Remove kustomization.yaml as it's not a Kubernetes resource
+    rm -f "${CHART_DIR}/templates/apiservice/kustomization.yaml"
+fi
+
 # Function to apply patches
 apply_patch() {
     local file=$1
