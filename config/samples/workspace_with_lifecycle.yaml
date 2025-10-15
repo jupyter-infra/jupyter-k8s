@@ -1,0 +1,18 @@
+apiVersion: workspaces.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  labels:
+    app.kubernetes.io/name: jupyter-k8s
+    app.kubernetes.io/managed-by: kustomize
+  name: workspace-with-lifecycle
+spec:
+  displayName: "Workspace with Lifecycle Hooks"
+  image: "jupyter/scipy-notebook:latest"
+  desiredStatus: "Running"
+  lifecycle:
+    postStart:
+      exec:
+        command: ["/bin/sh", "-c", "echo 'Container started' > /tmp/startup.log"]
+    preStop:
+      exec:
+        command: ["/bin/sh", "-c", "echo 'Container stopping' > /tmp/shutdown.log"]

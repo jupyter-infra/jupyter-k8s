@@ -29,6 +29,10 @@ const (
 	// Label values
 	AppLabelValue = "jupyter"
 
+	// Annotation keys
+	AnnotationCreatedBy     = "workspaces.jupyter.org/created-by"
+	AnnotationLastUpdatedBy = "workspaces.jupyter.org/last-updated-by"
+
 	// Status phases
 	PhaseCreating = "Creating"
 	PhaseRunning  = "Running"

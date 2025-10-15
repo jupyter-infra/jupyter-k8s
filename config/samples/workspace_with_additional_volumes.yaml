@@ -1,0 +1,20 @@
+apiVersion: workspaces.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  labels:
+    app.kubernetes.io/name: jupyter-k8s
+    app.kubernetes.io/managed-by: kustomize
+  name: workspace-with-volumes
+spec:
+  displayName: "Workspace with Additional Volumes"
+  image: "jupyter/scipy-notebook:latest"
+  desiredStatus: "Running"
+  storage:
+    size: "5Gi"
+  volumes:
+    - name: "data-volume"
+      persistentVolumeClaimName: "shared-data-pvc"
+      mountPath: "/data"
+    - name: "models-volume"
+      persistentVolumeClaimName: "ml-models-pvc"
+      mountPath: "/models"

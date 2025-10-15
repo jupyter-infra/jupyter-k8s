@@ -5,4 +5,8 @@ resources:
 - workspaces_v1alpha1_workspace_with_storage.yaml
 - workspaces_v1alpha1_workspace_with_template.yaml
 - workspaces_v1alpha1_workspacetemplate_production.yaml
+- workspace_with_additional_volumes.yaml
+- workspace_with_container_config.yaml
+- workspace_with_lifecycle.yaml
+- workspace_with_node_selector.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
