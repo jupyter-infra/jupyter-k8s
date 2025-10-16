@@ -560,6 +560,30 @@ deploy-aws-traefik-dex-internal:
 deploy-aws-traefik-dex:
 	$(MAKE) deploy-aws-traefik-dex-internal CLOUD_PROVIDER=aws
 
+deploy-aws-hyperpod-internal:
+	@if [ ! -f .env ]; then \
+		echo "❌ .env file not found. Copy the `.env.example` file to `.env` and edit the values."; \
+		echo "Required variables: DOMAIN"; \
+		exit 1; \
+	fi
+	@echo "Loading configuration from .env file and deploying aws-hyperpod..."
+	@( \
+		set -e; \
+		. ./.env; \
+		echo 'Deploying AWS HyperPod helm chart'; \
+		helm upgrade --install aws-hyperpod ./guided-charts/aws-hyperpod \
+			--create-namespace --namespace jupyter-k8s-system \
+			--set domain=$$DOMAIN; \
+	)
+
+.PHONY: deploy-aws-hyperpod
+deploy-aws-hyperpod: ## Deploy aws-hyperpod guided chart
+	$(MAKE) deploy-aws-hyperpod-internal CLOUD_PROVIDER=aws
+
+.PHONY: undeploy-aws-hyperpod  
+undeploy-aws-hyperpod: ## Remove aws-hyperpod guided chart
+	helm uninstall aws-hyperpod --namespace jupyter-k8s-system
+
 .PHONY: apply-sample-routing
 apply-sample-routing:
 	@echo "Loading configuration from .env file and deploying..."

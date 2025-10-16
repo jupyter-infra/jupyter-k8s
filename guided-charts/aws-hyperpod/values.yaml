@@ -1,0 +1,20 @@
+# [AWS HYPERPOD]: Configuration for aws-hyperpod deployment mode
+# This includes presigned URL and remote access setup
+
+namespace: jupyter-k8s-system # TODO consider if we need seperate namespace
+
+# Full domain for the application (required)
+domain: ""
+
+# [STORAGE] StorageClasses for Workspaces
+storageClass:
+  ebs:
+    create: true
+    name: ebs-sc
+    isDefault: false
+    provisioner: ebs.csi.aws.com
+    reclaimPolicy: Delete
+    volumeBindingMode: WaitForFirstConsumer
+    parameters:
+      type: gp3
+      fsType: ext4
