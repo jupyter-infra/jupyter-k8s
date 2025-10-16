@@ -63,7 +63,7 @@ func (sm *StatusManager) UpdateStartingStatus(
 	readiness WorkspaceRunningReadiness,
 	snapshotStatus *workspacesv1alpha1.WorkspaceStatus,
 ) error {
-	// ensure StartingCondition is set to True with the appropriate reason
+	// default: nothing is started yet
 	startingReason := ReasonResourcesNotReady
 	startingMessage := "Workspace is starting"
 
@@ -71,10 +71,17 @@ func (sm *StatusManager) UpdateStartingStatus(
 		return fmt.Errorf("invalid call: not all resources should be ready in method UpdateStartingStatus")
 	}
 
-	if !readiness.computeReady {
+	waitingForCompute := !readiness.computeReady && readiness.serviceReady && readiness.accessResourcesReady
+	waitingForService := readiness.computeReady && !readiness.serviceReady && readiness.accessResourcesReady
+	waitingForAccess := readiness.computeReady && readiness.serviceReady && !readiness.accessResourcesReady
+
+	if waitingForCompute {
 		startingReason = ReasonComputeNotReady
 		startingMessage = "Compute is not ready"
-	} else if !readiness.serviceReady {
+	} else if waitingForAccess {
+		startingReason = ReasonAccessNotReady
+		startingMessage = "Access is not ready"
+	} else if waitingForService {
 		startingReason = ReasonServiceNotReady
 		startingMessage = "Service is not ready"
 	}
@@ -132,7 +139,12 @@ func (sm *StatusManager) UpdateStartingStatus(
 }
 
 // UpdateErrorStatus sets the Degraded condition to true with the specified error reason and message
-func (sm *StatusManager) UpdateErrorStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, reason, message string, snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
+func (sm *StatusManager) UpdateErrorStatus(
+	ctx context.Context,
+	workspace *workspacesv1alpha1.Workspace,
+	reason string,
+	message string,
+	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
 	// Set DegradedCondition to true with the provided error reason and message
 	degradedCondition := NewCondition(
 		ConditionTypeDegraded,
@@ -203,7 +215,10 @@ func (sm *StatusManager) SetInvalid(
 }
 
 // UpdateRunningStatus sets the Available condition to true and Progressing to false
-func (sm *StatusManager) UpdateRunningStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
+func (sm *StatusManager) UpdateRunningStatus(
+	ctx context.Context,
+	workspace *workspacesv1alpha1.Workspace,
+	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
 	// ensure AvailableCondition is set to true with ReasonResourcesReady
 	availableCondition := NewCondition(
 		ConditionTypeAvailable,
@@ -265,16 +280,30 @@ type WorkspaceStoppingReadiness struct {
 }
 
 // UpdateStoppingStatus sets Available to false and Progressing to true
-func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, readiness WorkspaceStoppingReadiness, snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
+func (sm *StatusManager) UpdateStoppingStatus(
+	ctx context.Context,
+	workspace *workspacesv1alpha1.Workspace,
+	readiness WorkspaceStoppingReadiness,
+	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
+	// default: nothing is stopped yet
 	stoppingReason := ReasonResourcesNotStopped
 	stoppingMessage := "Resources are still running"
 
-	if readiness.computeStopped && readiness.serviceStopped {
+	if readiness.computeStopped && readiness.serviceStopped && readiness.accessResourcesStopped {
 		return fmt.Errorf("invalid call: not all resources should be stopped in method UpdateStoppingStatus")
-	} else if readiness.serviceStopped {
+	}
+
+	waitingForCompute := !readiness.computeStopped && readiness.serviceStopped && readiness.accessResourcesStopped
+	waitingForService := readiness.computeStopped && !readiness.serviceStopped && readiness.accessResourcesStopped
+	waitingForAccess := readiness.computeStopped && readiness.serviceStopped && !readiness.accessResourcesStopped
+
+	if waitingForCompute {
 		stoppingReason = ReasonComputeNotStopped
 		stoppingMessage = "Compute is still running"
-	} else if readiness.computeStopped {
+	} else if waitingForAccess {
+		stoppingReason = ReasonAccessNotStopped
+		stoppingMessage = "Access is still up"
+	} else if waitingForService {
 		stoppingReason = ReasonServiceNotStopped
 		stoppingMessage = "Service is still up"
 	}
@@ -334,7 +363,10 @@ func (sm *StatusManager) UpdateStoppingStatus(ctx context.Context, workspace *wo
 }
 
 // UpdateStoppedStatus sets Available and Progressing to false, Stopped to true
-func (sm *StatusManager) UpdateStoppedStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
+func (sm *StatusManager) UpdateStoppedStatus(
+	ctx context.Context,
+	workspace *workspacesv1alpha1.Workspace,
+	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
 	// ensure AvailableCondition is set to false with ReasonDesiredStateStopped
 	availableCondition := NewCondition(
 		ConditionTypeAvailable,

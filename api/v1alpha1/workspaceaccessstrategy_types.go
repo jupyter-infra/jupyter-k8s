@@ -53,11 +53,6 @@ type WorkspaceAccessStrategySpec struct {
 	// DisplayName is a human-readable name for this access strategy
 	DisplayName string `json:"displayName"`
 
-	// AccessResourcesNamespace is the namespace where routing resources will be created
-	// If omitted, creates routes in the same namespace as the Workspace
-	// +optional
-	AccessResourcesNamespace string `json:"accessResourceNamespace,omitempty"`
-
 	// AccessResourceTemplates defines templates for resources created in the routes namespace
 	AccessResourceTemplates []AccessResourceTemplate `json:"accessResourceTemplates"`
 

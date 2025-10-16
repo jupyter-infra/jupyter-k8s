@@ -9,7 +9,6 @@ Jupyter-k8s is a Kubernetes operator for Jupyter notebooks and other IDEs. It ma
 - **Workspace**: A compute unit with dedicated storage, unique URL, and access control list for users
 - **WorkspaceAccessStrategy**: Handles network routing with HTTPS ingress or tunneling out from workspaces
 - **WorkspaceTemplate**: Provides default settings and bounds for variations
-- **WorkspaceExecutionProfile**: Associates a Grantee (k8s username or group) with a Service Account
 - **WorkspaceShare**: Associates a Grantee (k8s username or group) with a Workspace for access
 
 ## Architecture

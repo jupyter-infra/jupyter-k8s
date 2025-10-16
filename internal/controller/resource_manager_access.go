@@ -57,13 +57,9 @@ func (rm *ResourceManager) EnsureAccessResourcesExist(
 	accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy,
 	service *corev1.Service,
 ) error {
-	// Determine namespace for the AccessResources based on the namespace
-	// specified in the AccessStrategy;
-	// or fallback to the Workspace's namespace.
+	// The AccessResource MUST be in the Workspace namespace
+	// in order for the Workspace is the owner of the AccessResource
 	accessResourceNamespace := workspace.Namespace
-	if accessStrategy.Spec.AccessResourcesNamespace != "" {
-		accessResourceNamespace = accessStrategy.Spec.AccessResourcesNamespace
-	}
 
 	// ensure each of the resources defined in the accessStrategy exists
 	for _, resourceTemplate := range accessStrategy.Spec.AccessResourceTemplates {
@@ -101,6 +97,8 @@ func (rm *ResourceManager) ensureAccessResourceExists(
 		}
 	}
 
+	removedFromStatus := false
+
 	// CASE 1: resource exists in status
 	if accessResourceStatus != nil {
 		existingObj := &unstructured.Unstructured{}
@@ -126,6 +124,7 @@ func (rm *ResourceManager) ensureAccessResourceExists(
 		// remove the status entry
 		workspace.Status.AccessResources = append(
 			workspace.Status.AccessResources[:statusIdx], workspace.Status.AccessResources[statusIdx+1:]...)
+		removedFromStatus = true
 
 		// continue to create the resource (case 2)
 	}
@@ -143,17 +142,16 @@ func (rm *ResourceManager) ensureAccessResourceExists(
 		return fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
+	// Check if this resource already exists in the status
+	addToStatus := accessResourceStatus == nil || removedFromStatus
+
 	if err := rm.client.Create(ctx, obj); err != nil {
 		// If resource already exists, try update
 		if errors.IsAlreadyExists(err) {
 			existingObj := &unstructured.Unstructured{}
 			existingObj.SetGroupVersionKind(obj.GroupVersionKind())
-			workspace.Status.AccessResources = append(workspace.Status.AccessResources, workspacesv1alpha1.AccessResourceStatus{
-				Kind:       obj.GetKind(),
-				APIVersion: obj.GetAPIVersion(),
-				Name:       obj.GetName(),
-				Namespace:  obj.GetNamespace(),
-			})
+
+			// Get the existing resource
 			if err := rm.client.Get(ctx, types.NamespacedName{
 				Namespace: obj.GetNamespace(),
 				Name:      obj.GetName(),
@@ -172,12 +170,16 @@ func (rm *ResourceManager) ensureAccessResourceExists(
 			return fmt.Errorf("failed to create resource: %w", err)
 		}
 	}
-	workspace.Status.AccessResources = append(workspace.Status.AccessResources, workspacesv1alpha1.AccessResourceStatus{
-		Kind:       obj.GetKind(),
-		APIVersion: obj.GetAPIVersion(),
-		Name:       obj.GetName(),
-		Namespace:  obj.GetNamespace(),
-	})
+
+	// Only add to status after successful update if it doesn't already exist
+	if addToStatus {
+		workspace.Status.AccessResources = append(workspace.Status.AccessResources, workspacesv1alpha1.AccessResourceStatus{
+			Kind:       obj.GetKind(),
+			APIVersion: obj.GetAPIVersion(),
+			Name:       obj.GetName(),
+			Namespace:  obj.GetNamespace(),
+		})
+	}
 	logger.Info("Applied resource",
 		"kind", obj.GetKind(),
 		"name", obj.GetName(),
@@ -203,57 +205,79 @@ func (rm *ResourceManager) getGroupVersionKind(apiVersion string, kind string) s
 	}
 }
 
-// EnsureAccessResourcesDeleted removes routing resources for the Workspace
+// ensureAccessResourceDeleted queries and attempts to delete a specific accessResource
+// from its reference in Workspace.Status
+func (rm *ResourceManager) ensureAccessResourceDeleted(
+	ctx context.Context,
+	accessResource *workspacesv1alpha1.AccessResourceStatus) (bool, error) {
+	logger := logf.FromContext(ctx)
+	existingAccessResource := &unstructured.Unstructured{}
+
+	// Set the GVK before getting the resource
+	gvk := rm.getGroupVersionKind(accessResource.APIVersion, accessResource.Kind)
+	existingAccessResource.SetGroupVersionKind(gvk)
+
+	getAccessResourceErr := rm.client.Get(ctx, types.NamespacedName{
+		Name:      accessResource.Name,
+		Namespace: accessResource.Namespace,
+	}, existingAccessResource)
+
+	if getAccessResourceErr != nil {
+		if errors.IsNotFound(getAccessResourceErr) {
+			logger.Info("AccessResource '%s' in namespace '%s' is deleted.", accessResource.Name, accessResource.Namespace)
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to retrieve AccessResource: %w", getAccessResourceErr)
+	}
+
+	// Delete resource
+	if err := rm.client.Delete(ctx, existingAccessResource); err != nil {
+		if errors.IsNotFound(err) {
+			// Resource doesn't exist, nothing to do
+			logger.Info("AccessResource '%s' in namespace '%s' is deleted.", accessResource.Name, accessResource.Namespace)
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to delete resource: %w", err)
+	}
+	logger.Info("Deleted resource",
+		"kind", accessResource.Kind,
+		"name", accessResource.Name,
+		"namespace", accessResource.Namespace)
+	return true, nil
+}
+
+// EnsureAccessResourcesDeleted removes routing resources for the Workspace.
 func (rm *ResourceManager) EnsureAccessResourcesDeleted(
 	ctx context.Context,
 	workspace *workspacesv1alpha1.Workspace,
 ) error {
-	logger := logf.FromContext(ctx)
 	if len(workspace.Status.AccessResources) == 0 {
 		// no-op: nothing to delete
 		return nil
 	}
 
-	// Remove all existing AccessResources as tracked in Status
-	for len(workspace.Status.AccessResources) > 0 {
-		// pop the last index
-		accessResource := workspace.Status.AccessResources[len(workspace.Status.AccessResources)-1]
+	copiedAccessResources := make([]workspacesv1alpha1.AccessResourceStatus, len(workspace.Status.AccessResources))
+	copy(copiedAccessResources, workspace.Status.AccessResources)
 
-		existingAccessResource := &unstructured.Unstructured{}
-
-		// Set the GVK before getting the resource
-		gvk := rm.getGroupVersionKind(accessResource.APIVersion, accessResource.Kind)
-		existingAccessResource.SetGroupVersionKind(gvk)
-
-		getAccessResourceErr := rm.client.Get(ctx, types.NamespacedName{
-			Name:      accessResource.Name,
-			Namespace: accessResource.Namespace,
-		}, existingAccessResource)
-
-		if getAccessResourceErr != nil {
-			if errors.IsNotFound(getAccessResourceErr) {
-				logger.Info("AccessResource '%s' in namespace '%s' already deleted.", accessResource.Name, accessResource.Namespace)
-				workspace.Status.AccessResources = workspace.Status.AccessResources[:len(workspace.Status.AccessResources)-1]
-				continue
-			}
-			return fmt.Errorf("failed to retrieve AccessResource: %w", getAccessResourceErr)
+	// creates an empty slice with the same underlying array
+	var filteredResources []workspacesv1alpha1.AccessResourceStatus
+	for _, accessResource := range copiedAccessResources {
+		removed, err := rm.ensureAccessResourceDeleted(ctx, &accessResource)
+		if err != nil {
+			return err
 		}
-
-		// Delete resource
-		if err := rm.client.Delete(ctx, existingAccessResource); err != nil {
-			if errors.IsNotFound(err) {
-				// Resource doesn't exist, nothing to do
-				workspace.Status.AccessResources = workspace.Status.AccessResources[:len(workspace.Status.AccessResources)-1]
-				continue
-			}
-			return fmt.Errorf("failed to delete resource: %w", err)
+		if !removed {
+			filteredResources = append(filteredResources, accessResource)
 		}
-		logger.Info("Deleted resource",
-			"kind", accessResource.Kind,
-			"name", accessResource.Name,
-			"namespace", accessResource.Namespace)
-		workspace.Status.AccessResources = workspace.Status.AccessResources[:len(workspace.Status.AccessResources)-1]
 	}
 
+	// update the Status.AccessResources array
+	workspace.Status.AccessResources = filteredResources
+
 	return nil
+}
+
+// AreAccessResourcesDeleted returns true if the workspace.Status.AccessResources is no longer tracking resources.
+func (rm *ResourceManager) AreAccessResourcesDeleted(workspace *workspacesv1alpha1.Workspace) bool {
+	return len(workspace.Status.AccessResources) == 0 // len(nil) returns 0
 }

@@ -34,12 +34,16 @@ func (sm *StateMachine) ReconcileAccessForDesiredRunningStatus(ctx context.Conte
 			return accessUrlErr
 		}
 		workspace.Status.AccessURL = accessUrl
+		workspace.Status.AccessResourceSelector = sm.resourceManager.accessResourcesBuilder.ResolveAccessResourceSelector(
+			workspace, accessStrategy)
 		return nil
 	}
 	// END OF CASE 1
 
 	// CASE 2: there is no AccessStrategy (it may have been removed by an update)
 	workspace.Status.AccessURL = ""
+	workspace.Status.AccessResourceSelector = ""
+
 	err := sm.resourceManager.EnsureAccessResourcesDeleted(ctx, workspace)
 	if err != nil {
 		logger.Error(err, "Failed to delete access resources")
@@ -53,6 +57,8 @@ func (sm *StateMachine) ReconcileAccessForDesiredStoppedStatus(ctx context.Conte
 	logger := logf.FromContext(ctx)
 
 	workspace.Status.AccessURL = ""
+	workspace.Status.AccessResourceSelector = ""
+
 	err := sm.resourceManager.EnsureAccessResourcesDeleted(ctx, workspace)
 	if err != nil {
 		logger.Error(err, "Failed to delete access resources")

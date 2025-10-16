@@ -101,8 +101,6 @@ spec:
             value: "{{ .Values.authmiddleware.cookieSameSite }}"
           - name: PATH_REGEX_PATTERN
             value: "{{ .Values.authmiddleware.pathRegexPattern }}"
-          - name: MAX_COOKIE_PATHS
-            value: "{{ .Values.authmiddleware.maxCookiePaths }}"
           - name: CSRF_AUTH_KEY
             valueFrom:
               secretKeyRef:

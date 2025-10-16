@@ -2,12 +2,17 @@ package authmiddleware
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+)
+
+const (
+	testAppPath2 = "/workspaces/ns2/app2"
 )
 
 // TestHandleVerifyMissingUriHeader tests that handleVerify returns 400 if missing X-Forwarded-Uri header
@@ -44,9 +49,11 @@ func TestHandleVerifyMissingUriHeader(t *testing.T) {
 
 // TestHandleVerifyMissingHostHeader tests that handleVerify returns 400 if missing X-Forwarded-Host header
 func TestHandleVerifyMissingHostHeader(t *testing.T) {
+	fwdUrl := fmt.Sprintf("%s/lab", testAppPath2)
+
 	// Create a request without X-Forwarded-Host header
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
-	req.Header.Set("X-Forwarded-Uri", "/workspaces/ns1/app1/lab")
+	req.Header.Set("X-Forwarded-Uri", fwdUrl)
 	w := httptest.NewRecorder()
 
 	// Create a Server with minimal setup
@@ -76,9 +83,11 @@ func TestHandleVerifyMissingHostHeader(t *testing.T) {
 
 // TestHandleVerifyMissingCookie tests that handleVerify returns 401 if cookie is missing
 func TestHandleVerifyMissingCookie(t *testing.T) {
+	fwdUrl := fmt.Sprintf("%s/lab", testAppPath2)
+
 	// Create a request with required headers
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
-	req.Header.Set("X-Forwarded-Uri", "/workspaces/ns1/app1/lab")
+	req.Header.Set("X-Forwarded-Uri", fwdUrl)
 	req.Header.Set("X-Forwarded-Host", "example.com")
 	w := httptest.NewRecorder()
 
@@ -86,8 +95,8 @@ func TestHandleVerifyMissingCookie(t *testing.T) {
 	cookieHandler := &MockCookieHandler{
 		GetCookieFunc: func(r *http.Request, path string) (string, error) {
 			// Verify parameter
-			if path != "/workspaces/ns1/app1/lab" {
-				t.Errorf("Expected path '/workspaces/ns1/app1/lab', got '%s'", path)
+			if path != fwdUrl {
+				t.Errorf("Expected path '%s', got '%s'", fwdUrl, path)
 			}
 			return "", errors.New("no cookie found")
 		},
@@ -124,9 +133,11 @@ func TestHandleVerifyMissingCookie(t *testing.T) {
 
 // TestHandleVerifyInvalidJWT tests that handleVerify returns 401 if JWT is invalid
 func TestHandleVerifyInvalidJWT(t *testing.T) {
+	fwdUrl := fmt.Sprintf("%s/lab", testAppPath2)
+
 	// Create a request with required headers
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
-	req.Header.Set("X-Forwarded-Uri", "/workspaces/ns1/app1/lab")
+	req.Header.Set("X-Forwarded-Uri", fwdUrl)
 	req.Header.Set("X-Forwarded-Host", "example.com")
 	w := httptest.NewRecorder()
 
@@ -176,9 +187,11 @@ func TestHandleVerifyInvalidJWT(t *testing.T) {
 
 // TestHandleVerifyNoRefreshBeforeWindow tests that handleVerify does not refresh the JWT before the RefreshWindow and returns a 2xx
 func TestHandleVerifyNoRefreshBeforeWindow(t *testing.T) {
+	fwdUrl := fmt.Sprintf("%s/lab", testAppPath2)
+
 	// Create a request with required headers
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
-	req.Header.Set("X-Forwarded-Uri", "/workspaces/ns1/app1/lab")
+	req.Header.Set("X-Forwarded-Uri", fwdUrl)
 	req.Header.Set("X-Forwarded-Host", "example.com")
 	w := httptest.NewRecorder()
 
@@ -186,7 +199,7 @@ func TestHandleVerifyNoRefreshBeforeWindow(t *testing.T) {
 	claims := &Claims{
 		User:   "testuser",
 		Groups: []string{"group1", "group2"},
-		Path:   "/workspaces/ns1/app1",
+		Path:   testAppPath2,
 		Domain: "example.com",
 	}
 
@@ -255,9 +268,11 @@ func TestHandleVerifyNoRefreshBeforeWindow(t *testing.T) {
 
 // TestHandleVerifyWithRefresh tests that handleVerify refreshes the JWT during the RefreshWindow and returns a 2xx
 func TestHandleVerifyWithRefresh(t *testing.T) {
+	fwdUrl := fmt.Sprintf("%s/lab", testAppPath2)
+
 	// Create a request with required headers
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
-	req.Header.Set("X-Forwarded-Uri", "/workspaces/ns1/app1/lab")
+	req.Header.Set("X-Forwarded-Uri", fwdUrl)
 	req.Header.Set("X-Forwarded-Host", "example.com")
 	w := httptest.NewRecorder()
 
@@ -265,7 +280,7 @@ func TestHandleVerifyWithRefresh(t *testing.T) {
 	claims := &Claims{
 		User:   "testuser",
 		Groups: []string{"group1", "group2"},
-		Path:   "/workspaces/ns1/app1",
+		Path:   testAppPath2,
 		Domain: "example.com",
 	}
 
@@ -287,8 +302,8 @@ func TestHandleVerifyWithRefresh(t *testing.T) {
 			if token != newToken {
 				t.Errorf("Expected token '%s', got '%s'", newToken, token)
 			}
-			if path != "/workspaces/ns1/app1" {
-				t.Errorf("Expected path '/workspaces/ns1/app1', got '%s'", path)
+			if path != testAppPath2 {
+				t.Errorf("Expected path %s, got '%s'", testAppPath2, path)
 			}
 		},
 	}
@@ -309,8 +324,8 @@ func TestHandleVerifyWithRefresh(t *testing.T) {
 			if claims.User != "testuser" {
 				t.Errorf("Expected user 'testuser', got '%s'", claims.User)
 			}
-			if claims.Path != "/workspaces/ns1/app1" {
-				t.Errorf("Expected path '/workspaces/ns1/app1', got '%s'", claims.Path)
+			if claims.Path != testAppPath2 {
+				t.Errorf("Expected path '%s', got '%s'", testAppPath2, claims.Path)
 			}
 			return newToken, nil
 		},

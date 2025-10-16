@@ -53,9 +53,7 @@ spec:
     address: "http://authmiddleware.{{ .Values.namespace }}:8080/auth"
     trustForwardHeader: true
     addAuthCookiesToResponse:
-    {{- range $i := until (.Values.authmiddleware.maxCookiePaths | int) }}
-      - "{{ $.Values.authmiddleware.cookieName }}_{{ $i }}"
-    {{- end }}
+      - "{{ $.Values.authmiddleware.cookieName }}"
       - "{{ .Values.authmiddleware.csrfCookieName }}"
     authRequestHeaders:
       - "Cookie"
@@ -80,9 +78,7 @@ spec:
     address: "http://authmiddleware.{{ .Values.namespace }}:8080/verify"
     trustForwardHeader: true
     addAuthCookiesToResponse:
-    {{- range $i := until (.Values.authmiddleware.maxCookiePaths | int) }}
-      - "{{ $.Values.authmiddleware.cookieName }}_{{ $i }}"
-    {{- end }}
+      - "{{ $.Values.authmiddleware.cookieName }}"
       - "{{ .Values.authmiddleware.csrfCookieName }}"
     authRequestHeaders:
       - "Cookie"

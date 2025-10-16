@@ -256,6 +256,12 @@ make lint
 **Run the unit tests**
 ```sh
 make test
+
+# run a specific unit test
+go test -v ./path/to/module -run "YourSelector"
+
+# run a specific unit test (when using ginkgo)
+go test -v ./path/to/module -ginkgo.focus="YourSelector"
 ```
 
 **Generate the helm chart**

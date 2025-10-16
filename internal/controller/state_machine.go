@@ -108,6 +108,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 	// A nil resource means the resource has been fully deleted
 	deploymentDeleted := sm.resourceManager.IsDeploymentMissingOrDeleting(deployment)
 	serviceDeleted := sm.resourceManager.IsServiceMissingOrDeleting(service)
+	accessResourcesDeleted := sm.resourceManager.AreAccessResourcesDeleted(workspace)
 
 	if deploymentDeleted && serviceDeleted {
 		// Flag as Error if AccessResources failed to delete
@@ -117,6 +118,17 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 				logger.Error(statusErr, "Failed to update error status")
 			}
 			return ctrl.Result{RequeueAfter: PollRequeueDelay}, accessError
+		} else if !accessResourcesDeleted {
+			// AccessResources are not fully deleted, requeue
+			readiness := WorkspaceStoppingReadiness{
+				computeStopped:         deploymentDeleted,
+				serviceStopped:         serviceDeleted,
+				accessResourcesStopped: accessResourcesDeleted,
+			}
+			if err := sm.statusManager.UpdateStoppingStatus(ctx, workspace, readiness, snapshotStatus); err != nil {
+				return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+			}
+			return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
 		} else {
 			// All resources are fully deleted, update to stopped status
 			logger.Info("Deployment and Service are both deleted, updating to Stopped status")
@@ -125,7 +137,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 			sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceStopped", "Workspace has been stopped")
 
 			if err := sm.statusManager.UpdateStoppedStatus(ctx, workspace, snapshotStatus); err != nil {
-				return ctrl.Result{}, err
+				return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 			}
 			return ctrl.Result{}, nil
 		}
@@ -138,7 +150,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 		readiness := WorkspaceStoppingReadiness{
 			computeStopped:         deploymentDeleted,
 			serviceStopped:         serviceDeleted,
-			accessResourcesStopped: true,
+			accessResourcesStopped: accessResourcesDeleted,
 		}
 		if err := sm.statusManager.UpdateStoppingStatus(
 			ctx, workspace, readiness, snapshotStatus); err != nil {
@@ -218,6 +230,9 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 
 	// Apply access strategy when compute and service resources are ready
 	if deploymentReady && serviceReady {
+		// ReconcileAccess returns nil (no error) only when it successfully initiated
+		// the creation of all AccessRessources.
+		// TODO: add probe and requeue https://github.com/jupyter-infra/jupyter-k8s/issues/36
 		if err := sm.ReconcileAccessForDesiredRunningStatus(ctx, workspace, service); err != nil {
 			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 		}

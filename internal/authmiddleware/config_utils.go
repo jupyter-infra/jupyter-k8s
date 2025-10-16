@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"strconv"
 )
 
 // applyPathConfig applies path-related environment variable overrides
@@ -17,10 +16,6 @@ func applyPathConfig(config *Config) error {
 		config.PathRegexPattern = DefaultPathRegexPattern
 	}
 
-	if config.MaxCookiePaths <= 0 {
-		config.MaxCookiePaths = DefaultMaxCookiePaths
-	}
-
 	// Override with environment variables if provided
 	if pathRegex := os.Getenv(EnvPathRegexPattern); pathRegex != "" {
 		// Validate that the regex compiles
@@ -29,17 +24,6 @@ func applyPathConfig(config *Config) error {
 			return fmt.Errorf("invalid %s: %w", EnvPathRegexPattern, err)
 		}
 		config.PathRegexPattern = pathRegex
-	}
-
-	if maxPaths := os.Getenv(EnvMaxCookiePaths); maxPaths != "" {
-		val, err := strconv.Atoi(maxPaths)
-		if err != nil {
-			return fmt.Errorf("invalid %s: %w", EnvMaxCookiePaths, err)
-		}
-		if val <= 0 {
-			return fmt.Errorf("%s must be positive", EnvMaxCookiePaths)
-		}
-		config.MaxCookiePaths = val
 	}
 
 	return nil

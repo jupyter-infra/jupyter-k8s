@@ -73,11 +73,9 @@ func (b *AccessResourcesBuilder) BuildUnstructuredResource(
 	// Set basic metadata
 	obj.SetName(name)
 
-	// Determine the target namespace
+	// The AccessResource MUST be in the Workspace namespace
+	// in order for the Workspace is the owner of the AccessResource
 	targetNamespace := accessResourceData.Workspace.Namespace
-	if accessStrategy.Spec.AccessResourcesNamespace != "" {
-		targetNamespace = accessStrategy.Spec.AccessResourcesNamespace
-	}
 	obj.SetNamespace(targetNamespace)
 
 	// Set Group-Version-Kind properly by parsing the API version
@@ -150,4 +148,25 @@ func (b *AccessResourcesBuilder) ResolveAccessURL(
 	}
 
 	return accessURLBuffer.String(), nil
+}
+
+// ResolveAccessResourceSelector creates a label selector string for finding access resources
+// associated with a specific workspace and access strategy
+func (b *AccessResourcesBuilder) ResolveAccessResourceSelector(
+	workspace *workspacesv1alpha1.Workspace,
+	accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy,
+) string {
+	hasAccessResources := len(accessStrategy.Spec.AccessResourceTemplates) > 0
+
+	// if the AccessStrategy does not define AccessResources, do not set a selector.
+	if !hasAccessResources {
+		return ""
+	}
+
+	// Format: key1=value1,key2=value2
+	return fmt.Sprintf("%s=%s,%s=%s,%s=%s,%s=%s",
+		LabelWorkspaceName, workspace.Name,
+		LabelWorkspaceNamespace, workspace.Namespace,
+		LabelAccessStrategyName, accessStrategy.Name,
+		LabelAccessStrategyNamespace, accessStrategy.Namespace)
 }

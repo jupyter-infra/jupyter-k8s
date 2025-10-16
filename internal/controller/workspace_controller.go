@@ -32,6 +32,13 @@ import (
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
+// GVKWatch represents a Group-Version-Kind to watch
+type GVKWatch struct {
+	Group   string
+	Version string
+	Kind    string
+}
+
 // WorkspaceControllerOptions contains configuration options for the Workspace controller
 type WorkspaceControllerOptions struct {
 	// ApplicationImagesPullPolicy defines how application container images should be pulled
@@ -41,7 +48,11 @@ type WorkspaceControllerOptions struct {
 	ApplicationImagesRegistry string
 
 	// Flag to indicate whether to watch traefik resource (for AccessStrategy)
+	// Deprecated: Use ResourceWatches instead
 	WatchTraefik bool
+
+	// ResourceWatches defines custom Group-Version-Kind resources to watch
+	ResourceWatches []GVKWatch
 }
 
 // WorkspaceReconciler reconciles a Workspace object
@@ -129,8 +140,7 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.PersistentVolumeClaim{})
 
-	// Optional traefik configuration
-	// require traefik CRD to be installed
+	// Optional traefik configuration (backward compatibility)
 	if r.options.WatchTraefik {
 		// Create an IngressRoute unstructured object for watching
 		ingressRouteGVK := &unstructured.Unstructured{}
@@ -143,6 +153,23 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		middlewareGVK.SetKind("Middleware")
 
 		builder.Owns(ingressRouteGVK).Owns(middlewareGVK)
+	}
+
+	// Add additional resource watches from ResourceWatches config
+	for _, gvk := range r.options.ResourceWatches {
+		obj := &unstructured.Unstructured{}
+
+		var apiVersion string
+		if gvk.Group == "" {
+			// Core API group
+			apiVersion = gvk.Version
+		} else {
+			apiVersion = gvk.Group + "/" + gvk.Version
+		}
+
+		obj.SetAPIVersion(apiVersion)
+		obj.SetKind(gvk.Kind)
+		builder.Owns(obj)
 	}
 
 	return builder.Complete(r)

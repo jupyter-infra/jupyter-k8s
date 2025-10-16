@@ -1,7 +1,7 @@
 apiVersion: workspaces.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
-  name: ws-with-access
+  name: alt-ws-with-access
   namespace: default
 spec:
   displayName: "Sample Workspace with Access Strategy"
