@@ -7,3 +7,11 @@
             {{- if .Values.accessResources.traefik.enable }}
             - --watch-traefik
             {{- end}}
+            {{- if .Values.extensionApi.enable }}
+            - --enable-extension-api=true
+            {{- end}}
+          env:
+            {{- if .Values.extensionApi.enable }}
+            - name: SSM_DOCUMENT_NAME
+              value: {{ .Values.extensionApi.ssmDocumentName }}
+            {{- end}}

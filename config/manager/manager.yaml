@@ -67,6 +67,9 @@ spec:
           - --application-images-registry=docker.io/library
         image: controller:latest
         name: manager
+        env:
+        - name: SSM_DOCUMENT_NAME
+          value: "SageMaker-SpaceSSHSessionDocument"
         ports: []
         securityContext:
           readOnlyRootFilesystem: true
