@@ -75,6 +75,31 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 		}
 		Eventually(verifyControllerUp, 2*time.Minute).Should(Succeed())
 
+		By("waiting for webhook server to be ready")
+		_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for webhook server to accept requests...\n")
+		verifyWebhookReady := func(g Gomega) {
+			// Verify mutating webhook configuration has CA bundle injected
+			cmd := exec.Command("kubectl", "get", "mutatingwebhookconfiguration",
+				"jupyter-k8s-mutating-webhook-configuration",
+				"-o", "jsonpath={.webhooks[0].clientConfig.caBundle}")
+			caBundle, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(caBundle).NotTo(BeEmpty(), "webhook CA bundle should be injected by cert-manager")
+
+			// Verify webhook endpoint is reachable by attempting a dry-run resource creation
+			testWorkspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: webhook-readiness-test
+spec:
+  displayName: "Webhook Readiness Test"`
+			cmd = exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply --dry-run=server -f -", testWorkspaceYaml))
+			_, err = utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred(), "webhook server should respond to admission requests")
+		}
+		Eventually(verifyWebhookReady, 30*time.Second, 2*time.Second).Should(Succeed())
+
 		By("installing WorkspaceTemplate samples")
 		_, _ = fmt.Fprintf(GinkgoWriter, "Applying production template...\n")
 		cmd = exec.Command("kubectl", "apply", "-f",

@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 )
 
 // nolint:unused
@@ -40,8 +41,6 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 		WithDefaulter(&WorkspaceCustomDefaulter{}).
 		Complete()
 }
-
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
 // +kubebuilder:webhook:path=/mutate-workspaces-jupyter-org-v1alpha1-workspace,mutating=true,failurePolicy=fail,sideEffects=None,groups=workspaces.jupyter.org,resources=workspaces,verbs=create;update,versions=v1alpha1,name=mworkspace-v1alpha1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
 
@@ -65,15 +64,22 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 	}
 	workspacelog.Info("Defaulting for Workspace", "name", workspace.GetName())
 
-	// Add created-by annotation for ownership tracking
+	// Add ownership tracking annotations
 	if workspace.Annotations == nil {
 		workspace.Annotations = make(map[string]string)
 	}
 
 	// Extract user info from request context
 	if req, err := admission.RequestFromContext(ctx); err == nil {
-		workspace.Annotations["created-by"] = req.UserInfo.Username
-		workspacelog.Info("Added created-by annotation", "workspace", workspace.GetName(), "user", req.UserInfo.Username)
+		// Only set created-by if it doesn't exist (CREATE operation)
+		if _, exists := workspace.Annotations[controller.AnnotationCreatedBy]; !exists {
+			workspace.Annotations[controller.AnnotationCreatedBy] = req.UserInfo.Username
+			workspacelog.Info("Added created-by annotation", "workspace", workspace.GetName(), "user", req.UserInfo.Username)
+		}
+
+		// Always set last-updated-by (CREATE and UPDATE operations)
+		workspace.Annotations[controller.AnnotationLastUpdatedBy] = req.UserInfo.Username
+		workspacelog.Info("Added last-updated-by annotation", "workspace", workspace.GetName(), "user", req.UserInfo.Username)
 	}
 
 	return nil

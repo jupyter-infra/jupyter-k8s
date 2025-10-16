@@ -84,7 +84,7 @@ var _ = Describe("Webhook Owner", Ordered, func() {
 
 			By("verifying created-by annotation exists")
 			cmd = exec.Command("kubectl", "get", "workspace", "workspace-sample",
-				"-o", "jsonpath={.metadata.annotations.created-by}")
+				"-o", "jsonpath={.metadata.annotations.workspaces\\.jupyter\\.org/created-by}")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			annotation := strings.TrimSpace(string(output))

@@ -25,6 +25,27 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// VolumeSpec defines a volume to mount from an existing PVC
+type VolumeSpec struct {
+	// Name is a unique identifier for this volume within the pod (maps to pod.spec.volumes[].name)
+	Name string `json:"name"`
+
+	// PersistentVolumeClaimName is the name of the existing PVC to mount
+	PersistentVolumeClaimName string `json:"persistentVolumeClaimName"`
+
+	// MountPath is the path where the volume should be mounted (Unix-style path, e.g. /data)
+	MountPath string `json:"mountPath"`
+}
+
+// ContainerConfig defines container command and args configuration
+type ContainerConfig struct {
+	// Command specifies the container command
+	Command []string `json:"command,omitempty"`
+
+	// Args specifies the container arguments
+	Args []string `json:"args,omitempty"`
+}
+
 // StorageSpec defines the storage configuration for Workspace
 type StorageSpec struct {
 	// StorageClassName specifies the storage class to use for persistent storage
@@ -76,6 +97,19 @@ type WorkspaceSpec struct {
 	// Storage specifies the storage configuration
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage is immutable"
 	Storage *StorageSpec `json:"storage,omitempty"`
+
+	// Volumes specifies additional volumes to mount from existing PersistantVolumeClaims
+	Volumes []VolumeSpec `json:"volumes,omitempty"`
+
+	// ContainerConfig specifies container command and args configuration
+	ContainerConfig *ContainerConfig `json:"containerConfig,omitempty"`
+
+	// NodeSelector specifies node selection constraints for the workspace pod
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// Lifecycle specifies actions that the management system should take
+	// in response to container lifecycle events (for instance, lifecycle hooks)
+	Lifecycle *corev1.Lifecycle `json:"lifecycle,omitempty"`
 
 	// AccessStrategy specifies the WorkspaceAccessStrategy to use
 	// +optional
