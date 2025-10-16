@@ -107,6 +107,12 @@ type WorkspaceSpec struct {
 	// NodeSelector specifies node selection constraints for the workspace pod
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
+	// Affinity specifies node affinity and anti-affinity rules for the workspace pod
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+
+	// Tolerations specifies tolerations for the workspace pod to schedule on nodes with matching taints
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
 	// Lifecycle specifies actions that the management system should take
 	// in response to container lifecycle events (for instance, lifecycle hooks)
 	Lifecycle *corev1.Lifecycle `json:"lifecycle,omitempty"`

@@ -415,6 +415,18 @@ func (in *WorkspaceSpec) DeepCopyInto(out *WorkspaceSpec) {
 			(*out)[key] = val
 		}
 	}
+	if in.Affinity != nil {
+		in, out := &in.Affinity, &out.Affinity
+		*out = new(v1.Affinity)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.Tolerations != nil {
+		in, out := &in.Tolerations, &out.Tolerations
+		*out = make([]v1.Toleration, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.Lifecycle != nil {
 		in, out := &in.Lifecycle, &out.Lifecycle
 		*out = new(v1.Lifecycle)
@@ -561,6 +573,25 @@ func (in *WorkspaceTemplateSpec) DeepCopyInto(out *WorkspaceTemplateSpec) {
 		in, out := &in.AllowSecondaryStorages, &out.AllowSecondaryStorages
 		*out = new(bool)
 		**out = **in
+	}
+	if in.DefaultNodeSelector != nil {
+		in, out := &in.DefaultNodeSelector, &out.DefaultNodeSelector
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
+	if in.DefaultAffinity != nil {
+		in, out := &in.DefaultAffinity, &out.DefaultAffinity
+		*out = new(v1.Affinity)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.DefaultTolerations != nil {
+		in, out := &in.DefaultTolerations, &out.DefaultTolerations
+		*out = make([]v1.Toleration, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 }
 
