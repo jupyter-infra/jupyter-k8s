@@ -128,7 +128,7 @@ func main() {
 	flag.StringVar(&applicationImagesRegistry, "application-images-registry", "",
 		"Registry prefix for application images (e.g. example.com/my-registry)")
 	flag.BoolVar(&watchTraefik, "watch-traefik", false,
-		"Watch traefik sub-resources (deprecated, use watch-resources-gvk)")
+		"Watch traefik sub-resources (easy mode)")
 	flag.StringVar(&watchResourcesGVK, "watch-resources-gvk", "",
 		"Comma-separated list of Group/Version/Kind to watch (format: group/version/kind,group/version/kind,...)")
 	opts := zap.Options{

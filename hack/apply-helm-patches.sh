@@ -16,6 +16,7 @@ if [ ! -d "${CHART_DIR}" ]; then
 fi
 
 echo "Applying custom patches to Helm chart files..."
+echo "Using patches from ${PATCHES_DIR}"
 
 # Function to apply patches
 apply_patch() {
@@ -58,19 +59,30 @@ apply_patch() {
 if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
     # For values.yaml, we need more careful handling due to YAML structure
     echo "Applying patches to values.yaml..."
+    echo "Found patch file: ${PATCHES_DIR}/values.yaml.patch"
 
     # Check if the application section already exists
     if grep -q "^# \[APPLICATION\]" "${CHART_DIR}/values.yaml"; then
+        echo "Removing existing APPLICATION section from values.yaml"
         # Remove existing application section - from [APPLICATION] heading to the next section heading or end of file
         sed -i '/^# \[APPLICATION\]/,/^# \[/{ /^# \[APPLICATION\]/d; /^# \[/!d; }' "${CHART_DIR}/values.yaml"
     fi
 
-    # Append the entire application configuration from the patch file
+    # Check if the access resources section already exists
+    if grep -q "^# \[ACCESS RESOURCES\]" "${CHART_DIR}/values.yaml"; then
+        echo "Removing existing ACCESS RESOURCES section from values.yaml"
+        # Remove existing section - from [ACCESS RESOURCES] heading to the next section heading or end of file
+        sed -i '/^# \[ACCESS RESOURCES\]/,/^# \[/{ /^# \[ACCESS RESOURCES\]/d; /^# \[/!d; }' "${CHART_DIR}/values.yaml"
+    fi
+
+    # Append the entire patch file content to values.yaml
+    echo "Appending patch content to values.yaml"
     cat "${PATCHES_DIR}/values.yaml.patch" >> "${CHART_DIR}/values.yaml"
+    echo "Successfully applied values.yaml.patch"
 fi
 
 
-# Handle manager.yaml patch to add registry arguments
+# Handle manager.yaml patch to add registry arguments and watch-traefik flag
 if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
     MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
     if [ -f "${MANAGER_YAML}" ]; then
@@ -78,12 +90,23 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
         # Find the line with args: followed by the line with range
         if grep -q "args:" "${MANAGER_YAML}" && grep -q "{{- range .Values.controllerManager.container.args }}" "${MANAGER_YAML}"; then
             # Check if the patch is already applied
-            if ! grep -q "application-image-registry" "${MANAGER_YAML}"; then
-                # Replace the whole args block with our patched version
+            if ! grep -q "application-images-registry" "${MANAGER_YAML}"; then
+                echo "Replacing args section with content from manager.yaml.patch"
+
+                # Create a temporary file with the patch content
+                TMP_PATCH="/tmp/manager_patch_content"
+                cat "${PATCHES_DIR}/manager.yaml.patch" > "${TMP_PATCH}"
+
+                # Replace the whole args block with our patched version from the patch file
                 sed -i '/args:/,/command:/ {
                     /command:/!d
-                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"
+                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}
                 }' "${MANAGER_YAML}"
+
+                # Clean up temp file
+                rm -f "${TMP_PATCH}"
+            else
+                echo "Args section already has application-images-registry, skipping patch"
             fi
         else
             echo "Warning: Could not find proper args section in manager.yaml"

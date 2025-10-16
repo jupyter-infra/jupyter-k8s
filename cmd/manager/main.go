@@ -90,7 +90,7 @@ func main() {
 	flag.BoolVar(&requireTemplate, "require-template", false,
 		"Require all workspaces to reference a WorkspaceTemplate")
 	flag.BoolVar(&watchTraefik, "watch-traefik", false,
-		"Watch traefik sub-resources (deprecated, use watch-resources-gvk)")
+		"Watch traefik sub-resources (easy mode)")
 	flag.StringVar(&watchResourcesGVK, "watch-resources-gvk", "",
 		"Comma-separated list of Group/Version/Kind to watch (format: group/version/kind,group/version/kind,...)")
 	flag.Parse()

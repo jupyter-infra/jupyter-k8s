@@ -4,6 +4,13 @@ application:
   imagesPullPolicy: IfNotPresent
   # Image registry for Workspaces controller
   imagesRegistry: "docker.io/library"
-  # Watch resource configuratio for traefik
+
+# [ACCESS RESOURCES]: Configure resources to watch for access strategy
+# Additional access resources that the controller should watch
+accessResources:
+  # Guided mode using traefik proxy
   traefik:
+    # Whether to enable watching traefik resources
     enable: false
+  # Additional Group-Version-Kind to watch
+  additionalGvk: []
