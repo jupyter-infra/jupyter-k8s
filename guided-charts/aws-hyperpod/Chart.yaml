@@ -1,0 +1,12 @@
+apiVersion: v2
+name: jupyter-k8s-aws-hyperpod
+description: A template for deploying jupyter-k8s on HyperPod with SSM remote access and presigned URL support
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+icon: "https://example.com/icon.png"
+
+# Dependencies
+# Require traefik CRDs to be installed (https://traefik.github.io/charts)
+# Not adding as a dependency because of `helm` install issues
+# Run `helm upgrade --install traefik-crd traefik/traefik-crds` first
