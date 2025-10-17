@@ -116,9 +116,25 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacesv1alpha1.Workspac
 		})
 	}
 
-	// Set node selector if specified
+	// Set node selector - workspace spec takes precedence over template
 	if len(workspace.Spec.NodeSelector) > 0 {
 		podSpec.NodeSelector = workspace.Spec.NodeSelector
+	} else if resolvedTemplate != nil && len(resolvedTemplate.NodeSelector) > 0 {
+		podSpec.NodeSelector = resolvedTemplate.NodeSelector
+	}
+
+	// Set affinity - workspace spec takes precedence over template
+	if workspace.Spec.Affinity != nil {
+		podSpec.Affinity = workspace.Spec.Affinity
+	} else if resolvedTemplate != nil && resolvedTemplate.Affinity != nil {
+		podSpec.Affinity = resolvedTemplate.Affinity
+	}
+
+	// Set tolerations - workspace spec takes precedence over template
+	if len(workspace.Spec.Tolerations) > 0 {
+		podSpec.Tolerations = workspace.Spec.Tolerations
+	} else if resolvedTemplate != nil && len(resolvedTemplate.Tolerations) > 0 {
+		podSpec.Tolerations = resolvedTemplate.Tolerations
 	}
 
 	return podSpec

@@ -69,6 +69,18 @@ type WorkspaceTemplateSpec struct {
 	// +kubebuilder:default=true
 	// +optional
 	AllowSecondaryStorages *bool `json:"allowSecondaryStorages,omitempty"`
+
+	// DefaultNodeSelector specifies default node selection constraints
+	// +optional
+	DefaultNodeSelector map[string]string `json:"defaultNodeSelector,omitempty"`
+
+	// DefaultAffinity specifies default node affinity and anti-affinity rules
+	// +optional
+	DefaultAffinity *corev1.Affinity `json:"defaultAffinity,omitempty"`
+
+	// DefaultTolerations specifies default tolerations for scheduling on nodes with taints
+	// +optional
+	DefaultTolerations []corev1.Toleration `json:"defaultTolerations,omitempty"`
 }
 
 // ResourceBounds defines minimum and maximum resource limits
