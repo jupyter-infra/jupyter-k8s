@@ -359,6 +359,152 @@ var _ = Describe("DeploymentBuilder", func() {
 		})
 	})
 
+	Context("Affinity", func() {
+		It("should set node affinity when specified", func() {
+			workspace := &workspacesv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-affinity",
+					Namespace: "default",
+				},
+				Spec: workspacesv1alpha1.WorkspaceSpec{
+					Affinity: &corev1.Affinity{
+						NodeAffinity: &corev1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+								NodeSelectorTerms: []corev1.NodeSelectorTerm{
+									{
+										MatchExpressions: []corev1.NodeSelectorRequirement{
+											{
+												Key:      "node.kubernetes.io/instance-type",
+												Operator: corev1.NodeSelectorOpIn,
+												Values:   []string{"ml.t3.large", "ml.t3.xlarge"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deployment).NotTo(BeNil())
+
+			affinity := deployment.Spec.Template.Spec.Affinity
+			Expect(affinity).NotTo(BeNil())
+			Expect(affinity.NodeAffinity).NotTo(BeNil())
+			Expect(affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution).NotTo(BeNil())
+			Expect(affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(HaveLen(1))
+		})
+
+		It("should use template affinity when workspace doesn't specify", func() {
+			workspace := &workspacesv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-template-affinity",
+					Namespace: "default",
+				},
+				Spec: workspacesv1alpha1.WorkspaceSpec{},
+			}
+
+			resolvedTemplate := &ResolvedTemplate{
+				Image: "quay.io/jupyter/minimal-notebook:latest",
+				Affinity: &corev1.Affinity{
+					NodeAffinity: &corev1.NodeAffinity{
+						PreferredDuringSchedulingIgnoredDuringExecution: []corev1.PreferredSchedulingTerm{
+							{
+								Weight: 100,
+								Preference: corev1.NodeSelectorTerm{
+									MatchExpressions: []corev1.NodeSelectorRequirement{
+										{
+											Key:      "kubernetes.io/arch",
+											Operator: corev1.NodeSelectorOpIn,
+											Values:   []string{"amd64"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, resolvedTemplate)
+			Expect(err).NotTo(HaveOccurred())
+
+			affinity := deployment.Spec.Template.Spec.Affinity
+			Expect(affinity).NotTo(BeNil())
+			Expect(affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution).To(HaveLen(1))
+		})
+	})
+
+	Context("Tolerations", func() {
+		It("should set tolerations when specified", func() {
+			workspace := &workspacesv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-tolerations",
+					Namespace: "default",
+				},
+				Spec: workspacesv1alpha1.WorkspaceSpec{
+					Tolerations: []corev1.Toleration{
+						{
+							Key:      "nvidia.com/gpu",
+							Operator: corev1.TolerationOpEqual,
+							Value:    "true",
+							Effect:   corev1.TaintEffectNoSchedule,
+						},
+						{
+							Key:      "dedicated",
+							Operator: corev1.TolerationOpExists,
+							Effect:   corev1.TaintEffectNoExecute,
+						},
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deployment).NotTo(BeNil())
+
+			tolerations := deployment.Spec.Template.Spec.Tolerations
+			Expect(tolerations).To(HaveLen(2))
+			Expect(tolerations[0].Key).To(Equal("nvidia.com/gpu"))
+			Expect(tolerations[0].Operator).To(Equal(corev1.TolerationOpEqual))
+			Expect(tolerations[0].Value).To(Equal("true"))
+			Expect(tolerations[0].Effect).To(Equal(corev1.TaintEffectNoSchedule))
+			Expect(tolerations[1].Key).To(Equal("dedicated"))
+			Expect(tolerations[1].Operator).To(Equal(corev1.TolerationOpExists))
+		})
+
+		It("should use template tolerations when workspace doesn't specify", func() {
+			workspace := &workspacesv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-template-tolerations",
+					Namespace: "default",
+				},
+				Spec: workspacesv1alpha1.WorkspaceSpec{},
+			}
+
+			resolvedTemplate := &ResolvedTemplate{
+				Image: "quay.io/jupyter/minimal-notebook:latest",
+				Tolerations: []corev1.Toleration{
+					{
+						Key:      "spot-instance",
+						Operator: corev1.TolerationOpExists,
+						Effect:   corev1.TaintEffectNoSchedule,
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, resolvedTemplate)
+			Expect(err).NotTo(HaveOccurred())
+
+			tolerations := deployment.Spec.Template.Spec.Tolerations
+			Expect(tolerations).To(HaveLen(1))
+			Expect(tolerations[0].Key).To(Equal("spot-instance"))
+		})
+	})
+
 	Context("Lifecycle Hooks", func() {
 		It("should set lifecycle hooks", func() {
 			workspace := &workspacesv1alpha1.Workspace{

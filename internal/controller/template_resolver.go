@@ -54,6 +54,9 @@ type ResolvedTemplate struct {
 	EnvironmentVariables   []corev1.EnvVar
 	StorageConfiguration   *workspacesv1alpha1.StorageConfig
 	AllowSecondaryStorages bool
+	NodeSelector           map[string]string
+	Affinity               *corev1.Affinity
+	Tolerations            []corev1.Toleration
 }
 
 // ValidateAndResolveTemplate resolves a WorkspaceTemplate reference, validates overrides, and returns validation result
@@ -111,6 +114,9 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 		Resources:              corev1.ResourceRequirements{}, // Default empty if not specified
 		EnvironmentVariables:   template.Spec.EnvironmentVariables,
 		AllowSecondaryStorages: allowSecondaryStorages,
+		NodeSelector:           template.Spec.DefaultNodeSelector,
+		Affinity:               template.Spec.DefaultAffinity,
+		Tolerations:            template.Spec.DefaultTolerations,
 	}
 
 	if template.Spec.DefaultResources != nil {
