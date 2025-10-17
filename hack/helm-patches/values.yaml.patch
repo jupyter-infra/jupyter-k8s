@@ -7,3 +7,8 @@ application:
   # Watch resource configuratio for traefik
   traefik:
     enable: false
+
+# [EXTENSION_API]: Extension API server configuration  
+extensionApi:
+  # Enable extension API server for WorkspaceConnection
+  enable: false
