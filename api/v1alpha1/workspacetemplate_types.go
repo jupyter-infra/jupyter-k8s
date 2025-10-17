@@ -64,6 +64,10 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	EnvironmentVariables []corev1.EnvVar `json:"environmentVariables,omitempty"`
 
+	// DefaultContainerConfig specifies default container command and args configuration
+	// +optional
+	DefaultContainerConfig *ContainerConfig `json:"defaultContainerConfig,omitempty"`
+
 	// AllowSecondaryStorages controls whether workspaces using this template
 	// can mount additional storage volumes beyond the primary storage
 	// +kubebuilder:default=true

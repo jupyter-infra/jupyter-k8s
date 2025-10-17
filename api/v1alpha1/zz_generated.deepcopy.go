@@ -574,6 +574,11 @@ func (in *WorkspaceTemplateSpec) DeepCopyInto(out *WorkspaceTemplateSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.DefaultContainerConfig != nil {
+		in, out := &in.DefaultContainerConfig, &out.DefaultContainerConfig
+		*out = new(ContainerConfig)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.AllowSecondaryStorages != nil {
 		in, out := &in.AllowSecondaryStorages, &out.AllowSecondaryStorages
 		*out = new(bool)

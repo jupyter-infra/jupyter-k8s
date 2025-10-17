@@ -980,6 +980,21 @@ spec:
                         x-kubernetes-list-type: atomic
                     type: object
                 type: object
+              defaultContainerConfig:
+                description: DefaultContainerConfig specifies default container command
+                  and args configuration
+                properties:
+                  args:
+                    description: Args specifies the container arguments
+                    items:
+                      type: string
+                    type: array
+                  command:
+                    description: Command specifies the container command
+                    items:
+                      type: string
+                    type: array
+                type: object
               defaultImage:
                 description: DefaultImage is the default container image for workspaces
                   using this template
