@@ -49,7 +49,6 @@ type ContainerConfig struct {
 // StorageSpec defines the storage configuration for Workspace
 type StorageSpec struct {
 	// StorageClassName specifies the storage class to use for persistent storage
-	// +optional
 	StorageClassName *string `json:"storageClassName,omitempty"`
 
 	// Size specifies the size of the persistent volume

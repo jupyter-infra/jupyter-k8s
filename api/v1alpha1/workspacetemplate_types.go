@@ -127,6 +127,15 @@ type StorageConfig struct {
 	// MaxSize is the maximum allowed storage size
 	// +optional
 	MaxSize *resource.Quantity `json:"maxSize,omitempty"`
+
+	// DefaultStorageClassName is the default storage class name
+	// +optional
+	DefaultStorageClassName *string `json:"defaultStorageClassName,omitempty"`
+
+	// DefaultMountPath is the default mount path for the storage
+	// +kubebuilder:default="/home/jovyan"
+	// +optional
+	DefaultMountPath string `json:"defaultMountPath,omitempty"`
 }
 
 // +kubebuilder:object:root=true

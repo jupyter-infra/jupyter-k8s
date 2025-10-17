@@ -86,7 +86,7 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacesv1alpha1.Workspac
 		},
 	}
 
-	storageConfig := db.getStorageConfig(workspace, resolvedTemplate)
+	storageConfig := ResolveStorageConfig(workspace, resolvedTemplate)
 	if storageConfig != nil {
 		podSpec.Volumes = []corev1.Volume{
 			{
@@ -173,12 +173,12 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacesv1alpha1
 		container.Env = resolvedTemplate.EnvironmentVariables
 	}
 
-	storageConfig := db.getStorageConfig(workspace, resolvedTemplate)
+	storageConfig := ResolveStorageConfig(workspace, resolvedTemplate)
 	if storageConfig != nil {
 		container.VolumeMounts = []corev1.VolumeMount{
 			{
 				Name:      "workspace-storage",
-				MountPath: DefaultMountPath,
+				MountPath: storageConfig.MountPath,
 			},
 		}
 	}
@@ -250,20 +250,4 @@ func (db *DeploymentBuilder) parseResourceRequirements(workspace *workspacesv1al
 			corev1.ResourceMemory: defaultMemory,
 		},
 	}
-}
-
-// getStorageConfig determines storage configuration from workspace or template
-func (db *DeploymentBuilder) getStorageConfig(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) *workspacesv1alpha1.StorageConfig {
-	// Workspace storage takes precedence
-	if workspace.Spec.Storage != nil {
-		return &workspacesv1alpha1.StorageConfig{
-			DefaultSize: workspace.Spec.Storage.Size,
-		}
-	}
-
-	if resolvedTemplate != nil && resolvedTemplate.StorageConfiguration != nil {
-		return resolvedTemplate.StorageConfiguration
-	}
-
-	return nil
 }
