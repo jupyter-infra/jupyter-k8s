@@ -980,6 +980,21 @@ spec:
                         x-kubernetes-list-type: atomic
                     type: object
                 type: object
+              defaultContainerConfig:
+                description: DefaultContainerConfig specifies default container command
+                  and args configuration
+                properties:
+                  args:
+                    description: Args specifies the container arguments
+                    items:
+                      type: string
+                    type: array
+                  command:
+                    description: Command specifies the container command
+                    items:
+                      type: string
+                    type: array
+                type: object
               defaultImage:
                 description: DefaultImage is the default container image for workspaces
                   using this template
@@ -1261,6 +1276,11 @@ spec:
               primaryStorage:
                 description: PrimaryStorage defines storage configuration
                 properties:
+                  defaultMountPath:
+                    default: /home/jovyan
+                    description: DefaultMountPath is the default mount path for the
+                      storage
+                    type: string
                   defaultSize:
                     anyOf:
                     - type: integer
@@ -1269,6 +1289,10 @@ spec:
                     description: DefaultSize is the default storage size
                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                     x-kubernetes-int-or-string: true
+                  defaultStorageClassName:
+                    description: DefaultStorageClassName is the default storage class
+                      name
+                    type: string
                   maxSize:
                     anyOf:
                     - type: integer
