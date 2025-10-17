@@ -134,7 +134,6 @@ func TestHandleAuthWithInvalidRedirectURL(t *testing.T) {
 		cookieHTTPOnly:     true,
 		cookieSameSiteHttp: http.SameSiteLaxMode,
 		pathRegexPattern:   DefaultPathRegexPattern,
-		maxCookiePaths:     20,
 	}
 	server.cookieManager = cookieManager
 

@@ -5,7 +5,6 @@ metadata:
   namespace: default
 spec:
   displayName: JupyterLab Routing Strategy
-  accessResourceNamespace: default
   accessResourceTemplates:
     # The authorized route - tries token verification on already authenticated requests
     - kind: IngressRoute
@@ -16,7 +15,7 @@ spec:
           entryPoints:
             - websecure
           routes:
-            - match: "Host(`$DOMAIN`) && PathPrefix(`/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}`)"
+            - match: "Host(`$DOMAIN`) && PathPrefix(`/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/`)"
               kind: Rule
               priority: 100
               middlewares:

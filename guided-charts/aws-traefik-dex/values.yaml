@@ -170,7 +170,6 @@ authmiddleware:
   cookieSameSite: "lax"
   # Path configuration
   pathRegexPattern: "^(/workspaces/[^/]+/[^/]+)(?:/.*)?$"
-  maxCookiePaths: "20"
   # CSRF configuration
   # Required: must be provided as base64 encoded string (generate with: openssl rand -base64 32)
   csrfAuthKey: ""

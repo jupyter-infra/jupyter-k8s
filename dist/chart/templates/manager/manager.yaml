@@ -33,6 +33,9 @@ spec:
             {{- end }}
             - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"
             - "--application-images-registry={{ .Values.application.imagesRegistry }}"
+            {{- if .Values.accessResources.traefik.enable }}
+            - "--watch-traefik"
+            {{- end}}
           command:
             - /manager
           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag }}

@@ -14,7 +14,8 @@ import (
 
 // Constants for common test values
 const (
-	testLabPath         = "/workspaces/ns1/app1/lab" // Path with lab suffix, testAppPath is defined in hash_test.go
+	testAppPath         = "/workspaces/ns1/app1"
+	testLabPath         = "/workspaces/ns1/app1/lab" // Path with lab suffix
 	csrfProtectedHeader = "X-CSRF-Protected"         // Header set by CSRF protection middleware in tests
 	csrfProtectedValue  = "true"
 )

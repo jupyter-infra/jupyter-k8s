@@ -1,6 +1,7 @@
 package authmiddleware
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -101,7 +102,6 @@ func TestDynamicCookiePath(t *testing.T) {
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
 		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		MaxCookiePaths:   20,                                 // Maximum of 20 different cookie paths
 		CSRFAuthKey:      "01234567890123456789012345678901", // 32-byte key
 		CSRFCookieName:   "test_csrf",
 		CSRFFieldName:    "csrf_token",
@@ -189,7 +189,6 @@ func TestCookieWithDifferentPathsButSameApp(t *testing.T) {
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
 		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		MaxCookiePaths:   20,                                 // Maximum of 20 different cookie paths
 		CSRFAuthKey:      "01234567890123456789012345678901", // 32-byte key
 	}
 
@@ -199,12 +198,12 @@ func TestCookieWithDifferentPathsButSameApp(t *testing.T) {
 		t.Fatalf("Failed to create cookie manager: %v", err)
 	}
 
-	basePath := testAppPath
+	basePath := "/workspaces/ns1/app1"
 	subPaths := []string{
-		"/workspaces/ns1/app1/lab",
-		"/workspaces/ns1/app1/tree",
-		"/workspaces/ns1/app1/notebook/nb1.ipynb",
-		"/workspaces/ns1/app1/console",
+		fmt.Sprintf("%s/lab", basePath),
+		fmt.Sprintf("%s/tree", basePath),
+		fmt.Sprintf("%s/notebook/nb1.ipynb", basePath),
+		fmt.Sprintf("%s/console", basePath),
 	}
 
 	// First set a cookie with the base path
@@ -250,7 +249,6 @@ func TestSetCookieNameAndPath(t *testing.T) {
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
 		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		MaxCookiePaths:   20,                                 // Maximum of 20 different cookie paths
 		CSRFAuthKey:      "01234567890123456789012345678901", // 32-byte key
 	}
 
@@ -348,7 +346,6 @@ func TestGetCookieWithPath(t *testing.T) {
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
 		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		MaxCookiePaths:   20,                                 // Maximum of 20 different cookie paths
 		CSRFAuthKey:      "01234567890123456789012345678901", // 32-byte key
 	}
 
@@ -418,7 +415,6 @@ func TestGetCookieNotFound(t *testing.T) {
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
 		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		MaxCookiePaths:   20,                                 // Maximum of 20 different cookie paths
 		CSRFAuthKey:      "01234567890123456789012345678901", // 32-byte key
 	}
 
@@ -452,7 +448,6 @@ func TestClearCookie(t *testing.T) {
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
 		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		MaxCookiePaths:   20,                                 // Maximum of 20 different cookie paths
 		CSRFAuthKey:      "01234567890123456789012345678901", // 32-byte key
 	}
 
@@ -518,73 +513,6 @@ func TestClearCookie(t *testing.T) {
 
 			if cookie.Path != expectedPath {
 				t.Errorf("Expected cookie path %q but got %q", expectedPath, cookie.Path)
-			}
-		})
-	}
-}
-
-// TestGetCSRFCookiePath verifies that GetCSRFCookiePath always returns the static cookie path
-func TestGetCSRFCookiePath(t *testing.T) {
-	// Create a test config with a custom cookie path
-	customPath := "/custom-cookie-path"
-	config := &Config{
-		CookieName:       "test_auth",
-		CookieSecure:     true,
-		CookiePath:       customPath, // Set a custom path to verify it's returned
-		CookieMaxAge:     1 * time.Hour,
-		CookieHTTPOnly:   true,
-		CookieSameSite:   SameSiteLax,
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		MaxCookiePaths:   20,
-		CSRFAuthKey:      "01234567890123456789012345678901",
-		CSRFCookieName:   "test_csrf",
-		CSRFCookieMaxAge: 1 * time.Hour,
-		CSRFCookieSecure: true,
-		CSRFFieldName:    "csrf_token",
-		CSRFHeaderName:   "X-CSRF-Token",
-	}
-
-	// Create a cookie manager
-	manager, err := NewCookieManager(config)
-	if err != nil {
-		t.Fatalf("Failed to create cookie manager: %v", err)
-	}
-
-	testCases := []struct {
-		name string
-		path string
-	}{
-		{
-			name: "Empty path",
-			path: "",
-		},
-		{
-			name: "Root path",
-			path: "/",
-		},
-		{
-			name: "App path",
-			path: "/workspaces/namespace1/app1",
-		},
-		{
-			name: "App subpath",
-			path: "/workspaces/namespace1/app1/lab",
-		},
-		{
-			name: "Non-matching path",
-			path: "/api/v1/status",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Call GetCSRFCookiePath
-			csrfPath := manager.GetCSRFCookiePath(tc.path)
-
-			// Check that the returned path is always the static cookie path
-			// regardless of the input path
-			if csrfPath != customPath {
-				t.Errorf("Expected CSRF cookie path to always be %q for any input, but got %q", customPath, csrfPath)
 			}
 		})
 	}

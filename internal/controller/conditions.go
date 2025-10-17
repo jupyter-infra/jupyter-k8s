@@ -31,14 +31,16 @@ const (
 	ReasonResourcesNotReady   = "ResourcesNotReady"
 	ReasonComputeNotReady     = "ComputeNotReady"
 	ReasonServiceNotReady     = "ServiceNotReady"
+	ReasonAccessNotReady      = "AccessNotReady"
 	ReasonResourcesReady      = "ResourcesReady"
 	ReasonDesiredStateStopped = "DesiredStateStopped"
 
 	// StoppedTypeCondition reasons and ConditionTypeProgressing reasons
-	ReasonResourcesNotStopped = "DeploymentAndServiceNotStopped"
+	ReasonResourcesNotStopped = "ResourcesNotStopped"
 	ReasonComputeNotStopped   = "ComputeNotStopped"
 	ReasonServiceNotStopped   = "ServiceNotStopped"
-	ReasonResourcesStopped    = "DeploymentAndServiceStopped"
+	ReasonAccessNotStopped    = "AccessNotStopped"
+	ReasonResourcesStopped    = "AllResourcesStopped"
 	ReasonDesiredStateRunning = "DesiredStateRunning"
 
 	// ConditionTypeDegraded reasons

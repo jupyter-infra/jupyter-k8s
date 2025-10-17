@@ -20,6 +20,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 	"strings"
 
@@ -45,6 +46,13 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
+// GVKWatch represents a Group-Version-Kind to watch
+type GVKWatch struct {
+	Group   string
+	Version string
+	Kind    string
+}
+
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
@@ -55,6 +63,33 @@ func init() {
 
 	utilruntime.Must(workspacesv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
+}
+
+// parseGVKWatches parses a comma-separated list of GVK strings into GVKWatch objects
+// Format: group/version/kind,group/version/kind,...
+func parseGVKWatches(gvkList string) ([]GVKWatch, error) {
+	if gvkList == "" {
+		return nil, nil
+	}
+
+	watches := []GVKWatch{}
+	items := strings.Split(gvkList, ",")
+
+	for _, item := range items {
+		parts := strings.Split(item, "/")
+		if len(parts) != 3 {
+			return nil, fmt.Errorf("invalid GVK format: %s. Expected format: group/version/kind", item)
+		}
+
+		watch := GVKWatch{
+			Group:   parts[0],
+			Version: parts[1],
+			Kind:    parts[2],
+		}
+		watches = append(watches, watch)
+	}
+
+	return watches, nil
 }
 
 // nolint:gocyclo
@@ -70,6 +105,7 @@ func main() {
 	var applicationImagesPullPolicy string
 	var applicationImagesRegistry string
 	var watchTraefik bool
+	var watchResourcesGVK string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -91,7 +127,10 @@ func main() {
 		"Image pull policy for Application containers (Always, IfNotPresent, or Never)")
 	flag.StringVar(&applicationImagesRegistry, "application-images-registry", "",
 		"Registry prefix for application images (e.g. example.com/my-registry)")
-	flag.BoolVar(&watchTraefik, "watch-traefik", false, "Watch traefik sub-resources")
+	flag.BoolVar(&watchTraefik, "watch-traefik", false,
+		"Watch traefik sub-resources (easy mode)")
+	flag.StringVar(&watchResourcesGVK, "watch-resources-gvk", "",
+		"Comma-separated list of Group/Version/Kind to watch (format: group/version/kind,group/version/kind,...)")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -191,11 +230,28 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Parse GVK watches
+	gvkWatches, err := parseGVKWatches(watchResourcesGVK)
+	if err != nil {
+		setupLog.Error(err, "Error parsing GVK watches")
+		os.Exit(1)
+	}
+
 	// Configure controller options
 	controllerOpts := controller.WorkspaceControllerOptions{
 		ApplicationImagesPullPolicy: getImagePullPolicy(applicationImagesPullPolicy),
 		ApplicationImagesRegistry:   applicationImagesRegistry,
 		WatchTraefik:                watchTraefik,
+		ResourceWatches:             make([]controller.GVKWatch, 0),
+	}
+
+	// Convert parsed GVKWatches to controller.GVKWatch format
+	for _, watch := range gvkWatches {
+		controllerOpts.ResourceWatches = append(controllerOpts.ResourceWatches, controller.GVKWatch{
+			Group:   watch.Group,
+			Version: watch.Version,
+			Kind:    watch.Kind,
+		})
 	}
 
 	if err := controller.SetupWorkspaceController(mgr, controllerOpts); err != nil {

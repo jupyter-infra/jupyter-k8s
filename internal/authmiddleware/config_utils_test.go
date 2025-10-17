@@ -12,7 +12,6 @@ func TestApplyPathConfig(t *testing.T) {
 		config := &Config{
 			// Initialize with empty values
 			PathRegexPattern: "",
-			MaxCookiePaths:   0,
 		}
 
 		err := applyPathConfig(config)
@@ -24,35 +23,23 @@ func TestApplyPathConfig(t *testing.T) {
 			t.Errorf("Expected PathRegexPattern to be set to default %q, got %q",
 				DefaultPathRegexPattern, config.PathRegexPattern)
 		}
-
-		if config.MaxCookiePaths != DefaultMaxCookiePaths {
-			t.Errorf("Expected MaxCookiePaths to be set to default %d, got %d",
-				DefaultMaxCookiePaths, config.MaxCookiePaths)
-		}
 	})
 
 	// Test that env vars override defaults
 	t.Run("Environment variables override defaults", func(t *testing.T) {
 		// Save original env vars to restore them later
 		origPathRegex := os.Getenv(EnvPathRegexPattern)
-		origMaxPaths := os.Getenv(EnvMaxCookiePaths)
 		// nolint: errcheck
 		_ = os.Setenv(EnvPathRegexPattern, origPathRegex)
-		// nolint: errcheck
-		_ = os.Setenv(EnvMaxCookiePaths, origMaxPaths)
 
 		// Set test values
 		testPathRegex := `^(/custom/[^/]+/[^/]+)(?:/.*)?$`
-		testMaxPaths := "50"
 		// nolint: errcheck
 		_ = os.Setenv(EnvPathRegexPattern, testPathRegex)
-		// nolint: errcheck
-		_ = os.Setenv(EnvMaxCookiePaths, testMaxPaths)
 
 		config := &Config{
 			// Initialize with defaults
 			PathRegexPattern: DefaultPathRegexPattern,
-			MaxCookiePaths:   DefaultMaxCookiePaths,
 		}
 
 		err := applyPathConfig(config)
@@ -63,12 +50,6 @@ func TestApplyPathConfig(t *testing.T) {
 		if config.PathRegexPattern != testPathRegex {
 			t.Errorf("Expected PathRegexPattern to be %q, got %q",
 				testPathRegex, config.PathRegexPattern)
-		}
-
-		expectedMaxPaths := 50
-		if config.MaxCookiePaths != expectedMaxPaths {
-			t.Errorf("Expected MaxCookiePaths to be %d, got %d",
-				expectedMaxPaths, config.MaxCookiePaths)
 		}
 	})
 
@@ -87,32 +68,6 @@ func TestApplyPathConfig(t *testing.T) {
 		err := applyPathConfig(config)
 		if err == nil {
 			t.Fatal("Expected error for invalid regex, got nil")
-		}
-	})
-
-	// Test invalid MaxCookiePaths value
-	t.Run("Invalid MaxCookiePaths value", func(t *testing.T) {
-		// Save original env var to restore it later
-		origMaxPaths := os.Getenv(EnvMaxCookiePaths)
-		// nolint: errcheck
-		_ = os.Setenv(EnvMaxCookiePaths, origMaxPaths)
-
-		// Test non-numeric value
-		// nolint: errcheck
-		_ = os.Setenv(EnvMaxCookiePaths, "not-a-number")
-		config := &Config{}
-		err := applyPathConfig(config)
-		if err == nil {
-			t.Fatal("Expected error for non-numeric MaxCookiePaths, got nil")
-		}
-
-		// Test negative value
-		// nolint: errcheck
-		_ = os.Setenv(EnvMaxCookiePaths, "-5")
-		config = &Config{}
-		err = applyPathConfig(config)
-		if err == nil {
-			t.Fatal("Expected error for negative MaxCookiePaths, got nil")
 		}
 	})
 }

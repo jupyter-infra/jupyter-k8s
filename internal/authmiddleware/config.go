@@ -37,7 +37,6 @@ const (
 
 	// Path configuration
 	EnvPathRegexPattern = "PATH_REGEX_PATTERN"
-	EnvMaxCookiePaths   = "MAX_COOKIE_PATHS"
 
 	// CSRF configuration
 	EnvCsrfAuthKey    = "CSRF_AUTH_KEY"
@@ -76,7 +75,6 @@ const (
 
 	// Path defaults
 	DefaultPathRegexPattern = `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`
-	DefaultMaxCookiePaths   = 20
 
 	// CSRF defaults
 	DefaultCsrfCookieName = "workspace_csrf"
@@ -116,7 +114,6 @@ type Config struct {
 
 	// Path configuration
 	PathRegexPattern string // Regex pattern to extract app path from full path
-	MaxCookiePaths   int    // Maximum number of different cookie paths to support
 
 	// CSRF configuration
 	CSRFAuthKey    string
@@ -187,7 +184,6 @@ func createDefaultConfig() *Config {
 		// This regex extracts application path: /workspaces/<namespace>/<app-name>
 		// It will ignore subpaths like /lab, /tree, /notebook/*, etc.
 		PathRegexPattern: DefaultPathRegexPattern,
-		MaxCookiePaths:   DefaultMaxCookiePaths,
 
 		// CSRF defaults
 		CSRFCookieName:   DefaultCsrfCookieName,

@@ -97,9 +97,6 @@ func checkPathDefaults(t *testing.T, config *Config) {
 	if config.PathRegexPattern != DefaultPathRegexPattern {
 		t.Errorf("Expected PathRegexPattern to be %s, got %s", DefaultPathRegexPattern, config.PathRegexPattern)
 	}
-	if config.MaxCookiePaths != DefaultMaxCookiePaths {
-		t.Errorf("Expected MaxCookiePaths to be %d, got %d", DefaultMaxCookiePaths, config.MaxCookiePaths)
-	}
 }
 
 func checkCSRFDefaults(t *testing.T, config *Config) {
@@ -166,7 +163,6 @@ func TestNewConfigEnvOverrides(t *testing.T) {
 
 	// Path configuration
 	setEnv(t, EnvPathRegexPattern, "^(/custom/[^/]+)(?:/.*)?$")
-	setEnv(t, EnvMaxCookiePaths, "10")
 
 	// CSRF configuration
 	setEnv(t, EnvCsrfAuthKey, "custom-csrf-key")
@@ -183,7 +179,7 @@ func TestNewConfigEnvOverrides(t *testing.T) {
 		EnvJwtSigningKey, EnvJwtIssuer, EnvJwtAudience, EnvJwtExpiration,
 		EnvCookieName, EnvCookieSecure, EnvCookieDomain, EnvCookiePath,
 		EnvCookieMaxAge, EnvCookieHttpOnly, EnvCookieSameSite,
-		EnvPathRegexPattern, EnvMaxCookiePaths,
+		EnvPathRegexPattern,
 		EnvCsrfAuthKey, EnvCsrfCookieName,
 		EnvCsrfCookieMaxAge, EnvCsrfCookieSecure, EnvCsrfFieldName, EnvCsrfHeaderName,
 		EnvCsrfTrustedOrigins,
@@ -273,9 +269,6 @@ func checkCookieConfig(t *testing.T, config *Config) {
 func checkPathConfig(t *testing.T, config *Config) {
 	if config.PathRegexPattern != "^(/custom/[^/]+)(?:/.*)?$" {
 		t.Errorf("Expected PathRegexPattern to be ^(/custom/[^/]+)(?:/.*)?$, got %s", config.PathRegexPattern)
-	}
-	if config.MaxCookiePaths != 10 {
-		t.Errorf("Expected MaxCookiePaths to be 10, got %d", config.MaxCookiePaths)
 	}
 }
 

@@ -235,7 +235,8 @@ helm-test: ## Test the Helm chart with helm template
 	rm -rf /tmp/helm-test-chart
 	cp -r dist/chart /tmp/helm-test-chart
 	cd /tmp/helm-test-chart && helm dependency build
-	helm template jk8s /tmp/helm-test-chart --output-dir dist/test-output-crd-only
+	helm template jk8s /tmp/helm-test-chart --output-dir dist/test-output-crd-only \
+		--set accessResources.traefik.enable=true
 	rm -rf /tmp/helm-test-chart
 	go test ./test/helm/crd-only -v
 
@@ -474,7 +475,7 @@ deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remot
 		--set controllerManager.container.image.tag=latest \
 		--set application.imagesPullPolicy=Always \
 		--set application.imagesRegistry=$(ECR_REGISTRY) \
-		--set traefik.enable=true
+		--set accessResources.traefik.enable=true
 	@echo "Helm chart jupyter-k8s deployed successfully to remote AWS cluster"
 	@echo "Restarting deployments to use new images..."
 	kubectl rollout restart deployment -n jupyter-k8s-system jupyter-k8s-controller-manager

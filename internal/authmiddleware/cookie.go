@@ -43,7 +43,6 @@ type CookieManager struct {
 	cookieSameSite     csrf.SameSiteMode
 	cookieSameSiteHttp http.SameSite
 	pathRegexPattern   string // Regex pattern for path-based cookie naming
-	maxCookiePaths     int    // Maximum number of different cookie paths to support
 	csrfCookieName     string
 	csrfCookieMaxAge   time.Duration
 	csrfCookieSecure   bool
@@ -79,7 +78,7 @@ func NewCookieManager(cfg *Config) (*CookieManager, error) {
 
 	csrfOpts := []csrf.Option{
 		csrf.CookieName(cfg.CSRFCookieName),
-		csrf.Path(cfg.CookiePath), // Use regular cookie path
+		csrf.Path(cfg.CookiePath),
 		csrf.MaxAge(int(cfg.CSRFCookieMaxAge.Seconds())),
 		csrf.Secure(cfg.CSRFCookieSecure),
 		csrf.SameSite(sameSite),
@@ -107,7 +106,6 @@ func NewCookieManager(cfg *Config) (*CookieManager, error) {
 		cookieSameSite:     sameSite,
 		cookieSameSiteHttp: sameSiteHttp,
 		pathRegexPattern:   cfg.PathRegexPattern,
-		maxCookiePaths:     cfg.MaxCookiePaths,
 		csrfCookieName:     cfg.CSRFCookieName,
 		csrfCookieMaxAge:   cfg.CSRFCookieMaxAge,
 		csrfCookieSecure:   cfg.CSRFCookieSecure,
@@ -123,16 +121,13 @@ func (m *CookieManager) SetCookie(w http.ResponseWriter, token string, path stri
 	cookieName := m.cookieName
 	cookiePath := m.cookiePath
 
-	// Extract the app path for both cookie name and cookie path
+	// Extract the app path for cookie path only
 	if path != "" {
 		// Extract the app path using the regex pattern
 		appPath := path
 		if m.pathRegexPattern != "" {
 			appPath = ExtractAppPath(path, m.pathRegexPattern)
 		}
-
-		// Use app path for cookie name
-		cookieName = m.getCookieName(m.cookieName, path, m.pathRegexPattern)
 
 		// Use the extracted app path for cookie path if it's not empty
 		if appPath != "" && appPath != "/" {
@@ -160,9 +155,6 @@ func (m *CookieManager) SetCookie(w http.ResponseWriter, token string, path stri
 // GetCookie retrieves the auth token from the cookie
 func (m *CookieManager) GetCookie(r *http.Request, path string) (string, error) {
 	cookieName := m.cookieName
-	if path != "" {
-		cookieName = m.getCookieName(m.cookieName, path, m.pathRegexPattern)
-	}
 
 	cookie, err := r.Cookie(cookieName)
 	if err != nil {
@@ -180,16 +172,13 @@ func (m *CookieManager) ClearCookie(w http.ResponseWriter, path string) {
 	cookieName := m.cookieName
 	cookiePath := m.cookiePath
 
-	// Extract the app path for both cookie name and cookie path
+	// Extract the app path for cookie path only
 	if path != "" {
 		// Extract the app path using the regex pattern
 		appPath := path
 		if m.pathRegexPattern != "" {
 			appPath = ExtractAppPath(path, m.pathRegexPattern)
 		}
-
-		// Use app path for cookie name
-		cookieName = m.getCookieName(m.cookieName, path, m.pathRegexPattern)
 
 		// Use the extracted app path for cookie path if it's not empty
 		if appPath != "" && appPath != "/" {
@@ -215,22 +204,9 @@ func (m *CookieManager) ClearCookie(w http.ResponseWriter, path string) {
 }
 
 // CSRFProtect returns a middleware that protects against CSRF attacks
-// Note: This uses the default CSRF cookie path from the config, as the gorilla/csrf
-// package doesn't support dynamic path detection based on the request path.
-// For better security, consider setting CSRFCookiePath to a more restricted path in the config.
+// Note: CSRF cookies are set with the root path ("/") to ensure they're available
+// across all workspace paths. While auth cookies are path-specific, CSRF cookies
+// need to be accessible for any workspace to prevent CSRF token mismatches.
 func (m *CookieManager) CSRFProtect() func(http.Handler) http.Handler {
 	return m.csrfProtect
-}
-
-// GetCSRFCookiePath returns the path that should be used for CSRF cookies.
-// This always returns the standard cookie path, as CSRF cookies are not path-specific.
-func (m *CookieManager) GetCSRFCookiePath(path string) string {
-	// CSRF cookies always use the static cookie path from the config
-	return m.cookiePath
-}
-
-// Add a private helper method to handle the current cookieName implementation
-// which still uses only 3 parameters
-func (m *CookieManager) getCookieName(baseName string, path string, regexPattern string) string {
-	return GetCookieName(baseName, path, regexPattern, m.maxCookiePaths)
 }
