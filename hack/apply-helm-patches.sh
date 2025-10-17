@@ -70,6 +70,15 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
     echo "Applying patches to values.yaml..."
     echo "Found patch file: ${PATCHES_DIR}/values.yaml.patch"
 
+    # Add env section to controllerManager.container if it doesn't exist
+    if ! grep -q "env:" "${CHART_DIR}/values.yaml"; then
+        # Add env section right after container: (macOS compatible)
+        sed -i.bak '/container:/a\
+    env:\
+      CLUSTER_ADMIN_GROUP: "cluster-workspace-admin"\
+' "${CHART_DIR}/values.yaml" && rm "${CHART_DIR}/values.yaml.bak"
+    fi
+
     # Check if the application section already exists
     if grep -q "^# \[APPLICATION\]" "${CHART_DIR}/values.yaml"; then
         echo "Removing existing APPLICATION section from values.yaml"
