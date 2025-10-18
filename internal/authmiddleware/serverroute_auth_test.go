@@ -184,7 +184,7 @@ func TestHandleAuthHappyPath(t *testing.T) {
 
 	// Create JWT handler mock
 	jwtHandler := &MockJWTHandler{
-		GenerateTokenFunc: func(user string, groups []string, path string, domain string) (string, error) {
+		GenerateTokenFunc: func(user string, groups []string, path string, domain string, tokenType string) (string, error) {
 			tokenGenerated = true
 			// Verify parameters
 			if user != "user1" {

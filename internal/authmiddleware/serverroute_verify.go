@@ -40,6 +40,13 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate token type - verify should only accept session tokens
+	if claims.TokenType != TokenTypeSession {
+		s.logger.Info("Invalid token type for verify", "expected", TokenTypeSession, "actual", claims.TokenType)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	// Verify token path matches requested path or is a parent path
 	if claims.Path != "" && requestPath != "" {
 		if !strings.HasPrefix(requestPath, claims.Path) {

@@ -6,7 +6,7 @@ import (
 
 // MockJWTHandler implements the JWTHandler interface for testing
 type MockJWTHandler struct {
-	GenerateTokenFunc      func(user string, groups []string, path string, domain string) (string, error)
+	GenerateTokenFunc      func(user string, groups []string, path string, domain string, tokenType string) (string, error)
 	ValidateTokenFunc      func(tokenString string) (*Claims, error)
 	RefreshTokenFunc       func(claims *Claims) (string, error)
 	ShouldRefreshTokenFunc func(claims *Claims) bool
@@ -16,9 +16,9 @@ type MockJWTHandler struct {
 var _ JWTHandler = (*MockJWTHandler)(nil)
 
 // GenerateToken calls the mock implementation
-func (m *MockJWTHandler) GenerateToken(user string, groups []string, path string, domain string) (string, error) {
+func (m *MockJWTHandler) GenerateToken(user string, groups []string, path string, domain string, tokenType string) (string, error) {
 	if m.GenerateTokenFunc != nil {
-		return m.GenerateTokenFunc(user, groups, path, domain)
+		return m.GenerateTokenFunc(user, groups, path, domain, tokenType)
 	}
 	return "mock-token", nil
 }
