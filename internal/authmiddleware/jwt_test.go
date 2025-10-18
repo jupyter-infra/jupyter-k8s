@@ -77,7 +77,7 @@ func TestGenerateToken(t *testing.T) {
 	testDomain := testDomainValue
 
 	// Generate token
-	tokenString, err := manager.GenerateToken(testUser, testGroups, testPath, testDomain)
+	tokenString, err := manager.GenerateToken(testUser, testGroups, testPath, testDomain, TokenTypeSession)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestGenerateTokenWithNilGroups(t *testing.T) {
 	testDomain := testDomainValue
 
 	// Generate token
-	tokenString, err := manager.GenerateToken(testUser, testGroups, testPath, testDomain)
+	tokenString, err := manager.GenerateToken(testUser, testGroups, testPath, testDomain, TokenTypeSession)
 	if err != nil {
 		t.Fatalf("Failed to generate token with nil groups: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestGenerateTokenWithEmptyGroups(t *testing.T) {
 	testDomain := testDomainValue
 
 	// Generate token
-	tokenString, err := manager.GenerateToken(testUser, testGroups, testPath, testDomain)
+	tokenString, err := manager.GenerateToken(testUser, testGroups, testPath, testDomain, TokenTypeSession)
 	if err != nil {
 		t.Fatalf("Failed to generate token with empty groups: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestValidateToken(t *testing.T) {
 	testDomain := testDomainValue
 
 	// Generate valid token
-	validToken, err := manager.GenerateToken(testUser, testGroups, testPath, testDomain)
+	validToken, err := manager.GenerateToken(testUser, testGroups, testPath, testDomain, TokenTypeSession)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -371,7 +371,7 @@ func TestRefreshToken(t *testing.T) {
 	testDomain := testDomainValue
 
 	// Generate original token
-	originalToken, err := manager.GenerateToken(testUser, testGroups, testPath, testDomain)
+	originalToken, err := manager.GenerateToken(testUser, testGroups, testPath, testDomain, TokenTypeSession)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}

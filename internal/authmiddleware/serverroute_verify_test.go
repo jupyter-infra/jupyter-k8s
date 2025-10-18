@@ -197,10 +197,11 @@ func TestHandleVerifyNoRefreshBeforeWindow(t *testing.T) {
 
 	// Create claims
 	claims := &Claims{
-		User:   "testuser",
-		Groups: []string{"group1", "group2"},
-		Path:   testAppPath2,
-		Domain: "example.com",
+		User:      "testuser",
+		Groups:    []string{"group1", "group2"},
+		Path:      testAppPath2,
+		Domain:    "example.com",
+		TokenType: TokenTypeSession, // Add session token type
 	}
 
 	// Track method calls
@@ -278,10 +279,11 @@ func TestHandleVerifyWithRefresh(t *testing.T) {
 
 	// Create claims
 	claims := &Claims{
-		User:   "testuser",
-		Groups: []string{"group1", "group2"},
-		Path:   testAppPath2,
-		Domain: "example.com",
+		User:      "testuser",
+		Groups:    []string{"group1", "group2"},
+		Path:      testAppPath2,
+		Domain:    "example.com",
+		TokenType: TokenTypeSession, // Add session token type
 	}
 
 	// Track method calls
