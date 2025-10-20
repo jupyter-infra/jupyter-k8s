@@ -1,4 +1,4 @@
-name: Lint
+name: Test AWS Traefik Dex Chart
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  lint:
-    name: Lint
+  test-chart-aws-traefik-dex:
+    name: Test AWS Traefik Dex Chart
     runs-on: ubuntu-latest
     steps:
       - name: Clone the code
@@ -19,10 +19,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Install golangci-lint
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.4.0
-          export PATH=$PATH:$(go env GOPATH)/bin
+      # Do NOT install kind, the target deployment should be an AWS EKS cluster.
 
       - name: Install Helm
         run: |
@@ -31,5 +28,11 @@ jobs:
       - name: Verify Helm installation
         run: helm version
 
-      - name: Run linter
-        run: make lint
+      - name: Generate Helm Chart
+        run: make helm-generate
+
+      - name: Lint Helm Chart
+        run: make helm-lint
+
+      - name: Run AWS Traefik Dex Helm Tests
+        run: make helm-test-aws-traefik-dex

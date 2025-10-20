@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-e2e:
-    name: Run on Ubuntu
+  test-chart:
+    name: Test Chart
     runs-on: ubuntu-latest
     steps:
       - name: Clone the code
@@ -31,7 +31,7 @@ jobs:
       - name: Create kind cluster
         run: kind create cluster
 
-      - name: Prepare jupyter-k8s
+      - name: Prepare environment
         run: |
           go mod tidy
           make docker-build IMG=jupyter-k8s:v0.1.0 CONTAINER_TOOL=docker
@@ -44,9 +44,14 @@ jobs:
       - name: Verify Helm installation
         run: helm version
 
+      - name: Generate Helm Chart
+        run: make helm-generate
+
       - name: Lint Helm Chart
-        run: |
-          helm lint ./dist/chart
+        run: make helm-lint
+
+      - name: Run Helm Tests
+        run: make helm-test
 
       - name: Install cert-manager via Helm
         run: |
