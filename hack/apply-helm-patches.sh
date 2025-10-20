@@ -24,6 +24,8 @@ if [ -d "${SCRIPT_DIR}/../config/apiservice" ]; then
     mkdir -p "${CHART_DIR}/templates/apiservice"
     
     # Copy each YAML file and wrap with conditional
+    # This adds {{- if .Values.extensionApi.enable }} around each file
+    # so the API service resources are only created when extension API is enabled
     for file in "${SCRIPT_DIR}/../config/apiservice"/*.yaml; do
         if [ -f "$file" ]; then
             filename=$(basename "$file")

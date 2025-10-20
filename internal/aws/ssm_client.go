@@ -15,9 +15,9 @@ import (
 
 // GetSSMDocumentName returns the SSM document name from environment
 func GetSSMDocumentName() (string, error) {
-	name := os.Getenv("SSM_DOCUMENT_NAME")
+	name := os.Getenv(AWSSSMDocumentNameEnv)
 	if name == "" {
-		return "", fmt.Errorf("SSM_DOCUMENT_NAME environment variable is required")
+		return "", fmt.Errorf("%s environment variable is required", AWSSSMDocumentNameEnv)
 	}
 	return name, nil
 }
@@ -67,12 +67,13 @@ func (c *SSMClient) FindInstanceByPodUID(ctx context.Context, podUID string) (st
 	input := &ssm.DescribeInstanceInformationInput{
 		Filters: []types.InstanceInformationStringFilter{
 			{
-				Key:    aws.String("tag:workspace-pod-uid"),
+				Key:    aws.String(WorkspacePodUIDTagKey),
 				Values: []string{podUID},
 			},
 		},
 	}
 
+	// No pagination needed - we expect at most one instance per unique pod UID
 	result, err := c.client.DescribeInstanceInformation(ctx, input)
 	if err != nil {
 		return "", fmt.Errorf("failed to describe instances: %w", err)

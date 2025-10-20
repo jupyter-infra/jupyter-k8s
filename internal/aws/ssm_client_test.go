@@ -125,6 +125,20 @@ func TestSSMClient_StartSession(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name:         "session start error",
+			instanceID:   "mi-1234567890abcdef0",
+			documentName: "invalid-document",
+			mockSetup: func(m *MockSSMAPI) {
+				m.On("StartSession", mock.Anything, mock.MatchedBy(func(input *ssm.StartSessionInput) bool {
+					return *input.Target == "mi-1234567890abcdef0" && *input.DocumentName == "invalid-document"
+				})).Return(
+					(*ssm.StartSessionOutput)(nil), 
+					&types.InvalidDocument{Message: aws.String("Document not found")})
+			},
+			want:    nil,
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
