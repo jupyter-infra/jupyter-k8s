@@ -64,6 +64,10 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	EnvironmentVariables []corev1.EnvVar `json:"environmentVariables,omitempty"`
 
+	// DefaultContainerConfig specifies default container command and args configuration
+	// +optional
+	DefaultContainerConfig *ContainerConfig `json:"defaultContainerConfig,omitempty"`
+
 	// AllowSecondaryStorages controls whether workspaces using this template
 	// can mount additional storage volumes beyond the primary storage
 	// +kubebuilder:default=true
@@ -127,6 +131,15 @@ type StorageConfig struct {
 	// MaxSize is the maximum allowed storage size
 	// +optional
 	MaxSize *resource.Quantity `json:"maxSize,omitempty"`
+
+	// DefaultStorageClassName is the default storage class name
+	// +optional
+	DefaultStorageClassName *string `json:"defaultStorageClassName,omitempty"`
+
+	// DefaultMountPath is the default mount path for the storage
+	// +kubebuilder:default="/home/jovyan"
+	// +optional
+	DefaultMountPath string `json:"defaultMountPath,omitempty"`
 }
 
 // +kubebuilder:object:root=true

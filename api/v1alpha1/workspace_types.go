@@ -49,7 +49,6 @@ type ContainerConfig struct {
 // StorageSpec defines the storage configuration for Workspace
 type StorageSpec struct {
 	// StorageClassName specifies the storage class to use for persistent storage
-	// +optional
 	StorageClassName *string `json:"storageClassName,omitempty"`
 
 	// Size specifies the size of the persistent volume
@@ -90,6 +89,12 @@ type WorkspaceSpec struct {
 	// DesiredStatus specifies the desired operational status
 	// +kubebuilder:validation:Enum=Running;Stopped
 	DesiredStatus string `json:"desiredStatus,omitempty"`
+
+	// AccessType specifies who can modify the space.
+	// Public means anyone with RBAC permissions can update/delete the space.
+	// OwnerOnly means only the creator can update/delete the space.
+	// +kubebuilder:validation:Enum=Public;OwnerOnly
+	AccessType string `json:"accessType,omitempty"`
 
 	// Resources specifies the resource requirements
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
