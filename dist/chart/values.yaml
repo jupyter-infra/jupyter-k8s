@@ -2,6 +2,8 @@
 controllerManager:
   replicas: 1
   container:
+    env:
+      CLUSTER_ADMIN_GROUP: "cluster-workspace-admin"
     image:
       repository: controller
       tag: latest
