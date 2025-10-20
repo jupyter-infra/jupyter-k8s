@@ -4,10 +4,16 @@ import (
 	"context"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+)
+
+const (
+	testInstanceID = "mi-1234567890abcdef0"
+	testSessionID  = "sess-1234567890abcdef0"
 )
 
 // MockSSMAPI is a mock implementation of the SSM API
@@ -37,7 +43,7 @@ func TestSSMClient_FindInstanceByPodUID(t *testing.T) {
 			name:   "successful instance lookup",
 			podUID: "test-pod-uid",
 			mockSetup: func(m *MockSSMAPI) {
-				instanceID := "mi-1234567890abcdef0"
+				instanceID := testInstanceID
 				m.On("DescribeInstanceInformation", mock.Anything, mock.MatchedBy(func(input *ssm.DescribeInstanceInformationInput) bool {
 					return len(input.Filters) > 0 && *input.Filters[0].Key == "tag:workspace-pod-uid"
 				})).Return(
@@ -49,7 +55,7 @@ func TestSSMClient_FindInstanceByPodUID(t *testing.T) {
 						},
 					}, nil)
 			},
-			want:    "mi-1234567890abcdef0",
+			want:    testInstanceID,
 			wantErr: false,
 		},
 		{
@@ -102,14 +108,14 @@ func TestSSMClient_StartSession(t *testing.T) {
 	}{
 		{
 			name:         "successful session start",
-			instanceID:   "mi-1234567890abcdef0",
+			instanceID:   testInstanceID,
 			documentName: "test-document",
 			mockSetup: func(m *MockSSMAPI) {
-				sessionID := "sess-1234567890abcdef0"
+				sessionID := testSessionID
 				tokenValue := "test-token"
 				streamURL := "wss://test-stream-url"
 				m.On("StartSession", mock.Anything, mock.MatchedBy(func(input *ssm.StartSessionInput) bool {
-					return *input.Target == "mi-1234567890abcdef0" && *input.DocumentName == "test-document"
+					return *input.Target == testInstanceID && *input.DocumentName == "test-document"
 				})).Return(
 					&ssm.StartSessionOutput{
 						SessionId:  &sessionID,
@@ -118,22 +124,22 @@ func TestSSMClient_StartSession(t *testing.T) {
 					}, nil)
 			},
 			want: &SessionInfo{
-				SessionID:    "sess-1234567890abcdef0",
+				SessionID:    testSessionID,
 				TokenValue:   "test-token",
 				StreamURL:    "wss://test-stream-url",
-				WebSocketURL: "wss://ssmmessages.us-east-1.amazonaws.com/v1/data-channel/sess-1234567890abcdef0",
+				WebSocketURL: "wss://ssmmessages.us-east-1.amazonaws.com/v1/data-channel/" + testSessionID,
 			},
 			wantErr: false,
 		},
 		{
 			name:         "session start error",
-			instanceID:   "mi-1234567890abcdef0",
+			instanceID:   testInstanceID,
 			documentName: "invalid-document",
 			mockSetup: func(m *MockSSMAPI) {
 				m.On("StartSession", mock.Anything, mock.MatchedBy(func(input *ssm.StartSessionInput) bool {
-					return *input.Target == "mi-1234567890abcdef0" && *input.DocumentName == "invalid-document"
+					return *input.Target == testInstanceID && *input.DocumentName == "invalid-document"
 				})).Return(
-					(*ssm.StartSessionOutput)(nil), 
+					(*ssm.StartSessionOutput)(nil),
 					&types.InvalidDocument{Message: aws.String("Document not found")})
 			},
 			want:    nil,
