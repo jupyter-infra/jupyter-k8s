@@ -8,7 +8,7 @@ on:
 
 jobs:
   lint:
-    name: Lint
+    name: Go and Helm
     runs-on: ubuntu-latest
     steps:
       - name: Clone the code

@@ -1,4 +1,4 @@
-name: Test AWS Traefik Dex Chart
+name: Guided Helm
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 jobs:
   test-chart-aws-traefik-dex:
-    name: Test AWS Traefik Dex Chart
+    name: Chart (AWS Traefik Dex)
     runs-on: ubuntu-latest
     steps:
       - name: Clone the code
@@ -27,6 +27,13 @@ jobs:
 
       - name: Verify Helm installation
         run: helm version
+
+      - name: Install kubebuilder
+        run: |
+          curl -L -o kubebuilder https://github.com/kubernetes-sigs/kubebuilder/releases/download/v3.12.0/kubebuilder_linux_amd64
+          chmod +x kubebuilder
+          sudo mv kubebuilder /usr/local/bin/
+          kubebuilder version
 
       - name: Generate Helm Chart
         run: make helm-generate
