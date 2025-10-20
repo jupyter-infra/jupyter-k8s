@@ -57,6 +57,7 @@ type ResolvedTemplate struct {
 	NodeSelector           map[string]string
 	Affinity               *corev1.Affinity
 	Tolerations            []corev1.Toleration
+	ContainerConfig        *workspacesv1alpha1.ContainerConfig
 }
 
 // ValidateAndResolveTemplate resolves a WorkspaceTemplate reference, validates overrides, and returns validation result
@@ -125,6 +126,10 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 
 	if template.Spec.PrimaryStorage != nil {
 		resolved.StorageConfiguration = template.Spec.PrimaryStorage
+	}
+
+	if template.Spec.DefaultContainerConfig != nil {
+		resolved.ContainerConfig = template.Spec.DefaultContainerConfig
 	}
 
 	// Validate and apply workspace overrides
@@ -409,4 +414,26 @@ func (tr *TemplateResolver) ListWorkspacesUsingTemplate(ctx context.Context, tem
 	}
 
 	return activeWorkspaces, nil
+}
+
+// ResolveContainerCommand returns the container command from workspace or template
+func ResolveContainerCommand(workspace *workspacesv1alpha1.Workspace, template *ResolvedTemplate) []string {
+	if workspace.Spec.ContainerConfig != nil && len(workspace.Spec.ContainerConfig.Command) > 0 {
+		return workspace.Spec.ContainerConfig.Command
+	}
+	if template != nil && template.ContainerConfig != nil && len(template.ContainerConfig.Command) > 0 {
+		return template.ContainerConfig.Command
+	}
+	return nil
+}
+
+// ResolveContainerArgs returns the container args from workspace or template
+func ResolveContainerArgs(workspace *workspacesv1alpha1.Workspace, template *ResolvedTemplate) []string {
+	if workspace.Spec.ContainerConfig != nil && len(workspace.Spec.ContainerConfig.Args) > 0 {
+		return workspace.Spec.ContainerConfig.Args
+	}
+	if template != nil && template.ContainerConfig != nil && len(template.ContainerConfig.Args) > 0 {
+		return template.ContainerConfig.Args
+	}
+	return nil
 }

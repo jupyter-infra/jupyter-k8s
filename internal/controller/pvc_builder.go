@@ -24,34 +24,72 @@ func NewPVCBuilder(scheme *runtime.Scheme) *PVCBuilder {
 	}
 }
 
+// ResolvedStorageConfig contains all resolved storage configuration
+type ResolvedStorageConfig struct {
+	Size             resource.Quantity
+	StorageClassName *string
+	MountPath        string
+}
+
+// resolveStorageSize returns the storage size from workspace or template, with fallback to default
+func resolveStorageSize(workspace *workspacesv1alpha1.Workspace, template *ResolvedTemplate) resource.Quantity {
+	if workspace.Spec.Storage != nil && !workspace.Spec.Storage.Size.IsZero() {
+		return workspace.Spec.Storage.Size
+	}
+	if template != nil && template.StorageConfiguration != nil && !template.StorageConfiguration.DefaultSize.IsZero() {
+		return template.StorageConfiguration.DefaultSize
+	}
+	return resource.MustParse("10Gi")
+}
+
+// resolveStorageClassName returns the storage class name from workspace or template
+func resolveStorageClassName(workspace *workspacesv1alpha1.Workspace, template *ResolvedTemplate) *string {
+	if workspace.Spec.Storage != nil && workspace.Spec.Storage.StorageClassName != nil {
+		return workspace.Spec.Storage.StorageClassName
+	}
+	if template != nil && template.StorageConfiguration != nil {
+		return template.StorageConfiguration.DefaultStorageClassName
+	}
+	return nil
+}
+
+// resolveMountPath returns the mount path from workspace or template, with fallback to default
+func resolveMountPath(workspace *workspacesv1alpha1.Workspace, template *ResolvedTemplate) string {
+	if workspace.Spec.Storage != nil && workspace.Spec.Storage.MountPath != "" {
+		return workspace.Spec.Storage.MountPath
+	}
+	if template != nil && template.StorageConfiguration != nil && template.StorageConfiguration.DefaultMountPath != "" {
+		return template.StorageConfiguration.DefaultMountPath
+	}
+	return DefaultMountPath
+}
+
+// ResolveStorageConfig determines storage configuration from workspace or template
+// Returns nil if no storage is requested from either source
+func ResolveStorageConfig(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) *ResolvedStorageConfig {
+	// Check if storage is requested from either source
+	if (workspace.Spec.Storage == nil) && (resolvedTemplate == nil || resolvedTemplate.StorageConfiguration == nil) {
+		return nil
+	}
+
+	return &ResolvedStorageConfig{
+		Size:             resolveStorageSize(workspace, resolvedTemplate),
+		StorageClassName: resolveStorageClassName(workspace, resolvedTemplate),
+		MountPath:        resolveMountPath(workspace, resolvedTemplate),
+	}
+}
+
 // BuildPVC creates a PersistentVolumeClaim resource for the given Workspace
 // It uses workspace storage if specified, otherwise falls back to template storage configuration
 func (pb *PVCBuilder) BuildPVC(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
-	// Determine storage configuration from workspace or template
-	var size resource.Quantity
-	var storageClassName *string
-
-	if workspace.Spec.Storage != nil {
-		// Workspace storage takes precedence
-		size = workspace.Spec.Storage.Size
-		storageClassName = workspace.Spec.Storage.StorageClassName
-	} else if resolvedTemplate != nil && resolvedTemplate.StorageConfiguration != nil {
-		// Fall back to template storage configuration
-		size = resolvedTemplate.StorageConfiguration.DefaultSize
-		// Use default storage class from cluster (storageClassName remains nil)
-	} else {
-		// No storage requested from either source
-		return nil, nil
-	}
-
-	// Ensure size is set to a default if zero
-	if size.IsZero() {
-		size = resource.MustParse("10Gi")
+	storageConfig := ResolveStorageConfig(workspace, resolvedTemplate)
+	if storageConfig == nil {
+		return nil, nil // No storage requested
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: pb.buildObjectMeta(workspace),
-		Spec:       pb.buildPVCSpecWithSize(size, storageClassName),
+		Spec:       pb.buildPVCSpecWithSize(storageConfig.Size, storageConfig.StorageClassName),
 	}
 
 	// Set owner reference for garbage collection

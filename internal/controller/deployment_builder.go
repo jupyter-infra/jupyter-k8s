@@ -86,7 +86,7 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacesv1alpha1.Workspac
 		},
 	}
 
-	storageConfig := db.getStorageConfig(workspace, resolvedTemplate)
+	storageConfig := ResolveStorageConfig(workspace, resolvedTemplate)
 	if storageConfig != nil {
 		podSpec.Volumes = []corev1.Volume{
 			{
@@ -153,8 +153,8 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacesv1alpha1
 		Name:            "workspace",
 		Image:           image,
 		ImagePullPolicy: db.options.ApplicationImagesPullPolicy,
-		Command:         db.getContainerCommand(workspace),
-		Args:            db.getContainerArgs(workspace),
+		Command:         ResolveContainerCommand(workspace, resolvedTemplate),
+		Args:            ResolveContainerArgs(workspace, resolvedTemplate),
 		Lifecycle:       workspace.Spec.Lifecycle,
 		Ports: []corev1.ContainerPort{
 			{
@@ -173,12 +173,12 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacesv1alpha1
 		container.Env = resolvedTemplate.EnvironmentVariables
 	}
 
-	storageConfig := db.getStorageConfig(workspace, resolvedTemplate)
+	storageConfig := ResolveStorageConfig(workspace, resolvedTemplate)
 	if storageConfig != nil {
 		container.VolumeMounts = []corev1.VolumeMount{
 			{
 				Name:      "workspace-storage",
-				MountPath: DefaultMountPath,
+				MountPath: storageConfig.MountPath,
 			},
 		}
 	}
@@ -196,26 +196,6 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacesv1alpha1
 	}
 
 	return container
-}
-
-// getContainerCommand returns the command for the container
-func (db *DeploymentBuilder) getContainerCommand(workspace *workspacesv1alpha1.Workspace) []string {
-	// Use ContainerConfig command if specified
-	if workspace.Spec.ContainerConfig != nil && len(workspace.Spec.ContainerConfig.Command) > 0 {
-		return workspace.Spec.ContainerConfig.Command
-	}
-	// Return nil to use Docker ENTRYPOINT
-	return nil
-}
-
-// getContainerArgs returns the args for the container
-func (db *DeploymentBuilder) getContainerArgs(workspace *workspacesv1alpha1.Workspace) []string {
-	// Use ContainerConfig args if specified
-	if workspace.Spec.ContainerConfig != nil && len(workspace.Spec.ContainerConfig.Args) > 0 {
-		return workspace.Spec.ContainerConfig.Args
-	}
-	// Return nil to use Docker CMD
-	return nil
 }
 
 // parseResourceRequirements extracts and validates resource requirements
@@ -250,20 +230,4 @@ func (db *DeploymentBuilder) parseResourceRequirements(workspace *workspacesv1al
 			corev1.ResourceMemory: defaultMemory,
 		},
 	}
-}
-
-// getStorageConfig determines storage configuration from workspace or template
-func (db *DeploymentBuilder) getStorageConfig(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) *workspacesv1alpha1.StorageConfig {
-	// Workspace storage takes precedence
-	if workspace.Spec.Storage != nil {
-		return &workspacesv1alpha1.StorageConfig{
-			DefaultSize: workspace.Spec.Storage.Size,
-		}
-	}
-
-	if resolvedTemplate != nil && resolvedTemplate.StorageConfiguration != nil {
-		return resolvedTemplate.StorageConfiguration
-	}
-
-	return nil
 }
