@@ -11,10 +11,7 @@ jobs:
     name: Run on Ubuntu
     runs-on: ubuntu-latest
     permissions:
-      contents: read       # To checkout code
-      pull-requests: write # To add ci:e2e-approved label
-    # Require approval UNLESS: on main, manual trigger, or PR has ci:e2e-approved label
-    environment: ${{ !(github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:e2e-approved'))) && 'e2e-tests' || '' }}
+      contents: read # To checkout code
 
     steps:
       - name: Clone the code
@@ -39,35 +36,3 @@ jobs:
           go mod tidy
           # Use Docker instead of Finch in GitHub Actions
           make test-e2e CONTAINER_TOOL=docker
-
-      # After E2E passes, auto-add label for future runs
-      - name: Add E2E approved label
-        if: success() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              if (!context.payload.pull_request) {
-                console.log('ℹ️ Not a pull request event, skipping label addition');
-                return;
-              }
-
-              const labels = context.payload.pull_request.labels.map(l => l.name);
-
-              if (!labels.includes('ci:e2e-approved')) {
-                await github.rest.issues.addLabels({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: context.payload.pull_request.number,
-                  labels: ['ci:e2e-approved']
-                });
-                console.log('✅ Successfully added ci:e2e-approved label');
-                console.log('   Future pushes to this PR will run E2E automatically without approval');
-              } else {
-                console.log('ℹ️ ci:e2e-approved label already exists, skipping');
-              }
-            } catch (error) {
-              console.error('❌ Failed to add ci:e2e-approved label:', error.message);
-              console.error('   This is non-fatal - E2E tests passed but label was not added');
-              // Don't fail the workflow if label addition fails
-            }
