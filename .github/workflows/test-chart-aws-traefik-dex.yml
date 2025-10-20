@@ -30,9 +30,12 @@ jobs:
 
       - name: Install kubebuilder
         run: |
-          curl -L -o kubebuilder https://github.com/kubernetes-sigs/kubebuilder/releases/download/v3.12.0/kubebuilder_linux_amd64
-          chmod +x kubebuilder
-          sudo mv kubebuilder /usr/local/bin/
+          # Install the correct version of kubebuilder (4.8.0) as specified in the PROJECT file
+          mkdir -p /tmp/kubebuilder
+          curl -L "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v4.8.0/kubebuilder_$(go env GOOS)_$(go env GOARCH)" -o /tmp/kubebuilder/kubebuilder
+          chmod +x /tmp/kubebuilder/kubebuilder
+          sudo mv /tmp/kubebuilder/kubebuilder /usr/local/bin/
+          rm -rf /tmp/kubebuilder
           kubebuilder version
 
       - name: Generate Helm Chart
