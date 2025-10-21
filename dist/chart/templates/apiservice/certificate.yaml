@@ -1,3 +1,4 @@
+{{- if .Values.extensionApi.enable }}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -19,3 +20,4 @@ spec:
   issuerRef:
     name: jupyter-k8s-selfsigned-issuer
     kind: Issuer
+{{- end }}

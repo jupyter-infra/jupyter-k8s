@@ -22,7 +22,24 @@ echo "Using patches from ${PATCHES_DIR}"
 if [ -d "${SCRIPT_DIR}/../config/apiservice" ]; then
     echo "Copying apiservice resources..."
     mkdir -p "${CHART_DIR}/templates/apiservice"
-    cp "${SCRIPT_DIR}/../config/apiservice"/*.yaml "${CHART_DIR}/templates/apiservice/"
+    
+    # Copy each YAML file and wrap with conditional
+    # This adds {{- if .Values.extensionApi.enable }} around each file
+    # so the API service resources are only created when extension API is enabled
+    for file in "${SCRIPT_DIR}/../config/apiservice"/*.yaml; do
+        if [ -f "$file" ]; then
+            filename=$(basename "$file")
+            target="${CHART_DIR}/templates/apiservice/${filename}"
+            
+            # Add conditional wrapper
+            echo "{{- if .Values.extensionApi.enable }}" > "$target"
+            cat "$file" >> "$target"
+            echo "{{- end }}" >> "$target"
+            
+            echo "  Added conditional to ${filename}"
+        fi
+    done
+    
     # Remove kustomization.yaml as it's not a Kubernetes resource
     rm -f "${CHART_DIR}/templates/apiservice/kustomization.yaml"
 fi
