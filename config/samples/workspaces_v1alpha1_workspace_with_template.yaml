@@ -9,4 +9,4 @@ spec:
   displayName: "Workspace Using Template"
   templateRef: "production-notebook-template"
   desiredStatus: Running
-  accessType: Public
+  ownershipType: Public

@@ -65,15 +65,6 @@ spec:
                 required:
                 - name
                 type: object
-              accessType:
-                description: |-
-                  AccessType specifies who can modify the space.
-                  Public means anyone with RBAC permissions can update/delete the space.
-                  OwnerOnly means only the creator can update/delete the space.
-                enum:
-                - Public
-                - OwnerOnly
-                type: string
               affinity:
                 description: Affinity specifies node affinity and anti-affinity rules
                   for the workspace pod
@@ -1247,6 +1238,15 @@ spec:
                 description: NodeSelector specifies node selection constraints for
                   the workspace pod
                 type: object
+              ownershipType:
+                description: |-
+                  OwnershipType specifies who can modify the space.
+                  Public means anyone with RBAC permissions can update/delete the space.
+                  OwnerOnly means only the creator can update/delete the space.
+                enum:
+                - Public
+                - OwnerOnly
+                type: string
               resources:
                 description: Resources specifies the resource requirements
                 properties:

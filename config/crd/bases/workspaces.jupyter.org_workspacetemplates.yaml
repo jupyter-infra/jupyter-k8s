@@ -67,14 +67,6 @@ spec:
                   type: string
                 maxItems: 50
                 type: array
-              defaultAccessType:
-                default: Public
-                description: DefaultAccessType specifies the default access type for
-                  workspaces using this template
-                enum:
-                - Public
-                - OwnerOnly
-                type: string
               defaultAffinity:
                 description: DefaultAffinity specifies default node affinity and anti-affinity
                   rules
@@ -1015,6 +1007,14 @@ spec:
                 description: DefaultNodeSelector specifies default node selection
                   constraints
                 type: object
+              defaultOwnershipType:
+                default: Public
+                description: DefaultOwnershipType specifies the default access type
+                  for workspaces using this template
+                enum:
+                - Public
+                - OwnerOnly
+                type: string
               defaultResources:
                 description: DefaultResources specifies the default resource requirements
                 properties:

@@ -3,6 +3,6 @@ package webhook
 
 // Access type constants
 const (
-	AccessTypeOwnerOnly = "OwnerOnly"
-	AccessTypePublic    = "Public"
+	OwnershipTypeOwnerOnly = "OwnerOnly"
+	OwnershipTypePublic    = "Public"
 )

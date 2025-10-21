@@ -44,12 +44,12 @@ func sanitizeUsername(username string) string {
 	return string(escaped[1 : len(escaped)-1])
 }
 
-// getEffectiveAccessType returns the effective access type, treating empty as Public
-func getEffectiveAccessType(accessType string) string {
-	if accessType == "" {
-		return webhookconst.AccessTypeOwnerOnly
+// getEffectiveOwnershipType returns the effective access type, treating empty as Public
+func getEffectiveOwnershipType(ownershipType string) string {
+	if ownershipType == "" {
+		return webhookconst.OwnershipTypeOwnerOnly
 	}
-	return accessType
+	return ownershipType
 }
 
 // validateEditPermission checks if the user has permission to modify/delete an OwnerOnly workspace
@@ -179,15 +179,15 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 		}
 	}
 
-	// Check accessType transition rules first
-	oldAccessType := getEffectiveAccessType(oldWorkspace.Spec.AccessType)
-	newAccessType := getEffectiveAccessType(newWorkspace.Spec.AccessType)
-	if oldAccessType == webhookconst.AccessTypePublic && newAccessType == webhookconst.AccessTypeOwnerOnly {
-		return nil, fmt.Errorf("cannot change accessType from Public to OwnerOnly")
+	// Check ownershipType transition rules first
+	oldOwnershipType := getEffectiveOwnershipType(oldWorkspace.Spec.OwnershipType)
+	newOwnershipType := getEffectiveOwnershipType(newWorkspace.Spec.OwnershipType)
+	if oldOwnershipType == webhookconst.OwnershipTypePublic && newOwnershipType == webhookconst.OwnershipTypeOwnerOnly {
+		return nil, fmt.Errorf("cannot change ownershipType from Public to OwnerOnly")
 	}
 
 	// For OwnerOnly workspaces, check if user has permission
-	if newAccessType == webhookconst.AccessTypeOwnerOnly {
+	if newOwnershipType == webhookconst.OwnershipTypeOwnerOnly {
 		if err := validateEditPermission(ctx, oldWorkspace); err != nil {
 			return nil, err
 		}
@@ -204,8 +204,8 @@ func (v *WorkspaceCustomValidator) ValidateDelete(ctx context.Context, obj runti
 	}
 
 	// For OwnerOnly workspaces, check if user has permission
-	effectiveAccessType := getEffectiveAccessType(workspace.Spec.AccessType)
-	if effectiveAccessType == webhookconst.AccessTypeOwnerOnly {
+	effectiveOwnershipType := getEffectiveOwnershipType(workspace.Spec.OwnershipType)
+	if effectiveOwnershipType == webhookconst.OwnershipTypeOwnerOnly {
 		if err := validateEditPermission(ctx, workspace); err != nil {
 			return nil, err
 		}

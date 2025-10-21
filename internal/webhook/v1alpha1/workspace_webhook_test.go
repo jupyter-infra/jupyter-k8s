@@ -51,7 +51,7 @@ var _ = Describe("Workspace Webhook", func() {
 				DisplayName:   "Test Workspace",
 				Image:         "jupyter/base-notebook:latest",
 				DesiredStatus: "Running",
-				AccessType:    "Public",
+				OwnershipType: "Public",
 			},
 		}
 		defaulter = WorkspaceCustomDefaulter{}
@@ -138,12 +138,12 @@ var _ = Describe("Workspace Webhook", func() {
 			userCtx := admission.NewContextWithRequest(ctx, req)
 
 			oldWorkspace := workspace.DeepCopy()
-			oldWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
+			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			oldWorkspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "original-user",
 			}
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
+			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			newWorkspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "original-user",
 			}
@@ -156,9 +156,9 @@ var _ = Describe("Workspace Webhook", func() {
 
 		It("should allow Public workspace update", func() {
 			oldWorkspace := workspace.DeepCopy()
-			oldWorkspace.Spec.AccessType = webhookconst.AccessTypePublic
+			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.AccessType = webhookconst.AccessTypePublic
+			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
 			newWorkspace.Spec.Image = "jupyter/scipy-notebook:latest"
 
 			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, newWorkspace)
@@ -172,12 +172,12 @@ var _ = Describe("Workspace Webhook", func() {
 			userCtx := admission.NewContextWithRequest(ctx, req)
 
 			oldWorkspace := workspace.DeepCopy()
-			oldWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
+			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			oldWorkspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "owner-user",
 			}
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
+			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			newWorkspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "owner-user",
 			}
@@ -193,7 +193,7 @@ var _ = Describe("Workspace Webhook", func() {
 			userCtx := admission.NewContextWithRequest(ctx, req)
 
 			ownerOnlyWorkspace := workspace.DeepCopy()
-			ownerOnlyWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
+			ownerOnlyWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			ownerOnlyWorkspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "owner-user",
 			}
@@ -219,23 +219,23 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
-		It("should reject changing accessType from Public to OwnerOnly", func() {
+		It("should reject changing ownershipType from Public to OwnerOnly", func() {
 			oldWorkspace := workspace.DeepCopy()
-			oldWorkspace.Spec.AccessType = webhookconst.AccessTypePublic
+			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
+			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 
 			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, newWorkspace)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("cannot change accessType from Public to OwnerOnly"))
+			Expect(err.Error()).To(ContainSubstring("cannot change ownershipType from Public to OwnerOnly"))
 			Expect(warnings).To(BeEmpty())
 		})
 
-		It("should allow changing accessType from OwnerOnly to Public", func() {
+		It("should allow changing ownershipType from OwnerOnly to Public", func() {
 			oldWorkspace := workspace.DeepCopy()
-			oldWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
+			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.AccessType = webhookconst.AccessTypePublic
+			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
 
 			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, newWorkspace)
 			Expect(err).NotTo(HaveOccurred())
@@ -298,7 +298,7 @@ var _ = Describe("Workspace Webhook", func() {
 
 		BeforeEach(func() {
 			ownerOnlyWorkspace = workspace.DeepCopy()
-			ownerOnlyWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
+			ownerOnlyWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			ownerOnlyWorkspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "owner-user",
 			}
