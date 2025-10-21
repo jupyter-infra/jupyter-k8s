@@ -8,7 +8,7 @@ on:
 
 jobs:
   lint:
-    name: Run on Ubuntu
+    name: Go and Helm
     runs-on: ubuntu-latest
     steps:
       - name: Clone the code
@@ -19,7 +19,17 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.4.0
+          export PATH=$PATH:$(go env GOPATH)/bin
+
+      - name: Install Helm
+        run: |
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Verify Helm installation
+        run: helm version
+
       - name: Run linter
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.3.0
+        run: make lint
