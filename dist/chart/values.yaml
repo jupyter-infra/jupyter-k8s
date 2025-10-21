@@ -98,3 +98,8 @@ accessResources:
     enable: false
   # Additional Group-Version-Kind to watch
   additionalGvk: []
+
+# [EXTENSION_API]: Extension API server configuration  
+extensionApi:
+  # Enable extension API server for WorkspaceConnection
+  enable: true

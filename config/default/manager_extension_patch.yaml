@@ -1,0 +1,17 @@
+# This patch adds the extension server certificate mount for the API service
+
+# Add the volumeMount for the extension server certificates
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    mountPath: /tmp/extension-server/serving-certs
+    name: extension-server-certs
+    readOnly: true
+
+# Add the volume configuration for the extension server certificates
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: extension-server-certs
+    secret:
+      secretName: jupyter-k8s-extension-server-certs

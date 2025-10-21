@@ -7,3 +7,6 @@
             {{- if .Values.accessResources.traefik.enable }}
             - --watch-traefik
             {{- end}}
+            {{- if .Values.extensionApi.enable }}
+            - --enable-extension-api=true
+            {{- end}}
