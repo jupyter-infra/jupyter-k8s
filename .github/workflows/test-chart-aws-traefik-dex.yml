@@ -1,0 +1,48 @@
+name: Guided Helm
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-chart-aws-traefik-dex:
+    name: Chart (AWS Traefik Dex)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Do NOT install kind, the target deployment should be an AWS EKS cluster.
+
+      - name: Install Helm
+        run: |
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Verify Helm installation
+        run: helm version
+
+      - name: Install kubebuilder
+        run: |
+          # Install the correct version of kubebuilder (4.8.0) as specified in the PROJECT file
+          mkdir -p /tmp/kubebuilder
+          curl -L "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v4.8.0/kubebuilder_$(go env GOOS)_$(go env GOARCH)" -o /tmp/kubebuilder/kubebuilder
+          chmod +x /tmp/kubebuilder/kubebuilder
+          sudo mv /tmp/kubebuilder/kubebuilder /usr/local/bin/
+          rm -rf /tmp/kubebuilder
+          kubebuilder version
+
+      - name: Generate Helm Chart
+        run: make helm-generate
+
+      - name: Lint Helm Chart
+        run: make helm-lint
+
+      - name: Run AWS Traefik Dex Helm Tests
+        run: make helm-test-aws-traefik-dex

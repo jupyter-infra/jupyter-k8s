@@ -1,4 +1,4 @@
-name: Test Chart
+name: Base Helm
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-e2e:
-    name: Run on Ubuntu
+  test-chart:
+    name: Chart (Operator-Only)
     runs-on: ubuntu-latest
     steps:
       - name: Clone the code
@@ -31,7 +31,7 @@ jobs:
       - name: Create kind cluster
         run: kind create cluster
 
-      - name: Prepare jupyter-k8s
+      - name: Prepare environment
         run: |
           go mod tidy
           make docker-build IMG=jupyter-k8s:v0.1.0 CONTAINER_TOOL=docker
@@ -44,9 +44,24 @@ jobs:
       - name: Verify Helm installation
         run: helm version
 
-      - name: Lint Helm Chart
+      - name: Install kubebuilder
         run: |
-          helm lint ./dist/chart
+          # Install the correct version of kubebuilder (4.8.0) as specified in the PROJECT file
+          mkdir -p /tmp/kubebuilder
+          curl -L "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v4.8.0/kubebuilder_$(go env GOOS)_$(go env GOARCH)" -o /tmp/kubebuilder/kubebuilder
+          chmod +x /tmp/kubebuilder/kubebuilder
+          sudo mv /tmp/kubebuilder/kubebuilder /usr/local/bin/
+          rm -rf /tmp/kubebuilder
+          kubebuilder version
+
+      - name: Generate Helm Chart
+        run: make helm-generate
+
+      - name: Lint Helm Chart
+        run: make helm-lint
+
+      - name: Run Helm Tests
+        run: make helm-test
 
       - name: Install cert-manager via Helm
         run: |
