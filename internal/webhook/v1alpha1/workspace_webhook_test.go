@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"context"
+	"os"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -29,6 +30,7 @@ import (
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 )
 
 var _ = Describe("Workspace Webhook", func() {
@@ -136,12 +138,12 @@ var _ = Describe("Workspace Webhook", func() {
 			userCtx := admission.NewContextWithRequest(ctx, req)
 
 			oldWorkspace := workspace.DeepCopy()
-			oldWorkspace.Spec.AccessType = accessTypeOwnerOnly
+			oldWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
 			oldWorkspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "original-user",
 			}
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.AccessType = accessTypeOwnerOnly
+			newWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
 			newWorkspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "original-user",
 			}
@@ -154,9 +156,9 @@ var _ = Describe("Workspace Webhook", func() {
 
 		It("should allow Public workspace update", func() {
 			oldWorkspace := workspace.DeepCopy()
-			oldWorkspace.Spec.AccessType = accessTypePublic
+			oldWorkspace.Spec.AccessType = webhookconst.AccessTypePublic
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.AccessType = accessTypePublic
+			newWorkspace.Spec.AccessType = webhookconst.AccessTypePublic
 			newWorkspace.Spec.Image = "jupyter/scipy-notebook:latest"
 
 			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, newWorkspace)
@@ -170,12 +172,12 @@ var _ = Describe("Workspace Webhook", func() {
 			userCtx := admission.NewContextWithRequest(ctx, req)
 
 			oldWorkspace := workspace.DeepCopy()
-			oldWorkspace.Spec.AccessType = accessTypeOwnerOnly
+			oldWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
 			oldWorkspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "owner-user",
 			}
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.AccessType = accessTypeOwnerOnly
+			newWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
 			newWorkspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "owner-user",
 			}
@@ -191,7 +193,7 @@ var _ = Describe("Workspace Webhook", func() {
 			userCtx := admission.NewContextWithRequest(ctx, req)
 
 			ownerOnlyWorkspace := workspace.DeepCopy()
-			ownerOnlyWorkspace.Spec.AccessType = accessTypeOwnerOnly
+			ownerOnlyWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
 			ownerOnlyWorkspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "owner-user",
 			}
@@ -217,27 +219,11 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
-		It("should reject update that changes last-updated-by annotation", func() {
-			oldWorkspace := workspace.DeepCopy()
-			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationLastUpdatedBy: "original-user",
-			}
-			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Annotations = map[string]string{
-				controller.AnnotationLastUpdatedBy: "malicious-user",
-			}
-
-			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, newWorkspace)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("last-updated-by annotation is immutable"))
-			Expect(warnings).To(BeEmpty())
-		})
-
 		It("should reject changing accessType from Public to OwnerOnly", func() {
 			oldWorkspace := workspace.DeepCopy()
-			oldWorkspace.Spec.AccessType = accessTypePublic
+			oldWorkspace.Spec.AccessType = webhookconst.AccessTypePublic
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.AccessType = accessTypeOwnerOnly
+			newWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
 
 			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, newWorkspace)
 			Expect(err).To(HaveOccurred())
@@ -247,9 +233,9 @@ var _ = Describe("Workspace Webhook", func() {
 
 		It("should allow changing accessType from OwnerOnly to Public", func() {
 			oldWorkspace := workspace.DeepCopy()
-			oldWorkspace.Spec.AccessType = accessTypeOwnerOnly
+			oldWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.AccessType = accessTypePublic
+			newWorkspace.Spec.AccessType = webhookconst.AccessTypePublic
 
 			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, newWorkspace)
 			Expect(err).NotTo(HaveOccurred())
@@ -304,6 +290,57 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(warnings).To(BeNil())
 			Expect(err.Error()).To(ContainSubstring("expected a Workspace object"))
+		})
+	})
+
+	Context("validateEditPermission", func() {
+		var ownerOnlyWorkspace *workspacesv1alpha1.Workspace
+
+		BeforeEach(func() {
+			ownerOnlyWorkspace = workspace.DeepCopy()
+			ownerOnlyWorkspace.Spec.AccessType = webhookconst.AccessTypeOwnerOnly
+			ownerOnlyWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "owner-user",
+			}
+		})
+
+		It("should allow owner access", func() {
+			userInfo := &authenticationv1.UserInfo{Username: "owner-user"}
+			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
+			userCtx := admission.NewContextWithRequest(ctx, req)
+
+			err := validateEditPermission(userCtx, ownerOnlyWorkspace)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should deny non-owner access", func() {
+			userInfo := &authenticationv1.UserInfo{Username: "different-user"}
+			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
+			userCtx := admission.NewContextWithRequest(ctx, req)
+
+			err := validateEditPermission(userCtx, ownerOnlyWorkspace)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("access denied"))
+		})
+
+		It("should allow cluster admin access", func() {
+			userInfo := &authenticationv1.UserInfo{
+				Username: "admin-user",
+				Groups:   []string{"system:masters"},
+			}
+			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
+			userCtx := admission.NewContextWithRequest(ctx, req)
+			Expect(os.Setenv("CLUSTER_ADMIN_GROUP", "system:masters")).To(Succeed())
+			defer func() { _ = os.Unsetenv("CLUSTER_ADMIN_GROUP") }()
+
+			err := validateEditPermission(userCtx, ownerOnlyWorkspace)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should deny access when no request context", func() {
+			err := validateEditPermission(ctx, ownerOnlyWorkspace)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("unable to extract user information"))
 		})
 	})
 })

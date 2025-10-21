@@ -302,6 +302,7 @@ metadata:
 spec:
   displayName: "CPU Bounds Test"
   templateRef: "production-notebook-template"
+  accessType: Public
   resources:
     requests:
       cpu: "10"  # Exceeds template max of 2
@@ -352,6 +353,7 @@ metadata:
 spec:
   displayName: "Valid Overrides Test"
   templateRef: "production-notebook-template"
+  accessType: Public
   resources:
     requests:
       cpu: "100m"
@@ -401,6 +403,7 @@ metadata:
   name: deletion-protection-test
 spec:
   displayName: "Deletion Protection Test"
+  accessType: Public
   templateRef: "production-notebook-template"
 `
 			cmd := exec.Command("sh", "-c",
@@ -495,6 +498,7 @@ metadata:
   name: cel-immutability-test
 spec:
   displayName: "CEL Immutability Test"
+  accessType: Public
   templateRef: "production-notebook-template"
 `
 			cmd = exec.Command("sh", "-c",
@@ -524,6 +528,7 @@ metadata:
 spec:
   displayName: "Immutability Test Template"
   description: "Original description"
+  defaultAccessType: Public
   allowedImages:
     - "jk8s-application-jupyter-uv:latest"
   defaultImage: "jk8s-application-jupyter-uv:latest"

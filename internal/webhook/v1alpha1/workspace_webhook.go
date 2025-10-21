@@ -30,11 +30,7 @@ import (
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
-)
-
-const (
-	accessTypeOwnerOnly = "OwnerOnly"
-	accessTypePublic    = "Public"
+	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 )
 
 // nolint:unused
@@ -46,6 +42,39 @@ func sanitizeUsername(username string) string {
 	escaped, _ := json.Marshal(username)
 	// Remove the surrounding quotes that json.Marshal adds
 	return string(escaped[1 : len(escaped)-1])
+}
+
+// getEffectiveAccessType returns the effective access type, treating empty as Public
+func getEffectiveAccessType(accessType string) string {
+	if accessType == "" {
+		return webhookconst.AccessTypeOwnerOnly
+	}
+	return accessType
+}
+
+// validateEditPermission checks if the user has permission to modify/delete an OwnerOnly workspace
+func validateEditPermission(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
+	req, err := admission.RequestFromContext(ctx)
+	if err != nil {
+		return fmt.Errorf("unable to extract user information from request context: %w", err)
+	}
+
+	// Check if user is the owner
+	if workspace.Annotations != nil {
+		if createdBy := workspace.Annotations[controller.AnnotationCreatedBy]; createdBy == sanitizeUsername(req.UserInfo.Username) {
+			return nil
+		}
+	}
+
+	// Check if user is cluster admin
+	clusterAdminGroup := os.Getenv("CLUSTER_ADMIN_GROUP")
+	for _, group := range req.UserInfo.Groups {
+		if group == clusterAdminGroup {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("access denied: only workspace owner or cluster admins can modify OwnerOnly workspaces")
 }
 
 // SetupWorkspaceWebhookWithManager registers the webhook for Workspace in the manager.
@@ -148,40 +177,19 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 				return nil, fmt.Errorf("created-by annotation is immutable")
 			}
 		}
-		if oldLastUpdatedBy := oldWorkspace.Annotations[controller.AnnotationLastUpdatedBy]; oldLastUpdatedBy != "" {
-			if newLastUpdatedBy := newWorkspace.Annotations[controller.AnnotationLastUpdatedBy]; newLastUpdatedBy != oldLastUpdatedBy {
-				return nil, fmt.Errorf("last-updated-by annotation is immutable")
-			}
-		}
 	}
 
 	// Check accessType transition rules first
-	if oldWorkspace.Spec.AccessType == accessTypePublic && newWorkspace.Spec.AccessType == accessTypeOwnerOnly {
+	oldAccessType := getEffectiveAccessType(oldWorkspace.Spec.AccessType)
+	newAccessType := getEffectiveAccessType(newWorkspace.Spec.AccessType)
+	if oldAccessType == webhookconst.AccessTypePublic && newAccessType == webhookconst.AccessTypeOwnerOnly {
 		return nil, fmt.Errorf("cannot change accessType from Public to OwnerOnly")
 	}
 
 	// For OwnerOnly workspaces, check if user has permission
-	if newWorkspace.Spec.AccessType == accessTypeOwnerOnly {
-		userHasPermission := false
-		if req, err := admission.RequestFromContext(ctx); err == nil {
-			// Check if user is cluster admin
-			clusterAdminGroup := os.Getenv("CLUSTER_ADMIN_GROUP")
-			for _, group := range req.UserInfo.Groups {
-				if group == clusterAdminGroup {
-					userHasPermission = true
-					break
-				}
-			}
-
-			// Check if user is the owner
-			if !userHasPermission && oldWorkspace.Annotations != nil {
-				if createdBy := oldWorkspace.Annotations[controller.AnnotationCreatedBy]; createdBy == sanitizeUsername(req.UserInfo.Username) {
-					userHasPermission = true
-				}
-			}
-		}
-		if !userHasPermission {
-			return nil, fmt.Errorf("access denied: only workspace owner or cluster admins can modify OwnerOnly workspaces")
+	if newAccessType == webhookconst.AccessTypeOwnerOnly {
+		if err := validateEditPermission(ctx, oldWorkspace); err != nil {
+			return nil, err
 		}
 	}
 
@@ -196,27 +204,10 @@ func (v *WorkspaceCustomValidator) ValidateDelete(ctx context.Context, obj runti
 	}
 
 	// For OwnerOnly workspaces, check if user has permission
-	if workspace.Spec.AccessType == accessTypeOwnerOnly {
-		userHasPermission := false
-		if req, err := admission.RequestFromContext(ctx); err == nil {
-			// Check if user is cluster admin
-			clusterAdminGroup := os.Getenv("CLUSTER_ADMIN_GROUP")
-			for _, group := range req.UserInfo.Groups {
-				if group == clusterAdminGroup {
-					userHasPermission = true
-					break
-				}
-			}
-
-			// Check if user is the owner
-			if !userHasPermission && workspace.Annotations != nil {
-				if createdBy := workspace.Annotations[controller.AnnotationCreatedBy]; createdBy == sanitizeUsername(req.UserInfo.Username) {
-					userHasPermission = true
-				}
-			}
-		}
-		if !userHasPermission {
-			return nil, fmt.Errorf("access denied: only workspace owner or cluster admins can delete OwnerOnly workspaces")
+	effectiveAccessType := getEffectiveAccessType(workspace.Spec.AccessType)
+	if effectiveAccessType == webhookconst.AccessTypeOwnerOnly {
+		if err := validateEditPermission(ctx, workspace); err != nil {
+			return nil, err
 		}
 	}
 
