@@ -101,6 +101,13 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
         sed -i '/^# \[ACCESS RESOURCES\]/,/^# \[/{ /^# \[ACCESS RESOURCES\]/d; /^# \[/!d; }' "${CHART_DIR}/values.yaml"
     fi
 
+    # Check if the workspace pod watching section already exists
+    if grep -q "^# \[WORKSPACE POD WATCHING\]" "${CHART_DIR}/values.yaml"; then
+        echo "Removing existing WORKSPACE POD WATCHING section from values.yaml"
+        # Remove existing section - from [WORKSPACE POD WATCHING] heading to the next section heading or end of file
+        sed -i '/^# \[WORKSPACE POD WATCHING\]/,/^# \[/{ /^# \[WORKSPACE POD WATCHING\]/d; /^# \[/!d; }' "${CHART_DIR}/values.yaml"
+    fi
+
     # Append the entire patch file content to values.yaml
     echo "Appending patch content to values.yaml"
     cat "${PATCHES_DIR}/values.yaml.patch" >> "${CHART_DIR}/values.yaml"

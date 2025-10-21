@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 
+	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -26,10 +27,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	mngr "sigs.k8s.io/controller-runtime/pkg/manager"
-
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
 // GVKWatch represents a Group-Version-Kind to watch
@@ -53,15 +53,19 @@ type WorkspaceControllerOptions struct {
 
 	// ResourceWatches defines custom Group-Version-Kind resources to watch
 	ResourceWatches []GVKWatch
+
+	// EnableWorkspacePodWatching controls whether workspace pod events should be watched
+	EnableWorkspacePodWatching bool
 }
 
 // WorkspaceReconciler reconciles a Workspace object
 type WorkspaceReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	stateMachine  *StateMachine
-	statusManager *StatusManager
-	options       WorkspaceControllerOptions
+	Scheme          *runtime.Scheme
+	stateMachine    *StateMachine
+	statusManager   *StatusManager
+	podEventHandler *PodEventHandler
+	options         WorkspaceControllerOptions
 }
 
 // SetStateMachine sets the state machine for testing purposes
@@ -72,6 +76,8 @@ func (r *WorkspaceReconciler) SetStateMachine(sm *StateMachine) {
 // +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=*,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=traefik.io,resources=ingressroutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=traefik.io,resources=middlewares,verbs=get;list;watch;create;update;patch;delete
@@ -140,6 +146,11 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.PersistentVolumeClaim{})
 
+	// Conditionally watch pods based on configuration
+	if r.options.EnableWorkspacePodWatching {
+		builder.Watches(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(r.podEventHandler.HandleWorkspacePodEvents))
+	}
+
 	// Optional traefik configuration (backward compatibility)
 	if r.options.WatchTraefik {
 		// Create an IngressRoute unstructured object for watching
@@ -197,13 +208,17 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
 	stateMachine := NewStateMachine(resourceManager, statusManager, templateResolver, eventRecorder)
 
+	// Create pod event handler
+	podEventHandler := NewPodEventHandler(k8sClient, resourceManager)
+
 	// Create reconciler with dependencies
 	reconciler := &WorkspaceReconciler{
-		Client:        k8sClient,
-		Scheme:        scheme,
-		stateMachine:  stateMachine,
-		statusManager: statusManager,
-		options:       options,
+		Client:          k8sClient,
+		Scheme:          scheme,
+		stateMachine:    stateMachine,
+		statusManager:   statusManager,
+		podEventHandler: podEventHandler,
+		options:         options,
 	}
 
 	return reconciler.SetupWithManager(mgr)

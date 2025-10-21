@@ -106,6 +106,7 @@ func main() {
 	var applicationImagesRegistry string
 	var watchTraefik bool
 	var watchResourcesGVK string
+	var enableWorkspacePodWatching bool
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -131,6 +132,8 @@ func main() {
 		"Watch traefik sub-resources (easy mode)")
 	flag.StringVar(&watchResourcesGVK, "watch-resources-gvk", "",
 		"Comma-separated list of Group/Version/Kind to watch (format: group/version/kind,group/version/kind,...)")
+	flag.BoolVar(&enableWorkspacePodWatching, "enable-workspace-pod-watching", false,
+		"Enable workspace pod event watching for workspace lifecycle management")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -243,6 +246,7 @@ func main() {
 		ApplicationImagesRegistry:   applicationImagesRegistry,
 		WatchTraefik:                watchTraefik,
 		ResourceWatches:             make([]controller.GVKWatch, 0),
+		EnableWorkspacePodWatching:  enableWorkspacePodWatching,
 	}
 
 	// Convert parsed GVKWatches to controller.GVKWatch format

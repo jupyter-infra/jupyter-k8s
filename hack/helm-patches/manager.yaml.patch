@@ -10,3 +10,6 @@
             {{- if .Values.extensionApi.enable }}
             - --enable-extension-api=true
             {{- end}}
+            {{- if .Values.workspacePodWatching.enable }}
+            - --enable-workspace-pod-watching
+            {{- end}}

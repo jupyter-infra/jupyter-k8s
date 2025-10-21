@@ -81,6 +81,12 @@ spec:
                   If not provided, the AccessURL will not be set in the workspace status
                   Example: "https://example.com/workspace-path/"
                 type: string
+              controllerConfig:
+                additionalProperties:
+                  type: string
+                description: ControllerConfig contains settings used by the controller
+                  for strategy-specific operations
+                type: object
               displayName:
                 description: DisplayName is a human-readable name for this access
                   strategy
