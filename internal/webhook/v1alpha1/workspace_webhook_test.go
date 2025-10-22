@@ -229,6 +229,60 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(BeEmpty())
 		})
+
+		It("should reject update that removes created-by annotation", func() {
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "original-user",
+				"other-annotation":             "other-value",
+			}
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Annotations = map[string]string{
+				"other-annotation": "other-value",
+			}
+
+			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, newWorkspace)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("created-by annotation is immutable"))
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("should reject update that removes all annotations", func() {
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "original-user",
+				"other-annotation":             "other-value",
+			}
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Annotations = nil
+
+			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, newWorkspace)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("created-by annotation cannot be removed"))
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("should allow admin to modify created-by annotation", func() {
+			userInfo := &authenticationv1.UserInfo{
+				Username: "admin-user",
+				Groups:   []string{"system:masters"},
+			}
+			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
+			adminCtx := admission.NewContextWithRequest(ctx, req)
+
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "original-user",
+			}
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "new-user",
+			}
+
+			warnings, err := validator.ValidateUpdate(adminCtx, oldWorkspace, newWorkspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
 	})
 
 	Context("sanitizeUsername", func() {
@@ -281,7 +335,7 @@ var _ = Describe("Workspace Webhook", func() {
 		})
 	})
 
-	Context("validateEditPermission", func() {
+	Context("validateOwnershipPermission", func() {
 		var ownerOnlyWorkspace *workspacesv1alpha1.Workspace
 
 		BeforeEach(func() {
@@ -297,7 +351,7 @@ var _ = Describe("Workspace Webhook", func() {
 			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
 			userCtx := admission.NewContextWithRequest(ctx, req)
 
-			err := validateEditPermission(userCtx, ownerOnlyWorkspace)
+			err := validateOwnershipPermission(userCtx, ownerOnlyWorkspace)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -306,7 +360,7 @@ var _ = Describe("Workspace Webhook", func() {
 			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
 			userCtx := admission.NewContextWithRequest(ctx, req)
 
-			err := validateEditPermission(userCtx, ownerOnlyWorkspace)
+			err := validateOwnershipPermission(userCtx, ownerOnlyWorkspace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("access denied"))
 		})
@@ -321,14 +375,26 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(os.Setenv("CLUSTER_ADMIN_GROUP", "system:masters")).To(Succeed())
 			defer func() { _ = os.Unsetenv("CLUSTER_ADMIN_GROUP") }()
 
-			err := validateEditPermission(userCtx, ownerOnlyWorkspace)
+			err := validateOwnershipPermission(userCtx, ownerOnlyWorkspace)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should deny access when no request context", func() {
-			err := validateEditPermission(ctx, ownerOnlyWorkspace)
+			err := validateOwnershipPermission(ctx, ownerOnlyWorkspace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unable to extract user information"))
+		})
+
+		It("should allow system:masters access", func() {
+			userInfo := &authenticationv1.UserInfo{
+				Username: "admin-user",
+				Groups:   []string{"system:masters"},
+			}
+			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
+			userCtx := admission.NewContextWithRequest(ctx, req)
+
+			err := validateOwnershipPermission(userCtx, ownerOnlyWorkspace)
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })

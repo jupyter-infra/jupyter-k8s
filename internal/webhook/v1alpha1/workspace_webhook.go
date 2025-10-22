@@ -45,6 +45,7 @@ func sanitizeUsername(username string) string {
 }
 
 // getEffectiveOwnershipType returns the effective access type, treating empty as Public
+// TODO: think of better way to convey defaults to user.
 func getEffectiveOwnershipType(ownershipType string) string {
 	if ownershipType == "" {
 		return webhookconst.OwnershipTypePublic
@@ -52,8 +53,24 @@ func getEffectiveOwnershipType(ownershipType string) string {
 	return ownershipType
 }
 
-// validateEditPermission checks if the user has permission to modify/delete an OwnerOnly workspace
-func validateEditPermission(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
+// isAdminUser checks if the user groups include any admin groups
+func isAdminUser(groups []string) bool {
+	adminGroups := []string{"system:masters"}
+	if clusterAdminGroup := os.Getenv("CLUSTER_ADMIN_GROUP"); clusterAdminGroup != "" {
+		adminGroups = append(adminGroups, clusterAdminGroup)
+	}
+	for _, group := range groups {
+		for _, adminGroup := range adminGroups {
+			if group == adminGroup {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// validateOwnershipPermission checks if the user has permission to modify/delete an OwnerOnly workspace
+func validateOwnershipPermission(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
 	req, err := admission.RequestFromContext(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to extract user information from request context: %w", err)
@@ -67,11 +84,8 @@ func validateEditPermission(ctx context.Context, workspace *workspacesv1alpha1.W
 	}
 
 	// Check if user is cluster admin
-	clusterAdminGroup := os.Getenv("CLUSTER_ADMIN_GROUP")
-	for _, group := range req.UserInfo.Groups {
-		if group == clusterAdminGroup {
-			return nil
-		}
+	if isAdminUser(req.UserInfo.Groups) {
+		return nil
 	}
 
 	return fmt.Errorf("access denied: only workspace owner or cluster admins can modify OwnerOnly workspaces")
@@ -170,10 +184,23 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 		return nil, fmt.Errorf("expected a Workspace object for the newObj but got %T", newObj)
 	}
 
-	// Validate that ownership annotations are immutable
-	if oldWorkspace.Annotations != nil && newWorkspace.Annotations != nil {
-		if oldCreatedBy := oldWorkspace.Annotations[controller.AnnotationCreatedBy]; oldCreatedBy != "" {
-			if newCreatedBy := newWorkspace.Annotations[controller.AnnotationCreatedBy]; newCreatedBy != oldCreatedBy {
+	// Check if user is admin
+	isAdmin := false
+	if req, err := admission.RequestFromContext(ctx); err == nil {
+		isAdmin = isAdminUser(req.UserInfo.Groups)
+	}
+
+	// Validate that ownership annotations are immutable (except for admins)
+	if oldWorkspace.Annotations != nil && oldWorkspace.Annotations[controller.AnnotationCreatedBy] != "" {
+		oldCreatedBy := oldWorkspace.Annotations[controller.AnnotationCreatedBy]
+		// Check if annotations are being cleared
+		if newWorkspace.Annotations == nil {
+			if !isAdmin {
+				return nil, fmt.Errorf("created-by annotation cannot be removed")
+			}
+		}
+		if newCreatedBy := newWorkspace.Annotations[controller.AnnotationCreatedBy]; newCreatedBy != oldCreatedBy {
+			if !isAdmin {
 				return nil, fmt.Errorf("created-by annotation is immutable")
 			}
 		}
@@ -182,7 +209,7 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 	newOwnershipType := getEffectiveOwnershipType(newWorkspace.Spec.OwnershipType)
 	// For OwnerOnly workspaces, check if user has permission
 	if newOwnershipType == webhookconst.OwnershipTypeOwnerOnly {
-		if err := validateEditPermission(ctx, oldWorkspace); err != nil {
+		if err := validateOwnershipPermission(ctx, oldWorkspace); err != nil {
 			return nil, err
 		}
 	}
@@ -200,7 +227,7 @@ func (v *WorkspaceCustomValidator) ValidateDelete(ctx context.Context, obj runti
 	// For OwnerOnly workspaces, check if user has permission
 	effectiveOwnershipType := getEffectiveOwnershipType(workspace.Spec.OwnershipType)
 	if effectiveOwnershipType == webhookconst.OwnershipTypeOwnerOnly {
-		if err := validateEditPermission(ctx, workspace); err != nil {
+		if err := validateOwnershipPermission(ctx, workspace); err != nil {
 			return nil, err
 		}
 	}
