@@ -106,6 +106,7 @@ func main() {
 	var applicationImagesPullPolicy string
 	var applicationImagesRegistry string
 	var watchTraefik bool
+	var enableExtensionAPI bool
 	var watchResourcesGVK string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -130,6 +131,8 @@ func main() {
 		"Registry prefix for application images (e.g. example.com/my-registry)")
 	flag.BoolVar(&watchTraefik, "watch-traefik", false,
 		"Watch traefik sub-resources (easy mode)")
+	flag.BoolVar(&enableExtensionAPI, "enable-extension-api", false,
+		"Enable extension API server")
 	flag.StringVar(&watchResourcesGVK, "watch-resources-gvk", "",
 		"Comma-separated list of Group/Version/Kind to watch (format: group/version/kind,group/version/kind,...)")
 	opts := zap.Options{
