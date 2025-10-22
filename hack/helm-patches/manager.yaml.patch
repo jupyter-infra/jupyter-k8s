@@ -8,5 +8,5 @@
             - --watch-traefik
             {{- end}}
             {{- if .Values.extensionApi.enable }}
-            - --enable-extension-api=true
+            - --enable-extension-api
             {{- end}}
