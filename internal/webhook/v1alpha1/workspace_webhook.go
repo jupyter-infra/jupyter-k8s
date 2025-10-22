@@ -47,7 +47,7 @@ func sanitizeUsername(username string) string {
 // getEffectiveOwnershipType returns the effective access type, treating empty as Public
 func getEffectiveOwnershipType(ownershipType string) string {
 	if ownershipType == "" {
-		return webhookconst.OwnershipTypeOwnerOnly
+		return webhookconst.OwnershipTypePublic
 	}
 	return ownershipType
 }
@@ -179,13 +179,7 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 		}
 	}
 
-	// Check ownershipType transition rules first
-	oldOwnershipType := getEffectiveOwnershipType(oldWorkspace.Spec.OwnershipType)
 	newOwnershipType := getEffectiveOwnershipType(newWorkspace.Spec.OwnershipType)
-	if oldOwnershipType == webhookconst.OwnershipTypePublic && newOwnershipType == webhookconst.OwnershipTypeOwnerOnly {
-		return nil, fmt.Errorf("cannot change ownershipType from Public to OwnerOnly")
-	}
-
 	// For OwnerOnly workspaces, check if user has permission
 	if newOwnershipType == webhookconst.OwnershipTypeOwnerOnly {
 		if err := validateEditPermission(ctx, oldWorkspace); err != nil {

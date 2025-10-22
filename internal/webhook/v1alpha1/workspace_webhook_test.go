@@ -219,18 +219,6 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
-		It("should reject changing ownershipType from Public to OwnerOnly", func() {
-			oldWorkspace := workspace.DeepCopy()
-			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
-			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
-
-			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, newWorkspace)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("cannot change ownershipType from Public to OwnerOnly"))
-			Expect(warnings).To(BeEmpty())
-		})
-
 		It("should allow changing ownershipType from OwnerOnly to Public", func() {
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly

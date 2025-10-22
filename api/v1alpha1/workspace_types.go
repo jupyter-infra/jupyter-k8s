@@ -94,6 +94,7 @@ type WorkspaceSpec struct {
 	// Public means anyone with RBAC permissions can update/delete the space.
 	// OwnerOnly means only the creator can update/delete the space.
 	// +kubebuilder:validation:Enum=Public;OwnerOnly
+	// +optional
 	OwnershipType string `json:"ownershipType,omitempty"`
 
 	// Resources specifies the resource requirements
