@@ -42,6 +42,7 @@ import (
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/extensionapi"
 	webhookv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
@@ -267,6 +268,14 @@ func main() {
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
 		if err := webhookv1alpha1.SetupWorkspaceWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Workspace")
+			os.Exit(1)
+		}
+	}
+
+	// nolint:goconst
+	if enableExtensionAPI {
+		if err := extensionapi.SetupExtensionAPIServerWithManager(); err != nil {
+			setupLog.Error(err, "unable to create extension API server", "extensionapi", "Server")
 			os.Exit(1)
 		}
 	}
