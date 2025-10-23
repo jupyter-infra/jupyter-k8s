@@ -110,6 +110,13 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
         sed -i '/^# \[ACCESS RESOURCES\]/,/^# \[/{ /^# \[ACCESS RESOURCES\]/d; /^# \[/!d; }' "${CHART_DIR}/values.yaml"
     fi
 
+    # Check if the workspace pod watching section already exists
+    if grep -q "^# \[WORKSPACE POD WATCHING\]" "${CHART_DIR}/values.yaml"; then
+        echo "Removing existing WORKSPACE POD WATCHING section from values.yaml"
+        # Remove existing section - from [WORKSPACE POD WATCHING] heading to the next section heading or end of file
+        sed -i '/^# \[WORKSPACE POD WATCHING\]/,/^# \[/{ /^# \[WORKSPACE POD WATCHING\]/d; /^# \[/!d; }' "${CHART_DIR}/values.yaml"
+    fi
+
     # Append the entire patch file content to values.yaml
     echo "Appending patch content to values.yaml"
     cat "${PATCHES_DIR}/values.yaml.patch" >> "${CHART_DIR}/values.yaml"
@@ -133,10 +140,28 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
                 cat "${PATCHES_DIR}/manager.yaml.patch" > "${TMP_PATCH}"
 
                 # Replace the whole args block with our patched version from the patch file
-                sed -i '/args:/,/command:/ {
-                    /command:/!d
-                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}
-                }' "${MANAGER_YAML}"
+                if [[ "$OSTYPE" == "darwin"* ]]; then
+                    # macOS sed requires empty string after -i
+                    sed -i '' '/args:/,/command:/ {
+                        /command:/!d
+                        i\
+          args:\
+            {{- range .Values.controllerManager.container.args }}\
+            - {{ . }}\
+            {{- end }}\
+            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\
+            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\
+            {{- if .Values.accessResources.traefik.enable }}\
+            - "--watch-traefik"\
+            {{- end}}
+                    }' "${MANAGER_YAML}"
+                else
+                    # Linux sed
+                    sed -i '/args:/,/command:/ {
+                        /command:/!d
+                        i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}
+                    }' "${MANAGER_YAML}"
+                fi
 
                 # Clean up temp file
                 rm -f "${TMP_PATCH}"

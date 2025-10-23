@@ -49,6 +49,9 @@ OAUTH2P_COOKIE_SECRET := $(shell openssl rand -base64 32 | tr -- '+/' '-_')
 .PHONY: all
 all: build
 
+.PHONY: release
+release: helm-generate build lint-fix test helm-lint helm-test helm-test-aws-traefik-dex ## Run all checks required before PR submission (excluding e2e tests)
+
 ##@ General
 
 # The help target prints out all targets with their descriptions organized
@@ -475,7 +478,8 @@ deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remot
 		--set controllerManager.container.image.tag=latest \
 		--set application.imagesPullPolicy=Always \
 		--set application.imagesRegistry=$(ECR_REGISTRY) \
-		--set accessResources.traefik.enable=true
+		--set accessResources.traefik.enable=true \
+		--set workspacePodWatching.enable=true
 	@echo "Helm chart jupyter-k8s deployed successfully to remote AWS cluster"
 	@echo "Restarting deployments to use new images..."
 	kubectl rollout restart deployment -n jupyter-k8s-system jupyter-k8s-controller-manager

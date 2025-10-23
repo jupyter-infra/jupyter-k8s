@@ -1,3 +1,4 @@
+// Package aws provides AWS-related constants for the workspace controller.
 package aws
 
 const (

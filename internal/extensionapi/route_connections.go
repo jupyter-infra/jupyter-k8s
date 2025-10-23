@@ -63,14 +63,18 @@ func handleConnectionCreate(config *Config) http.HandlerFunc {
 				setupLog.Info("Found pod UID for workspace", "spaceName", spaceName, "podUID", podUID)
 			}
 			responseType, responseURL, err = generateVSCodeURL(r, config, spaceName, namespace, podUID)
+			if err != nil {
+				setupLog.Error(err, "Failed to generate connection URL", "ide", ide)
+				http.Error(w, "Failed to generate connection URL", http.StatusInternalServerError)
+				return
+			}
 		} else {
 			responseType, responseURL, err = generateWebUIURL(r, config, spaceName, namespace)
-		}
-
-		if err != nil {
-			setupLog.Error(err, "Failed to generate connection URL", "ide", ide)
-			http.Error(w, "Failed to generate connection URL", http.StatusInternalServerError)
-			return
+			if err != nil {
+				setupLog.Error(err, "Failed to generate connection URL", "ide", ide)
+				http.Error(w, "Failed to generate connection URL", http.StatusInternalServerError)
+				return
+			}
 		}
 
 		// Create response
@@ -87,7 +91,9 @@ func handleConnectionCreate(config *Config) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(response)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			setupLog.Error(err, "Failed to encode response")
+		}
 	}
 }
 

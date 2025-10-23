@@ -67,6 +67,10 @@ type WorkspaceAccessStrategySpec struct {
 	// Example: "https://example.com/workspace-path/"
 	// +optional
 	AccessURLTemplate string `json:"accessURLTemplate,omitempty"`
+
+	// ControllerConfig contains settings used by the controller for strategy-specific operations
+	// +optional
+	ControllerConfig map[string]string `json:"controllerConfig,omitempty"`
 }
 
 // WorkspaceAccessStrategyStatus defines the observed state of WorkspaceAccessStrategy
