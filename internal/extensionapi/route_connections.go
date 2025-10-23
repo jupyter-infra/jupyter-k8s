@@ -48,19 +48,20 @@ func handleConnectionCreate(config *Config) http.HandlerFunc {
 			return
 		}
 
-		setupLog.Info("Creating connection", "namespace", namespace, "spaceName", spaceName, "ide", ide)
+		// TODO: Implement authorization check for private workspaces
 
-		// Get pod UID from space name
-		podUID, err := getPodUIDFromSpaceName(spaceName)
-		if err != nil {
-			setupLog.Error(err, "Failed to get pod UID", "spaceName", spaceName)
-		} else {
-			setupLog.Info("Found pod UID for workspace", "spaceName", spaceName, "podUID", podUID)
-		}
+		setupLog.Info("Creating connection", "namespace", namespace, "spaceName", spaceName, "ide", ide)
 
 		// Generate response based on IDE type
 		var responseType, responseURL string
 		if ide == "vscode" {
+			// Get pod UID from space name
+			podUID, err := getPodUIDFromSpaceName(spaceName)
+			if err != nil {
+				setupLog.Error(err, "Failed to get pod UID", "spaceName", spaceName)
+			} else {
+				setupLog.Info("Found pod UID for workspace", "spaceName", spaceName, "podUID", podUID)
+			}
 			responseType, responseURL, err = generateVSCodeURL(r, config, spaceName, namespace, podUID)
 		} else {
 			responseType, responseURL, err = generateWebUIURL(r, config, spaceName, namespace)
@@ -132,27 +133,6 @@ func generateVSCodeURL(r *http.Request, config *Config, spaceName, namespace, po
 }
 
 func generateWebUIURL(r *http.Request, config *Config, spaceName, namespace string) (string, string, error) {
-	setupLog := ctrl.Log.WithName("webui-handler")
-
-	if config.KMSKeyID == "" {
-		setupLog.Error(nil, "KMS_KEY_ID not configured")
-		return "", "", fmt.Errorf("KMS_KEY_ID not configured")
-	}
-
-	kmsClient, err := aws.NewKMSClient(r.Context(), config.KMSKeyID)
-	if err != nil {
-		return "", "", err
-	}
-
-	// Generate JWT token with space info
-	jwtToken, err := kmsClient.GenerateJWTToken(r.Context(), spaceName, namespace, "test-user")
-	if err != nil {
-		return "", "", err
-	}
-
-	setupLog.Info("Generated JWT token for Web UI", "spaceName", spaceName, "namespace", namespace)
-
-	url := "https://test-presigned-url.com/" + namespace + "/" + spaceName + "?token=" + jwtToken
-
-	return "webui", url, nil
+	// TODO: Implement Web UI URL generation with JWT tokens
+	return "webui", "https://placeholder-webui-url.com", nil
 }

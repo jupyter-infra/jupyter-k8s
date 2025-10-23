@@ -7,6 +7,7 @@ spec:
   displayName: "Restricted Data Science Template"
   description: "Template with strict resource and image restrictions"
   defaultImage: "quay.io/jupyter/datascience-notebook:latest"
+  defaultOwnershipType: Public
   allowedImages:
     - "quay.io/jupyter/datascience-notebook:latest"
     - "quay.io/jupyter/minimal-notebook:latest"
@@ -40,6 +41,7 @@ spec:
   desiredStatus: Running
   templateRef: "restricted-template"
   image: "tensorflow/tensorflow:latest-gpu-jupyter"
+  ownershipType: Public
   resources:
     requests:
       cpu: "4"
@@ -61,6 +63,7 @@ spec:
   desiredStatus: Running
   templateRef: "restricted-template"
   image: "quay.io/jupyter/minimal-notebook:latest"
+  ownershipType: Public
   resources:
     requests:
       cpu: "250m"
