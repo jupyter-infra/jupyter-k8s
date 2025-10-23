@@ -42,6 +42,7 @@ import (
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/extensionapi"
 	webhookv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
@@ -105,6 +106,7 @@ func main() {
 	var applicationImagesPullPolicy string
 	var applicationImagesRegistry string
 	var watchTraefik bool
+	var enableExtensionAPI bool
 	var watchResourcesGVK string
 	var enableWorkspacePodWatching bool
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
@@ -130,6 +132,8 @@ func main() {
 		"Registry prefix for application images (e.g. example.com/my-registry)")
 	flag.BoolVar(&watchTraefik, "watch-traefik", false,
 		"Watch traefik sub-resources (easy mode)")
+	flag.BoolVar(&enableExtensionAPI, "enable-extension-api", false,
+		"Enable extension API server")
 	flag.StringVar(&watchResourcesGVK, "watch-resources-gvk", "",
 		"Comma-separated list of Group/Version/Kind to watch (format: group/version/kind,group/version/kind,...)")
 	flag.BoolVar(&enableWorkspacePodWatching, "enable-workspace-pod-watching", false,
@@ -271,6 +275,14 @@ func main() {
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
 		if err := webhookv1alpha1.SetupWorkspaceWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Workspace")
+			os.Exit(1)
+		}
+	}
+
+	// nolint:goconst
+	if enableExtensionAPI {
+		if err := extensionapi.SetupExtensionAPIServerWithManager(); err != nil {
+			setupLog.Error(err, "unable to create extension API server", "extensionapi", "Server")
 			os.Exit(1)
 		}
 	}
