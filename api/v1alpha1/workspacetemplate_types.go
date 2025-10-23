@@ -85,6 +85,12 @@ type WorkspaceTemplateSpec struct {
 	// DefaultTolerations specifies default tolerations for scheduling on nodes with taints
 	// +optional
 	DefaultTolerations []corev1.Toleration `json:"defaultTolerations,omitempty"`
+
+	// DefaultOwnershipType specifies the default access type for workspaces using this template
+	// +kubebuilder:validation:Enum=Public;OwnerOnly
+	// +kubebuilder:default="Public"
+	// +optional
+	DefaultOwnershipType string `json:"defaultOwnershipType,omitempty"`
 }
 
 // ResourceBounds defines minimum and maximum resource limits

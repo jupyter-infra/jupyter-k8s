@@ -90,6 +90,13 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:Enum=Running;Stopped
 	DesiredStatus string `json:"desiredStatus,omitempty"`
 
+	// OwnershipType specifies who can modify the space.
+	// Public means anyone with RBAC permissions can update/delete the space.
+	// OwnerOnly means only the creator can update/delete the space.
+	// +kubebuilder:validation:Enum=Public;OwnerOnly
+	// +optional
+	OwnershipType string `json:"ownershipType,omitempty"`
+
 	// Resources specifies the resource requirements
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 

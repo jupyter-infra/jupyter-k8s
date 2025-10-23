@@ -18,7 +18,9 @@ package v1alpha1
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -28,11 +30,66 @@ import (
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 )
 
 // nolint:unused
 // log is for logging in this package.
 var workspacelog = logf.Log.WithName("workspace-resource")
+
+func sanitizeUsername(username string) string {
+	// Use Go's JSON marshaling to properly escape the string
+	escaped, _ := json.Marshal(username)
+	// Remove the surrounding quotes that json.Marshal adds
+	return string(escaped[1 : len(escaped)-1])
+}
+
+// getEffectiveOwnershipType returns the effective access type, treating empty as Public
+// TODO: think of better way to convey defaults to user.
+func getEffectiveOwnershipType(ownershipType string) string {
+	if ownershipType == "" {
+		return webhookconst.OwnershipTypePublic
+	}
+	return ownershipType
+}
+
+// isAdminUser checks if the user groups include any admin groups
+func isAdminUser(groups []string) bool {
+	adminGroups := []string{"system:masters"}
+	if clusterAdminGroup := os.Getenv("CLUSTER_ADMIN_GROUP"); clusterAdminGroup != "" {
+		adminGroups = append(adminGroups, clusterAdminGroup)
+	}
+	for _, group := range groups {
+		for _, adminGroup := range adminGroups {
+			if group == adminGroup {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// validateOwnershipPermission checks if the user has permission to modify/delete an OwnerOnly workspace
+func validateOwnershipPermission(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
+	req, err := admission.RequestFromContext(ctx)
+	if err != nil {
+		return fmt.Errorf("unable to extract user information from request context: %w", err)
+	}
+
+	// Check if user is the owner
+	if workspace.Annotations != nil {
+		if createdBy := workspace.Annotations[controller.AnnotationCreatedBy]; createdBy == sanitizeUsername(req.UserInfo.Username) {
+			return nil
+		}
+	}
+
+	// Check if user is cluster admin
+	if isAdminUser(req.UserInfo.Groups) {
+		return nil
+	}
+
+	return fmt.Errorf("access denied: only workspace owner or cluster admins can modify OwnerOnly workspaces")
+}
 
 // SetupWorkspaceWebhookWithManager registers the webhook for Workspace in the manager.
 func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
@@ -71,15 +128,17 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 
 	// Extract user info from request context
 	if req, err := admission.RequestFromContext(ctx); err == nil {
+		sanitizedUsername := sanitizeUsername(req.UserInfo.Username)
+
 		// Only set created-by if it doesn't exist (CREATE operation)
 		if _, exists := workspace.Annotations[controller.AnnotationCreatedBy]; !exists {
-			workspace.Annotations[controller.AnnotationCreatedBy] = req.UserInfo.Username
-			workspacelog.Info("Added created-by annotation", "workspace", workspace.GetName(), "user", req.UserInfo.Username)
+			workspace.Annotations[controller.AnnotationCreatedBy] = sanitizedUsername
+			workspacelog.Info("Added created-by annotation", "workspace", workspace.GetName(), "user", sanitizedUsername)
 		}
 
 		// Always set last-updated-by (CREATE and UPDATE operations)
-		workspace.Annotations[controller.AnnotationLastUpdatedBy] = req.UserInfo.Username
-		workspacelog.Info("Added last-updated-by annotation", "workspace", workspace.GetName(), "user", req.UserInfo.Username)
+		workspace.Annotations[controller.AnnotationLastUpdatedBy] = sanitizedUsername
+		workspacelog.Info("Added last-updated-by annotation", "workspace", workspace.GetName(), "user", sanitizedUsername)
 	}
 
 	return nil
@@ -115,14 +174,45 @@ func (v *WorkspaceCustomValidator) ValidateCreate(_ context.Context, obj runtime
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type Workspace.
-func (v *WorkspaceCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	workspace, ok := newObj.(*workspacesv1alpha1.Workspace)
+func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	oldWorkspace, ok := oldObj.(*workspacesv1alpha1.Workspace)
+	if !ok {
+		return nil, fmt.Errorf("expected a Workspace object for the oldObj but got %T", oldObj)
+	}
+	newWorkspace, ok := newObj.(*workspacesv1alpha1.Workspace)
 	if !ok {
 		return nil, fmt.Errorf("expected a Workspace object for the newObj but got %T", newObj)
 	}
-	workspacelog.Info("Validation for Workspace upon update", "name", workspace.GetName())
 
-	// TODO(user): fill in your validation logic upon object update.
+	// Check if user is admin
+	isAdmin := false
+	if req, err := admission.RequestFromContext(ctx); err == nil {
+		isAdmin = isAdminUser(req.UserInfo.Groups)
+	}
+
+	// Validate that ownership annotations are immutable (except for admins)
+	if oldWorkspace.Annotations != nil && oldWorkspace.Annotations[controller.AnnotationCreatedBy] != "" {
+		oldCreatedBy := oldWorkspace.Annotations[controller.AnnotationCreatedBy]
+		// Check if annotations are being cleared
+		if newWorkspace.Annotations == nil {
+			if !isAdmin {
+				return nil, fmt.Errorf("created-by annotation cannot be removed")
+			}
+		}
+		if newCreatedBy := newWorkspace.Annotations[controller.AnnotationCreatedBy]; newCreatedBy != oldCreatedBy {
+			if !isAdmin {
+				return nil, fmt.Errorf("created-by annotation is immutable")
+			}
+		}
+	}
+
+	newOwnershipType := getEffectiveOwnershipType(newWorkspace.Spec.OwnershipType)
+	// For OwnerOnly workspaces, check if user has permission
+	if newOwnershipType == webhookconst.OwnershipTypeOwnerOnly {
+		if err := validateOwnershipPermission(ctx, oldWorkspace); err != nil {
+			return nil, err
+		}
+	}
 
 	return nil, nil
 }
@@ -133,9 +223,14 @@ func (v *WorkspaceCustomValidator) ValidateDelete(ctx context.Context, obj runti
 	if !ok {
 		return nil, fmt.Errorf("expected a Workspace object but got %T", obj)
 	}
-	workspacelog.Info("Validation for Workspace upon deletion", "name", workspace.GetName())
 
-	// TODO(user): fill in your validation logic upon object deletion.
+	// For OwnerOnly workspaces, check if user has permission
+	effectiveOwnershipType := getEffectiveOwnershipType(workspace.Spec.OwnershipType)
+	if effectiveOwnershipType == webhookconst.OwnershipTypeOwnerOnly {
+		if err := validateOwnershipPermission(ctx, workspace); err != nil {
+			return nil, err
+		}
+	}
 
 	return nil, nil
 }
