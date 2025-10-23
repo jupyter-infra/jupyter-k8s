@@ -136,8 +136,8 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 	fi
 
 .PHONY: test-e2e
-test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -ginkgo.v
+test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind. Use FOCUS="test name" to run specific tests.
+	KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -ginkgo.v $(if $(FOCUS),-ginkgo.focus="$(FOCUS)")
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: cleanup-test-e2e
