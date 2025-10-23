@@ -288,6 +288,25 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
+		It("should allow changing ownershipType from Public to OwnerOnly by admin", func() {
+			adminCtx := createUserContext(ctx, "UPDATE", "admin-user", "system:masters")
+
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
+			oldWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "original-user",
+			}
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
+			newWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "original-user",
+			}
+
+			warnings, err := validator.ValidateUpdate(adminCtx, oldWorkspace, newWorkspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
 		It("should reject update that removes created-by annotation", func() {
 			userCtx := createUserContext(ctx, "UPDATE", "different-user")
 

@@ -77,7 +77,7 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacesv1alp
 	}
 
 	currentUser := sanitizeUsername(req.UserInfo.Username)
-	workspacelog.Info("Validating ownership permission", "currentUser", currentUser, "workspace", workspace.GetName())
+	workspacelog.Info("Validating ownership permission", "currentUser", currentUser)
 
 	// Check if user is the owner
 	if workspace.Annotations != nil {
@@ -127,7 +127,7 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 	if !ok {
 		return fmt.Errorf("expected an Workspace object but got %T", obj)
 	}
-	workspacelog.Info("Defaulting for Workspace", "name", workspace.GetName())
+	workspacelog.Info("Defaulting for Workspace", "name", workspace.GetName(), "namespace", workspace.GetNamespace())
 
 	// Add ownership tracking annotations
 	if workspace.Annotations == nil {
@@ -141,12 +141,12 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 		// Always set created-by on CREATE operations
 		if req.Operation == "CREATE" {
 			workspace.Annotations[controller.AnnotationCreatedBy] = sanitizedUsername
-			workspacelog.Info("Added created-by annotation", "workspace", workspace.GetName(), "user", sanitizedUsername)
+			workspacelog.Info("Added created-by annotation", "workspace", workspace.GetName(), "user", sanitizedUsername, "namespace", workspace.GetNamespace())
 		}
 
 		// Always set last-updated-by (CREATE and UPDATE operations)
 		workspace.Annotations[controller.AnnotationLastUpdatedBy] = sanitizedUsername
-		workspacelog.Info("Added last-updated-by annotation", "workspace", workspace.GetName(), "user", sanitizedUsername)
+		workspacelog.Info("Added last-updated-by annotation", "workspace", workspace.GetName(), "user", sanitizedUsername, "namespace", workspace.GetNamespace())
 	}
 
 	return nil
@@ -174,7 +174,7 @@ func (v *WorkspaceCustomValidator) ValidateCreate(_ context.Context, obj runtime
 	if !ok {
 		return nil, fmt.Errorf("expected a Workspace object but got %T", obj)
 	}
-	workspacelog.Info("Validation for Workspace upon creation", "name", workspace.GetName())
+	workspacelog.Info("Validation for Workspace upon creation", "name", workspace.GetName(), "namespace", workspace.GetNamespace())
 
 	// TODO(user): fill in your validation logic upon object creation.
 
@@ -191,7 +191,7 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 	if !ok {
 		return nil, fmt.Errorf("expected a Workspace object for the newObj but got %T", newObj)
 	}
-	workspacelog.Info("Validation for Workspace upon update", "name", newWorkspace.GetName())
+	workspacelog.Info("Validation for Workspace upon update", "name", newWorkspace.GetName(), "namespace", newWorkspace.GetNamespace())
 
 	// Check if user is admin
 	isAdmin := false
@@ -217,17 +217,15 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 
 	originalOwnershipType := getEffectiveOwnershipType(oldWorkspace.Spec.OwnershipType)
 	newOwnershipType := getEffectiveOwnershipType(newWorkspace.Spec.OwnershipType)
-	workspacelog.Info("Ownership validation check", "originalType", originalOwnershipType, "newType", newOwnershipType, "workspace", newWorkspace.GetName())
+	workspacelog.Info("Ownership validation check", "originalType", originalOwnershipType, "newType", newOwnershipType)
 	// For OwnerOnly workspaces, check if user has permission
 	if originalOwnershipType == webhookconst.OwnershipTypeOwnerOnly {
 		// Existing OwnerOnly workspace - check against old workspace
-		workspacelog.Info("Validating existing OwnerOnly workspace", "workspace", newWorkspace.GetName())
 		if err := validateOwnershipPermission(ctx, oldWorkspace); err != nil {
 			return nil, err
 		}
 	} else if newOwnershipType == webhookconst.OwnershipTypeOwnerOnly {
 		// Changing to OwnerOnly - only allow if user is the original creator
-		workspacelog.Info("Validating change to OwnerOnly workspace", "workspace", newWorkspace.GetName())
 		if err := validateOwnershipPermission(ctx, oldWorkspace); err != nil {
 			return nil, err
 		}
@@ -242,7 +240,7 @@ func (v *WorkspaceCustomValidator) ValidateDelete(ctx context.Context, obj runti
 	if !ok {
 		return nil, fmt.Errorf("expected a Workspace object but got %T", obj)
 	}
-	workspacelog.Info("Validation for Workspace upon deletion", "name", workspace.GetName())
+	workspacelog.Info("Validation for Workspace upon deletion", "name", workspace.GetName(), "namespace", workspace.GetNamespace())
 
 	// For OwnerOnly workspaces, check if user has permission
 	effectiveOwnershipType := getEffectiveOwnershipType(workspace.Spec.OwnershipType)

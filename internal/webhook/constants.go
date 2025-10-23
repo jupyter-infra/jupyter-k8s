@@ -8,6 +8,7 @@ const (
 )
 
 // Admin group constants
+// Defined by Kubernetes: https://kubernetes.io/docs/reference/access-authn-authz/rbac/#user-facing-roles
 const (
 	DefaultAdminGroup = "system:masters"
 )
