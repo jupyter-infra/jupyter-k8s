@@ -4,10 +4,13 @@ import (
 	jwt5 "github.com/golang-jwt/jwt/v5"
 )
 
-// TokenType constants
+// TokenType constants define the different types of authentication tokens used in the system.
 const (
+	// TokenTypeBootstrap represents a bootstrap token used for initial session setup. These are
+	// short-lived and exchanged by the service for a session token.
 	TokenTypeBootstrap = "bootstrap"
-	TokenTypeSession   = "session"
+	// TokenTypeSession represents a session token used for ongoing authenticated requests
+	TokenTypeSession = "session"
 )
 
 // Claims represents the JWT claims for our auth token

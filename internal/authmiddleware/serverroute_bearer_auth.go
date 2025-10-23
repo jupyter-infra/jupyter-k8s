@@ -6,7 +6,7 @@ import (
 )
 
 // handleBearerAuth handles bearer token authentication requests
-// Takes 5-minute JWT tokens from URL parameter and exchanges them for 6-hour session cookies
+// Takes short lived JWT tokens from URL parameter and exchanges them for 6-hour session cookies
 func (s *Server) handleBearerAuth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -39,7 +39,7 @@ func (s *Server) handleBearerAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate the 5-minute JWT token
+	// Validate the short-lived JWT token
 	claims, err := s.jwtManager.ValidateToken(token)
 	if err != nil {
 		s.logger.Error("Invalid token", "error", err)
