@@ -9,25 +9,38 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	awsutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
 )
 
-// Variable for dependency injection in tests
+// Variables for dependency injection in tests
 var (
-	newSSMRemoteAccessStrategy = func() (*SSMRemoteAccessStrategy, error) {
-		return NewSSMRemoteAccessStrategy(nil, nil)
+	newSSMRemoteAccessStrategy = func(podExecUtil awsutil.PodExecInterface) (*awsutil.SSMRemoteAccessStrategy, error) {
+		return awsutil.NewSSMRemoteAccessStrategy(nil, podExecUtil)
 	}
+	newPodExecUtil = NewPodExecUtil
 )
 
 // PodEventHandler handles pod events for workspace pods
 type PodEventHandler struct {
 	client                  client.Client
 	resourceManager         *ResourceManager
-	ssmRemoteAccessStrategy *SSMRemoteAccessStrategy
+	ssmRemoteAccessStrategy *awsutil.SSMRemoteAccessStrategy
 }
 
 // NewPodEventHandler creates a new PodEventHandler
 func NewPodEventHandler(k8sClient client.Client, resourceManager *ResourceManager) *PodEventHandler {
-	ssmStrategy, err := newSSMRemoteAccessStrategy()
+	// Create PodExecUtil for SSM strategy
+	podExecUtil, err := newPodExecUtil()
+	if err != nil {
+		logf.Log.Error(err, "Failed to initialize PodExecUtil - SSM features will be disabled")
+		return &PodEventHandler{
+			client:                  k8sClient,
+			resourceManager:         resourceManager,
+			ssmRemoteAccessStrategy: nil,
+		}
+	}
+
+	ssmStrategy, err := newSSMRemoteAccessStrategy(podExecUtil)
 	if err != nil {
 		logf.Log.Error(err, "Failed to initialize SSM remote access strategy - SSM features will be disabled")
 		ssmStrategy = nil
@@ -50,12 +63,8 @@ func (h *PodEventHandler) HandleWorkspacePodEvents(ctx context.Context, obj clie
 	logger := logf.FromContext(ctx).WithValues("pod", pod.Name, "namespace", pod.Namespace)
 	logger.V(1).Info("Received pod event", "phase", pod.Status.Phase)
 
-	// Check if pod has workspace labels (early filtering)
-	workspaceName, hasWorkspace := pod.Labels[LabelWorkspaceName]
-	if !hasWorkspace {
-		logger.V(2).Info("Ignoring non-workspace pod")
-		return nil // Not a workspace pod, ignore it
-	}
+	// Get workspace name from labels (predicate ensures this exists)
+	workspaceName := pod.Labels[LabelWorkspaceName]
 
 	logger.Info("Processing workspace pod event",
 		"workspaceName", workspaceName,

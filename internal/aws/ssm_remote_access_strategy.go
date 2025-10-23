@@ -1,4 +1,4 @@
-package controller
+package aws
 
 import (
 	"context"
@@ -8,18 +8,17 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	awsutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
+
 )
 
 // Variables for dependency injection in tests
 var (
-	newSSMClient   = awsutil.NewSSMClient
-	newPodExecUtil = NewPodExecUtil
+	newSSMClient = NewSSMClient
 )
 
-// SSMClientInterface defines the interface for SSM operations needed by the remote access strategy.
-type SSMClientInterface interface {
-	CreateActivation(ctx context.Context, description string, instanceName string, iamRole string, tags map[string]string) (*awsutil.SSMActivation, error)
+// SSMRemoteAccessClientInterface defines the interface for SSM operations needed by the remote access strategy.
+type SSMRemoteAccessClientInterface interface {
+	CreateActivation(ctx context.Context, description string, instanceName string, iamRole string, tags map[string]string) (*SSMActivation, error)
 	GetRegion() string
 	CleanupManagedInstancesByPodUID(ctx context.Context, podUID string) error
 }
@@ -49,13 +48,13 @@ const (
 
 // SSMRemoteAccessStrategy handles SSM remote access strategy operations
 type SSMRemoteAccessStrategy struct {
-	ssmClient   SSMClientInterface
+	ssmClient   SSMRemoteAccessClientInterface
 	podExecUtil PodExecInterface
 }
 
 // NewSSMRemoteAccessStrategy creates a new SSMRemoteAccessStrategy with optional dependency injection
 // If ssmClient or podExecUtil are nil, default implementations will be created
-func NewSSMRemoteAccessStrategy(ssmClient SSMClientInterface, podExecUtil PodExecInterface) (*SSMRemoteAccessStrategy, error) {
+func NewSSMRemoteAccessStrategy(ssmClient SSMRemoteAccessClientInterface, podExecUtil PodExecInterface) (*SSMRemoteAccessStrategy, error) {
 	// If SSM client not provided, create default
 	if ssmClient == nil {
 		realSSMClient, err := newSSMClient(context.Background())
@@ -66,13 +65,9 @@ func NewSSMRemoteAccessStrategy(ssmClient SSMClientInterface, podExecUtil PodExe
 		ssmClient = realSSMClient
 	}
 
-	// If PodExecUtil not provided, create default
+	// PodExecUtil must be provided by the caller since it's in the controller package
 	if podExecUtil == nil {
-		realPodExecUtil, err := newPodExecUtil()
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize PodExecUtil: %w", err)
-		}
-		podExecUtil = realPodExecUtil
+		return nil, fmt.Errorf("podExecUtil is required")
 	}
 
 	return &SSMRemoteAccessStrategy{

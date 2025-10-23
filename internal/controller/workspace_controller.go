@@ -26,10 +26,12 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	builderPkg "sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	mngr "sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 // GVKWatch represents a Group-Version-Kind to watch
@@ -148,7 +150,15 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// Conditionally watch pods based on configuration
 	if r.options.EnableWorkspacePodWatching {
-		builder.Watches(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(r.podEventHandler.HandleWorkspacePodEvents))
+		builder.Watches(
+			&corev1.Pod{}, 
+			handler.EnqueueRequestsFromMapFunc(r.podEventHandler.HandleWorkspacePodEvents),
+			builderPkg.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				// Only watch pods with workspace labels
+				_, hasWorkspace := obj.GetLabels()[LabelWorkspaceName]
+				return hasWorkspace
+			})),
+		)
 	}
 
 	// Optional traefik configuration (backward compatibility)

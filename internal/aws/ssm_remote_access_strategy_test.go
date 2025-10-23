@@ -1,4 +1,4 @@
-package controller
+package aws
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	awsutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
+
 )
 
 const (
@@ -21,25 +21,25 @@ const (
 
 // Mock implementations for testing
 
-// MockSSMClient implements SSMClientInterface for testing
-type MockSSMClient struct {
+// MockSSMRemoteAccessClient implements SSMRemoteAccessClientInterface for testing
+type MockSSMRemoteAccessClient struct {
 	mock.Mock
 }
 
-func (m *MockSSMClient) CreateActivation(ctx context.Context, description string, instanceName string, iamRole string, tags map[string]string) (*awsutil.SSMActivation, error) {
+func (m *MockSSMRemoteAccessClient) CreateActivation(ctx context.Context, description string, instanceName string, iamRole string, tags map[string]string) (*SSMActivation, error) {
 	args := m.Called(ctx, description, instanceName, iamRole, tags)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*awsutil.SSMActivation), args.Error(1)
+	return args.Get(0).(*SSMActivation), args.Error(1)
 }
 
-func (m *MockSSMClient) GetRegion() string {
+func (m *MockSSMRemoteAccessClient) GetRegion() string {
 	args := m.Called()
 	return args.String(0)
 }
 
-func (m *MockSSMClient) CleanupManagedInstancesByPodUID(ctx context.Context, podUID string) error {
+func (m *MockSSMRemoteAccessClient) CleanupManagedInstancesByPodUID(ctx context.Context, podUID string) error {
 	args := m.Called(ctx, podUID)
 	return args.Error(0)
 }
@@ -56,7 +56,7 @@ func (m *MockPodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, contai
 
 func TestNewSSMRemoteAccessStrategy_WithDependencyInjection(t *testing.T) {
 	// Create mock dependencies
-	mockSSMClient := &MockSSMClient{}
+	mockSSMClient := &MockSSMRemoteAccessClient{}
 	mockPodExecUtil := &MockPodExecUtil{}
 
 	// Test creation with dependency injection
@@ -69,58 +69,36 @@ func TestNewSSMRemoteAccessStrategy_WithDependencyInjection(t *testing.T) {
 }
 
 func TestNewSSMRemoteAccessStrategy_WithDefaults(t *testing.T) {
-	// Save original functions
-	originalNewSSMClient := newSSMClient
-	originalNewPodExecUtil := newPodExecUtil
-	defer func() {
-		newSSMClient = originalNewSSMClient
-		newPodExecUtil = originalNewPodExecUtil
-	}()
+	// Create mock PodExecUtil
+	mockPodExecUtil := &MockPodExecUtil{}
 
-	// Mock successful SSM client creation
-	mockSSMClient := &awsutil.SSMClient{}
-	newSSMClient = func(ctx context.Context) (*awsutil.SSMClient, error) {
-		return mockSSMClient, nil
-	}
-
-	// Mock successful PodExecUtil creation
-	mockPodExecUtil := &PodExecUtil{}
-	newPodExecUtil = func() (*PodExecUtil, error) {
-		return mockPodExecUtil, nil
-	}
-
-	// Test creation with nil dependencies (should create defaults)
-	strategy, err := NewSSMRemoteAccessStrategy(nil, nil)
+	// Test creation with nil SSM client (should create default)
+	strategy, err := NewSSMRemoteAccessStrategy(nil, mockPodExecUtil)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, strategy)
-	assert.Equal(t, mockSSMClient, strategy.ssmClient)
+	assert.NotNil(t, strategy.ssmClient) // Should have created default SSM client
 	assert.Equal(t, mockPodExecUtil, strategy.podExecUtil)
 }
 
 func TestNewSSMRemoteAccessStrategy_SSMClientFailure(t *testing.T) {
-	// Save original functions
+	// Save original function
 	originalNewSSMClient := newSSMClient
-	originalNewPodExecUtil := newPodExecUtil
 	defer func() {
 		newSSMClient = originalNewSSMClient
-		newPodExecUtil = originalNewPodExecUtil
 	}()
 
 	// Mock SSM client creation failure
 	expectedSSMError := errors.New("failed to initialize AWS config")
-	newSSMClient = func(ctx context.Context) (*awsutil.SSMClient, error) {
+	newSSMClient = func(ctx context.Context) (*SSMClient, error) {
 		return nil, expectedSSMError
 	}
 
-	// Mock successful PodExecUtil creation
-	mockPodExecUtil := &PodExecUtil{}
-	newPodExecUtil = func() (*PodExecUtil, error) {
-		return mockPodExecUtil, nil
-	}
+	// Create mock PodExecUtil
+	mockPodExecUtil := &MockPodExecUtil{}
 
 	// Test creation with SSM client failure (should still succeed with nil SSM client)
-	strategy, err := NewSSMRemoteAccessStrategy(nil, nil)
+	strategy, err := NewSSMRemoteAccessStrategy(nil, mockPodExecUtil)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, strategy)
@@ -128,35 +106,7 @@ func TestNewSSMRemoteAccessStrategy_SSMClientFailure(t *testing.T) {
 	assert.Equal(t, mockPodExecUtil, strategy.podExecUtil)
 }
 
-func TestNewSSMRemoteAccessStrategy_PodExecUtilFailure(t *testing.T) {
-	// Save original functions
-	originalNewSSMClient := newSSMClient
-	originalNewPodExecUtil := newPodExecUtil
-	defer func() {
-		newSSMClient = originalNewSSMClient
-		newPodExecUtil = originalNewPodExecUtil
-	}()
 
-	// Mock successful SSM client creation
-	mockSSMClient := &awsutil.SSMClient{}
-	newSSMClient = func(ctx context.Context) (*awsutil.SSMClient, error) {
-		return mockSSMClient, nil
-	}
-
-	// Mock PodExecUtil creation failure
-	expectedPodExecError := errors.New("failed to get Kubernetes config")
-	newPodExecUtil = func() (*PodExecUtil, error) {
-		return nil, expectedPodExecError
-	}
-
-	// Test creation with PodExecUtil failure (should fail)
-	strategy, err := NewSSMRemoteAccessStrategy(nil, nil)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to initialize PodExecUtil")
-	assert.Contains(t, err.Error(), expectedPodExecError.Error())
-	assert.Nil(t, strategy)
-}
 
 // Test helper functions for creating test objects
 
@@ -217,7 +167,7 @@ func TestInitSSMAgent_SSMClientNotAvailable(t *testing.T) {
 
 func TestInitSSMAgent_SidecarNotFound(t *testing.T) {
 	// Create mocks (we won't reach them due to early return)
-	mockSSMClient := &MockSSMClient{}
+	mockSSMClient := &MockSSMRemoteAccessClient{}
 	mockPodExecUtil := &MockPodExecUtil{}
 
 	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
@@ -250,7 +200,7 @@ func TestInitSSMAgent_SidecarNotFound(t *testing.T) {
 
 func TestInitSSMAgent_SidecarNotRunning(t *testing.T) {
 	// Create mocks (we won't reach them due to early return)
-	mockSSMClient := &MockSSMClient{}
+	mockSSMClient := &MockSSMRemoteAccessClient{}
 	mockPodExecUtil := &MockPodExecUtil{}
 
 	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
@@ -282,7 +232,7 @@ func TestInitSSMAgent_AlreadyCompleted(t *testing.T) {
 	mockPodExecUtil.On("ExecInPod", mock.Anything, mock.Anything, SSMAgentSidecarContainerName,
 		[]string{"test", "-f", SSMRegistrationMarkerFile}).Return("", nil) // File exists
 
-	mockSSMClient := &MockSSMClient{}
+	mockSSMClient := &MockSSMRemoteAccessClient{}
 	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
 	assert.NoError(t, err)
 
@@ -334,10 +284,10 @@ func TestInitSSMAgent_SuccessFlow(t *testing.T) {
 		[]string{"touch", SSMRegistrationMarkerFile}).Return("", nil)
 
 	// Create mock SSM client
-	mockSSMClient := &MockSSMClient{}
+	mockSSMClient := &MockSSMRemoteAccessClient{}
 	mockSSMClient.On("GetRegion").Return("us-west-2")
 	mockSSMClient.On("CreateActivation", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(&awsutil.SSMActivation{
+		Return(&SSMActivation{
 			ActivationId:   "test-activation-id",
 			ActivationCode: "test-activation-code",
 		}, nil)
@@ -386,10 +336,10 @@ func TestInitSSMAgent_RegistrationFailure(t *testing.T) {
 		})).Return("", expectedError)
 
 	// Create mock SSM client
-	mockSSMClient := &MockSSMClient{}
+	mockSSMClient := &MockSSMRemoteAccessClient{}
 	mockSSMClient.On("GetRegion").Return("us-west-2")
 	mockSSMClient.On("CreateActivation", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(&awsutil.SSMActivation{
+		Return(&SSMActivation{
 			ActivationId:   "test-activation-id",
 			ActivationCode: "test-activation-code",
 		}, nil)
@@ -444,7 +394,7 @@ func TestCleanupSSMManagedNodes_SSMClientNotAvailable(t *testing.T) {
 
 func TestCleanupSSMManagedNodes_Success(t *testing.T) {
 	// Create mocks
-	mockSSMClient := &MockSSMClient{}
+	mockSSMClient := &MockSSMRemoteAccessClient{}
 	mockPodExecUtil := &MockPodExecUtil{}
 
 	// Set up expectation for successful cleanup
@@ -468,7 +418,7 @@ func TestCleanupSSMManagedNodes_Success(t *testing.T) {
 
 func TestCleanupSSMManagedNodes_CleanupFailure(t *testing.T) {
 	// Create mocks
-	mockSSMClient := &MockSSMClient{}
+	mockSSMClient := &MockSSMRemoteAccessClient{}
 	mockPodExecUtil := &MockPodExecUtil{}
 
 	// Set up expectation for cleanup failure

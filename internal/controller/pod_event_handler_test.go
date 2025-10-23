@@ -11,16 +11,27 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	awsutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
 )
 
 func TestNewPodEventHandler_Success(t *testing.T) {
 	// Save original
 	original := newSSMRemoteAccessStrategy
-	defer func() { newSSMRemoteAccessStrategy = original }()
+	originalNewPodExecUtil := newPodExecUtil
+	defer func() { 
+		newSSMRemoteAccessStrategy = original 
+		newPodExecUtil = originalNewPodExecUtil
+	}()
+
+	// Mock successful PodExecUtil creation
+	mockPodExecUtil := &PodExecUtil{}
+	newPodExecUtil = func() (*PodExecUtil, error) {
+		return mockPodExecUtil, nil
+	}
 
 	// Mock successful SSM strategy creation
-	mockStrategy := &SSMRemoteAccessStrategy{}
-	newSSMRemoteAccessStrategy = func() (*SSMRemoteAccessStrategy, error) {
+	mockStrategy := &awsutil.SSMRemoteAccessStrategy{}
+	newSSMRemoteAccessStrategy = func(podExecUtil awsutil.PodExecInterface) (*awsutil.SSMRemoteAccessStrategy, error) {
 		return mockStrategy, nil
 	}
 
@@ -48,11 +59,21 @@ func TestNewPodEventHandler_Success(t *testing.T) {
 func TestNewPodEventHandler_SSMStrategyFailure(t *testing.T) {
 	// Save original
 	original := newSSMRemoteAccessStrategy
-	defer func() { newSSMRemoteAccessStrategy = original }()
+	originalNewPodExecUtil := newPodExecUtil
+	defer func() { 
+		newSSMRemoteAccessStrategy = original 
+		newPodExecUtil = originalNewPodExecUtil
+	}()
+
+	// Mock successful PodExecUtil creation
+	mockPodExecUtil := &PodExecUtil{}
+	newPodExecUtil = func() (*PodExecUtil, error) {
+		return mockPodExecUtil, nil
+	}
 
 	// Mock SSM strategy creation failure
 	expectedError := errors.New("mock SSM strategy creation error")
-	newSSMRemoteAccessStrategy = func() (*SSMRemoteAccessStrategy, error) {
+	newSSMRemoteAccessStrategy = func(podExecUtil awsutil.PodExecInterface) (*awsutil.SSMRemoteAccessStrategy, error) {
 		return nil, expectedError
 	}
 
@@ -78,29 +99,7 @@ func TestNewPodEventHandler_SSMStrategyFailure(t *testing.T) {
 	}
 }
 
-func TestHandleWorkspacePodEvents_NonWorkspacePod(t *testing.T) {
-	// Create handler
-	handler := &PodEventHandler{
-		client:          fake.NewClientBuilder().Build(),
-		resourceManager: &ResourceManager{},
-	}
 
-	// Create pod without workspace label
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "non-workspace-pod",
-			Namespace: "test-namespace",
-			Labels:    map[string]string{}, // No workspace label
-		},
-	}
-
-	// Test handling non-workspace pod
-	result := handler.HandleWorkspacePodEvents(context.Background(), pod)
-
-	if result != nil {
-		t.Error("Expected nil result for non-workspace pod")
-	}
-}
 
 func TestHandleWorkspacePodEvents_PodRunning_SSMSuccess(t *testing.T) {
 	// Create workspace object
@@ -124,8 +123,8 @@ func TestHandleWorkspacePodEvents_PodRunning_SSMSuccess(t *testing.T) {
 	// Create handler with minimal setup (we'll test the basic flow)
 	handler := &PodEventHandler{
 		client:                  fakeClient,
-		resourceManager:         &ResourceManager{},         // Will fail gracefully
-		ssmRemoteAccessStrategy: &SSMRemoteAccessStrategy{}, // Will fail gracefully
+		resourceManager:         &ResourceManager{},              // Will fail gracefully
+		ssmRemoteAccessStrategy: &awsutil.SSMRemoteAccessStrategy{}, // Will fail gracefully
 	}
 
 	// Create running workspace pod
@@ -238,7 +237,7 @@ func TestHandleWorkspacePodEvents_PodDeleted_Success(t *testing.T) {
 	handler := &PodEventHandler{
 		client:                  fake.NewClientBuilder().Build(),
 		resourceManager:         &ResourceManager{},
-		ssmRemoteAccessStrategy: &SSMRemoteAccessStrategy{}, // Will fail gracefully
+		ssmRemoteAccessStrategy: &awsutil.SSMRemoteAccessStrategy{}, // Will fail gracefully
 	}
 
 	// Create deleted workspace pod
@@ -298,7 +297,7 @@ func TestHandleWorkspacePodEvents_PodDeleted_SSMCleanupFailure(t *testing.T) {
 	handler := &PodEventHandler{
 		client:                  fake.NewClientBuilder().Build(),
 		resourceManager:         &ResourceManager{},
-		ssmRemoteAccessStrategy: &SSMRemoteAccessStrategy{}, // Will fail gracefully
+		ssmRemoteAccessStrategy: &awsutil.SSMRemoteAccessStrategy{}, // Will fail gracefully
 	}
 
 	// Create deleted workspace pod
