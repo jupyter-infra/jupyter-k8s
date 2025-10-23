@@ -1,0 +1,24 @@
+apiVersion: workspaces.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: test-access-strategy
+spec:
+  displayName: "Test Access Strategy"
+  accessURLTemplate: "https://test.example.com/workspace/{{.Workspace.Name}}"
+  accessResourceTemplates:
+  - kind: "Service"
+    apiVersion: "v1"
+    namePrefix: "access"
+    template: |
+      metadata:
+        labels:
+          app: "{{.Workspace.Name}}"
+      spec:
+        selector:
+          app: "{{.Workspace.Name}}"
+        ports:
+        - port: 8888
+          targetPort: 8888
+  mergeEnv:
+  - name: "WORKSPACE_URL"
+    valueTemplate: "https://test.example.com/workspace/{{.Workspace.Name}}"

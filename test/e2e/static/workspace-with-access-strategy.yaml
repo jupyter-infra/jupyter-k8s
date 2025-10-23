@@ -1,0 +1,10 @@
+apiVersion: workspaces.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: access-test-workspace
+spec:
+  displayName: "Access Test Workspace"
+  image: "jupyter/scipy-notebook:latest"
+  desiredStatus: Running
+  accessStrategy:
+    name: "test-access-strategy"

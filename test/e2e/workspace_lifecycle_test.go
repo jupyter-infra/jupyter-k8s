@@ -52,7 +52,18 @@ var _ = Describe("Workspace Lifecycle", Ordered, func() {
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(readyStatus).To(Equal("True"), "expected controller pod to be Ready")
 		}
-		Eventually(verifyControllerUp, 2*time.Minute).Should(Succeed())
+		Eventually(verifyControllerUp, 3*time.Minute).Should(Succeed())
+
+		By("waiting for webhook to be ready")
+		verifyWebhookReady := func(g Gomega) {
+			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/static/webhook-test-workspace.yaml")
+			_, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred(), "webhook should be responding")
+			
+			cmd = exec.Command("kubectl", "delete", "workspace", "webhook-test-workspace", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		}
+		Eventually(verifyWebhookReady, 2*time.Minute, 10*time.Second).Should(Succeed())
 	})
 
 	AfterAll(func() {
@@ -74,24 +85,7 @@ var _ = Describe("Workspace Lifecycle", Ordered, func() {
 	Context("Workspace Creation and Status Transitions", func() {
 		It("should create workspace and show valid status", func() {
 			By("creating a workspace with Running status")
-			workspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: lifecycle-test-workspace
-spec:
-  displayName: "Lifecycle Test Workspace"
-  image: "jupyter/scipy-notebook:latest"
-  desiredStatus: Running
-  resources:
-    requests:
-      cpu: "100m"
-      memory: "128Mi"
-    limits:
-      cpu: "500m"
-      memory: "512Mi"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/static/workspace-lifecycle-test.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -133,24 +127,7 @@ spec:
 	Context("Workspace Resource Validation", func() {
 		It("should mark workspace with invalid resources as invalid", func() {
 			By("creating workspace with invalid resources")
-			workspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: invalid-resources-workspace
-spec:
-  displayName: "Invalid Resources Workspace"
-  image: "jupyter/scipy-notebook:latest"
-  desiredStatus: Running
-  resources:
-    requests:
-      cpu: "2000m"
-      memory: "128Mi"
-    limits:
-      cpu: "100m"  # Invalid: limit < request
-      memory: "512Mi"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/static/workspace-invalid-resources.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 

@@ -1,0 +1,15 @@
+apiVersion: workspaces.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: invalid-resources-workspace
+spec:
+  displayName: "Invalid Resources Workspace"
+  image: "jupyter/scipy-notebook:latest"
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: "2000m"
+      memory: "128Mi"
+    limits:
+      cpu: "100m"  # Invalid: limit < request
+      memory: "512Mi"

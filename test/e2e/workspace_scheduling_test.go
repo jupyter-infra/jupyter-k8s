@@ -54,15 +54,7 @@ var _ = Describe("Workspace Scheduling", Ordered, func() {
 		By("waiting for webhook to be ready")
 		verifyWebhookReady := func(g Gomega) {
 			// Test webhook by creating a simple workspace
-			testYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: webhook-test-workspace
-spec:
-  displayName: "Webhook Test"
-  image: "jupyter/scipy-notebook:latest"
-  desiredStatus: Stopped`
-			cmd := exec.Command("sh", "-c", fmt.Sprintf("echo '%s' | kubectl apply -f -", testYaml))
+			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/static/webhook-test-workspace.yaml")
 			_, err := utils.Run(cmd)
 			g.Expect(err).NotTo(HaveOccurred(), "webhook should be responding")
 

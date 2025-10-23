@@ -77,33 +77,7 @@ var _ = Describe("Workspace Access Control", Ordered, func() {
 	Context("WorkspaceAccessStrategy", func() {
 		It("should create and configure access strategy", func() {
 			By("creating a WorkspaceAccessStrategy")
-			accessStrategyYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
-kind: WorkspaceAccessStrategy
-metadata:
-  name: test-access-strategy
-spec:
-  displayName: "Test Access Strategy"
-  accessURLTemplate: "https://test.example.com/workspace/{{.Workspace.Name}}"
-  accessResourceTemplates:
-  - kind: "Service"
-    apiVersion: "v1"
-    namePrefix: "access"
-    template: |
-      metadata:
-        labels:
-          app: "{{.Workspace.Name}}"
-      spec:
-        selector:
-          app: "{{.Workspace.Name}}"
-        ports:
-        - port: 8888
-          targetPort: 8888
-  mergeEnv:
-  - name: "WORKSPACE_URL"
-    valueTemplate: "https://test.example.com/workspace/{{.Workspace.Name}}"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", accessStrategyYaml))
+			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/static/workspace-access-strategy.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -124,19 +98,7 @@ spec:
 
 		It("should create workspace with access strategy reference", func() {
 			By("creating workspace with access strategy")
-			workspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: access-test-workspace
-spec:
-  displayName: "Access Test Workspace"
-  image: "jupyter/scipy-notebook:latest"
-  desiredStatus: Running
-  accessStrategy:
-    name: "test-access-strategy"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/static/workspace-with-access-strategy.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 

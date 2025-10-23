@@ -1,0 +1,8 @@
+apiVersion: workspaces.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: webhook-test-workspace
+spec:
+  displayName: "Webhook Test"
+  image: "jupyter/scipy-notebook:latest"
+  desiredStatus: Stopped
