@@ -12,6 +12,12 @@ import (
 func SetupExtensionAPIServerWithManager() error {
 	setupLog := ctrl.Log.WithName("extension-api")
 
+	// Initialize configuration
+	config, err := NewConfig()
+	if err != nil {
+		return err
+	}
+
 	go func() {
 		setupLog.Info("Extension server goroutine started")
 
@@ -25,7 +31,7 @@ func SetupExtensionAPIServerWithManager() error {
 
 			// Handle CREATE requests for connections
 			if r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/") {
-				handleConnectionCreate(w, r)
+				handleConnectionCreate(config)(w, r)
 				return
 			}
 
@@ -41,28 +47,4 @@ func SetupExtensionAPIServerWithManager() error {
 	}()
 
 	return nil
-}
-
-func handleDiscovery(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(`{
-		"kind": "APIResourceList",
-		"apiVersion": "v1",
-		"groupVersion": "connection.workspaces.jupyter.org/v1alpha1",
-		"resources": [{
-			"name": "connections",
-			"singularName": "connection",
-			"namespaced": true,
-			"kind": "Connection",
-			"verbs": ["create"]
-		}]
-	}`))
-}
-
-func handleConnectionCreate(w http.ResponseWriter, _ *http.Request) {
-	// TODO: Implement connection creation logic
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	_, _ = w.Write([]byte(`{"status": "created"}`))
 }
