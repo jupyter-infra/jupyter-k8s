@@ -172,15 +172,15 @@ func (s *SSMClient) CreateActivation(ctx context.Context, description string, in
 		})
 	}
 
-	// Set expiration to 24 hours from now
-	expirationTime := time.Now().Add(24 * time.Hour)
+	// Set expiration to 5 minutes from now
+	expirationTime := time.Now().Add(5 * time.Minute)
 
 	// Create activation input
 	input := &ssm.CreateActivationInput{
 		Description:         aws.String(description),
 		IamRole:             aws.String(iamRole),
-		RegistrationLimit:   aws.Int32(1),    // Only one instance can use this activation
-		ExpirationDate:      &expirationTime, // Expires in 24 hours
+		RegistrationLimit:   aws.Int32(1), // Only one instance can use this activation
+		ExpirationDate:      &expirationTime,
 		DefaultInstanceName: aws.String(instanceName),
 		Tags:                awsTags,
 	}
