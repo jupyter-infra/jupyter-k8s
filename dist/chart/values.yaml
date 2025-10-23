@@ -91,6 +91,13 @@ application:
   # Image registry for Workspaces controller
   imagesRegistry: "docker.io/library"
 
+# [WORKSPACE POD WATCHING]: Configure workspace pod event watching
+workspacePodWatching:
+  # Whether to enable workspace pod event watching
+  # When true, controller watches pod events for workspace lifecycle management
+  # When false, pod watching is disabled
+  enable: false  # Default: false (disabled by default)
+
 # [ACCESS RESOURCES]: Configure resources to watch for access strategy
 # Additional access resources that the controller should watch
 accessResources:

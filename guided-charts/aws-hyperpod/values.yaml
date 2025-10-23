@@ -6,6 +6,13 @@ namespace: jupyter-k8s-system # TODO consider if we need seperate namespace
 # Full domain for the application (required)
 domain: ""
 
+# Remote access configuration
+remoteAccess:
+  enabled: false
+  ssmManagedNodeRole: ""  # REQUIRED: IAM role for SSM managed instances - must be provided during installation
+  ssmSidecarImage: ""  # REQURIED: SSM sidecar container image
+  ssmDocumentName: "SageMaker-SpaceSSHSessionDocument"  # Custom SSM document name for SSH sessions
+
 # [STORAGE] StorageClasses for Workspaces
 storageClass:
   ebs:

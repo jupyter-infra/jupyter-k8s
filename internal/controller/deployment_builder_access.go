@@ -8,6 +8,7 @@ import (
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // partialAccessResourceData provides values for template substitutions
@@ -121,8 +122,87 @@ func (db *DeploymentBuilder) ApplyAccessStrategyToDeployment(
 		return fmt.Errorf("failed to add environment variables to container: %w", err)
 	}
 
-	// Future extensions could be added here:
-	// - sidecar containers
+	// Conditional sidecar logic based on access strategy name
+	if accessStrategy.Name == "aws-ssm-remote-access" {
+		if err := db.addSSMSidecarContainer(deployment, accessStrategy); err != nil {
+			return fmt.Errorf("failed to add SSM sidecar container: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// addSSMSidecarContainer adds an SSM sidecar container to the deployment with shared volume
+func (db *DeploymentBuilder) addSSMSidecarContainer(
+	deployment *appsv1.Deployment,
+	accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy,
+) error {
+	// Create shared volume for communication between main container and sidecar
+	sharedVolume := corev1.Volume{
+		Name: "ssm-remote-access",
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{
+				SizeLimit: func() *resource.Quantity {
+					limit := resource.MustParse("1Gi")
+					return &limit
+				}(),
+			},
+		},
+	}
+
+	// Create volume mount for shared directory
+	sharedVolumeMount := corev1.VolumeMount{
+		Name:      "ssm-remote-access",
+		MountPath: "/ssm-remote-access",
+	}
+
+	// Get sidecar image from access strategy controller configuration
+	var sidecarImage string
+	if accessStrategy.Spec.ControllerConfig != nil {
+		sidecarImage = accessStrategy.Spec.ControllerConfig["SSM_SIDECAR_IMAGE"]
+	}
+
+	if sidecarImage == "" {
+		return fmt.Errorf("SSM_SIDECAR_IMAGE environment variable not found in access strategy %s", accessStrategy.Name)
+	}
+
+	ssmContainer := corev1.Container{
+		Name:    "ssm-agent-sidecar",
+		Image:   sidecarImage,
+		Command: []string{"/bin/sh"},
+		Args: []string{
+			"-c",
+			"cp /usr/local/bin/remote-access-server /ssm-remote-access/ || echo \"Failed to copy: $?\"; sleep infinity",
+		},
+		VolumeMounts: []corev1.VolumeMount{sharedVolumeMount},
+		ReadinessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"test", "-f", "/tmp/ssm-registered"},
+				},
+			},
+			InitialDelaySeconds: 2,
+			PeriodSeconds:       2,
+		},
+	}
+
+	// Add the shared volume to the deployment
+	deployment.Spec.Template.Spec.Volumes = append(
+		deployment.Spec.Template.Spec.Volumes,
+		sharedVolume,
+	)
+
+	// Add volume mount to the main container (first container)
+	if len(deployment.Spec.Template.Spec.Containers) > 0 {
+		mainContainer := &deployment.Spec.Template.Spec.Containers[0]
+		mainContainer.VolumeMounts = append(mainContainer.VolumeMounts, sharedVolumeMount)
+	}
+
+	// Add the sidecar container to the deployment
+	deployment.Spec.Template.Spec.Containers = append(
+		deployment.Spec.Template.Spec.Containers,
+		ssmContainer,
+	)
 
 	return nil
 }
