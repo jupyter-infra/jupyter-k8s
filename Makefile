@@ -50,7 +50,7 @@ OAUTH2P_COOKIE_SECRET := $(shell openssl rand -base64 32 | tr -- '+/' '-_')
 all: build
 
 .PHONY: release
-release: helm-generate build lint test helm-lint helm-test ## Run all checks required before PR submission (excluding e2e tests)
+release: helm-generate build lint test helm-lint helm-test helm-test-aws-traefik-dex ## Run all checks required before PR submission (excluding e2e tests)
 
 ##@ General
 
