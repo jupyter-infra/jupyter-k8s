@@ -49,6 +49,9 @@ OAUTH2P_COOKIE_SECRET := $(shell openssl rand -base64 32 | tr -- '+/' '-_')
 .PHONY: all
 all: build
 
+.PHONY: release
+release: helm-generate build lint-fix test helm-lint helm-test helm-test-aws-traefik-dex ## Run all checks required before PR submission (excluding e2e tests)
+
 ##@ General
 
 # The help target prints out all targets with their descriptions organized
