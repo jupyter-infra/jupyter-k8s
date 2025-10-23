@@ -12,7 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-
 )
 
 const (
@@ -105,8 +104,6 @@ func TestNewSSMRemoteAccessStrategy_SSMClientFailure(t *testing.T) {
 	assert.Nil(t, strategy.ssmClient) // SSM client should be nil due to failure
 	assert.Equal(t, mockPodExecUtil, strategy.podExecUtil)
 }
-
-
 
 // Test helper functions for creating test objects
 

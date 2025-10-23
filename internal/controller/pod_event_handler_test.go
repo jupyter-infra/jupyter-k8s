@@ -18,8 +18,8 @@ func TestNewPodEventHandler_Success(t *testing.T) {
 	// Save original
 	original := newSSMRemoteAccessStrategy
 	originalNewPodExecUtil := newPodExecUtil
-	defer func() { 
-		newSSMRemoteAccessStrategy = original 
+	defer func() {
+		newSSMRemoteAccessStrategy = original
 		newPodExecUtil = originalNewPodExecUtil
 	}()
 
@@ -60,8 +60,8 @@ func TestNewPodEventHandler_SSMStrategyFailure(t *testing.T) {
 	// Save original
 	original := newSSMRemoteAccessStrategy
 	originalNewPodExecUtil := newPodExecUtil
-	defer func() { 
-		newSSMRemoteAccessStrategy = original 
+	defer func() {
+		newSSMRemoteAccessStrategy = original
 		newPodExecUtil = originalNewPodExecUtil
 	}()
 
@@ -99,8 +99,6 @@ func TestNewPodEventHandler_SSMStrategyFailure(t *testing.T) {
 	}
 }
 
-
-
 func TestHandleWorkspacePodEvents_PodRunning_SSMSuccess(t *testing.T) {
 	// Create workspace object
 	workspace := &workspacesv1alpha1.Workspace{
@@ -123,7 +121,7 @@ func TestHandleWorkspacePodEvents_PodRunning_SSMSuccess(t *testing.T) {
 	// Create handler with minimal setup (we'll test the basic flow)
 	handler := &PodEventHandler{
 		client:                  fakeClient,
-		resourceManager:         &ResourceManager{},              // Will fail gracefully
+		resourceManager:         &ResourceManager{},                 // Will fail gracefully
 		ssmRemoteAccessStrategy: &awsutil.SSMRemoteAccessStrategy{}, // Will fail gracefully
 	}
 

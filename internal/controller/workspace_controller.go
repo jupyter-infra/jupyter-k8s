@@ -151,7 +151,7 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Conditionally watch pods based on configuration
 	if r.options.EnableWorkspacePodWatching {
 		builder.Watches(
-			&corev1.Pod{}, 
+			&corev1.Pod{},
 			handler.EnqueueRequestsFromMapFunc(r.podEventHandler.HandleWorkspacePodEvents),
 			builderPkg.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				// Only watch pods with workspace labels
