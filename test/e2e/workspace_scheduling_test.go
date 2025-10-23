@@ -14,9 +14,7 @@ import (
 	"github.com/jupyter-ai-contrib/jupyter-k8s/test/utils"
 )
 
-// commenting out flaky test: https://github.com/jupyter-infra/jupyter-k8s/issues/45
-// reinstate 'Describe' to run again
-var _ = XDescribe("Workspace Scheduling", Ordered, func() {
+var _ = Describe("Workspace Scheduling", Ordered, func() {
 	BeforeAll(func() {
 		By("installing CRDs")
 		cmd := exec.Command("make", "install")
@@ -52,6 +50,27 @@ var _ = XDescribe("Workspace Scheduling", Ordered, func() {
 			g.Expect(readyStatus).To(Equal("True"), "expected controller pod to be Ready")
 		}
 		Eventually(verifyControllerUp, 2*time.Minute).Should(Succeed())
+
+		By("waiting for webhook to be ready")
+		verifyWebhookReady := func(g Gomega) {
+			// Test webhook by creating a simple workspace
+			testYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: webhook-test-workspace
+spec:
+  displayName: "Webhook Test"
+  image: "jupyter/scipy-notebook:latest"
+  desiredStatus: Stopped`
+			cmd := exec.Command("sh", "-c", fmt.Sprintf("echo '%s' | kubectl apply -f -", testYaml))
+			_, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred(), "webhook should be responding")
+
+			// Clean up test workspace
+			cmd = exec.Command("kubectl", "delete", "workspace", "webhook-test-workspace", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		}
+		Eventually(verifyWebhookReady, 1*time.Minute, 5*time.Second).Should(Succeed())
 	})
 
 	AfterAll(func() {
