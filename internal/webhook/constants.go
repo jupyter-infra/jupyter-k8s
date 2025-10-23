@@ -6,3 +6,8 @@ const (
 	OwnershipTypeOwnerOnly = "OwnerOnly"
 	OwnershipTypePublic    = "Public"
 )
+
+// Admin group constants
+const (
+	DefaultAdminGroup = "system:masters"
+)
