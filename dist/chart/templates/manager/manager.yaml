@@ -31,11 +31,20 @@ spec:
             {{- range .Values.controllerManager.container.args }}
             - {{ . }}
             {{- end }}
-            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"
-            - "--application-images-registry={{ .Values.application.imagesRegistry }}"
+            - --application-images-pull-policy={{ .Values.application.imagesPullPolicy }}
+            - --application-images-registry={{ .Values.application.imagesRegistry }}
             {{- if .Values.accessResources.traefik.enable }}
-            - "--watch-traefik"
+            - --watch-traefik
             {{- end}}
+            {{- if .Values.extensionApi.enable }}
+            - --enable-extension-api=true
+            {{- end}}
+            {{- if .Values.workspacePodWatching.enable }}
+            - --enable-workspace-pod-watching
+            {{- end}}
+            {{- range .Values.controllerManager.container.args }}
+            - {{ . }}
+            {{- end }}
           command:
             - /manager
           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag }}

@@ -391,5 +391,86 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("cannot apply AccessStrategy"))
 		})
+
+		It("Should add SSM sidecar container for aws-ssm-remote-access strategy", func() {
+			// Create SSM access strategy with required sidecar image
+			ssmAccessStrategy := &workspacesv1alpha1.WorkspaceAccessStrategy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "aws-ssm-remote-access",
+				},
+				Spec: workspacesv1alpha1.WorkspaceAccessStrategySpec{
+					DisplayName: "AWS SSM Remote Access",
+					ControllerConfig: map[string]string{
+						"SSM_SIDECAR_IMAGE":     "amazon/aws-ssm-agent:latest",
+						"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMRole",
+					},
+				},
+			}
+
+			// Create test deployment with one container
+			testDeployment := &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "main-container",
+									Image: "test-image:latest",
+								},
+							},
+							Volumes: []corev1.Volume{}, // Start with no volumes
+						},
+					},
+				},
+			}
+
+			// Apply SSM access strategy
+			err := deploymentBuilder.ApplyAccessStrategyToDeployment(
+				testDeployment,
+				testWorkspace,
+				ssmAccessStrategy,
+			)
+
+			Expect(err).NotTo(HaveOccurred())
+
+			// Validate SSM sidecar container was added
+			Expect(testDeployment.Spec.Template.Spec.Containers).To(HaveLen(2))
+
+			sidecarContainer := testDeployment.Spec.Template.Spec.Containers[1]
+			Expect(sidecarContainer.Name).To(Equal("ssm-agent-sidecar"))
+			Expect(sidecarContainer.Image).To(Equal("amazon/aws-ssm-agent:latest"))
+			Expect(sidecarContainer.Command).To(Equal([]string{"/bin/sh"}))
+			Expect(sidecarContainer.Args).To(HaveLen(2))
+			Expect(sidecarContainer.Args[0]).To(Equal("-c"))
+			Expect(sidecarContainer.Args[1]).To(ContainSubstring("cp /usr/local/bin/remote-access-server"))
+
+			// Validate readiness probe
+			Expect(sidecarContainer.ReadinessProbe).NotTo(BeNil())
+			Expect(sidecarContainer.ReadinessProbe.Exec).NotTo(BeNil())
+			Expect(sidecarContainer.ReadinessProbe.Exec.Command).To(Equal([]string{"test", "-f", "/tmp/ssm-registered"}))
+			Expect(sidecarContainer.ReadinessProbe.InitialDelaySeconds).To(Equal(int32(2)))
+			Expect(sidecarContainer.ReadinessProbe.PeriodSeconds).To(Equal(int32(2)))
+
+			// Validate shared volume was created
+			Expect(testDeployment.Spec.Template.Spec.Volumes).To(HaveLen(1))
+			sharedVolume := testDeployment.Spec.Template.Spec.Volumes[0]
+			Expect(sharedVolume.Name).To(Equal("ssm-remote-access"))
+			Expect(sharedVolume.EmptyDir).NotTo(BeNil())
+			Expect(sharedVolume.EmptyDir.SizeLimit.String()).To(Equal("1Gi"))
+
+			// Validate volume mounts on both containers
+			mainContainer := testDeployment.Spec.Template.Spec.Containers[0]
+			Expect(mainContainer.VolumeMounts).To(HaveLen(1))
+			Expect(mainContainer.VolumeMounts[0].Name).To(Equal("ssm-remote-access"))
+			Expect(mainContainer.VolumeMounts[0].MountPath).To(Equal("/ssm-remote-access"))
+
+			Expect(sidecarContainer.VolumeMounts).To(HaveLen(1))
+			Expect(sidecarContainer.VolumeMounts[0].Name).To(Equal("ssm-remote-access"))
+			Expect(sidecarContainer.VolumeMounts[0].MountPath).To(Equal("/ssm-remote-access"))
+
+			// Validate that controller config values are not injected as environment variables
+			// (they should only be available to the controller, not the workspace containers)
+			Expect(mainContainer.Env).To(BeEmpty())
+		})
 	})
 })
