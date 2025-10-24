@@ -25,6 +25,7 @@ const (
 	EnvJwtExpiration     = "JWT_EXPIRATION"
 	EnvJwtRefreshWindow  = "JWT_REFRESH_WINDOW"
 	EnvJwtRefreshHorizon = "JWT_REFRESH_HORIZON"
+	EnvEnableBearerAuth  = "ENABLE_BEARER_URL_AUTH"
 
 	// Cookie configuration
 	EnvCookieName     = "COOKIE_NAME"
@@ -64,6 +65,7 @@ const (
 	DefaultJwtExpiration     = 1 * time.Hour
 	DefaultJwtRefreshWindow  = 15 * time.Minute // 25% of the default expiration
 	DefaultJwtRefreshHorizon = 12 * time.Hour
+	DefaultEnableBearerAuth  = false
 
 	// Cookie defaults
 	DefaultCookieName     = "workspace_auth"
@@ -102,6 +104,7 @@ type Config struct {
 	JWTExpiration     time.Duration
 	JWTRefreshWindow  time.Duration
 	JWTRefreshHorizon time.Duration
+	EnableBearerAuth  bool
 
 	// Cookie configuration
 	CookieName     string
@@ -171,6 +174,7 @@ func createDefaultConfig() *Config {
 		JWTExpiration:     DefaultJwtExpiration,
 		JWTRefreshWindow:  DefaultJwtRefreshWindow,
 		JWTRefreshHorizon: DefaultJwtRefreshHorizon,
+		EnableBearerAuth:  DefaultEnableBearerAuth,
 
 		// Cookie defaults
 		CookieName:     DefaultCookieName,
@@ -274,6 +278,14 @@ func applyJWTConfig(config *Config) error {
 			return fmt.Errorf("invalid %s: %w", EnvJwtRefreshHorizon, err)
 		}
 		config.JWTRefreshHorizon = d
+	}
+
+	if enableBearerAuth := os.Getenv(EnvEnableBearerAuth); enableBearerAuth != "" {
+		enable, err := strconv.ParseBool(enableBearerAuth)
+		if err != nil {
+			return fmt.Errorf("invalid %s: %w", EnvEnableBearerAuth, err)
+		}
+		config.EnableBearerAuth = enable
 	}
 
 	// Validate that JWTExpiration >= JWTRefreshWindow

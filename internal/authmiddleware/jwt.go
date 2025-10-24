@@ -21,7 +21,7 @@ var (
 
 // JWTHandler exposes JWTManager interface to facilitate unit-testing
 type JWTHandler interface {
-	GenerateToken(user string, groups []string, path string, domain string) (string, error)
+	GenerateToken(user string, groups []string, path string, domain string, tokenType string) (string, error)
 	ValidateToken(tokenString string) (*Claims, error)
 	RefreshToken(claims *Claims) (string, error)
 	ShouldRefreshToken(claims *Claims) bool
@@ -50,7 +50,7 @@ func NewJWTManager(cfg *Config) *JWTManager {
 }
 
 // GenerateToken creates a new JWT token for the given user and groups
-func (m *JWTManager) GenerateToken(user string, groups []string, path string, domain string) (string, error) {
+func (m *JWTManager) GenerateToken(user string, groups []string, path string, domain string, tokenType string) (string, error) {
 	now := time.Now().UTC()
 	claims := &Claims{
 		RegisteredClaims: jwt5.RegisteredClaims{
@@ -61,10 +61,11 @@ func (m *JWTManager) GenerateToken(user string, groups []string, path string, do
 			Audience:  []string{m.audience},
 			Subject:   user,
 		},
-		User:   user,
-		Groups: groups,
-		Path:   path,
-		Domain: domain,
+		User:      user,
+		Groups:    groups,
+		Path:      path,
+		Domain:    domain,
+		TokenType: tokenType,
 	}
 
 	token := jwt5.NewWithClaims(jwt5.SigningMethodHS256, claims)

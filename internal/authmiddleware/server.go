@@ -35,7 +35,11 @@ func (s *Server) Start() error {
 	router := http.NewServeMux()
 
 	// Register routes
+	// todo: add flag to turn off oauth
 	router.HandleFunc("/auth", s.handleAuth)
+	if s.config.EnableBearerAuth {
+		router.HandleFunc("/bearer-auth", s.handleBearerAuth)
+	}
 	router.HandleFunc("/verify", s.handleVerify)
 	router.HandleFunc("/health", s.handleHealth)
 
