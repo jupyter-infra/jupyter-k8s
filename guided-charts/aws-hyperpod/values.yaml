@@ -25,3 +25,53 @@ storageClass:
     parameters:
       type: gp3
       fsType: ext4
+
+# Authmiddleware configuration
+authmiddleware:
+  # Whether to deploy the authmiddleware component
+  enabled: true
+  # Number of replicas
+  replicas: 1
+  # Authmiddleware image settings
+  imagePullPolicy: Always
+  repository: docker.io
+  imageName: jupyter-k8s-auth
+  imageTag: latest
+  # Resource limits and requests
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 200m
+      memory: 128Mi
+  # JWT configuration
+  # JWT validation type: "hmac" or "kms"
+  jwtValidationType: "kms"
+  jwtIssuer: "jupyter-k8s-auth"
+  jwtAudience: "workspace-users"
+  jwtExpiration: "1h"
+  jwtRefreshWindow: "15m"
+  jwtRefreshHorizon: "12h"
+  # Cookie configuration
+  cookieName: "workspace_auth"
+  cookieSecure: "true"
+  cookiePath: "/"
+  cookieMaxAge: "24h"
+  cookieHttpOnly: "true"
+  cookieSameSite: "lax"
+  # Path configuration
+  pathRegexPattern: "^(/workspaces/[^/]+/[^/]+)(?:/.*)?$"
+  maxCookiePaths: "20"
+  # CSRF configuration
+  # Required: must be provided as base64 encoded string (generate with: openssl rand -base64 32)
+  csrfAuthKey: ""
+  csrfCookieName: "workspace_csrf"
+  csrfCookieMaxAge: "1h"
+  csrfCookieSecure: "true"
+  # Server configuration
+  readTimeout: "10s"
+  writeTimeout: "10s"
+  shutdownTimeout: "30s"
+  # Bearer auth configuration
+  enableBearerAuth: true
