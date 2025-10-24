@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-healthcheck
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: traefik
+    component: router-health
+spec:
+  type: ClusterIP
+  selector:
+    app: traefik
+    component: router
+  ports:
+  - name: traefik
+    port: 9000
+    targetPort: traefik
+    protocol: TCP
+  - name: metrics
+    port: 9100
+    targetPort: metrics
+    protocol: TCP
