@@ -1,0 +1,13 @@
+{{- if .Values.rbac.enable }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  namespace: default
+  name: workspace-connection
+rules:
+- apiGroups: ["connection.workspaces.jupyter.org"]
+  resources: ["connections"]
+  verbs: ["create"]
+{{- end -}}
