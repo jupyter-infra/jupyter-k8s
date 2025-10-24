@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traefik
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: traefik
+    component: router
+spec:
+  replicas: {{ .Values.traefik.replicas }}
+  selector:
+    matchLabels:
+      app: traefik
+      component: router
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  minReadySeconds: 0
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9100"
+      labels:
+        app: traefik
+        component: router
+    spec:
+      serviceAccountName: jupyter-k8s-traefik
+      terminationGracePeriodSeconds: 60
+      hostNetwork: false
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - traefik
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - image: {{ .Values.traefik.repository }}/{{ .Values.traefik.imageName }}:{{ .Values.traefik.imageTag }}
+        imagePullPolicy: IfNotPresent
+        name: traefik
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: 9000
+            scheme: HTTP
+          failureThreshold: 1
+          initialDelaySeconds: 2
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 2
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: 9000
+            scheme: HTTP
+          failureThreshold: 3
+          initialDelaySeconds: 2
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 2
+        ports:
+        - name: metrics
+          containerPort: 9100
+          protocol: TCP
+        - name: traefik
+          containerPort: 9000
+          protocol: TCP
+        - name: web
+          containerPort: 8000
+          protocol: TCP
+        - name: websecure
+          containerPort: 8443
+          protocol: TCP
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsUser: 65532
+          runAsGroup: 65532
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+        args:
+          - "--global.checknewversion=false"
+          - "--global.sendanonymoususage=false"
+          - "--entrypoints.metrics.address=:9100/tcp"
+          - "--entrypoints.traefik.address=:9000/tcp"
+          - "--entrypoints.web.address=:8000/tcp"
+        {{- if .Values.traefik.redirectHttp }}
+          - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+          - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+          - "--entrypoints.web.http.redirections.entryPoint.permanent=true"
+        {{- end }}
+          - "--entrypoints.websecure.address=:8443/tcp"
+          - "--api.dashboard=false"
+          - "--ping=true"
+          - "--metrics.prometheus=true"
+          - "--metrics.prometheus.entrypoint=metrics"
+          - "--providers.kubernetescrd"
+          - "--providers.kubernetescrd.allowexternalnameservices=true"
+          - "--providers.kubernetescrd.allowcrossnamespace={{ .Values.traefik.allowCrossNamespace }}"
+          - "--providers.kubernetesingress"
+          - "--entrypoints.websecure.http.tls=true"
+        {{- if .Values.traefik.debug }}
+          - "--log.level=DEBUG"
+        {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      securityContext:
+        fsGroup: 65532
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
