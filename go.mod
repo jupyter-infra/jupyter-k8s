@@ -5,6 +5,7 @@ go 1.24.5
 require (
 	github.com/aws/aws-sdk-go-v2 v1.39.3
 	github.com/aws/aws-sdk-go-v2/config v1.31.13
+	github.com/aws/aws-sdk-go-v2/service/kms v1.46.0
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.66.0
 	github.com/go-logr/logr v1.4.3
 	github.com/golang-jwt/jwt/v5 v5.2.2
