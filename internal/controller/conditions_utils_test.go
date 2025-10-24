@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -34,7 +34,7 @@ func TestFindCondition(t *testing.T) {
 
 func TestGetNewConditionsOrEmptyIfUnchanged(t *testing.T) {
 	ctx := context.Background()
-	workspace := &workspacesv1alpha1.Workspace{}
+	workspace := &workspacev1alpha1.Workspace{}
 	workspace.Status.Conditions = []metav1.Condition{
 		{Type: "Existing", Status: metav1.ConditionTrue, Reason: "InitialReason", Message: "Initial message"},
 		{Type: "ToUpdate", Status: metav1.ConditionFalse, Reason: "OldReason", Message: "Old message"},

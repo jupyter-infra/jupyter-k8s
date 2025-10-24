@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: workspaceaccessstrategies.workspaces.jupyter.org
+  name: workspaceaccessstrategies.workspace.jupyter.org
 spec:
-  group: workspaces.jupyter.org
+  group: workspace.jupyter.org
   names:
     kind: WorkspaceAccessStrategy
     listKind: WorkspaceAccessStrategyList

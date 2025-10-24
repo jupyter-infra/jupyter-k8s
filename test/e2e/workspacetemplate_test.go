@@ -87,7 +87,7 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			g.Expect(caBundle).NotTo(BeEmpty(), "webhook CA bundle should be injected by cert-manager")
 
 			// Verify webhook endpoint is reachable by attempting a dry-run resource creation
-			testWorkspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
+			testWorkspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: webhook-readiness-test
@@ -103,7 +103,7 @@ spec:
 		By("installing WorkspaceTemplate samples")
 		_, _ = fmt.Fprintf(GinkgoWriter, "Applying production template...\n")
 		cmd = exec.Command("kubectl", "apply", "-f",
-			"config/samples/workspaces_v1alpha1_workspacetemplate_production.yaml")
+			"config/samples/workspace_v1alpha1_workspacetemplate_production.yaml")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create production template")
 
@@ -150,7 +150,7 @@ spec:
 	var deleteAllWorkspacesUsingTemplate = func(templateName string) {
 		By("deleting all workspaces using template: " + templateName)
 		cmd := exec.Command("kubectl", "get", "workspace",
-			"-l", "workspaces.jupyter.org/template="+templateName,
+			"-l", "workspace.jupyter.org/template="+templateName,
 			"-o", "jsonpath={.items[*].metadata.name}")
 		output, err := utils.Run(cmd)
 		if err != nil || strings.TrimSpace(output) == "" {
@@ -194,7 +194,7 @@ spec:
 
 			By("applying workspace with template reference")
 			cmd := exec.Command("kubectl", "apply", "-f",
-				"config/samples/workspaces_v1alpha1_workspace_with_template.yaml")
+				"config/samples/workspace_v1alpha1_workspace_with_template.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -283,7 +283,7 @@ spec:
 
 			By("verifying NO pod was created for rejected workspace")
 			cmd = exec.Command("kubectl", "get", "pods", "-l",
-				"workspace.workspaces.jupyter.org/name=test-rejected-workspace",
+				"workspace.workspace.jupyter.org/name=test-rejected-workspace",
 				"-o", "jsonpath={.items}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -295,7 +295,7 @@ spec:
 			var err error
 
 			By("creating workspace with CPU exceeding template max")
-			workspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: cpu-exceed-test
@@ -334,7 +334,7 @@ spec:
 
 			By("verifying NO pod was created")
 			cmd = exec.Command("kubectl", "get", "pods", "-l",
-				"workspace.workspaces.jupyter.org/name=cpu-exceed-test",
+				"workspace.workspace.jupyter.org/name=cpu-exceed-test",
 				"-o", "jsonpath={.items}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -346,7 +346,7 @@ spec:
 			var err error
 
 			By("creating workspace with valid resource overrides")
-			workspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: valid-overrides-test
@@ -397,7 +397,7 @@ spec:
 			var err error
 
 			By("creating a workspace using production template")
-			workspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: deletion-protection-test
@@ -436,7 +436,7 @@ spec:
 					"-o", "jsonpath={.metadata.finalizers[0]}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("workspaces.jupyter.org/template-protection"))
+				g.Expect(output).To(Equal("workspace.jupyter.org/template-protection"))
 			}
 			Eventually(verifyFinalizerAdded).
 				WithPolling(500 * time.Millisecond).
@@ -464,7 +464,7 @@ spec:
 				"-o", "jsonpath={.metadata.finalizers[0]}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(output).To(Equal("workspaces.jupyter.org/template-protection"))
+			Expect(output).To(Equal("workspace.jupyter.org/template-protection"))
 
 			// Delete all workspaces using the template (including deletion-protection-test)
 			deleteAllWorkspacesUsingTemplate("production-notebook-template")
@@ -487,12 +487,12 @@ spec:
 
 			By("re-creating production template for CEL tests")
 			cmd := exec.Command("kubectl", "apply", "-f",
-				"config/samples/workspaces_v1alpha1_workspacetemplate_production.yaml")
+				"config/samples/workspace_v1alpha1_workspacetemplate_production.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating workspace using production template")
-			workspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: cel-immutability-test
@@ -521,7 +521,7 @@ spec:
 
 		It("should reject WorkspaceTemplate spec modification via CEL validation", func() {
 			By("creating a template specifically for immutability testing")
-			templateYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
+			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
   name: immutability-test-template

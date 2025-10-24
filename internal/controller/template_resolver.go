@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
 // TemplateResolver handles resolving WorkspaceTemplate references and applying overrides
@@ -52,16 +52,16 @@ type ResolvedTemplate struct {
 	Image                  string
 	Resources              corev1.ResourceRequirements
 	EnvironmentVariables   []corev1.EnvVar
-	StorageConfiguration   *workspacesv1alpha1.StorageConfig
+	StorageConfiguration   *workspacev1alpha1.StorageConfig
 	AllowSecondaryStorages bool
 	NodeSelector           map[string]string
 	Affinity               *corev1.Affinity
 	Tolerations            []corev1.Toleration
-	ContainerConfig        *workspacesv1alpha1.ContainerConfig
+	ContainerConfig        *workspacev1alpha1.ContainerConfig
 }
 
 // ValidateAndResolveTemplate resolves a WorkspaceTemplate reference, validates overrides, and returns validation result
-func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, workspace *workspacesv1alpha1.Workspace) (*TemplateValidationResult, error) {
+func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*TemplateValidationResult, error) {
 	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name, "namespace", workspace.Namespace)
 
 	// If no template reference, workspace must specify image directly
@@ -83,7 +83,7 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 
 	// Fetch the WorkspaceTemplate (cluster-scoped resource)
 	templateName := *workspace.Spec.TemplateRef
-	template := &workspacesv1alpha1.WorkspaceTemplate{}
+	template := &workspacev1alpha1.WorkspaceTemplate{}
 	templateKey := types.NamespacedName{
 		Name: templateName,
 	}
@@ -155,7 +155,7 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 // validateAndApplyOverrides validates and applies workspace-specific overrides to the resolved template
 // When template is set, base spec fields (Image, Resources, Storage.Size) act as overrides
 // Returns a list of violations if validation fails
-func (tr *TemplateResolver) validateAndApplyOverrides(ctx context.Context, resolved *ResolvedTemplate, workspace *workspacesv1alpha1.Workspace, template *workspacesv1alpha1.WorkspaceTemplate) []TemplateViolation {
+func (tr *TemplateResolver) validateAndApplyOverrides(ctx context.Context, resolved *ResolvedTemplate, workspace *workspacev1alpha1.Workspace, template *workspacev1alpha1.WorkspaceTemplate) []TemplateViolation {
 	logger := logf.FromContext(ctx)
 	var violations []TemplateViolation
 
@@ -224,7 +224,7 @@ func (tr *TemplateResolver) validateImageAllowed(image string, allowedImages []s
 
 // validateResourceBounds checks if resources are within template bounds
 // Returns a list of violations for any resources that exceed bounds
-func (tr *TemplateResolver) validateResourceBounds(resources corev1.ResourceRequirements, bounds *workspacesv1alpha1.ResourceBounds) []TemplateViolation {
+func (tr *TemplateResolver) validateResourceBounds(resources corev1.ResourceRequirements, bounds *workspacev1alpha1.ResourceBounds) []TemplateViolation {
 	var violations []TemplateViolation
 
 	// First validate that limits >= requests for all resources
@@ -341,7 +341,7 @@ func (tr *TemplateResolver) validateResourceBounds(resources corev1.ResourceRequ
 
 // validateStorageSize checks if storage size is within template bounds
 // Returns a violation if the size is outside bounds, nil otherwise
-func (tr *TemplateResolver) validateStorageSize(size resource.Quantity, storageConfig *workspacesv1alpha1.StorageConfig) *TemplateViolation {
+func (tr *TemplateResolver) validateStorageSize(size resource.Quantity, storageConfig *workspacev1alpha1.StorageConfig) *TemplateViolation {
 	if storageConfig == nil {
 		return nil
 	}
@@ -372,13 +372,13 @@ func (tr *TemplateResolver) validateStorageSize(size resource.Quantity, storageC
 // ListWorkspacesUsingTemplate returns all workspaces that reference the specified template
 // Excludes workspaces that are being deleted (have deletionTimestamp set) to follow
 // Kubernetes best practices for finalizer management and garbage collection
-func (tr *TemplateResolver) ListWorkspacesUsingTemplate(ctx context.Context, templateName string) ([]workspacesv1alpha1.Workspace, error) {
+func (tr *TemplateResolver) ListWorkspacesUsingTemplate(ctx context.Context, templateName string) ([]workspacev1alpha1.Workspace, error) {
 	logger := logf.FromContext(ctx)
 
 	// Use label selector for fast, efficient lookup
-	workspaceList := &workspacesv1alpha1.WorkspaceList{}
+	workspaceList := &workspacev1alpha1.WorkspaceList{}
 	if err := tr.client.List(ctx, workspaceList, client.MatchingLabels{
-		"workspaces.jupyter.org/template": templateName,
+		"workspace.jupyter.org/template": templateName,
 	}); err != nil {
 		return nil, fmt.Errorf("failed to list workspaces by template label: %w", err)
 	}
@@ -386,7 +386,7 @@ func (tr *TemplateResolver) ListWorkspacesUsingTemplate(ctx context.Context, tem
 	// Filter out workspaces being deleted and verify template reference
 	// This follows Kubernetes controller best practice: resources with deletionTimestamp
 	// are considered "gone" for dependency checking purposes
-	activeWorkspaces := []workspacesv1alpha1.Workspace{}
+	activeWorkspaces := []workspacev1alpha1.Workspace{}
 	for _, ws := range workspaceList.Items {
 		if !ws.DeletionTimestamp.IsZero() {
 			continue // Skip workspaces being deleted
@@ -417,7 +417,7 @@ func (tr *TemplateResolver) ListWorkspacesUsingTemplate(ctx context.Context, tem
 }
 
 // ResolveContainerCommand returns the container command from workspace or template
-func ResolveContainerCommand(workspace *workspacesv1alpha1.Workspace, template *ResolvedTemplate) []string {
+func ResolveContainerCommand(workspace *workspacev1alpha1.Workspace, template *ResolvedTemplate) []string {
 	if workspace.Spec.ContainerConfig != nil && len(workspace.Spec.ContainerConfig.Command) > 0 {
 		return workspace.Spec.ContainerConfig.Command
 	}
@@ -428,7 +428,7 @@ func ResolveContainerCommand(workspace *workspacesv1alpha1.Workspace, template *
 }
 
 // ResolveContainerArgs returns the container args from workspace or template
-func ResolveContainerArgs(workspace *workspacesv1alpha1.Workspace, template *ResolvedTemplate) []string {
+func ResolveContainerArgs(workspace *workspacev1alpha1.Workspace, template *ResolvedTemplate) []string {
 	if workspace.Spec.ContainerConfig != nil && len(workspace.Spec.ContainerConfig.Args) > 0 {
 		return workspace.Spec.ContainerConfig.Args
 	}

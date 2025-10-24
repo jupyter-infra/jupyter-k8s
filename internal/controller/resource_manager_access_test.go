@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
 var _ = Describe("ResourceManagerForAccess", func() {
@@ -25,8 +25,8 @@ var _ = Describe("ResourceManagerForAccess", func() {
 		resourceManager        *ResourceManager
 		mockK8sClient          *MockClient
 		fakeClient             client.Client
-		workspace              *workspacesv1alpha1.Workspace
-		accessStrategy         *workspacesv1alpha1.WorkspaceAccessStrategy
+		workspace              *workspacev1alpha1.Workspace
+		accessStrategy         *workspacev1alpha1.WorkspaceAccessStrategy
 		service                *corev1.Service
 		accessResourcesBuilder *AccessResourcesBuilder
 	)
@@ -35,7 +35,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 		// Set up the context and scheme
 		ctx = context.Background()
 		scheme = runtime.NewScheme()
-		Expect(workspacesv1alpha1.AddToScheme(scheme)).To(Succeed())
+		Expect(workspacev1alpha1.AddToScheme(scheme)).To(Succeed())
 		Expect(corev1.AddToScheme(scheme)).To(Succeed())
 
 		// Create a fake client as the base for our mock
@@ -62,32 +62,32 @@ var _ = Describe("ResourceManagerForAccess", func() {
 		)
 
 		// Define a test workspace
-		workspace = &workspacesv1alpha1.Workspace{
+		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-workspace",
 				Namespace: "test-namespace",
 				UID:       "test-uid",
 			},
-			Spec: workspacesv1alpha1.WorkspaceSpec{
+			Spec: workspacev1alpha1.WorkspaceSpec{
 				DisplayName: "Test Workspace",
 				Image:       "test-image",
-				AccessStrategy: &workspacesv1alpha1.AccessStrategyRef{
+				AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
 					Name:      "test-strategy",
 					Namespace: "strategy-namespace",
 				},
 			},
-			Status: workspacesv1alpha1.WorkspaceStatus{},
+			Status: workspacev1alpha1.WorkspaceStatus{},
 		}
 
 		// Define a test access strategy
-		accessStrategy = &workspacesv1alpha1.WorkspaceAccessStrategy{
+		accessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-strategy",
 				Namespace: "strategy-namespace",
 			},
-			Spec: workspacesv1alpha1.WorkspaceAccessStrategySpec{
+			Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 				DisplayName: "Test Strategy",
-				AccessResourceTemplates: []workspacesv1alpha1.AccessResourceTemplate{
+				AccessResourceTemplates: []workspacev1alpha1.AccessResourceTemplate{
 					{
 						Kind:       "IngressRoute",
 						ApiVersion: "traefik.io/v1alpha1",
@@ -134,7 +134,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 			// Set up the mock client to return our test accessStrategy
 			mockK8sClient.getFunc = func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 				if key.Name == "test-strategy" && key.Namespace == "strategy-namespace" {
-					accessStrategy.DeepCopyInto(obj.(*workspacesv1alpha1.WorkspaceAccessStrategy))
+					accessStrategy.DeepCopyInto(obj.(*workspacev1alpha1.WorkspaceAccessStrategy))
 					return nil
 				}
 				return fmt.Errorf("unexpected key: %v", key)
@@ -159,7 +159,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 			mockK8sClient.getFunc = func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 				// Verify that the namespace used is the workspace namespace
 				if key.Name == "test-strategy" && key.Namespace == "test-namespace" {
-					accessStrategy.DeepCopyInto(obj.(*workspacesv1alpha1.WorkspaceAccessStrategy))
+					accessStrategy.DeepCopyInto(obj.(*workspacev1alpha1.WorkspaceAccessStrategy))
 					return nil
 				}
 				return fmt.Errorf("unexpected key: %v", key)
@@ -177,7 +177,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 		It("Should return an error if get(AccessStrategy) is NotFound", func() {
 			// Set up the mock client to return NotFound
 			mockK8sClient.getFunc = func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-				return errors.NewNotFound(schema.GroupResource{Group: "workspaces.jupyter.org", Resource: "workspaceaccessstrategies"}, "test-strategy")
+				return errors.NewNotFound(schema.GroupResource{Group: "workspace.jupyter.org", Resource: "workspaceaccessstrategies"}, "test-strategy")
 			}
 
 			// Call the function under test
@@ -240,7 +240,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 			strategyWithMultipleResources := accessStrategy.DeepCopy()
 			strategyWithMultipleResources.Spec.AccessResourceTemplates = append(
 				strategyWithMultipleResources.Spec.AccessResourceTemplates,
-				workspacesv1alpha1.AccessResourceTemplate{
+				workspacev1alpha1.AccessResourceTemplate{
 					Kind:       "Middleware",
 					ApiVersion: "traefik.io/v1alpha1",
 					NamePrefix: "test-middleware",
@@ -283,7 +283,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 	Context("ensureAccessResourceExists.ResourceReferencedInStatus", func() {
 		BeforeEach(func() {
 			// Add a resource reference to the workspace status
-			workspace.Status.AccessResources = []workspacesv1alpha1.AccessResourceStatus{
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{
 				{
 					Kind:       "IngressRoute",
 					APIVersion: "traefik.io/v1alpha1",
@@ -403,7 +403,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 
 		It("Should add resource to status if create and setOwner succeeded", func() {
 			// Clear the status first
-			workspace.Status.AccessResources = []workspacesv1alpha1.AccessResourceStatus{}
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{}
 
 			// Set up the mock client to return NotFound
 			mockK8sClient.getFunc = func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
@@ -437,7 +437,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 
 		It("Should return error without adding to status when create(resource) fails", func() {
 			// Clear the status first
-			workspace.Status.AccessResources = []workspacesv1alpha1.AccessResourceStatus{}
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{}
 
 			// Set up the mock client to return NotFound then error on create
 			mockK8sClient.getFunc = func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
@@ -466,7 +466,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 
 		It("Should return error without adding to status when setOwner fails", func() {
 			// Clear the status first
-			workspace.Status.AccessResources = []workspacesv1alpha1.AccessResourceStatus{}
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{}
 
 			// Create a fake scheme that will cause SetControllerReference to fail
 			brokenScheme := runtime.NewScheme()
@@ -502,7 +502,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 	Context("ensureAccessResourceExists.ResourceNotReferencedInStatus.DoesntExist", func() {
 		BeforeEach(func() {
 			// Ensure no resources in status
-			workspace.Status.AccessResources = []workspacesv1alpha1.AccessResourceStatus{}
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{}
 
 			// Mock the client to return NotFound
 			mockK8sClient.getFunc = func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
@@ -648,7 +648,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 	Context("ensureAccessResourceExists.ResourceNotReferencedInStatus.AlreadyExists", func() {
 		BeforeEach(func() {
 			// Ensure no resources in status
-			workspace.Status.AccessResources = []workspacesv1alpha1.AccessResourceStatus{}
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{}
 
 			// Mock the client to return AlreadyExists on create
 			mockK8sClient.createFunc = func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
@@ -783,10 +783,10 @@ var _ = Describe("ResourceManagerForAccess", func() {
 	})
 
 	Context("ensureAccessResourceDeleted", func() {
-		var accessResource *workspacesv1alpha1.AccessResourceStatus
+		var accessResource *workspacev1alpha1.AccessResourceStatus
 
 		BeforeEach(func() {
-			accessResource = &workspacesv1alpha1.AccessResourceStatus{
+			accessResource = &workspacev1alpha1.AccessResourceStatus{
 				Kind:       "IngressRoute",
 				APIVersion: "traefik.io/v1alpha1",
 				Name:       "test-route-test-workspace",
@@ -924,7 +924,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 
 		It("Should be a no-op if Workspace.Status.AccessResources is empty", func() {
 			// Set empty resources
-			workspace.Status.AccessResources = []workspacesv1alpha1.AccessResourceStatus{}
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{}
 
 			// Track get and delete calls
 			getCalled := false
@@ -949,7 +949,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 
 		It("Should loop through the accessResources and filter those that should be removed", func() {
 			// Set up test resources in status
-			workspace.Status.AccessResources = []workspacesv1alpha1.AccessResourceStatus{
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{
 				{
 					Kind:       "IngressRoute",
 					APIVersion: "traefik.io/v1alpha1",
@@ -1018,7 +1018,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 
 		It("Should return an error if get(resource) fails with another error than NotFound", func() {
 			// Set up test resources in status
-			workspace.Status.AccessResources = []workspacesv1alpha1.AccessResourceStatus{
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{
 				{
 					Kind:       "IngressRoute",
 					APIVersion: "traefik.io/v1alpha1",
@@ -1045,7 +1045,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 
 		It("Should return an error if delete(resource) fails with another error than NotFound", func() {
 			// Set up test resources in status
-			workspace.Status.AccessResources = []workspacesv1alpha1.AccessResourceStatus{
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{
 				{
 					Kind:       "IngressRoute",
 					APIVersion: "traefik.io/v1alpha1",
@@ -1092,7 +1092,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 
 		It("Should return true if workspace.Status.AccessResource is empty", func() {
 			// Set empty resources
-			workspace.Status.AccessResources = []workspacesv1alpha1.AccessResourceStatus{}
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{}
 
 			// Call the function under test
 			result := resourceManager.AreAccessResourcesDeleted(workspace)
@@ -1103,7 +1103,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 
 		It("Should return false if workspace.Status.AccessResource is not empty", func() {
 			// Set resource in status
-			workspace.Status.AccessResources = []workspacesv1alpha1.AccessResourceStatus{
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{
 				{
 					Kind:       "IngressRoute",
 					APIVersion: "traefik.io/v1alpha1",

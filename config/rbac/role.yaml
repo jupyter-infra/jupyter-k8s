@@ -64,7 +64,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - workspaces.jupyter.org
+  - workspace.jupyter.org
   resources:
   - '*'
   verbs:
@@ -76,7 +76,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - workspaces.jupyter.org
+  - workspace.jupyter.org
   resources:
   - workspacetemplates
   verbs:
@@ -86,7 +86,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - workspaces.jupyter.org
+  - workspace.jupyter.org
   resources:
   - workspacetemplates/finalizers
   verbs:

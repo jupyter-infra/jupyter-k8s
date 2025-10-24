@@ -11,7 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
 const (
@@ -120,8 +120,8 @@ func createTestPod(containerStatuses []corev1.ContainerStatus) *corev1.Pod {
 	}
 }
 
-func createTestWorkspace() *workspacesv1alpha1.Workspace {
-	return &workspacesv1alpha1.Workspace{
+func createTestWorkspace() *workspacev1alpha1.Workspace {
+	return &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workspace",
 			Namespace: "test-namespace",
@@ -129,12 +129,12 @@ func createTestWorkspace() *workspacesv1alpha1.Workspace {
 	}
 }
 
-func createTestAccessStrategy(controllerConfig map[string]string) *workspacesv1alpha1.WorkspaceAccessStrategy {
-	return &workspacesv1alpha1.WorkspaceAccessStrategy{
+func createTestAccessStrategy(controllerConfig map[string]string) *workspacev1alpha1.WorkspaceAccessStrategy {
+	return &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "aws-ssm-remote-access",
 		},
-		Spec: workspacesv1alpha1.WorkspaceAccessStrategySpec{
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 			ControllerConfig: controllerConfig,
 		},
 	}

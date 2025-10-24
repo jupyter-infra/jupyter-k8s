@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -19,8 +19,8 @@ import (
 // Or nil if no AccessStrategy is specified.
 func (rm *ResourceManager) GetAccessStrategyForWorkspace(
 	ctx context.Context,
-	workspace *workspacesv1alpha1.Workspace,
-) (*workspacesv1alpha1.WorkspaceAccessStrategy, error) {
+	workspace *workspacev1alpha1.Workspace,
+) (*workspacev1alpha1.WorkspaceAccessStrategy, error) {
 	accessStrategyRef := workspace.Spec.AccessStrategy
 	if accessStrategyRef == nil {
 		// no-op: no AccessStrategy
@@ -34,7 +34,7 @@ func (rm *ResourceManager) GetAccessStrategyForWorkspace(
 	}
 
 	// Get the AccessStrategy
-	accessStrategy := &workspacesv1alpha1.WorkspaceAccessStrategy{}
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{}
 	err := rm.client.Get(ctx, types.NamespacedName{
 		Name:      accessStrategyRef.Name,
 		Namespace: accessStrategyNamespace,
@@ -53,8 +53,8 @@ func (rm *ResourceManager) GetAccessStrategyForWorkspace(
 // EnsureAccessResourcesExist creates or updates routing resources for the Workspace
 func (rm *ResourceManager) EnsureAccessResourcesExist(
 	ctx context.Context,
-	workspace *workspacesv1alpha1.Workspace,
-	accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy,
+	workspace *workspacev1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 	service *corev1.Service,
 ) error {
 	// The AccessResource MUST be in the Workspace namespace
@@ -76,16 +76,16 @@ func (rm *ResourceManager) EnsureAccessResourcesExist(
 // applyResource creates or updates a resource
 func (rm *ResourceManager) ensureAccessResourceExists(
 	ctx context.Context,
-	workspace *workspacesv1alpha1.Workspace,
-	accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy,
+	workspace *workspacev1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 	service *corev1.Service,
-	resourceTemplate *workspacesv1alpha1.AccessResourceTemplate,
+	resourceTemplate *workspacev1alpha1.AccessResourceTemplate,
 	accessResourceNamespace string,
 ) error {
 	logger := logf.FromContext(ctx)
 
 	// Check if the resource exists
-	var accessResourceStatus *workspacesv1alpha1.AccessResourceStatus
+	var accessResourceStatus *workspacev1alpha1.AccessResourceStatus
 	statusIdx := -1
 	lookupName := fmt.Sprintf("%s-%s", resourceTemplate.NamePrefix, workspace.Name)
 
@@ -173,7 +173,7 @@ func (rm *ResourceManager) ensureAccessResourceExists(
 
 	// Only add to status after successful update if it doesn't already exist
 	if addToStatus {
-		workspace.Status.AccessResources = append(workspace.Status.AccessResources, workspacesv1alpha1.AccessResourceStatus{
+		workspace.Status.AccessResources = append(workspace.Status.AccessResources, workspacev1alpha1.AccessResourceStatus{
 			Kind:       obj.GetKind(),
 			APIVersion: obj.GetAPIVersion(),
 			Name:       obj.GetName(),
@@ -209,7 +209,7 @@ func (rm *ResourceManager) getGroupVersionKind(apiVersion string, kind string) s
 // from its reference in Workspace.Status
 func (rm *ResourceManager) ensureAccessResourceDeleted(
 	ctx context.Context,
-	accessResource *workspacesv1alpha1.AccessResourceStatus) (bool, error) {
+	accessResource *workspacev1alpha1.AccessResourceStatus) (bool, error) {
 	logger := logf.FromContext(ctx)
 	existingAccessResource := &unstructured.Unstructured{}
 
@@ -249,18 +249,18 @@ func (rm *ResourceManager) ensureAccessResourceDeleted(
 // EnsureAccessResourcesDeleted removes routing resources for the Workspace.
 func (rm *ResourceManager) EnsureAccessResourcesDeleted(
 	ctx context.Context,
-	workspace *workspacesv1alpha1.Workspace,
+	workspace *workspacev1alpha1.Workspace,
 ) error {
 	if len(workspace.Status.AccessResources) == 0 {
 		// no-op: nothing to delete
 		return nil
 	}
 
-	copiedAccessResources := make([]workspacesv1alpha1.AccessResourceStatus, len(workspace.Status.AccessResources))
+	copiedAccessResources := make([]workspacev1alpha1.AccessResourceStatus, len(workspace.Status.AccessResources))
 	copy(copiedAccessResources, workspace.Status.AccessResources)
 
 	// creates an empty slice with the same underlying array
-	var filteredResources []workspacesv1alpha1.AccessResourceStatus
+	var filteredResources []workspacev1alpha1.AccessResourceStatus
 	for _, accessResource := range copiedAccessResources {
 		removed, err := rm.ensureAccessResourceDeleted(ctx, &accessResource)
 		if err != nil {
@@ -278,6 +278,6 @@ func (rm *ResourceManager) EnsureAccessResourcesDeleted(
 }
 
 // AreAccessResourcesDeleted returns true if the workspace.Status.AccessResources is no longer tracking resources.
-func (rm *ResourceManager) AreAccessResourcesDeleted(workspace *workspacesv1alpha1.Workspace) bool {
+func (rm *ResourceManager) AreAccessResourcesDeleted(workspace *workspacev1alpha1.Workspace) bool {
 	return len(workspace.Status.AccessResources) == 0 // len(nil) returns 0
 }

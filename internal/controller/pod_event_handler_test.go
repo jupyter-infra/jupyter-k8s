@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	awsutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
 )
 
@@ -101,7 +101,7 @@ func TestNewPodEventHandler_SSMStrategyFailure(t *testing.T) {
 
 func TestHandleWorkspacePodEvents_PodRunning_SSMSuccess(t *testing.T) {
 	// Create workspace object
-	workspace := &workspacesv1alpha1.Workspace{
+	workspace := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workspace",
 			Namespace: "test-namespace",
@@ -110,7 +110,7 @@ func TestHandleWorkspacePodEvents_PodRunning_SSMSuccess(t *testing.T) {
 
 	// Create scheme and add our types
 	scheme := runtime.NewScheme()
-	_ = workspacesv1alpha1.AddToScheme(scheme)
+	_ = workspacev1alpha1.AddToScheme(scheme)
 
 	// Create fake client with workspace
 	fakeClient := fake.NewClientBuilder().
@@ -183,7 +183,7 @@ func TestHandleWorkspacePodEvents_PodRunning_WorkspaceNotFound(t *testing.T) {
 
 func TestHandleWorkspacePodEvents_PodRunning_SSMStrategyNil(t *testing.T) {
 	// Create workspace object
-	workspace := &workspacesv1alpha1.Workspace{
+	workspace := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workspace",
 			Namespace: "test-namespace",
@@ -192,7 +192,7 @@ func TestHandleWorkspacePodEvents_PodRunning_SSMStrategyNil(t *testing.T) {
 
 	// Create scheme and add our types
 	scheme := runtime.NewScheme()
-	_ = workspacesv1alpha1.AddToScheme(scheme)
+	_ = workspacev1alpha1.AddToScheme(scheme)
 
 	// Create fake client with workspace
 	fakeClient := fake.NewClientBuilder().

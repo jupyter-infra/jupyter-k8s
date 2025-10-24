@@ -10,13 +10,13 @@ webhooks:
     service:
       name: jupyter-k8s-controller-manager
       namespace: system
-      path: /mutate-workspaces-jupyter-org-v1alpha1-workspace
+      path: /mutate-workspace-jupyter-org-v1alpha1-workspace
       port: 9443
   failurePolicy: Fail
   name: mworkspace-v1alpha1.kb.io
   rules:
   - apiGroups:
-    - workspaces.jupyter.org
+    - workspace.jupyter.org
     apiVersions:
     - v1alpha1
     operations:
@@ -37,13 +37,13 @@ webhooks:
     service:
       name: jupyter-k8s-controller-manager
       namespace: system
-      path: /validate-workspaces-jupyter-org-v1alpha1-workspace
+      path: /validate-workspace-jupyter-org-v1alpha1-workspace
       port: 9443
   failurePolicy: Fail
   name: vworkspace-v1alpha1.kb.io
   rules:
   - apiGroups:
-    - workspaces.jupyter.org
+    - workspace.jupyter.org
     apiVersions:
     - v1alpha1
     operations:

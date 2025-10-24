@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"text/template"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -13,15 +13,15 @@ import (
 
 // partialAccessResourceData provides values for template substitutions
 type partialAccessResourceData struct {
-	Workspace      *workspacesv1alpha1.Workspace
-	AccessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy
+	Workspace      *workspacev1alpha1.Workspace
+	AccessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
 }
 
 // resolveAccessStrategyEnv interpolates the env defined in the AccessStrategy
 // for a particular Workspace.
 func (b *DeploymentBuilder) resolveAccessStrategyEnv(
-	accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy,
-	workspace *workspacesv1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
+	workspace *workspacev1alpha1.Workspace,
 ) ([]map[string]string, error) {
 	data := &partialAccessResourceData{
 		Workspace:      workspace,
@@ -55,8 +55,8 @@ func (b *DeploymentBuilder) resolveAccessStrategyEnv(
 // by the Workspace create / update API.
 func (db *DeploymentBuilder) addAccessStrategyEnvToContainer(
 	container *corev1.Container,
-	workspace *workspacesv1alpha1.Workspace,
-	accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy,
+	workspace *workspacev1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 ) error {
 	if container == nil {
 		return fmt.Errorf("container is nil, cannot apply env vars of AccessStrategy: %s", accessStrategy.Name)
@@ -106,8 +106,8 @@ func (db *DeploymentBuilder) addAccessStrategyEnvToContainer(
 // Currently only adds environment variables, but could be extended in the future
 func (db *DeploymentBuilder) ApplyAccessStrategyToDeployment(
 	deployment *appsv1.Deployment,
-	workspace *workspacesv1alpha1.Workspace,
-	accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy,
+	workspace *workspacev1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 ) error {
 	if deployment == nil {
 		return fmt.Errorf("cannot apply AccessStrategy '%s' to nil deployment", accessStrategy.Name)
@@ -135,7 +135,7 @@ func (db *DeploymentBuilder) ApplyAccessStrategyToDeployment(
 // addSSMSidecarContainer adds an SSM sidecar container to the deployment with shared volume
 func (db *DeploymentBuilder) addSSMSidecarContainer(
 	deployment *appsv1.Deployment,
-	accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 ) error {
 	// Create shared volume for communication between main container and sidecar
 	sharedVolume := corev1.Volume{

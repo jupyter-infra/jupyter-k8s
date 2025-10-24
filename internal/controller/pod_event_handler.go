@@ -8,7 +8,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	awsutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
 )
 
@@ -101,7 +101,7 @@ func (h *PodEventHandler) handlePodRunning(ctx context.Context, pod *corev1.Pod,
 	logger.Info("Workspace pod is now running")
 
 	// Get the workspace
-	workspace := &workspacesv1alpha1.Workspace{}
+	workspace := &workspacev1alpha1.Workspace{}
 	err := h.client.Get(ctx, client.ObjectKey{
 		Name:      workspaceName,
 		Namespace: pod.Namespace,

@@ -31,10 +31,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
-const templateFinalizerName = "workspaces.jupyter.org/template-protection"
+const templateFinalizerName = "workspace.jupyter.org/template-protection"
 
 // WorkspaceTemplateReconciler reconciles a WorkspaceTemplate object
 type WorkspaceTemplateReconciler struct {
@@ -44,8 +44,8 @@ type WorkspaceTemplateReconciler struct {
 	templateResolver *TemplateResolver
 }
 
-// +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=workspacetemplates,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=workspacetemplates/finalizers,verbs=update
+// +kubebuilder:rbac:groups=workspace.jupyter.org,resources=workspacetemplates,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=workspace.jupyter.org,resources=workspacetemplates/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -56,7 +56,7 @@ func (r *WorkspaceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	logger := logf.FromContext(ctx)
 	logger.Info("Reconciling WorkspaceTemplate", "template", req.Name)
 
-	template := &workspacesv1alpha1.WorkspaceTemplate{}
+	template := &workspacev1alpha1.WorkspaceTemplate{}
 	if err := r.Get(ctx, req.NamespacedName, template); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("WorkspaceTemplate not found, assuming deleted")
@@ -80,7 +80,7 @@ func (r *WorkspaceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // - Finalizers are only added when workspaces start using the template
 // - Finalizers are removed when all workspaces stop using the template
 // - This minimizes overhead and complexity compared to adding finalizers to all templates
-func (r *WorkspaceTemplateReconciler) manageFinalizer(ctx context.Context, template *workspacesv1alpha1.WorkspaceTemplate) (ctrl.Result, error) {
+func (r *WorkspaceTemplateReconciler) manageFinalizer(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
 	// Check if any active workspaces are using this template
@@ -131,7 +131,7 @@ func (r *WorkspaceTemplateReconciler) manageFinalizer(ctx context.Context, templ
 	return ctrl.Result{}, nil
 }
 
-func (r *WorkspaceTemplateReconciler) handleDeletion(ctx context.Context, template *workspacesv1alpha1.WorkspaceTemplate) (ctrl.Result, error) {
+func (r *WorkspaceTemplateReconciler) handleDeletion(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 	logger.Info("Handling template deletion", "templateName", template.Name)
 
@@ -188,9 +188,9 @@ func (r *WorkspaceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	logger.Info("Setting up WorkspaceTemplate controller")
 
 	err := ctrl.NewControllerManagedBy(mgr).
-		For(&workspacesv1alpha1.WorkspaceTemplate{}).
+		For(&workspacev1alpha1.WorkspaceTemplate{}).
 		Watches(
-			&workspacesv1alpha1.Workspace{},
+			&workspacev1alpha1.Workspace{},
 			handler.EnqueueRequestsFromMapFunc(r.findTemplatesForWorkspace),
 		).
 		Named("workspacetemplate").
@@ -208,7 +208,7 @@ func (r *WorkspaceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // findTemplatesForWorkspace maps a Workspace to the WorkspaceTemplate it references
 // This ensures the template is reconciled when a workspace using it is created/updated/deleted
 func (r *WorkspaceTemplateReconciler) findTemplatesForWorkspace(ctx context.Context, obj client.Object) []reconcile.Request {
-	workspace, ok := obj.(*workspacesv1alpha1.Workspace)
+	workspace, ok := obj.(*workspacev1alpha1.Workspace)
 	if !ok {
 		return nil
 	}
