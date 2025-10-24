@@ -58,6 +58,7 @@ webhooks:
       - operations:
           - CREATE
           - UPDATE
+          - DELETE
         apiGroups:
           - workspaces.jupyter.org
         apiVersions:
