@@ -252,7 +252,7 @@ kubectl logs -f deployment/jupyter-k8s-controller-manager -n jupyter-k8s-system
 
 ```bash
 cat > test-workspace.yaml << EOF
-apiVersion: workspaces.jupyter.org/v1alpha1
+apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: test-ssm-workspace
@@ -281,7 +281,7 @@ kubectl apply -f test-workspace.yaml
 
 ```bash
 # Watch pod creation
-kubectl get pods -l workspaces.jupyter.org/workspaceName=test-ssm-workspace -w
+kubectl get pods -l workspace.jupyter.org/workspaceName=test-ssm-workspace -w
 
 # Monitor operator logs for SSM workflow
 kubectl logs -f deployment/jupyter-k8s-controller-manager -n jupyter-k8s-system | grep -i ssm

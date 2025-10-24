@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 )
@@ -70,7 +70,7 @@ func isAdminUser(groups []string) bool {
 }
 
 // validateOwnershipPermission checks if the user has permission to modify/delete an OwnerOnly workspace
-func validateOwnershipPermission(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
+func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
 	req, err := admission.RequestFromContext(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to extract user information from request context: %w", err)
@@ -101,13 +101,13 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacesv1alp
 
 // SetupWorkspaceWebhookWithManager registers the webhook for Workspace in the manager.
 func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).For(&workspacesv1alpha1.Workspace{}).
+	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.Workspace{}).
 		WithValidator(&WorkspaceCustomValidator{}).
 		WithDefaulter(&WorkspaceCustomDefaulter{}).
 		Complete()
 }
 
-// +kubebuilder:webhook:path=/mutate-workspaces-jupyter-org-v1alpha1-workspace,mutating=true,failurePolicy=fail,sideEffects=None,groups=workspaces.jupyter.org,resources=workspaces,verbs=create;update,versions=v1alpha1,name=mworkspace-v1alpha1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
+// +kubebuilder:webhook:path=/mutate-workspace-jupyter-org-v1alpha1-workspace,mutating=true,failurePolicy=fail,sideEffects=None,groups=workspace.jupyter.org,resources=workspaces,verbs=create;update,versions=v1alpha1,name=mworkspace-v1alpha1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
 
 // WorkspaceCustomDefaulter struct is responsible for setting default values on the custom resource of the
 // Kind Workspace when those are created or updated.
@@ -122,7 +122,7 @@ var _ webhook.CustomDefaulter = &WorkspaceCustomDefaulter{}
 
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind Workspace.
 func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
-	workspace, ok := obj.(*workspacesv1alpha1.Workspace)
+	workspace, ok := obj.(*workspacev1alpha1.Workspace)
 
 	if !ok {
 		return fmt.Errorf("expected an Workspace object but got %T", obj)
@@ -155,7 +155,7 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 // NOTE: The 'path' attribute must follow a specific pattern and should not be modified directly here.
 // Modifying the path for an invalid path can cause API server errors; failing to locate the webhook.
-// +kubebuilder:webhook:path=/validate-workspaces-jupyter-org-v1alpha1-workspace,mutating=false,failurePolicy=fail,sideEffects=None,groups=workspaces.jupyter.org,resources=workspaces,verbs=create;update;delete,versions=v1alpha1,name=vworkspace-v1alpha1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
+// +kubebuilder:webhook:path=/validate-workspace-jupyter-org-v1alpha1-workspace,mutating=false,failurePolicy=fail,sideEffects=None,groups=workspace.jupyter.org,resources=workspaces,verbs=create;update;delete,versions=v1alpha1,name=vworkspace-v1alpha1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
 
 // WorkspaceCustomValidator struct is responsible for validating the Workspace resource
 // when it is created, updated, or deleted.
@@ -170,7 +170,7 @@ var _ webhook.CustomValidator = &WorkspaceCustomValidator{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type Workspace.
 func (v *WorkspaceCustomValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	workspace, ok := obj.(*workspacesv1alpha1.Workspace)
+	workspace, ok := obj.(*workspacev1alpha1.Workspace)
 	if !ok {
 		return nil, fmt.Errorf("expected a Workspace object but got %T", obj)
 	}
@@ -183,11 +183,11 @@ func (v *WorkspaceCustomValidator) ValidateCreate(_ context.Context, obj runtime
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type Workspace.
 func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	oldWorkspace, ok := oldObj.(*workspacesv1alpha1.Workspace)
+	oldWorkspace, ok := oldObj.(*workspacev1alpha1.Workspace)
 	if !ok {
 		return nil, fmt.Errorf("expected a Workspace object for the oldObj but got %T", oldObj)
 	}
-	newWorkspace, ok := newObj.(*workspacesv1alpha1.Workspace)
+	newWorkspace, ok := newObj.(*workspacev1alpha1.Workspace)
 	if !ok {
 		return nil, fmt.Errorf("expected a Workspace object for the newObj but got %T", newObj)
 	}
@@ -236,7 +236,7 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type Workspace.
 func (v *WorkspaceCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	workspace, ok := obj.(*workspacesv1alpha1.Workspace)
+	workspace, ok := obj.(*workspacev1alpha1.Workspace)
 	if !ok {
 		return nil, fmt.Errorf("expected a Workspace object but got %T", obj)
 	}

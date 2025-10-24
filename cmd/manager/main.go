@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 
 	corev1 "k8s.io/api/core/v1"
@@ -38,7 +38,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	// Add custom resource schemes
-	utilruntime.Must(workspacesv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(workspacev1alpha1.AddToScheme(scheme))
 }
 
 // parseGVKWatches parses a comma-separated list of GVK strings into GVKWatch objects

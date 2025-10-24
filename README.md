@@ -127,13 +127,13 @@ spec:
 
 **Create a template with resource limits and security policies:**
 ```sh
-kubectl apply -f config/samples/workspaces_v1alpha1_workspacetemplate_production.yaml
+kubectl apply -f config/samples/workspace_v1alpha1_workspacetemplate_production.yaml
 kubectl get workspacetemplates
 ```
 
 **Create a workspace using the template:**
 ```sh
-kubectl apply -f config/samples/workspaces_v1alpha1_workspace_with_template.yaml
+kubectl apply -f config/samples/workspace_v1alpha1_workspace_with_template.yaml
 ```
 
 **Check validation status:**

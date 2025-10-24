@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,7 +35,7 @@ func NewDeploymentBuilder(scheme *runtime.Scheme, options WorkspaceControllerOpt
 
 // BuildDeployment creates a Deployment resource for the given Workspace
 // Note: Template validation should happen in StateMachine before calling this
-func (db *DeploymentBuilder) BuildDeployment(ctx context.Context, workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
+func (db *DeploymentBuilder) BuildDeployment(ctx context.Context, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
 	resources := db.parseResourceRequirements(workspace, resolvedTemplate)
 
 	deployment := &appsv1.Deployment{
@@ -51,7 +51,7 @@ func (db *DeploymentBuilder) BuildDeployment(ctx context.Context, workspace *wor
 }
 
 // buildObjectMeta creates the metadata for the Deployment
-func (db *DeploymentBuilder) buildObjectMeta(workspace *workspacesv1alpha1.Workspace) metav1.ObjectMeta {
+func (db *DeploymentBuilder) buildObjectMeta(workspace *workspacev1alpha1.Workspace) metav1.ObjectMeta {
 	return metav1.ObjectMeta{
 		Name:      GenerateDeploymentName(workspace.Name),
 		Namespace: workspace.Namespace,
@@ -60,7 +60,7 @@ func (db *DeploymentBuilder) buildObjectMeta(workspace *workspacesv1alpha1.Works
 }
 
 // buildDeploymentSpec creates the deployment specification
-func (db *DeploymentBuilder) buildDeploymentSpec(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, resources corev1.ResourceRequirements) appsv1.DeploymentSpec {
+func (db *DeploymentBuilder) buildDeploymentSpec(workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, resources corev1.ResourceRequirements) appsv1.DeploymentSpec {
 	// Single replica for Jupyter workspaces (stateful, user-specific workloads)
 	replicas := int32(1)
 
@@ -79,7 +79,7 @@ func (db *DeploymentBuilder) buildDeploymentSpec(workspace *workspacesv1alpha1.W
 }
 
 // buildPodSpec creates the pod specification
-func (db *DeploymentBuilder) buildPodSpec(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, resources corev1.ResourceRequirements) corev1.PodSpec {
+func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, resources corev1.ResourceRequirements) corev1.PodSpec {
 	podSpec := corev1.PodSpec{
 		Containers: []corev1.Container{
 			db.buildPrimaryContainer(workspace, resolvedTemplate, resources),
@@ -141,7 +141,7 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacesv1alpha1.Workspac
 }
 
 // buildPrimaryContainer creates the container specification
-func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, resources corev1.ResourceRequirements) corev1.Container {
+func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, resources corev1.ResourceRequirements) corev1.Container {
 	var image string
 	if resolvedTemplate != nil && resolvedTemplate.Image != "" {
 		image = resolvedTemplate.Image
@@ -199,7 +199,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacesv1alpha1
 }
 
 // parseResourceRequirements extracts and validates resource requirements
-func (db *DeploymentBuilder) parseResourceRequirements(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) corev1.ResourceRequirements {
+func (db *DeploymentBuilder) parseResourceRequirements(workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) corev1.ResourceRequirements {
 	if resolvedTemplate != nil {
 		return resolvedTemplate.Resources
 	}

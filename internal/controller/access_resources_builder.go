@@ -6,7 +6,7 @@ import (
 	"strings"
 	"text/template"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -25,16 +25,16 @@ func NewAccessResourcesBuilder() *AccessResourcesBuilder {
 
 // fullAccessResourceData provides values for template substitutions
 type fullAccessResourceData struct {
-	Workspace      *workspacesv1alpha1.Workspace
-	AccessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy
+	Workspace      *workspacev1alpha1.Workspace
+	AccessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
 	Service        *corev1.Service
 }
 
 // BuildUnstructuredResource builds an unstructured resource from a template
 func (b *AccessResourcesBuilder) BuildUnstructuredResource(
-	accessResourceTemplate workspacesv1alpha1.AccessResourceTemplate,
-	workspace *workspacesv1alpha1.Workspace,
-	accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy,
+	accessResourceTemplate workspacev1alpha1.AccessResourceTemplate,
+	workspace *workspacev1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 	service *corev1.Service,
 ) (*unstructured.Unstructured, error) {
 	// Generate resource name using NamePrefix and workspace name
@@ -117,8 +117,8 @@ func (b *AccessResourcesBuilder) BuildUnstructuredResource(
 
 // ResolveAccessURL processes the AccessURLTemplate
 func (b *AccessResourcesBuilder) ResolveAccessURL(
-	workspace *workspacesv1alpha1.Workspace,
-	accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy,
+	workspace *workspacev1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 	service *corev1.Service,
 ) (string, error) {
 	accessUrlTemplate := accessStrategy.Spec.AccessURLTemplate
@@ -153,8 +153,8 @@ func (b *AccessResourcesBuilder) ResolveAccessURL(
 // ResolveAccessResourceSelector creates a label selector string for finding access resources
 // associated with a specific workspace and access strategy
 func (b *AccessResourcesBuilder) ResolveAccessResourceSelector(
-	workspace *workspacesv1alpha1.Workspace,
-	accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy,
+	workspace *workspacev1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 ) string {
 	hasAccessResources := len(accessStrategy.Spec.AccessResourceTemplates) > 0
 

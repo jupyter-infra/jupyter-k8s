@@ -73,7 +73,7 @@ var _ = XDescribe("Workspace Scheduling", Ordered, func() {
 	Context("Node Affinity", func() {
 		It("should create workspace with node affinity and apply it to deployment", func() {
 			By("creating workspace with node affinity")
-			workspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: workspace-with-affinity
@@ -108,7 +108,7 @@ spec:
 	Context("Tolerations", func() {
 		It("should create workspace with tolerations and apply them to deployment", func() {
 			By("creating workspace with tolerations")
-			workspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: workspace-with-tolerations
@@ -139,7 +139,7 @@ spec:
 	Context("Node Selector", func() {
 		It("should create workspace with node selector and apply it to deployment", func() {
 			By("creating workspace with node selector")
-			workspaceYaml := `apiVersion: workspaces.jupyter.org/v1alpha1
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: workspace-with-node-selector

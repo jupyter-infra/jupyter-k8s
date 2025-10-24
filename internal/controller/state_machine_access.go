@@ -3,13 +3,13 @@ package controller
 import (
 	"context"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // ReconcileAccessForDesiredRunningStatus reconciles the access strategy for a Workspace whose desired state is Running
-func (sm *StateMachine) ReconcileAccessForDesiredRunningStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace, service *corev1.Service) error {
+func (sm *StateMachine) ReconcileAccessForDesiredRunningStatus(ctx context.Context, workspace *workspacev1alpha1.Workspace, service *corev1.Service) error {
 	logger := logf.FromContext(ctx)
 	accessStrategyRef := workspace.Spec.AccessStrategy
 
@@ -53,7 +53,7 @@ func (sm *StateMachine) ReconcileAccessForDesiredRunningStatus(ctx context.Conte
 }
 
 // ReconcileAccessForDesiredStoppedStatus reconciles the access strategy for a Workspace whose desired state is Stopped
-func (sm *StateMachine) ReconcileAccessForDesiredStoppedStatus(ctx context.Context, workspace *workspacesv1alpha1.Workspace) error {
+func (sm *StateMachine) ReconcileAccessForDesiredStoppedStatus(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
 	logger := logf.FromContext(ctx)
 
 	workspace.Status.AccessURL = ""

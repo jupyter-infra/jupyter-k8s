@@ -19,7 +19,7 @@ package controller
 import (
 	"context"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -75,7 +75,7 @@ func (r *WorkspaceReconciler) SetStateMachine(sm *StateMachine) {
 	r.stateMachine = sm
 }
 
-// +kubebuilder:rbac:groups=workspaces.jupyter.org,resources=*,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=workspace.jupyter.org,resources=*,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
@@ -114,7 +114,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if workspace.Labels == nil {
 			workspace.Labels = make(map[string]string)
 		}
-		expectedLabel := "workspaces.jupyter.org/template"
+		expectedLabel := "workspace.jupyter.org/template"
 		if workspace.Labels[expectedLabel] != *workspace.Spec.TemplateRef {
 			logger.Info("Adding template label to workspace", "template", *workspace.Spec.TemplateRef)
 			workspace.Labels[expectedLabel] = *workspace.Spec.TemplateRef
@@ -141,7 +141,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 // SetupWithManager sets up the controller with the Manager.
 func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
-		For(&workspacesv1alpha1.Workspace{}).
+		For(&workspacev1alpha1.Workspace{}).
 		Named("workspace").
 		// Watch for standard Kubernetes resources
 		Owns(&appsv1.Deployment{}).
@@ -235,8 +235,8 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 }
 
 // getWorkspace retrieves the Workspace resource
-func (r *WorkspaceReconciler) getWorkspace(ctx context.Context, req ctrl.Request) (*workspacesv1alpha1.Workspace, error) {
-	workspace := &workspacesv1alpha1.Workspace{}
+func (r *WorkspaceReconciler) getWorkspace(ctx context.Context, req ctrl.Request) (*workspacev1alpha1.Workspace, error) {
+	workspace := &workspacev1alpha1.Workspace{}
 	err := r.Get(ctx, req.NamespacedName, workspace)
 	return workspace, err
 }

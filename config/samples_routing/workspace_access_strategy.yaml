@@ -1,4 +1,4 @@
-apiVersion: workspaces.jupyter.org/v1alpha1
+apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceAccessStrategy
 metadata:
   name: sample-access-strategy

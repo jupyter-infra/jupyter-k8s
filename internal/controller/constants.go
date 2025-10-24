@@ -21,17 +21,17 @@ const (
 	AppLabel = "app"
 
 	// Access strategy label keys
-	LabelWorkspaceName           = "workspaces.jupyter.org/workspaceName"
-	LabelWorkspaceNamespace      = "workspaces.jupyter.org/workspaceNamespace"
-	LabelAccessStrategyName      = "workspaces.jupyter.org/accessStrategyName"
-	LabelAccessStrategyNamespace = "workspaces.jupyter.org/accessStrategyNamespace"
+	LabelWorkspaceName           = "workspace.jupyter.org/workspaceName"
+	LabelWorkspaceNamespace      = "workspace.jupyter.org/workspaceNamespace"
+	LabelAccessStrategyName      = "workspace.jupyter.org/accessStrategyName"
+	LabelAccessStrategyNamespace = "workspace.jupyter.org/accessStrategyNamespace"
 
 	// Label values
 	AppLabelValue = "jupyter"
 
 	// Annotation keys
-	AnnotationCreatedBy     = "workspaces.jupyter.org/created-by"
-	AnnotationLastUpdatedBy = "workspaces.jupyter.org/last-updated-by"
+	AnnotationCreatedBy     = "workspace.jupyter.org/created-by"
+	AnnotationLastUpdatedBy = "workspace.jupyter.org/last-updated-by"
 
 	// Status phases
 	PhaseCreating = "Creating"

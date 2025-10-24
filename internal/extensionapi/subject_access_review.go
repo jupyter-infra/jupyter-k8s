@@ -33,7 +33,7 @@ func (s *ExtensionServer) CheckRBACPermission(
 			ResourceAttributes: &authorizationv1.ResourceAttributes{
 				Namespace: namespace,
 				Verb:      "create",
-				Group:     "workspaces.jupyter.org",
+				Group:     "workspace.jupyter.org",
 				Resource:  "workspaces/connection",
 			},
 			User:   username,

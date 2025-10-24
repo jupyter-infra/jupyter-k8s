@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,9 +26,9 @@ func NewStatusManager(k8sClient client.Client) *StatusManager {
 
 func (sm *StatusManager) updateStatus(
 	ctx context.Context,
-	workspace *workspacesv1alpha1.Workspace,
+	workspace *workspacev1alpha1.Workspace,
 	conditionsToUpdate *[]metav1.Condition,
-	snapshotStatus *workspacesv1alpha1.WorkspaceStatus,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus,
 ) error {
 	logger := logf.FromContext(ctx)
 	if len(*conditionsToUpdate) > 0 {
@@ -59,9 +59,9 @@ type WorkspaceRunningReadiness struct {
 // UpdateStartingStatus sets Available to false and Progressing to true
 func (sm *StatusManager) UpdateStartingStatus(
 	ctx context.Context,
-	workspace *workspacesv1alpha1.Workspace,
+	workspace *workspacev1alpha1.Workspace,
 	readiness WorkspaceRunningReadiness,
-	snapshotStatus *workspacesv1alpha1.WorkspaceStatus,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus,
 ) error {
 	// default: nothing is started yet
 	startingReason := ReasonResourcesNotReady
@@ -141,10 +141,10 @@ func (sm *StatusManager) UpdateStartingStatus(
 // UpdateErrorStatus sets the Degraded condition to true with the specified error reason and message
 func (sm *StatusManager) UpdateErrorStatus(
 	ctx context.Context,
-	workspace *workspacesv1alpha1.Workspace,
+	workspace *workspacev1alpha1.Workspace,
 	reason string,
 	message string,
-	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) error {
 	// Set DegradedCondition to true with the provided error reason and message
 	degradedCondition := NewCondition(
 		ConditionTypeDegraded,
@@ -159,9 +159,9 @@ func (sm *StatusManager) UpdateErrorStatus(
 // SetInvalid sets the Valid condition to false when policy validation fails
 func (sm *StatusManager) SetInvalid(
 	ctx context.Context,
-	workspace *workspacesv1alpha1.Workspace,
+	workspace *workspacev1alpha1.Workspace,
 	validation *TemplateValidationResult,
-	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) error {
 	// Build violation message
 	message := fmt.Sprintf("Validation failed: %d violation(s)", len(validation.Violations))
 	if len(validation.Violations) > 0 {
@@ -217,8 +217,8 @@ func (sm *StatusManager) SetInvalid(
 // UpdateRunningStatus sets the Available condition to true and Progressing to false
 func (sm *StatusManager) UpdateRunningStatus(
 	ctx context.Context,
-	workspace *workspacesv1alpha1.Workspace,
-	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
+	workspace *workspacev1alpha1.Workspace,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) error {
 	// ensure AvailableCondition is set to true with ReasonResourcesReady
 	availableCondition := NewCondition(
 		ConditionTypeAvailable,
@@ -282,9 +282,9 @@ type WorkspaceStoppingReadiness struct {
 // UpdateStoppingStatus sets Available to false and Progressing to true
 func (sm *StatusManager) UpdateStoppingStatus(
 	ctx context.Context,
-	workspace *workspacesv1alpha1.Workspace,
+	workspace *workspacev1alpha1.Workspace,
 	readiness WorkspaceStoppingReadiness,
-	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) error {
 	// default: nothing is stopped yet
 	stoppingReason := ReasonResourcesNotStopped
 	stoppingMessage := "Resources are still running"
@@ -365,8 +365,8 @@ func (sm *StatusManager) UpdateStoppingStatus(
 // UpdateStoppedStatus sets Available and Progressing to false, Stopped to true
 func (sm *StatusManager) UpdateStoppedStatus(
 	ctx context.Context,
-	workspace *workspacesv1alpha1.Workspace,
-	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) error {
+	workspace *workspacev1alpha1.Workspace,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) error {
 	// ensure AvailableCondition is set to false with ReasonDesiredStateStopped
 	availableCondition := NewCondition(
 		ConditionTypeAvailable,

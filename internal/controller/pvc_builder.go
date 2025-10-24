@@ -3,7 +3,7 @@ package controller
 import (
 	"fmt"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -32,7 +32,7 @@ type ResolvedStorageConfig struct {
 }
 
 // resolveStorageSize returns the storage size from workspace or template, with fallback to default
-func resolveStorageSize(workspace *workspacesv1alpha1.Workspace, template *ResolvedTemplate) resource.Quantity {
+func resolveStorageSize(workspace *workspacev1alpha1.Workspace, template *ResolvedTemplate) resource.Quantity {
 	if workspace.Spec.Storage != nil && !workspace.Spec.Storage.Size.IsZero() {
 		return workspace.Spec.Storage.Size
 	}
@@ -43,7 +43,7 @@ func resolveStorageSize(workspace *workspacesv1alpha1.Workspace, template *Resol
 }
 
 // resolveStorageClassName returns the storage class name from workspace or template
-func resolveStorageClassName(workspace *workspacesv1alpha1.Workspace, template *ResolvedTemplate) *string {
+func resolveStorageClassName(workspace *workspacev1alpha1.Workspace, template *ResolvedTemplate) *string {
 	if workspace.Spec.Storage != nil && workspace.Spec.Storage.StorageClassName != nil {
 		return workspace.Spec.Storage.StorageClassName
 	}
@@ -54,7 +54,7 @@ func resolveStorageClassName(workspace *workspacesv1alpha1.Workspace, template *
 }
 
 // resolveMountPath returns the mount path from workspace or template, with fallback to default
-func resolveMountPath(workspace *workspacesv1alpha1.Workspace, template *ResolvedTemplate) string {
+func resolveMountPath(workspace *workspacev1alpha1.Workspace, template *ResolvedTemplate) string {
 	if workspace.Spec.Storage != nil && workspace.Spec.Storage.MountPath != "" {
 		return workspace.Spec.Storage.MountPath
 	}
@@ -66,7 +66,7 @@ func resolveMountPath(workspace *workspacesv1alpha1.Workspace, template *Resolve
 
 // ResolveStorageConfig determines storage configuration from workspace or template
 // Returns nil if no storage is requested from either source
-func ResolveStorageConfig(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) *ResolvedStorageConfig {
+func ResolveStorageConfig(workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) *ResolvedStorageConfig {
 	// Check if storage is requested from either source
 	if (workspace.Spec.Storage == nil) && (resolvedTemplate == nil || resolvedTemplate.StorageConfiguration == nil) {
 		return nil
@@ -81,7 +81,7 @@ func ResolveStorageConfig(workspace *workspacesv1alpha1.Workspace, resolvedTempl
 
 // BuildPVC creates a PersistentVolumeClaim resource for the given Workspace
 // It uses workspace storage if specified, otherwise falls back to template storage configuration
-func (pb *PVCBuilder) BuildPVC(workspace *workspacesv1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
+func (pb *PVCBuilder) BuildPVC(workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
 	storageConfig := ResolveStorageConfig(workspace, resolvedTemplate)
 	if storageConfig == nil {
 		return nil, nil // No storage requested
@@ -101,7 +101,7 @@ func (pb *PVCBuilder) BuildPVC(workspace *workspacesv1alpha1.Workspace, resolved
 }
 
 // buildObjectMeta creates the metadata for the PVC
-func (pb *PVCBuilder) buildObjectMeta(workspace *workspacesv1alpha1.Workspace) metav1.ObjectMeta {
+func (pb *PVCBuilder) buildObjectMeta(workspace *workspacev1alpha1.Workspace) metav1.ObjectMeta {
 	return metav1.ObjectMeta{
 		Name:      GeneratePVCName(workspace.Name),
 		Namespace: workspace.Namespace,

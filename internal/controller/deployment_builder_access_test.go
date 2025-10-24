@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
 const (
@@ -22,15 +22,15 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 		deploymentBuilder  *DeploymentBuilder
 		scheme             *runtime.Scheme
 		options            WorkspaceControllerOptions
-		testWorkspace      *workspacesv1alpha1.Workspace
-		testAccessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy
+		testWorkspace      *workspacev1alpha1.Workspace
+		testAccessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
 		testDeployment     *appsv1.Deployment
 	)
 
 	BeforeEach(func() {
 		// Initialize test objects based on config/samples_routing
 		scheme = runtime.NewScheme()
-		Expect(workspacesv1alpha1.AddToScheme(scheme)).To(Succeed())
+		Expect(workspacev1alpha1.AddToScheme(scheme)).To(Succeed())
 
 		options = WorkspaceControllerOptions{
 			ApplicationImagesPullPolicy: corev1.PullIfNotPresent,
@@ -40,16 +40,16 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 		deploymentBuilder = NewDeploymentBuilder(scheme, options, nil)
 
 		// Create test workspace
-		testWorkspace = &workspacesv1alpha1.Workspace{
+		testWorkspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-workspace",
 				Namespace: "test-namespace",
 			},
-			Spec: workspacesv1alpha1.WorkspaceSpec{
+			Spec: workspacev1alpha1.WorkspaceSpec{
 				DisplayName:   "Test Workspace",
 				Image:         "jupyter/minimal-notebook:latest",
 				DesiredStatus: "Running",
-				AccessStrategy: &workspacesv1alpha1.AccessStrategyRef{
+				AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
 					Name:      "test-access-strategy",
 					Namespace: "default",
 				},
@@ -67,14 +67,14 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 		}
 
 		// Create test access strategy with env vars
-		testAccessStrategy = &workspacesv1alpha1.WorkspaceAccessStrategy{
+		testAccessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-access-strategy",
 				Namespace: "default",
 			},
-			Spec: workspacesv1alpha1.WorkspaceAccessStrategySpec{
+			Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 				DisplayName: "Test Routing Strategy",
-				MergeEnv: []workspacesv1alpha1.AccessEnvTemplate{
+				MergeEnv: []workspacev1alpha1.AccessEnvTemplate{
 					{
 						Name:          "JUPYTER_BASE_URL",
 						ValueTemplate: "/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/",
@@ -354,7 +354,7 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 		It("Should be a no-op when strategy.Spec.MergeEnv is empty", func() {
 			// Create a copy with empty MergeEnv
 			strategyWithEmptyEnv := testAccessStrategy.DeepCopy()
-			strategyWithEmptyEnv.Spec.MergeEnv = []workspacesv1alpha1.AccessEnvTemplate{}
+			strategyWithEmptyEnv.Spec.MergeEnv = []workspacev1alpha1.AccessEnvTemplate{}
 
 			originalEnvVarCount := len(testDeployment.Spec.Template.Spec.Containers[0].Env)
 
@@ -394,11 +394,11 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 
 		It("Should add SSM sidecar container for aws-ssm-remote-access strategy", func() {
 			// Create SSM access strategy with required sidecar image
-			ssmAccessStrategy := &workspacesv1alpha1.WorkspaceAccessStrategy{
+			ssmAccessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "aws-ssm-remote-access",
 				},
-				Spec: workspacesv1alpha1.WorkspaceAccessStrategySpec{
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 					DisplayName: "AWS SSM Remote Access",
 					ControllerConfig: map[string]string{
 						"SSM_SIDECAR_IMAGE":     "amazon/aws-ssm-agent:latest",

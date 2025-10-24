@@ -9,14 +9,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
 var _ = Describe("AccessResourcesBuilder", func() {
 	var (
 		accessBuilder      *AccessResourcesBuilder
-		testAccessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy
-		testWorkspace      *workspacesv1alpha1.Workspace
+		testAccessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
+		testWorkspace      *workspacev1alpha1.Workspace
 		testService        *corev1.Service
 	)
 
@@ -25,14 +25,14 @@ var _ = Describe("AccessResourcesBuilder", func() {
 		accessBuilder = NewAccessResourcesBuilder()
 
 		// Define test objects based on config/samples_routing
-		testAccessStrategy = &workspacesv1alpha1.WorkspaceAccessStrategy{
+		testAccessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "sample-access-strategy",
 				Namespace: "default",
 			},
-			Spec: workspacesv1alpha1.WorkspaceAccessStrategySpec{
+			Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 				DisplayName: "JupyterLab Routing Strategy",
-				AccessResourceTemplates: []workspacesv1alpha1.AccessResourceTemplate{
+				AccessResourceTemplates: []workspacev1alpha1.AccessResourceTemplate{
 					{
 						Kind:       "IngressRoute",
 						ApiVersion: "traefik.io/v1alpha1",
@@ -44,16 +44,16 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			},
 		}
 
-		testWorkspace = &workspacesv1alpha1.Workspace{
+		testWorkspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-workspace",
 				Namespace: "test-namespace",
 			},
-			Spec: workspacesv1alpha1.WorkspaceSpec{
+			Spec: workspacev1alpha1.WorkspaceSpec{
 				DisplayName:    "Test Workspace",
 				Image:          "jupyter/minimal-notebook:latest",
 				DesiredStatus:  "Running",
-				AccessStrategy: &workspacesv1alpha1.AccessStrategyRef{Name: "sample-access-strategy"},
+				AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "sample-access-strategy"},
 			},
 		}
 
@@ -130,7 +130,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			Expect(gvk.Kind).To(Equal("IngressRoute"))
 
 			// Test with a core API version (no group)
-			coreApiTemplate := workspacesv1alpha1.AccessResourceTemplate{
+			coreApiTemplate := workspacev1alpha1.AccessResourceTemplate{
 				Kind:       "ConfigMap",
 				ApiVersion: "v1", // Core API version without group
 				NamePrefix: "test-config",
@@ -303,7 +303,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 		It("Should return the empty string if the strategy does not define accessResources", func() {
 			// Create a copy of the access strategy without access resources
 			strategyWithoutResources := testAccessStrategy.DeepCopy()
-			strategyWithoutResources.Spec.AccessResourceTemplates = []workspacesv1alpha1.AccessResourceTemplate{}
+			strategyWithoutResources.Spec.AccessResourceTemplates = []workspacev1alpha1.AccessResourceTemplate{}
 
 			selector := accessBuilder.ResolveAccessResourceSelector(
 				testWorkspace,

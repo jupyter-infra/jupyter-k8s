@@ -78,13 +78,13 @@ var _ = Describe("Webhook Owner", Ordered, func() {
 	Context("Ownership Annotation", func() {
 		It("should add created-by annotation to new workspace", func() {
 			By("creating a workspace")
-			cmd := exec.Command("kubectl", "apply", "-f", "config/samples/workspaces_v1alpha1_workspace.yaml")
+			cmd := exec.Command("kubectl", "apply", "-f", "config/samples/workspace_v1alpha1_workspace.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying created-by annotation exists")
 			cmd = exec.Command("kubectl", "get", "workspace", "workspace-sample",
-				"-o", "jsonpath={.metadata.annotations.workspaces\\.jupyter\\.org/created-by}")
+				"-o", "jsonpath={.metadata.annotations.workspace\\.jupyter\\.org/created-by}")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			annotation := strings.TrimSpace(string(output))
@@ -97,7 +97,7 @@ var _ = Describe("Webhook Owner", Ordered, func() {
 
 		It("should preserve existing annotations when adding created-by", func() {
 			By("creating workspace with existing annotation")
-			workspaceYAML := `apiVersion: workspaces.jupyter.org/v1alpha1
+			workspaceYAML := `apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: workspace-with-annotations

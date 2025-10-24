@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -23,7 +23,7 @@ const (
 	DefaultAccessType = AccessTypePrivate
 
 	// OwnerAnnotation is the annotation key for workspace owner
-	OwnerAnnotation = "workspaces.jupyter.org/created-by"
+	OwnerAnnotation = "workspace.jupyter.org/created-by"
 )
 
 // WorkspaceAdmissionResult contains the result of a workspace access check
@@ -47,7 +47,7 @@ func (s *ExtensionServer) CheckWorkspaceAccess(
 	k8sClient := s.k8sClient
 
 	// Get the workspace
-	var workspace workspacesv1alpha1.Workspace
+	var workspace workspacev1alpha1.Workspace
 	if err := k8sClient.Get(
 		context.Background(),
 		client.ObjectKey{Namespace: namespace, Name: workspaceName},
@@ -110,7 +110,7 @@ func (s *ExtensionServer) CheckWorkspaceAccess(
 }
 
 // getWorkspaceAccessType determines the ownership type of a workspace
-func getWorkspaceAccessType(workspace *workspacesv1alpha1.Workspace) string {
+func getWorkspaceAccessType(workspace *workspacev1alpha1.Workspace) string {
 	if workspace != nil {
 		accessType := workspace.Spec.OwnershipType
 		if accessType == "" {
@@ -128,7 +128,7 @@ func getWorkspaceAccessType(workspace *workspacesv1alpha1.Workspace) string {
 }
 
 // getWorkspaceOwner gets the username of the workspace owner
-func getWorkspaceOwner(workspace *workspacesv1alpha1.Workspace) string {
+func getWorkspaceOwner(workspace *workspacev1alpha1.Workspace) string {
 	// Look for owner annotation
 	if workspace.Annotations != nil {
 		if owner, exists := workspace.Annotations[OwnerAnnotation]; exists && owner != "" {

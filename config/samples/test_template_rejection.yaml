@@ -1,5 +1,5 @@
 ---
-apiVersion: workspaces.jupyter.org/v1alpha1
+apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
   name: restricted-template
@@ -31,7 +31,7 @@ spec:
     maxSize: 20Gi
 
 ---
-apiVersion: workspaces.jupyter.org/v1alpha1
+apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: test-rejected-workspace
@@ -53,7 +53,7 @@ spec:
     size: "50Gi"
 
 ---
-apiVersion: workspaces.jupyter.org/v1alpha1
+apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: test-valid-workspace

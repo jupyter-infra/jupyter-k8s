@@ -3,7 +3,7 @@ package controller
 import (
 	"testing"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,25 +15,25 @@ func TestPVCBuilder_BuildPVC(t *testing.T) {
 	// Register our types with the scheme
 	s := runtime.NewScheme()
 	_ = scheme.AddToScheme(s)
-	_ = workspacesv1alpha1.AddToScheme(s)
+	_ = workspacev1alpha1.AddToScheme(s)
 
 	builder := NewPVCBuilder(s)
 
 	t.Run("workspace with explicit storage should use workspace storage", func(t *testing.T) {
-		workspace := &workspacesv1alpha1.Workspace{
+		workspace := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-workspace",
 				Namespace: "default",
 			},
-			Spec: workspacesv1alpha1.WorkspaceSpec{
-				Storage: &workspacesv1alpha1.StorageSpec{
+			Spec: workspacev1alpha1.WorkspaceSpec{
+				Storage: &workspacev1alpha1.StorageSpec{
 					Size: resource.MustParse("5Gi"),
 				},
 			},
 		}
 
 		template := &ResolvedTemplate{
-			StorageConfiguration: &workspacesv1alpha1.StorageConfig{
+			StorageConfiguration: &workspacev1alpha1.StorageConfig{
 				DefaultSize: resource.MustParse("50Gi"),
 			},
 		}
@@ -54,18 +54,18 @@ func TestPVCBuilder_BuildPVC(t *testing.T) {
 	})
 
 	t.Run("workspace without explicit storage should use template storage", func(t *testing.T) {
-		workspace := &workspacesv1alpha1.Workspace{
+		workspace := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-workspace",
 				Namespace: "default",
 			},
-			Spec: workspacesv1alpha1.WorkspaceSpec{
+			Spec: workspacev1alpha1.WorkspaceSpec{
 				// No Storage field
 			},
 		}
 
 		template := &ResolvedTemplate{
-			StorageConfiguration: &workspacesv1alpha1.StorageConfig{
+			StorageConfiguration: &workspacev1alpha1.StorageConfig{
 				DefaultSize: resource.MustParse("50Gi"),
 			},
 		}
@@ -86,12 +86,12 @@ func TestPVCBuilder_BuildPVC(t *testing.T) {
 	})
 
 	t.Run("workspace without storage and no template should return nil", func(t *testing.T) {
-		workspace := &workspacesv1alpha1.Workspace{
+		workspace := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-workspace",
 				Namespace: "default",
 			},
-			Spec: workspacesv1alpha1.WorkspaceSpec{
+			Spec: workspacev1alpha1.WorkspaceSpec{
 				// No Storage field
 			},
 		}
@@ -107,12 +107,12 @@ func TestPVCBuilder_BuildPVC(t *testing.T) {
 	})
 
 	t.Run("workspace without storage and template without storage should return nil", func(t *testing.T) {
-		workspace := &workspacesv1alpha1.Workspace{
+		workspace := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-workspace",
 				Namespace: "default",
 			},
-			Spec: workspacesv1alpha1.WorkspaceSpec{
+			Spec: workspacev1alpha1.WorkspaceSpec{
 				// No Storage field
 			},
 		}
@@ -132,13 +132,13 @@ func TestPVCBuilder_BuildPVC(t *testing.T) {
 	})
 
 	t.Run("workspace with zero size should default to 10Gi", func(t *testing.T) {
-		workspace := &workspacesv1alpha1.Workspace{
+		workspace := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-workspace",
 				Namespace: "default",
 			},
-			Spec: workspacesv1alpha1.WorkspaceSpec{
-				Storage: &workspacesv1alpha1.StorageSpec{
+			Spec: workspacev1alpha1.WorkspaceSpec{
+				Storage: &workspacev1alpha1.StorageSpec{
 					Size: resource.Quantity{}, // Zero value
 				},
 			},
@@ -161,13 +161,13 @@ func TestPVCBuilder_BuildPVC(t *testing.T) {
 
 	t.Run("workspace with storage class name should set storage class", func(t *testing.T) {
 		storageClassName := "fast-ssd"
-		workspace := &workspacesv1alpha1.Workspace{
+		workspace := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-workspace",
 				Namespace: "default",
 			},
-			Spec: workspacesv1alpha1.WorkspaceSpec{
-				Storage: &workspacesv1alpha1.StorageSpec{
+			Spec: workspacev1alpha1.WorkspaceSpec{
+				Storage: &workspacev1alpha1.StorageSpec{
 					Size:             resource.MustParse("10Gi"),
 					StorageClassName: &storageClassName,
 				},
@@ -193,13 +193,13 @@ func TestPVCBuilder_BuildPVC(t *testing.T) {
 	})
 
 	t.Run("PVC should have correct metadata", func(t *testing.T) {
-		workspace := &workspacesv1alpha1.Workspace{
+		workspace := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-workspace",
 				Namespace: "test-namespace",
 			},
-			Spec: workspacesv1alpha1.WorkspaceSpec{
-				Storage: &workspacesv1alpha1.StorageSpec{
+			Spec: workspacev1alpha1.WorkspaceSpec{
+				Storage: &workspacev1alpha1.StorageSpec{
 					Size: resource.MustParse("5Gi"),
 				},
 			},
@@ -234,14 +234,14 @@ func TestPVCBuilder_BuildPVC(t *testing.T) {
 	})
 
 	t.Run("PVC should have owner reference", func(t *testing.T) {
-		workspace := &workspacesv1alpha1.Workspace{
+		workspace := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-workspace",
 				Namespace: "default",
 				UID:       "test-uid",
 			},
-			Spec: workspacesv1alpha1.WorkspaceSpec{
-				Storage: &workspacesv1alpha1.StorageSpec{
+			Spec: workspacev1alpha1.WorkspaceSpec{
+				Storage: &workspacev1alpha1.StorageSpec{
 					Size: resource.MustParse("5Gi"),
 				},
 			},

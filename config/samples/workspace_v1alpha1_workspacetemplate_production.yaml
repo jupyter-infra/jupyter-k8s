@@ -1,5 +1,5 @@
 # Example WorkspaceTemplate for production use
-apiVersion: workspaces.jupyter.org/v1alpha1
+apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
   name: production-notebook-template

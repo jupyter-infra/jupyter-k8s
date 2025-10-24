@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
@@ -32,7 +32,7 @@ func NewStateMachine(resourceManager *ResourceManager, statusManager *StatusMana
 
 // ReconcileDesiredState handles the state machine logic for Workspace
 func (sm *StateMachine) ReconcileDesiredState(
-	ctx context.Context, workspace *workspacesv1alpha1.Workspace) (ctrl.Result, error) {
+	ctx context.Context, workspace *workspacev1alpha1.Workspace) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
 	desiredStatus := sm.getDesiredStatus(workspace)
@@ -55,7 +55,7 @@ func (sm *StateMachine) ReconcileDesiredState(
 }
 
 // getDesiredStatus returns the desired status with default fallback
-func (sm *StateMachine) getDesiredStatus(workspace *workspacesv1alpha1.Workspace) string {
+func (sm *StateMachine) getDesiredStatus(workspace *workspacev1alpha1.Workspace) string {
 	if workspace.Spec.DesiredStatus == "" {
 		return DefaultDesiredStatus
 	}
@@ -64,8 +64,8 @@ func (sm *StateMachine) getDesiredStatus(workspace *workspacesv1alpha1.Workspace
 
 func (sm *StateMachine) reconcileDesiredStoppedStatus(
 	ctx context.Context,
-	workspace *workspacesv1alpha1.Workspace,
-	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) (ctrl.Result, error) {
+	workspace *workspacev1alpha1.Workspace,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 	logger.Info("Attempting to bring Workspace status to 'Stopped'")
 
@@ -172,8 +172,8 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 
 func (sm *StateMachine) reconcileDesiredRunningStatus(
 	ctx context.Context,
-	workspace *workspacesv1alpha1.Workspace,
-	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) (ctrl.Result, error) {
+	workspace *workspacev1alpha1.Workspace,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 	logger.Info("Attempting to bring Workspace status to 'Running'")
 
@@ -273,8 +273,8 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 // On success, it returns the resolved template with shouldContinue=true.
 func (sm *StateMachine) handleTemplateValidation(
 	ctx context.Context,
-	workspace *workspacesv1alpha1.Workspace,
-	snapshotStatus *workspacesv1alpha1.WorkspaceStatus) (template *ResolvedTemplate, shouldContinue bool, err error) {
+	workspace *workspacev1alpha1.Workspace,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (template *ResolvedTemplate, shouldContinue bool, err error) {
 	logger := logf.FromContext(ctx)
 
 	// No template reference - continue with default configuration
