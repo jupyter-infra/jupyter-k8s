@@ -181,13 +181,19 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
             - "--application-images-registry={{ .Values.application.imagesRegistry }}"\
             {{- if .Values.accessResources.traefik.enable }}\
             - "--watch-traefik"\
+            {{- end}}\
+            {{- if .Values.extensionApi.enable }}\
+            - "--enable-extension-api"\
+            {{- end}}\
+            {{- if .Values.workspacePodWatching.enable }}\
+            - "--enable-workspace-pod-watching"\
             {{- end}}
                     }' "${MANAGER_YAML}"
                 else
                     # Linux sed
                     sed -i '/args:/,/command:/ {
                     /command:/!d
-                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}\n            {{- if .Values.extensionApi.enable }}\n            - "--enable-extension-api"\n            {{- end}}
+                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}\n            {{- if .Values.extensionApi.enable }}\n            - "--enable-extension-api"\n            {{- end}}\n            {{- if .Values.workspacePodWatching.enable }}\n            - "--enable-workspace-pod-watching"\n            {{- end}}
                 }' "${MANAGER_YAML}"
                 fi
                 # Also add extension API volume mount if not already present

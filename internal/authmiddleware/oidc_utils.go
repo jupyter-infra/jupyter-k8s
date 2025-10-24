@@ -22,7 +22,11 @@ func GetOidcGroups(serverConfig *Config, groups []string) []string {
 
 	result := make([]string, len(groups))
 	for i, group := range groups {
-		result[i] = oidcPrefix + group
+		if group == SystemAuthenticatedGroup {
+			result[i] = group
+		} else {
+			result[i] = oidcPrefix + group
+		}
 	}
 	return result
 }

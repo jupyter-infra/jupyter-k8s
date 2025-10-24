@@ -218,6 +218,10 @@ func createDefaultConfig() *Config {
 		CSRFCookieSecure: DefaultCsrfCookieSecure,
 		CSRFFieldName:    DefaultCsrfFieldName,
 		CSRFHeaderName:   DefaultCsrfHeaderName,
+
+		// OIDC defaults
+		OidcUsernamePrefix: DefaultOidcUsernamePrefix,
+		OidcGroupsPrefix:   DefaultOidcGroupsPrefix,
 	}
 }
 

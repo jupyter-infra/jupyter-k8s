@@ -103,6 +103,22 @@ func TestGetOidcGroups(t *testing.T) {
 			groups:   []string{"github:admin", "team1"},
 			expected: []string{"github:github:admin", "github:team1"},
 		},
+		{
+			name: "system:authenticated group is preserved",
+			config: &Config{
+				OidcGroupsPrefix: "github:",
+			},
+			groups:   []string{"system:authenticated", "dev-team"},
+			expected: []string{"system:authenticated", "github:dev-team"},
+		},
+		{
+			name: "mixed system and regular groups",
+			config: &Config{
+				OidcGroupsPrefix: "oidc:",
+			},
+			groups:   []string{"admin", "system:authenticated", "users"},
+			expected: []string{"oidc:admin", "system:authenticated", "oidc:users"},
+		},
 	}
 
 	for _, tc := range testCases {

@@ -102,7 +102,7 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate JWT token with app path and domain for authorization scope
-	token, err := s.jwtManager.GenerateToken(user, splitGroups(groups), appPath, host, TokenTypeSession)
+	token, err := s.jwtManager.GenerateToken(k8sUsername, k8sGroups, appPath, host, TokenTypeSession)
 	if err != nil {
 		s.logger.Error("Failed to generate token", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)

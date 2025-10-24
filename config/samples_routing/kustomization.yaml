@@ -4,4 +4,4 @@ kind: Kustomization
 resources:
   - workspace_access_strategy.yaml
   - workspace_with_access_strategy.yaml
-  - workspace_with_access_strategy2.yaml
+  - workspace_with_access_strategy_private.yaml

@@ -325,7 +325,6 @@ func TestCreateConnectionAccessReview_ReturnsError_WhenApiCallFails(t *testing.T
 }
 
 func TestVerifyWorkspaceAccess_ReturnsResultInfoAndNoError_WhenAccessReviewSucceeds(t *testing.T) {
-	t.Skip()
 	// Define test values
 	username := testUserValue
 	groups := []string{"group1", "group2"}

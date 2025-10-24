@@ -129,11 +129,13 @@ func checkCSRFDefaults(t *testing.T, config *Config) {
 }
 
 // checkOIDCDefaults verifies the default OIDC configuration values
-func checkOIDCDefaults(t *testing.T, _ *Config) {
-	// Since the default values might not be set directly in createDefaultConfig yet,
-	// we'll just check that applyOidcConfig was called
-	// This will be updated when the defaults are properly set in createDefaultConfig
-	t.Skip("Skipping OIDC defaults check until defaults are properly set in createDefaultConfig")
+func checkOIDCDefaults(t *testing.T, config *Config) {
+	if config.OidcUsernamePrefix != DefaultOidcUsernamePrefix {
+		t.Errorf("Expected OidcUsernamePrefix to be %s, got %s", DefaultOidcUsernamePrefix, config.OidcUsernamePrefix)
+	}
+	if config.OidcGroupsPrefix != DefaultOidcGroupsPrefix {
+		t.Errorf("Expected OidcGroupsPrefix to be %s, got %s", DefaultOidcGroupsPrefix, config.OidcGroupsPrefix)
+	}
 }
 
 // setEnv is a helper function to set environment variables for tests
