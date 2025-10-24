@@ -2,6 +2,8 @@
 set -e
 
 # Script to apply custom patches to helm chart files after generation
+# Contains patches for:
+# 1. extension_issuer - Adds jupyter-k8s-selfsigned-issuer for extension API
 # Run this after 'kubebuilder edit --plugins=helm/v1-alpha --force'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,7 +24,7 @@ echo "Using patches from ${PATCHES_DIR}"
 if [ -d "${SCRIPT_DIR}/../config/apiservice" ]; then
     echo "Copying apiservice resources..."
     mkdir -p "${CHART_DIR}/templates/apiservice"
-    
+
     # Copy each YAML file and wrap with conditional
     # This adds {{- if .Values.extensionApi.enable }} around each file
     # so the API service resources are only created when extension API is enabled
@@ -30,19 +32,45 @@ if [ -d "${SCRIPT_DIR}/../config/apiservice" ]; then
         if [ -f "$file" ]; then
             filename=$(basename "$file")
             target="${CHART_DIR}/templates/apiservice/${filename}"
-            
+
             # Add conditional wrapper
             echo "{{- if .Values.extensionApi.enable }}" > "$target"
-            cat "$file" >> "$target"
+
+            # Apply specific modifications based on file name
+            if [[ "$filename" == "apiservice.yaml" ]]; then
+                # Replace hardcoded namespace with {{ .Release.Namespace }}
+                # Also replace hardcoded cert reference with {{ .Release.Namespace }}
+                cat "$file" | \
+                    sed 's/cert-manager.io\/inject-ca-from: jupyter-k8s-system\/extension-server-cert/cert-manager.io\/inject-ca-from: {{ .Release.Namespace }}\/extension-server-cert/' | \
+                    sed 's/namespace: jupyter-k8s-system/namespace: {{ .Release.Namespace }}/' >> "$target"
+            elif [[ "$filename" == "certificate.yaml" ]]; then
+                # Replace hardcoded namespace with {{ .Release.Namespace }}
+                # Also replace hardcoded DNS names with templated values
+                cat "$file" | \
+                    sed 's/namespace: jupyter-k8s-system/namespace: {{ .Release.Namespace }}/' | \
+                    sed 's/- extension-server.jupyter-k8s-system.svc/- extension-server.{{ .Release.Namespace }}.svc/' | \
+                    sed 's/- extension-server.jupyter-k8s-system.svc.cluster.local/- extension-server.{{ .Release.Namespace }}.svc.cluster.local/' >> "$target"
+            elif [[ "$filename" == "service.yaml" ]]; then
+                # Replace hardcoded namespace with {{ .Release.Namespace }}
+                cat "$file" | \
+                    sed 's/namespace: jupyter-k8s-system/namespace: {{ .Release.Namespace }}/' >> "$target"
+            else
+                cat "$file" >> "$target"
+            fi
+
             echo "{{- end }}" >> "$target"
-            
+
             echo "  Added conditional to ${filename}"
         fi
     done
-    
+
     # Remove kustomization.yaml as it's not a Kubernetes resource
     rm -f "${CHART_DIR}/templates/apiservice/kustomization.yaml"
 fi
+
+# Remove connection CRDs as they're meant to be subresources, not standalone CRDs
+echo "Removing connection CRDs from Helm chart..."
+find "${CHART_DIR}/templates/crd/" -name "connection.workspace.jupyter.org_*.yaml" -delete
 
 # Function to apply patches
 apply_patch() {
@@ -153,14 +181,31 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
             - "--application-images-registry={{ .Values.application.imagesRegistry }}"\
             {{- if .Values.accessResources.traefik.enable }}\
             - "--watch-traefik"\
+            {{- end}}\
+            {{- if .Values.extensionApi.enable }}\
+            - "--enable-extension-api"\
+            {{- end}}\
+            {{- if .Values.workspacePodWatching.enable }}\
+            - "--enable-workspace-pod-watching"\
             {{- end}}
                     }' "${MANAGER_YAML}"
                 else
                     # Linux sed
                     sed -i '/args:/,/command:/ {
-                        /command:/!d
-                        i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}
-                    }' "${MANAGER_YAML}"
+                    /command:/!d
+                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}\n            {{- if .Values.extensionApi.enable }}\n            - "--enable-extension-api"\n            {{- end}}\n            {{- if .Values.workspacePodWatching.enable }}\n            - "--enable-workspace-pod-watching"\n            {{- end}}
+                }' "${MANAGER_YAML}"
+                fi
+                # Also add extension API volume mount if not already present
+                if ! grep -q "extension-server-cert" "${MANAGER_YAML}"; then
+                    # Add volume mount for extension API server certificates
+                    sed -i '/volumeMounts:/a\            {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\n            - name: extension-server-cert\n              mountPath: /tmp/extension-server/serving-certs\n              readOnly: true\n            {{- end }}' "${MANAGER_YAML}"
+
+                    # Add volume for extension API server certificates
+                    sed -i '/volumes:/a\        {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\n        - name: extension-server-cert\n          secret:\n            secretName: extension-server-cert\n        {{- end }}' "${MANAGER_YAML}"
+
+                    # Update the conditional wrapping for volumeMounts and volumes
+                    sed -i 's/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable) }}/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable .Values.extensionApi.enable) }}/g' "${MANAGER_YAML}"
                 fi
 
                 # Clean up temp file
@@ -174,6 +219,15 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
     else
         echo "Warning: manager.yaml not found at ${MANAGER_YAML}"
     fi
+fi
+
+# Patch the issuer name and add extension certificate in certmanager/certificate.yaml
+echo "Patching certmanager/certificate.yaml..."
+CERT_YAML="${CHART_DIR}/templates/certmanager/certificate.yaml"
+if [ -f "${CERT_YAML}" ]; then
+    # Update all issuer references to use jupyter-k8s-selfsigned-issuer
+    sed -i 's/name: selfsigned-issuer/name: jupyter-k8s-selfsigned-issuer/g' "${CERT_YAML}"
+    echo "Updated issuer name to jupyter-k8s-selfsigned-issuer"
 fi
 
 # Process any additional patch files

@@ -9,6 +9,7 @@ spec:
   # Using the built-in 'uv' image shortcut
   image: uv
   desiredStatus: Running
+  ownershipType: Public
   accessStrategy:
     name: sample-access-strategy
     namespace: default

@@ -5,13 +5,13 @@
   path: /spec/template/spec/containers/0/volumeMounts/-
   value:
     mountPath: /tmp/extension-server/serving-certs
-    name: extension-server-certs
+    name: extension-server-cert
     readOnly: true
 
 # Add the volume configuration for the extension server certificates
 - op: add
   path: /spec/template/spec/volumes/-
   value:
-    name: extension-server-certs
+    name: extension-server-cert
     secret:
-      secretName: jupyter-k8s-extension-server-certs
+      secretName: extension-server-cert

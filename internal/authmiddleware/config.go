@@ -37,7 +37,9 @@ const (
 	EnvCookieSameSite = "COOKIE_SAME_SITE"
 
 	// Path configuration
-	EnvPathRegexPattern = "PATH_REGEX_PATTERN"
+	EnvPathRegexPattern            = "PATH_REGEX_PATTERN"
+	EnvWorkspaceNamespacePathRegex = "WORKSPACE_NAMESPACE_PATH_REGEX"
+	EnvWorkspaceNamePathRegex      = "WORKSPACE_NAME_PATH_REGEX"
 
 	// CSRF configuration
 	EnvCsrfAuthKey    = "CSRF_AUTH_KEY"
@@ -48,6 +50,10 @@ const (
 	EnvCsrfFieldName      = "CSRF_FIELD_NAME"
 	EnvCsrfHeaderName     = "CSRF_HEADER_NAME"
 	EnvCsrfTrustedOrigins = "CSRF_TRUSTED_ORIGINS"
+
+	// OIDC configuration
+	EnvOidcUsernamePrefix = "OIDC_USERNAME_PREFIX"
+	EnvOidcGroupsPrefix   = "OIDC_GROUPS_PREFIX"
 )
 
 // Default values
@@ -76,7 +82,9 @@ const (
 	DefaultCookieSameSite = SameSiteLax
 
 	// Path defaults
-	DefaultPathRegexPattern = `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`
+	DefaultPathRegexPattern            = `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`
+	DefaultWorkspaceNamespacePathRegex = `^/workspaces/([^/]+)/[^/]+`
+	DefaultWorkspaceNamePathRegex      = `^/workspaces/[^/]+/([^/]+)`
 
 	// CSRF defaults
 	DefaultCsrfCookieName = "workspace_csrf"
@@ -86,6 +94,10 @@ const (
 	DefaultCsrfFieldName    = "csrf_token"
 	DefaultCsrfHeaderName   = "X-CSRF-Token"
 	// DefaultCsrfTrustedOrigins is a slice, defined in createDefaultConfig
+
+	// OIDC configuration
+	DefaultOidcUsernamePrefix = "github:"
+	DefaultOidcGroupsPrefix   = "github:"
 )
 
 // Config holds all configuration for the workspaces-auth service
@@ -116,7 +128,9 @@ type Config struct {
 	CookieSameSite string
 
 	// Path configuration
-	PathRegexPattern string // Regex pattern to extract app path from full path
+	PathRegexPattern            string // Regex pattern to extract app path from full path
+	WorkspaceNamespacePathRegex string // Regex pattern to extract workspace namespace from path
+	WorkspaceNamePathRegex      string // Regex pattern to extract workspace name from path
 
 	// CSRF configuration
 	CSRFAuthKey    string
@@ -127,6 +141,10 @@ type Config struct {
 	CSRFFieldName      string
 	CSRFHeaderName     string
 	CSRFTrustedOrigins []string
+
+	// OIDC configuration
+	OidcUsernamePrefix string
+	OidcGroupsPrefix   string
 }
 
 // NewConfig creates a Config with values from environment variables
@@ -154,6 +172,8 @@ func NewConfig() (*Config, error) {
 	if err := applyCSRFConfig(config); err != nil {
 		return nil, err
 	}
+
+	applyOidcConfig(config)
 
 	return config, nil
 }
@@ -188,6 +208,9 @@ func createDefaultConfig() *Config {
 		// This regex extracts application path: /workspaces/<namespace>/<app-name>
 		// It will ignore subpaths like /lab, /tree, /notebook/*, etc.
 		PathRegexPattern: DefaultPathRegexPattern,
+		// These regex patterns extract workspace namespace and name from the path
+		WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+		WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
 
 		// CSRF defaults
 		CSRFCookieName:   DefaultCsrfCookieName,
@@ -195,6 +218,10 @@ func createDefaultConfig() *Config {
 		CSRFCookieSecure: DefaultCsrfCookieSecure,
 		CSRFFieldName:    DefaultCsrfFieldName,
 		CSRFHeaderName:   DefaultCsrfHeaderName,
+
+		// OIDC defaults
+		OidcUsernamePrefix: DefaultOidcUsernamePrefix,
+		OidcGroupsPrefix:   DefaultOidcGroupsPrefix,
 	}
 }
 
@@ -389,4 +416,15 @@ func applyCSRFConfig(config *Config) error {
 	}
 
 	return nil
+}
+
+// applyOidcConfig applies OIDC-related environment variable overrides
+func applyOidcConfig(config *Config) {
+	if oidcUsernamePrefix := os.Getenv(EnvOidcUsernamePrefix); oidcUsernamePrefix != "" {
+		config.OidcUsernamePrefix = oidcUsernamePrefix
+	}
+
+	if oidcGroupsPrefix := os.Getenv(EnvOidcGroupsPrefix); oidcGroupsPrefix != "" {
+		config.OidcGroupsPrefix = oidcGroupsPrefix
+	}
 }

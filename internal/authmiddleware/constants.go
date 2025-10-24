@@ -13,4 +13,7 @@ const (
 	HeaderForwardedProto = "X-Forwarded-Proto"
 
 	// No headers set by middleware yet
+
+	// Special groups
+	SystemAuthenticatedGroup = "system:authenticated"
 )

@@ -281,10 +281,17 @@ func main() {
 
 	// nolint:goconst
 	if enableExtensionAPI {
-		if err := extensionapi.SetupExtensionAPIServerWithManager(); err != nil {
+		setupLog.Info("Setting up extension API server")
+		// Create config with a different port to avoid conflict with metrics
+		config := extensionapi.NewConfig(extensionapi.WithServerPort(7443))
+		if err := extensionapi.SetupExtensionAPIServerWithManager(mgr, config); err != nil {
 			setupLog.Error(err, "unable to create extension API server", "extensionapi", "Server")
 			os.Exit(1)
+		} else {
+			setupLog.Info("Extension API server setup successful", "port", config.ServerPort)
 		}
+	} else {
+		setupLog.Info("Extension API server is disabled. Use --enable-extension-api to enable it.")
 	}
 	// +kubebuilder:scaffold:builder
 

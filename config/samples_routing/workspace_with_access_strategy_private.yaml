@@ -1,7 +1,7 @@
 apiVersion: workspaces.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
-  name: alt-ws-with-access
+  name: private-ws-with-access
   namespace: default
 spec:
   displayName: "Sample Workspace with Access Strategy"
@@ -9,6 +9,7 @@ spec:
   # Using the built-in 'uv' image shortcut
   image: uv
   desiredStatus: Running
+  ownershipType: OwnerOnly
   accessStrategy:
     name: sample-access-strategy
     namespace: default

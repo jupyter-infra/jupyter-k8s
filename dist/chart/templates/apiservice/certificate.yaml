@@ -3,9 +3,9 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: extension-server-cert
-  namespace: jupyter-k8s-system
+  namespace: {{ .Release.Namespace }}
 spec:
-  secretName: jupyter-k8s-extension-server-certs
+  secretName: extension-server-cert
   duration: 2160h  # 90 days
   renewBefore: 360h  # 15 days
   privateKey:
@@ -13,10 +13,10 @@ spec:
   subject:
     organizations:
       - jupyter-k8s-operator
-  commonName: jupyter-k8s-extension-server
+  commonName: extension-server
   dnsNames:
-    - jupyter-k8s-extension-server.jupyter-k8s-system.svc
-    - jupyter-k8s-extension-server.jupyter-k8s-system.svc.cluster.local
+    - extension-server.{{ .Release.Namespace }}.svc
+    - extension-server.{{ .Release.Namespace }}.svc.cluster.local
   issuerRef:
     name: jupyter-k8s-selfsigned-issuer
     kind: Issuer

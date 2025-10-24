@@ -15,6 +15,12 @@ func applyPathConfig(config *Config) error {
 	if config.PathRegexPattern == "" {
 		config.PathRegexPattern = DefaultPathRegexPattern
 	}
+	if config.WorkspaceNamespacePathRegex == "" {
+		config.WorkspaceNamespacePathRegex = DefaultWorkspaceNamespacePathRegex
+	}
+	if config.WorkspaceNamePathRegex == "" {
+		config.WorkspaceNamePathRegex = DefaultWorkspaceNamePathRegex
+	}
 
 	// Override with environment variables if provided
 	if pathRegex := os.Getenv(EnvPathRegexPattern); pathRegex != "" {
@@ -24,6 +30,26 @@ func applyPathConfig(config *Config) error {
 			return fmt.Errorf("invalid %s: %w", EnvPathRegexPattern, err)
 		}
 		config.PathRegexPattern = pathRegex
+	}
+
+	// Override workspace namespace path regex if provided
+	if namespaceRegex := os.Getenv(EnvWorkspaceNamespacePathRegex); namespaceRegex != "" {
+		// Validate that the regex compiles
+		_, err := regexp.Compile(namespaceRegex)
+		if err != nil {
+			return fmt.Errorf("invalid %s: %w", EnvWorkspaceNamespacePathRegex, err)
+		}
+		config.WorkspaceNamespacePathRegex = namespaceRegex
+	}
+
+	// Override workspace name path regex if provided
+	if nameRegex := os.Getenv(EnvWorkspaceNamePathRegex); nameRegex != "" {
+		// Validate that the regex compiles
+		_, err := regexp.Compile(nameRegex)
+		if err != nil {
+			return fmt.Errorf("invalid %s: %w", EnvWorkspaceNamePathRegex, err)
+		}
+		config.WorkspaceNamePathRegex = nameRegex
 	}
 
 	return nil

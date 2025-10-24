@@ -3,14 +3,14 @@ apiVersion: v1
 kind: Service
 metadata:
   name: extension-server
-  namespace: jupyter-k8s-system
+  namespace: {{ .Release.Namespace }}
 spec:
   selector:
     control-plane: controller-manager
   ports:
   - name: https
     port: 443
-    targetPort: 8444
+    targetPort: 7443
     protocol: TCP
   type: ClusterIP
 {{- end }}
