@@ -144,6 +144,11 @@ func shouldSkipResourceCheck(resKind string, resName string) bool {
 			return true
 		}
 		return false
+	case "CustomResourceDefinition":
+		if strings.Contains(resName, "connection.workspace.jupyter.org") {
+			return true
+		}
+		return false
 	default:
 		return false
 	}

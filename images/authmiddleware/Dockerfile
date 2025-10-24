@@ -16,7 +16,8 @@ COPY go.sum go.sum
 # Download dependencies
 RUN go mod download
 
-# Copy the source code (both internal and cmd directories)
+# Copy the source code (api, internal, and cmd directories)
+COPY api/ api/
 COPY internal/ internal/
 COPY cmd/ cmd/
 

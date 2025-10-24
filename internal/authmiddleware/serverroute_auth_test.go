@@ -2,6 +2,7 @@ package authmiddleware
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -9,13 +10,17 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
+
+	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/rest"
 )
 
-// TestHandleAuthMethodNotAllowed tests that only GET method is allowed
-func TestHandleAuthMethodNotAllowed(t *testing.T) {
+// testAppPath is already defined in server_test.go
+
+// TestHandleAuth_PostMethodAllowed tests that POST methods are allowed
+func TestHandleAuth_PostMethodAllowed(t *testing.T) {
 	// Create a minimal server for testing
-	server := createTestServer()
+	server := createTestServer(nil)
 
 	// Create POST request
 	req := httptest.NewRequest(http.MethodPost, "/auth", nil)
@@ -31,19 +36,28 @@ func TestHandleAuthMethodNotAllowed(t *testing.T) {
 }
 
 // createTestServer creates a minimal server for testing
-func createTestServer() *Server {
+// The mockRestClient parameter is currently unused, but kept for future expansion
+// when we need to test with a configured REST client
+func createTestServer(_ rest.Interface) *Server {
 	config := &Config{
-		PathRegexPattern: DefaultPathRegexPattern,
+		PathRegexPattern:            DefaultPathRegexPattern,
+		WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+		WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+		OidcUsernamePrefix:          DefaultOidcUsernamePrefix,
+		OidcGroupsPrefix:            DefaultOidcGroupsPrefix,
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return &Server{
+
+	server := &Server{
 		config: config,
 		logger: logger,
 	}
+
+	return server
 }
 
-// TestHandleAuthRequiresHeaders tests that all required headers are properly checked
-func TestHandleAuthRequiresHeaders(t *testing.T) {
+// TestHandleAuth_RequiresHeaders tests that all required headers are properly checked
+func TestHandleAuth_RequiresHeaders(t *testing.T) {
 	testCases := []struct {
 		name           string
 		setupRequest   func(*http.Request)
@@ -53,7 +67,7 @@ func TestHandleAuthRequiresHeaders(t *testing.T) {
 		{
 			name: "Missing user header",
 			setupRequest: func(req *http.Request) {
-				req.Header.Set("X-Auth-Request-Groups", "group1,group2")
+				req.Header.Set("X-Auth-Request-Groups", "org1:group1,org1:group2")
 				req.Header.Set("X-Forwarded-Uri", "/workspaces/ns1/app1/lab")
 				req.Header.Set("X-Forwarded-Host", "example.com")
 			},
@@ -63,8 +77,8 @@ func TestHandleAuthRequiresHeaders(t *testing.T) {
 		{
 			name: "Missing URI header",
 			setupRequest: func(req *http.Request) {
-				req.Header.Set("X-Auth-Request-User", "testuser")
-				req.Header.Set("X-Auth-Request-Groups", "group1,group2")
+				req.Header.Set("X-Auth-Request-User", "user-uid")
+				req.Header.Set("X-Auth-Request-Groups", "org2:group1,org2:group2")
 				req.Header.Set("X-Forwarded-Host", "example.com")
 			},
 			expectedStatus: http.StatusBadRequest,
@@ -73,8 +87,8 @@ func TestHandleAuthRequiresHeaders(t *testing.T) {
 		{
 			name: "Missing host header",
 			setupRequest: func(req *http.Request) {
-				req.Header.Set("X-Auth-Request-User", "testuser")
-				req.Header.Set("X-Auth-Request-Groups", "group1,group2")
+				req.Header.Set("X-Auth-Request-User", "user-uid")
+				req.Header.Set("X-Auth-Request-Groups", "org3:group1,org3:group2")
 				req.Header.Set("X-Forwarded-Uri", "/workspaces/ns1/app1/lab")
 			},
 			expectedStatus: http.StatusBadRequest,
@@ -85,7 +99,7 @@ func TestHandleAuthRequiresHeaders(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create a test server
-			server := createTestServer()
+			server := createTestServer(nil)
 
 			// Create and setup the request
 			req := httptest.NewRequest(http.MethodGet, "/auth", nil)
@@ -109,68 +123,19 @@ func TestHandleAuthRequiresHeaders(t *testing.T) {
 	}
 }
 
-// TestHandleAuthWithInvalidRedirectURL tests that invalid redirect URLs are rejected
-func TestHandleAuthWithInvalidRedirectURL(t *testing.T) {
-	// Since we can't mock properly due to function assignment issues,
-	// we'll just test the basic functionality without verifying method calls
-
-	// Create a minimal server for testing
-	server := createTestServer()
-
-	// Create minimal JWT manager (needed for the handler to not crash)
-	server.jwtManager = &JWTManager{
-		signingKey: []byte("test-key"),
-		issuer:     "test-issuer",
-		audience:   "test-audience",
-		expiration: 30 * time.Minute,
-	}
-
-	// Create a minimal cookie manager
-	cookieManager := &CookieManager{
-		cookieName:         "test_cookie",
-		cookieSecure:       false,
-		cookiePath:         "/",
-		cookieMaxAge:       24 * time.Hour,
-		cookieHTTPOnly:     true,
-		cookieSameSiteHttp: http.SameSiteLaxMode,
-		pathRegexPattern:   DefaultPathRegexPattern,
-	}
-	server.cookieManager = cookieManager
-
-	// Create a request with an invalid redirect URL (different host)
-	req := httptest.NewRequest(http.MethodGet, "/auth?redirect=https://evil.com/path", nil)
-	req.Header.Set("X-Auth-Request-User", "user1")
-	req.Header.Set("X-Auth-Request-Groups", "group1") // Added missing groups header
-	req.Header.Set("X-Forwarded-Uri", "/workspaces/ns1/app1")
-	req.Header.Set("X-Forwarded-Host", "example.com")
-	w := httptest.NewRecorder()
-
-	// Call handler
-	server.handleAuth(w, req)
-
-	// Check response
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
-	}
-
-	// Check error message
-	body := w.Body.String()
-	if !strings.Contains(body, "Invalid redirect URL") {
-		t.Errorf("Expected error message about invalid redirect URL, got: %s", body)
-	}
-
-	// Note: We can't easily verify that JWT and Cookie functions were not called
-	// due to limitations in the current code structure
-}
-
 // For this test file, we are using mock implementations of the JWTHandler and CookieHandler interfaces
 // defined in mock_test.go within the same package.
 
-// TestHandleAuthHappyPath tests that valid redirect URLs are properly processed
-func TestHandleAuthHappyPath(t *testing.T) {
-	// Create a request with a valid redirect URL (same host)
-	req := httptest.NewRequest(http.MethodGet, "/auth?redirect=/dashboard", nil)
-	req.Header.Set("X-Auth-Request-User", "user1")
+// TestHandleAuth_HappyPath tests that auth route submits an access review,
+// generate a new JWT, set the cookie and returns a 2xx.
+func TestHandleAuth_HappyPath(t *testing.T) {
+	// Create a server instance
+	server := createTestServer(nil)
+
+	// Create a request
+	req := httptest.NewRequest(http.MethodGet, "/auth?some-key=some-value", nil)
+	req.Header.Set("X-Auth-Request-User", "user-uid")
+	req.Header.Set("X-Auth-Request-Preferred-Username", "valid-user")
 	req.Header.Set("X-Auth-Request-Groups", "org1:team1,org1:team2")
 	req.Header.Set("X-Forwarded-Uri", "/workspaces/ns1/app1/notebooks/nb1.ipynb")
 	req.Header.Set("X-Forwarded-Host", "example.com")
@@ -182,16 +147,20 @@ func TestHandleAuthHappyPath(t *testing.T) {
 	tokenGenerated := false
 	cookieSet := false
 
+	// expects
+	expectUsername := "github:valid-user"
+	expectGroups := []string{"github:org1:team1", "github:org1:team2"}
+
 	// Create JWT handler mock
 	jwtHandler := &MockJWTHandler{
 		GenerateTokenFunc: func(user string, groups []string, path string, domain string, tokenType string) (string, error) {
 			tokenGenerated = true
 			// Verify parameters
-			if user != "user1" {
-				t.Errorf("Expected user 'user1', got '%s'", user)
+			if user != expectUsername {
+				t.Errorf("Expected user '%s', got '%s'", expectUsername, user)
 			}
-			if !reflect.DeepEqual(groups, []string{"org1:team1", "org1:team2"}) {
-				t.Errorf("Expected groups [org1:team1,org1:team2], got %v", groups)
+			if !reflect.DeepEqual(groups, expectGroups) {
+				t.Errorf("Expected groups %v, got %v", expectGroups, groups)
 			}
 			if path != testAppPath {
 				t.Errorf("Expected path '%s', got '%s'", testAppPath, path)
@@ -217,17 +186,38 @@ func TestHandleAuthHappyPath(t *testing.T) {
 		},
 	}
 
-	// Create server with mocks
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	cfg := &Config{
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-	}
-	server := &Server{
-		config:        cfg,
-		logger:        logger,
-		jwtManager:    jwtHandler,
-		cookieManager: cookieHandler,
-	}
+	// Configure server
+	server.config.PathRegexPattern = `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`
+	server.config.WorkspaceNamespacePathRegex = DefaultWorkspaceNamespacePathRegex
+	server.config.WorkspaceNamePathRegex = DefaultWorkspaceNamePathRegex
+	server.jwtManager = jwtHandler
+	server.cookieManager = cookieHandler
+
+	// Create a mock K8s server for testing
+	mockServer := NewMockK8sServer(t)
+	defer mockServer.Close()
+
+	// mock response
+	reason := "User authorized by RBAC and workspace is public"
+	mockedResponse := CreateConnectionAccessReviewResponse(
+		"ns1",
+		"app1",
+		expectUsername,
+		expectGroups,
+		true,  // allowed
+		false, // not found
+		reason,
+	)
+
+	// Set up the mock server to return a 200 OK response
+	mockServer.SetupServer200OK(mockedResponse)
+
+	// Create a REST client pointing to our test server
+	restClient, err := mockServer.CreateRESTClient()
+	require.NoError(t, err)
+
+	// Set the REST client
+	server.restClient = restClient
 
 	// Call handler
 	server.handleAuth(w, req)
@@ -248,6 +238,149 @@ func TestHandleAuthHappyPath(t *testing.T) {
 	// Check JSON response
 	var response map[string]string
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-		t.Fatalf("Failed to parse JSON response: %v", err)
+		t.Errorf("Failed to parse JSON response: %v", err)
+	}
+
+	// Verify the request was made to the correct URL
+	expectedPath := fmt.Sprintf("/apis/%s/namespaces/ns1/connectionaccessreview",
+		expectApiGroupVersion)
+	mockServer.AssertRequestPath(expectedPath)
+}
+
+func TestHandleAuth_Returns5xxWhenK8sClientNotSet(t *testing.T) {
+	// Create a standard server
+	server := createTestServer(nil)
+	server.jwtManager = &MockJWTHandler{}
+	server.cookieManager = &MockCookieHandler{}
+	server.config.WorkspaceNamespacePathRegex = DefaultWorkspaceNamespacePathRegex
+	server.config.WorkspaceNamePathRegex = DefaultWorkspaceNamePathRegex
+
+	// Ensure restClient is nil
+	server.restClient = nil
+
+	// Create a request with all necessary headers
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Auth-Request-User", "user-uid")
+	req.Header.Set("X-Auth-Request-Preferred-Username", "user1")
+	req.Header.Set("X-Auth-Request-Groups", "github:org1:group1,org1:group2")
+	req.Header.Set("X-Forwarded-Uri", testAppPath)
+	req.Header.Set("X-Forwarded-Host", "example.com")
+	w := httptest.NewRecorder()
+
+	// Call handler
+	server.handleAuth(w, req)
+
+	// Check for 500 status code
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, w.Code)
+	}
+
+	// Check error message
+	body := w.Body.String()
+	if !strings.Contains(body, "Internal server error") {
+		t.Errorf("Expected 'Internal server error' message, got: %s", body)
+	}
+}
+
+func TestHandleAuth_Returns5xx_WhenVerifyAccessWorkspaceReturnsError(t *testing.T) {
+	// Create a standard server
+	server := createTestServer(nil)
+	server.jwtManager = &MockJWTHandler{}
+	server.cookieManager = &MockCookieHandler{}
+	server.config.WorkspaceNamespacePathRegex = DefaultWorkspaceNamespacePathRegex
+	server.config.WorkspaceNamePathRegex = DefaultWorkspaceNamePathRegex
+
+	// Create a mock K8s server for testing
+	mockServer := NewMockK8sServer(t)
+	defer mockServer.Close()
+
+	// Set up the mock server to return a 500 Internal Server Error response
+	mockServer.SetupServer500InternalServerError()
+
+	// Create a REST client pointing to our test server
+	restClient, err := mockServer.CreateRESTClient()
+	require.NoError(t, err)
+
+	// Set the REST client
+	server.restClient = restClient
+
+	// Create a request with all necessary headers
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Auth-Request-User", "user-uid")
+	req.Header.Set("X-Auth-Request-Preferred-Username", "user2")
+	req.Header.Set("X-Auth-Request-Groups", "org5:group1,org5:group2")
+	req.Header.Set("X-Forwarded-Uri", testAppPath)
+	req.Header.Set("X-Forwarded-Host", "example.com")
+	w := httptest.NewRecorder()
+
+	// Call handler
+	server.handleAuth(w, req)
+
+	// Check for 500 status code
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, w.Code)
+	}
+
+	// Check error message
+	body := w.Body.String()
+	if !strings.Contains(body, "Failed to verify workspace access") {
+		t.Errorf("Expected error message about failed validation, got: %s", body)
+	}
+}
+
+func TestHandleAuth_Returns403_WhenVerifyAccessWorkspaceReturnsDisallowed(t *testing.T) {
+	// Create a standard server
+	server := createTestServer(nil)
+	server.jwtManager = &MockJWTHandler{}
+	server.cookieManager = &MockCookieHandler{}
+	server.config.WorkspaceNamespacePathRegex = DefaultWorkspaceNamespacePathRegex
+	server.config.WorkspaceNamePathRegex = DefaultWorkspaceNamePathRegex
+
+	// Create a mock K8s server for testing
+	mockServer := NewMockK8sServer(t)
+	defer mockServer.Close()
+
+	reason := "User not authorized by RBAC"
+	mockedResponse := CreateConnectionAccessReviewResponse(
+		"ns1",
+		"app1",
+		"github:user1",
+		[]string{"github:org6:group1", "github:org6:group2"},
+		false, // allowed
+		false, // not found
+		reason,
+	)
+
+	// Set up the mock server to return a 200 with disallowed response
+	mockServer.SetupServer200OK(mockedResponse)
+
+	// Create a REST client pointing to our test server
+	restClient, err := mockServer.CreateRESTClient()
+	require.NoError(t, err)
+
+	// Set the REST client
+	server.restClient = restClient
+
+	// Create a request with all necessary headers
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Auth-Request-User", "user-uid")
+	req.Header.Set("X-Auth-Request-Preferred-Username", "user1")
+	req.Header.Set("X-Auth-Request-Groups", "org6:group1,org6:group2")
+	req.Header.Set("X-Forwarded-Uri", testAppPath)
+	req.Header.Set("X-Forwarded-Host", "example.com")
+	w := httptest.NewRecorder()
+
+	// Call handler
+	server.handleAuth(w, req)
+
+	// Check for 403 status code
+	if w.Code != http.StatusForbidden {
+		t.Errorf("Expected status %d, got %d", http.StatusForbidden, w.Code)
+	}
+
+	// Check error message
+	body := w.Body.String()
+	if !strings.Contains(body, "Access denied") {
+		t.Errorf("Expected error message about access denied, got: %s", body)
 	}
 }

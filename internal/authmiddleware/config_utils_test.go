@@ -11,7 +11,9 @@ func TestApplyPathConfig(t *testing.T) {
 	t.Run("Defaults applied when not set", func(t *testing.T) {
 		config := &Config{
 			// Initialize with empty values
-			PathRegexPattern: "",
+			PathRegexPattern:            "",
+			WorkspaceNamespacePathRegex: "",
+			WorkspaceNamePathRegex:      "",
 		}
 
 		err := applyPathConfig(config)
@@ -23,23 +25,49 @@ func TestApplyPathConfig(t *testing.T) {
 			t.Errorf("Expected PathRegexPattern to be set to default %q, got %q",
 				DefaultPathRegexPattern, config.PathRegexPattern)
 		}
+
+		if config.WorkspaceNamespacePathRegex != DefaultWorkspaceNamespacePathRegex {
+			t.Errorf("Expected WorkspaceNamespacePathRegex to be set to default %q, got %q",
+				DefaultWorkspaceNamespacePathRegex, config.WorkspaceNamespacePathRegex)
+		}
+
+		if config.WorkspaceNamePathRegex != DefaultWorkspaceNamePathRegex {
+			t.Errorf("Expected WorkspaceNamePathRegex to be set to default %q, got %q",
+				DefaultWorkspaceNamePathRegex, config.WorkspaceNamePathRegex)
+		}
 	})
 
 	// Test that env vars override defaults
 	t.Run("Environment variables override defaults", func(t *testing.T) {
 		// Save original env vars to restore them later
 		origPathRegex := os.Getenv(EnvPathRegexPattern)
-		// nolint: errcheck
-		_ = os.Setenv(EnvPathRegexPattern, origPathRegex)
+		origNamespaceRegex := os.Getenv(EnvWorkspaceNamespacePathRegex)
+		origNameRegex := os.Getenv(EnvWorkspaceNamePathRegex)
+		defer func() {
+			// nolint: errcheck
+			_ = os.Setenv(EnvPathRegexPattern, origPathRegex)
+			// nolint: errcheck
+			_ = os.Setenv(EnvWorkspaceNamespacePathRegex, origNamespaceRegex)
+			// nolint: errcheck
+			_ = os.Setenv(EnvWorkspaceNamePathRegex, origNameRegex)
+		}()
 
 		// Set test values
 		testPathRegex := `^(/custom/[^/]+/[^/]+)(?:/.*)?$`
+		testNamespaceRegex := `^/custom/([^/]+)/workspaces/[^/]+`
+		testNameRegex := `^/custom/[^/]+/workspaces/([^/]+)`
 		// nolint: errcheck
 		_ = os.Setenv(EnvPathRegexPattern, testPathRegex)
+		// nolint: errcheck
+		_ = os.Setenv(EnvWorkspaceNamespacePathRegex, testNamespaceRegex)
+		// nolint: errcheck
+		_ = os.Setenv(EnvWorkspaceNamePathRegex, testNameRegex)
 
 		config := &Config{
 			// Initialize with defaults
-			PathRegexPattern: DefaultPathRegexPattern,
+			PathRegexPattern:            DefaultPathRegexPattern,
+			WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+			WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
 		}
 
 		err := applyPathConfig(config)
@@ -51,14 +79,26 @@ func TestApplyPathConfig(t *testing.T) {
 			t.Errorf("Expected PathRegexPattern to be %q, got %q",
 				testPathRegex, config.PathRegexPattern)
 		}
+
+		if config.WorkspaceNamespacePathRegex != testNamespaceRegex {
+			t.Errorf("Expected WorkspaceNamespacePathRegex to be %q, got %q",
+				testNamespaceRegex, config.WorkspaceNamespacePathRegex)
+		}
+
+		if config.WorkspaceNamePathRegex != testNameRegex {
+			t.Errorf("Expected WorkspaceNamePathRegex to be %q, got %q",
+				testNameRegex, config.WorkspaceNamePathRegex)
+		}
 	})
 
-	// Test invalid regex pattern
-	t.Run("Invalid regex pattern", func(t *testing.T) {
-		// Save original env var to restore it later
+	// Test invalid regex pattern for PathRegexPattern
+	t.Run("Invalid PathRegexPattern", func(t *testing.T) {
+		// Save original env vars to restore them later
 		origPathRegex := os.Getenv(EnvPathRegexPattern)
-		// nolint: errcheck
-		_ = os.Setenv(EnvPathRegexPattern, origPathRegex)
+		defer func() {
+			// nolint: errcheck
+			_ = os.Setenv(EnvPathRegexPattern, origPathRegex)
+		}()
 
 		// Set invalid regex
 		// nolint: errcheck
@@ -67,7 +107,47 @@ func TestApplyPathConfig(t *testing.T) {
 		config := &Config{}
 		err := applyPathConfig(config)
 		if err == nil {
-			t.Fatal("Expected error for invalid regex, got nil")
+			t.Fatal("Expected error for invalid PathRegexPattern, got nil")
+		}
+	})
+
+	// Test invalid regex pattern for WorkspaceNamespacePathRegex
+	t.Run("Invalid WorkspaceNamespacePathRegex", func(t *testing.T) {
+		// Save original env vars to restore them later
+		origNamespaceRegex := os.Getenv(EnvWorkspaceNamespacePathRegex)
+		defer func() {
+			// nolint: errcheck
+			_ = os.Setenv(EnvWorkspaceNamespacePathRegex, origNamespaceRegex)
+		}()
+
+		// Set invalid regex
+		// nolint: errcheck
+		_ = os.Setenv(EnvWorkspaceNamespacePathRegex, "(unclosed parenthesis")
+
+		config := &Config{}
+		err := applyPathConfig(config)
+		if err == nil {
+			t.Fatal("Expected error for invalid WorkspaceNamespacePathRegex, got nil")
+		}
+	})
+
+	// Test invalid regex pattern for WorkspaceNamePathRegex
+	t.Run("Invalid WorkspaceNamePathRegex", func(t *testing.T) {
+		// Save original env vars to restore them later
+		origNameRegex := os.Getenv(EnvWorkspaceNamePathRegex)
+		defer func() {
+			// nolint: errcheck
+			_ = os.Setenv(EnvWorkspaceNamePathRegex, origNameRegex)
+		}()
+
+		// Set invalid regex
+		// nolint: errcheck
+		_ = os.Setenv(EnvWorkspaceNamePathRegex, "(unclosed parenthesis")
+
+		config := &Config{}
+		err := applyPathConfig(config)
+		if err == nil {
+			t.Fatal("Expected error for invalid WorkspaceNamePathRegex, got nil")
 		}
 	})
 }

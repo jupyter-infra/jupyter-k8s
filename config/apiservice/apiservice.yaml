@@ -1,14 +1,14 @@
 apiVersion: apiregistration.k8s.io/v1
 kind: APIService
 metadata:
-  name: v1alpha1.connection.workspaces.jupyter.org
+  name: v1alpha1.connection.workspace.jupyter.org
   annotations:
-    cert-manager.io/inject-ca-from: jupyter-k8s-system/jupyter-k8s-extension-server-cert
+    cert-manager.io/inject-ca-from: jupyter-k8s-system/extension-server-cert
 spec:
   service:
     name: extension-server
     namespace: jupyter-k8s-system
-  group: connection.workspaces.jupyter.org
+  group: connection.workspace.jupyter.org
   version: v1alpha1
   groupPriorityMinimum: 100
   versionPriority: 100

@@ -61,6 +61,11 @@ patches:
   target:
     kind: Deployment
 
+# [EXTENSION] Add extension API server flag
+- path: manager_extension_flag_patch.yaml
+  target:
+    kind: Deployment
+
 # [CERTMANAGER] To enable cert-manager, uncomment all sections with 'CERTMANAGER' prefix.
 # Uncomment the following replacements to add the cert-manager CA injection annotations
 replacements:
@@ -239,3 +244,59 @@ replacements:
 #     fieldPath: .metadata.name
 #   targets: # Do not remove or uncomment the following scaffold marker; required to generate code for target CRD.
 # +kubebuilder:scaffold:crdkustomizecainjectionname
+
+ # Extension API configuration
+ - source:
+     kind: Service
+     version: v1
+     name: extension-server
+     fieldPath: .metadata.name
+   targets:
+     - select:
+         kind: Certificate
+         group: cert-manager.io
+         version: v1
+         name: extension-server-cert
+       fieldPaths:
+         - .spec.dnsNames.0
+         - .spec.dnsNames.1
+       options:
+         delimiter: '.'
+         index: 0
+         create: true
+ - source:
+     kind: Certificate
+     group: cert-manager.io
+     version: v1
+     name: extension-server-cert
+     fieldPath: .metadata.namespace
+   targets:
+     - select:
+         kind: APIService
+         group: apiregistration.k8s.io
+         version: v1
+         name: v1alpha1.connection.workspace.jupyter.org
+       fieldPaths:
+         - .metadata.annotations.[cert-manager.io/inject-ca-from]
+       options:
+         delimiter: '/'
+         index: 0
+         create: true
+ - source:
+     kind: Certificate
+     group: cert-manager.io
+     version: v1
+     name: extension-server-cert
+     fieldPath: .metadata.name
+   targets:
+     - select:
+         kind: APIService
+         group: apiregistration.k8s.io
+         version: v1
+         name: v1alpha1.connection.workspace.jupyter.org
+       fieldPaths:
+         - .metadata.annotations.[cert-manager.io/inject-ca-from]
+       options:
+         delimiter: '/'
+         index: 1
+         create: true
