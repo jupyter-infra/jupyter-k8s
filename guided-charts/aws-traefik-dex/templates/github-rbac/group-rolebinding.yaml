@@ -5,7 +5,7 @@ metadata:
   name: github-workspace-orgs-binding
   namespace: default
   annotations:
-    description: "Grants access to workspaces.jupyter.org resources for specified GitHub teams"
+    description: "Grants access to workspace.jupyter.org resources for specified GitHub teams"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role

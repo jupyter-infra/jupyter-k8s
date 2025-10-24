@@ -10,7 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
 var _ = Describe("DeploymentBuilder", func() {
@@ -24,7 +24,7 @@ var _ = Describe("DeploymentBuilder", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		scheme = runtime.NewScheme()
-		Expect(workspacesv1alpha1.AddToScheme(scheme)).To(Succeed())
+		Expect(workspacev1alpha1.AddToScheme(scheme)).To(Succeed())
 
 		options = WorkspaceControllerOptions{
 			ApplicationImagesPullPolicy: corev1.PullIfNotPresent,
@@ -37,12 +37,12 @@ var _ = Describe("DeploymentBuilder", func() {
 	Context("Environment Variables", func() {
 		It("should pass environment variables from template to container", func() {
 			// Create workspace
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{},
+				Spec: workspacev1alpha1.WorkspaceSpec{},
 			}
 
 			// Create resolved template with environment variables
@@ -85,12 +85,12 @@ var _ = Describe("DeploymentBuilder", func() {
 		})
 
 		It("should not add environment variables when template has none", func() {
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-no-env",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{},
+				Spec: workspacev1alpha1.WorkspaceSpec{},
 			}
 
 			// Create resolved template without environment variables
@@ -116,12 +116,12 @@ var _ = Describe("DeploymentBuilder", func() {
 		})
 
 		It("should handle nil resolved template gracefully", func() {
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-nil-template",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{
+				Spec: workspacev1alpha1.WorkspaceSpec{
 					Resources: &corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("500m"),
@@ -144,12 +144,12 @@ var _ = Describe("DeploymentBuilder", func() {
 
 	Context("Storage Configuration", func() {
 		It("should mount volume when storage is configured in template", func() {
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-storage",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{},
+				Spec: workspacev1alpha1.WorkspaceSpec{},
 			}
 
 			resolvedTemplate := &ResolvedTemplate{
@@ -160,7 +160,7 @@ var _ = Describe("DeploymentBuilder", func() {
 						corev1.ResourceMemory: resource.MustParse("1Gi"),
 					},
 				},
-				StorageConfiguration: &workspacesv1alpha1.StorageConfig{
+				StorageConfiguration: &workspacev1alpha1.StorageConfig{
 					DefaultSize: resource.MustParse("10Gi"),
 				},
 			}
@@ -181,13 +181,13 @@ var _ = Describe("DeploymentBuilder", func() {
 		})
 
 		It("should handle workspace storage override", func() {
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-storage-override",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{
-					Storage: &workspacesv1alpha1.StorageSpec{
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					Storage: &workspacev1alpha1.StorageSpec{
 						Size: resource.MustParse("20Gi"), // Workspace storage takes precedence
 					},
 				},
@@ -201,7 +201,7 @@ var _ = Describe("DeploymentBuilder", func() {
 						corev1.ResourceMemory: resource.MustParse("1Gi"),
 					},
 				},
-				StorageConfiguration: &workspacesv1alpha1.StorageConfig{
+				StorageConfiguration: &workspacev1alpha1.StorageConfig{
 					DefaultSize: resource.MustParse("10Gi"),
 				},
 			}
@@ -218,16 +218,16 @@ var _ = Describe("DeploymentBuilder", func() {
 
 	Context("Additional Volumes", func() {
 		It("should mount additional PVC volumes", func() {
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-volumes",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{
-					Storage: &workspacesv1alpha1.StorageSpec{
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					Storage: &workspacev1alpha1.StorageSpec{
 						Size: resource.MustParse("1Gi"),
 					},
-					Volumes: []workspacesv1alpha1.VolumeSpec{
+					Volumes: []workspacev1alpha1.VolumeSpec{
 						{
 							Name:                      "data-volume",
 							PersistentVolumeClaimName: "data-pvc",
@@ -250,7 +250,7 @@ var _ = Describe("DeploymentBuilder", func() {
 						corev1.ResourceMemory: resource.MustParse("256Mi"),
 					},
 				},
-				StorageConfiguration: &workspacesv1alpha1.StorageConfig{
+				StorageConfiguration: &workspacev1alpha1.StorageConfig{
 					DefaultSize: resource.MustParse("1Gi"),
 				},
 			}
@@ -289,13 +289,13 @@ var _ = Describe("DeploymentBuilder", func() {
 
 	Context("Container Configuration", func() {
 		It("should set custom command and args", func() {
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-container-config",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{
-					ContainerConfig: &workspacesv1alpha1.ContainerConfig{
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					ContainerConfig: &workspacev1alpha1.ContainerConfig{
 						Command: []string{"/bin/bash"},
 						Args:    []string{"-c", "echo 'test' && sleep 3600"},
 					},
@@ -325,12 +325,12 @@ var _ = Describe("DeploymentBuilder", func() {
 
 	Context("Node Selector", func() {
 		It("should set node selector constraints", func() {
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-node-selector",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{
+				Spec: workspacev1alpha1.WorkspaceSpec{
 					NodeSelector: map[string]string{
 						"node.kubernetes.io/instance-type": "ml.t3.large",
 						"kubernetes.io/arch":               "amd64",
@@ -361,12 +361,12 @@ var _ = Describe("DeploymentBuilder", func() {
 
 	Context("Affinity", func() {
 		It("should set node affinity when specified", func() {
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-affinity",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{
+				Spec: workspacev1alpha1.WorkspaceSpec{
 					Affinity: &corev1.Affinity{
 						NodeAffinity: &corev1.NodeAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
@@ -399,12 +399,12 @@ var _ = Describe("DeploymentBuilder", func() {
 		})
 
 		It("should use template affinity when workspace doesn't specify", func() {
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-template-affinity",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{},
+				Spec: workspacev1alpha1.WorkspaceSpec{},
 			}
 
 			resolvedTemplate := &ResolvedTemplate{
@@ -440,12 +440,12 @@ var _ = Describe("DeploymentBuilder", func() {
 
 	Context("Tolerations", func() {
 		It("should set tolerations when specified", func() {
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-tolerations",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{
+				Spec: workspacev1alpha1.WorkspaceSpec{
 					Tolerations: []corev1.Toleration{
 						{
 							Key:      "nvidia.com/gpu",
@@ -477,12 +477,12 @@ var _ = Describe("DeploymentBuilder", func() {
 		})
 
 		It("should use template tolerations when workspace doesn't specify", func() {
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-template-tolerations",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{},
+				Spec: workspacev1alpha1.WorkspaceSpec{},
 			}
 
 			resolvedTemplate := &ResolvedTemplate{
@@ -507,12 +507,12 @@ var _ = Describe("DeploymentBuilder", func() {
 
 	Context("Lifecycle Hooks", func() {
 		It("should set lifecycle hooks", func() {
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-lifecycle",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{
+				Spec: workspacev1alpha1.WorkspaceSpec{
 					Lifecycle: &corev1.Lifecycle{
 						PostStart: &corev1.LifecycleHandler{
 							Exec: &corev1.ExecAction{

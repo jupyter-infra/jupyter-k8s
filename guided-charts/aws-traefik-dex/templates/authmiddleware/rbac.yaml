@@ -13,7 +13,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: authmiddleware-role
-rules: []  # No Kubernetes API permissions needed
+rules:
+  # Access to workspace resources for session creation
+  - apiGroups: ["connection.workspace.jupyter.org"]
+    resources: ["connectionaccessreview"]
+    verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

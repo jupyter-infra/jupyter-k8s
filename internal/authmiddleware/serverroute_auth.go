@@ -18,7 +18,6 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	groups := r.Header.Get(HeaderAuthRequestGroups)
 	fullPath := r.Header.Get(HeaderForwardedURI)
 	host := r.Header.Get(HeaderForwardedHost)
-	proto := r.Header.Get(HeaderForwardedProto)
 
 	// Extract base app path for JWT authorization
 	appPath := ExtractAppPath(fullPath, s.config.PathRegexPattern)
@@ -42,8 +41,68 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Determine k8s username
+	k8sUsername := GetOidcUsername(s.config, preferredUsername)
+	k8sGroups := GetOidcGroups(s.config, splitGroups(groups))
+
+	// Check workspace access permission
+	// and the Kubernetes REST client is available
+	if s.restClient == nil {
+		s.logger.Error("cannot authorize, REST client not set")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if s.restClient != nil {
+		// Verify workspace access using the new extracted function
+		connectionAccessReviewResult, workspaceInfo, err := s.VerifyWorkspaceAccess(
+			r.Context(),
+			appPath,
+			k8sUsername,
+			k8sGroups,
+		)
+
+		if err != nil {
+			s.logger.Error("Failed to verify workspace access", "error", err, "path", appPath)
+			http.Error(w, "Failed to verify workspace access", http.StatusInternalServerError)
+			return
+		}
+
+		allowed := connectionAccessReviewResult.Allowed
+		notFound := connectionAccessReviewResult.NotFound
+
+		if !allowed || notFound {
+			s.logger.Info("Workspace connection refused",
+				"username", k8sUsername,
+				"workspace", workspaceInfo.Name,
+				"namespace", workspaceInfo.Namespace,
+				"workspaceNotFound", connectionAccessReviewResult.NotFound,
+				"reason", connectionAccessReviewResult.Reason,
+			)
+
+			// Workspace was not found maps to Access denied error.
+			// If the workspace does not exist, we cannot know whether the user would have access
+			// given such decision depends on a/ the Workspace.Spec.AccessType, b/ whether the user
+			// is the owner of the Workspace, c/ when we support peer-to-peer sharing, whether the
+			// owner shared their workspace to the user or one of the group they belong to.
+
+			// Note: if the Workspace is in Stopped state, we could trigger an automatic restart
+			// when a user makes an authorized connection request. However, we should use a different
+			// route of the authmiddleware and use a redirect (possibly '/restart')
+			http.Error(w, "Access denied: you are not authorized to connect to this workspace", http.StatusForbidden)
+			return
+		}
+
+		s.logger.Info("Connection to the workspace granted",
+			"username", k8sUsername,
+			"workspace", workspaceInfo.Name,
+			"namespace", workspaceInfo.Namespace,
+			"reason", connectionAccessReviewResult.Reason,
+		)
+	}
+
 	// Generate JWT token with app path and domain for authorization scope
-	token, err := s.jwtManager.GenerateToken(user, splitGroups(groups), appPath, host, TokenTypeSession)
+	token, err := s.jwtManager.GenerateToken(k8sUsername, k8sGroups, appPath, host, TokenTypeSession)
 	if err != nil {
 		s.logger.Error("Failed to generate token", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -57,30 +116,12 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	// Create empty response
 	response := map[string]string{}
 
-	// Determine redirect URL if provided in query
-	redirectURL := r.URL.Query().Get("redirect")
-	if redirectURL != "" {
-		// Validate redirect URL (should be relative or same host)
-		if !isValidRedirectURL(redirectURL, host) {
-			http.Error(w, "Invalid redirect URL", http.StatusBadRequest)
-			return
-		}
-
-		// If redirect URL doesn't have protocol, add it
-		if !hasProtocol(redirectURL) && proto != "" {
-			redirectURL = proto + "://" + host + redirectURL
-		}
-
-		response["redirect"] = redirectURL
-	}
-
-	// Log successful authentication
-	s.logger.Info("Authentication successful",
+	// Log successful connection
+	s.logger.Info("Connection successful",
 		"user", user,
-		"username", preferredUsername,
+		"username", k8sUsername,
 		"path", appPath,
-		"groups", groups,
-		"redirect", redirectURL != "")
+		"groups", k8sGroups)
 
 	// Return JSON response
 	w.Header().Set("Content-Type", "application/json")

@@ -3,7 +3,7 @@ package controller
 import (
 	"context"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,7 +24,7 @@ func FindCondition(conditions *[]metav1.Condition, conditionType string) *metav1
 // or an empty list if there are no update needed.
 func GetNewConditionsOrEmptyIfUnchanged(
 	ctx context.Context,
-	workspace *workspacesv1alpha1.Workspace,
+	workspace *workspacev1alpha1.Workspace,
 	conditions *[]metav1.Condition) []metav1.Condition {
 
 	// abort early if nothing is requested

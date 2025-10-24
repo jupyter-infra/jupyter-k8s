@@ -11,8 +11,14 @@ metadata:
   annotations:
     description: "Grants namespace-specific permissions for workspaces to GitHub user {{ $user }}"
 rules:
-  - apiGroups: ["workspaces.jupyter.org"]
-    resources: ["*"]
+  - apiGroups: ["workspace.jupyter.org"]
+    resources: ["workspaces"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["workspace.jupyter.org"]
+    resources: ["workspaces/connection"]
+    verbs: ["create"]
+  - apiGroups: ["workspace.jupyter.org"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
 {{- end }}
 {{- end }}

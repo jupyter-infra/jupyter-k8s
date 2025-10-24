@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 )
@@ -42,19 +42,19 @@ func createUserContext(baseCtx context.Context, operation, username string, grou
 
 var _ = Describe("Workspace Webhook", func() {
 	var (
-		workspace *workspacesv1alpha1.Workspace
+		workspace *workspacev1alpha1.Workspace
 		defaulter WorkspaceCustomDefaulter
 		validator WorkspaceCustomValidator
 		ctx       context.Context
 	)
 
 	BeforeEach(func() {
-		workspace = &workspacesv1alpha1.Workspace{
+		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-workspace",
 				Namespace: "default",
 			},
-			Spec: workspacesv1alpha1.WorkspaceSpec{
+			Spec: workspacev1alpha1.WorkspaceSpec{
 				DisplayName:   "Test Workspace",
 				Image:         "jupyter/base-notebook:latest",
 				DesiredStatus: "Running",
@@ -430,7 +430,7 @@ var _ = Describe("Workspace Webhook", func() {
 	})
 
 	Context("validateOwnershipPermission", func() {
-		var ownerOnlyWorkspace *workspacesv1alpha1.Workspace
+		var ownerOnlyWorkspace *workspacev1alpha1.Workspace
 
 		BeforeEach(func() {
 			ownerOnlyWorkspace = workspace.DeepCopy()

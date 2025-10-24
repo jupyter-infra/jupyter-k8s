@@ -3,7 +3,7 @@ package controller
 import (
 	"fmt"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,7 +25,7 @@ func NewServiceBuilder(scheme *runtime.Scheme) *ServiceBuilder {
 }
 
 // BuildService creates a Service resource for the given Workspace
-func (sb *ServiceBuilder) BuildService(workspace *workspacesv1alpha1.Workspace) (*corev1.Service, error) {
+func (sb *ServiceBuilder) BuildService(workspace *workspacev1alpha1.Workspace) (*corev1.Service, error) {
 	service := &corev1.Service{
 		ObjectMeta: sb.buildObjectMeta(workspace),
 		Spec:       sb.buildServiceSpec(workspace),
@@ -40,7 +40,7 @@ func (sb *ServiceBuilder) BuildService(workspace *workspacesv1alpha1.Workspace) 
 }
 
 // buildObjectMeta creates the metadata for the Service
-func (sb *ServiceBuilder) buildObjectMeta(workspace *workspacesv1alpha1.Workspace) metav1.ObjectMeta {
+func (sb *ServiceBuilder) buildObjectMeta(workspace *workspacev1alpha1.Workspace) metav1.ObjectMeta {
 	return metav1.ObjectMeta{
 		Name:      GenerateServiceName(workspace.Name),
 		Namespace: workspace.Namespace,
@@ -49,7 +49,7 @@ func (sb *ServiceBuilder) buildObjectMeta(workspace *workspacesv1alpha1.Workspac
 }
 
 // buildServiceSpec creates the service specification
-func (sb *ServiceBuilder) buildServiceSpec(workspace *workspacesv1alpha1.Workspace) corev1.ServiceSpec {
+func (sb *ServiceBuilder) buildServiceSpec(workspace *workspacev1alpha1.Workspace) corev1.ServiceSpec {
 	return corev1.ServiceSpec{
 		Type:     corev1.ServiceTypeClusterIP,
 		Selector: GenerateLabels(workspace.Name),

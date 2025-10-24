@@ -1,4 +1,4 @@
-apiVersion: workspaces.jupyter.org/v1alpha1
+apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: ws-with-access
@@ -9,6 +9,7 @@ spec:
   # Using the built-in 'uv' image shortcut
   image: uv
   desiredStatus: Running
+  ownershipType: Public
   accessStrategy:
     name: sample-access-strategy
     namespace: default

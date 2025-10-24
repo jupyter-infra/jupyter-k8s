@@ -7,7 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
 // Variables for dependency injection in tests
@@ -76,7 +76,7 @@ func NewSSMRemoteAccessStrategy(ssmClient SSMRemoteAccessClientInterface, podExe
 }
 
 // InitSSMAgent initializes SSM agent for aws-ssm-remote-access strategy
-func (s *SSMRemoteAccessStrategy) InitSSMAgent(ctx context.Context, pod *corev1.Pod, workspace *workspacesv1alpha1.Workspace, accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy) error {
+func (s *SSMRemoteAccessStrategy) InitSSMAgent(ctx context.Context, pod *corev1.Pod, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) error {
 	if s.ssmClient == nil {
 		return fmt.Errorf("SSM client not available")
 	}
@@ -147,7 +147,7 @@ func (s *SSMRemoteAccessStrategy) isSSMRegistrationCompleted(ctx context.Context
 }
 
 // performSSMRegistration handles the SSM activation and registration process
-func (s *SSMRemoteAccessStrategy) performSSMRegistration(ctx context.Context, pod *corev1.Pod, workspace *workspacesv1alpha1.Workspace, accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy) error {
+func (s *SSMRemoteAccessStrategy) performSSMRegistration(ctx context.Context, pod *corev1.Pod, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) error {
 	logger := logf.FromContext(ctx).WithValues("pod", pod.Name, "workspace", workspace.Name)
 	noStdin := "" // For commands that don't need stdin input
 
@@ -192,7 +192,7 @@ func (s *SSMRemoteAccessStrategy) performSSMRegistration(ctx context.Context, po
 }
 
 // createSSMActivation creates an SSM activation and returns activation code and ID
-func (s *SSMRemoteAccessStrategy) createSSMActivation(ctx context.Context, pod *corev1.Pod, workspace *workspacesv1alpha1.Workspace, accessStrategy *workspacesv1alpha1.WorkspaceAccessStrategy) (string, string, error) {
+func (s *SSMRemoteAccessStrategy) createSSMActivation(ctx context.Context, pod *corev1.Pod, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (string, string, error) {
 	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name)
 
 	if s.ssmClient == nil {

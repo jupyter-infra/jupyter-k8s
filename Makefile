@@ -78,6 +78,8 @@ deps:
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	# Remove connection.workspace.jupyter.org CRDs as they're meant to be subresources, not standalone CRDs
+	rm -f config/crd/bases/connection.workspace.jupyter.org_*.yaml
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -239,7 +241,8 @@ helm-test: ## Test the Helm chart with helm template
 	cp -r dist/chart /tmp/helm-test-chart
 	cd /tmp/helm-test-chart && helm dependency build
 	helm template jk8s /tmp/helm-test-chart --output-dir dist/test-output-crd-only \
-		--set accessResources.traefik.enable=true
+		--set accessResources.traefik.enable=true \
+		--set extensionApi.enable=true
 	rm -rf /tmp/helm-test-chart
 	go test ./test/helm/crd-only -v
 
@@ -368,7 +371,7 @@ kubectl-kind: ## Configure kubectl to use kind cluster
 
 .PHONY: deploy-kind
 deploy-kind: docker-build kubectl-kind ## Build, load, and deploy controller to a kind cluster.
-	$(MAKE) deploy USE_KIND=true EXTRA_HELM_ARGS="--set application.imagesPullPolicy=Never --set application.imagesRegistry='docker.io/library'"
+	$(MAKE) deploy USE_KIND=true EXTRA_HELM_ARGS="--set application.imagesPullPolicy=Never --set application.imagesRegistry='docker.io/library' --set extensionApi.enable=true"
 
 .PHONY: redeploy-kind
 redeploy-kind: kubectl-kind
@@ -479,7 +482,8 @@ deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remot
 		--set application.imagesPullPolicy=Always \
 		--set application.imagesRegistry=$(ECR_REGISTRY) \
 		--set accessResources.traefik.enable=true \
-		--set workspacePodWatching.enable=true
+		--set workspacePodWatching.enable=true \
+		--set extensionApi.enable=true
 	@echo "Helm chart jupyter-k8s deployed successfully to remote AWS cluster"
 	@echo "Restarting deployments to use new images..."
 	kubectl rollout restart deployment -n jupyter-k8s-system jupyter-k8s-controller-manager

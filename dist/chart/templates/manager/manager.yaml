@@ -31,20 +31,17 @@ spec:
             {{- range .Values.controllerManager.container.args }}
             - {{ . }}
             {{- end }}
-            - --application-images-pull-policy={{ .Values.application.imagesPullPolicy }}
-            - --application-images-registry={{ .Values.application.imagesRegistry }}
+            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"
+            - "--application-images-registry={{ .Values.application.imagesRegistry }}"
             {{- if .Values.accessResources.traefik.enable }}
-            - --watch-traefik
+            - "--watch-traefik"
             {{- end}}
             {{- if .Values.extensionApi.enable }}
-            - --enable-extension-api=true
+            - "--enable-extension-api"
             {{- end}}
             {{- if .Values.workspacePodWatching.enable }}
-            - --enable-workspace-pod-watching
+            - "--enable-workspace-pod-watching"
             {{- end}}
-            {{- range .Values.controllerManager.container.args }}
-            - {{ . }}
-            {{- end }}
           command:
             - /manager
           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag }}
@@ -72,8 +69,13 @@ spec:
             {{- toYaml .Values.controllerManager.container.resources | nindent 12 }}
           securityContext:
             {{- toYaml .Values.controllerManager.container.securityContext | nindent 12 }}
-          {{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable) }}
+          {{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable .Values.extensionApi.enable) }}
           volumeMounts:
+            {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}
+            - name: extension-server-cert
+              mountPath: /tmp/extension-server/serving-certs
+              readOnly: true
+            {{- end }}
             {{- if and .Values.webhook.enable .Values.certmanager.enable }}
             - name: webhook-cert
               mountPath: /tmp/k8s-webhook-server/serving-certs
@@ -89,8 +91,13 @@ spec:
         {{- toYaml .Values.controllerManager.securityContext | nindent 8 }}
       serviceAccountName: {{ .Values.controllerManager.serviceAccountName }}
       terminationGracePeriodSeconds: {{ .Values.controllerManager.terminationGracePeriodSeconds }}
-      {{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable) }}
+      {{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable .Values.extensionApi.enable) }}
       volumes:
+        {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}
+        - name: extension-server-cert
+          secret:
+            secretName: extension-server-cert
+        {{- end }}
         {{- if and .Values.webhook.enable .Values.certmanager.enable }}
         - name: webhook-cert
           secret:

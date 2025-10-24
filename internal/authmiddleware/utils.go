@@ -86,36 +86,6 @@ func JoinGroups(groups []string) string {
 	return result
 }
 
-// isValidRedirectURL checks if a redirect URL is valid
-func isValidRedirectURL(url, host string) bool {
-	// Accept relative URLs
-	if len(url) > 0 && url[0] == '/' {
-		return true
-	}
-
-	// For absolute URLs, check if the host matches
-	return hasHost(url, host)
-}
-
-// hasHost checks if a URL has the given host
-func hasHost(url, host string) bool {
-	// Simple check - should be improved in production
-	if len(url) < len(host) {
-		return false
-	}
-
-	return url == host ||
-		url == "https://"+host ||
-		url == "http://"+host ||
-		(len(url) > len(host)+8 && url[:len(host)+8] == "https://"+host) ||
-		(len(url) > len(host)+7 && url[:len(host)+7] == "http://"+host)
-}
-
-// hasProtocol checks if a URL has a protocol
-func hasProtocol(url string) bool {
-	return len(url) > 7 && url[:7] == "http://" || len(url) > 8 && url[:8] == "https://"
-}
-
 // splitAndTrim splits a string by the given separator and trims spaces from each part
 func splitAndTrim(s, sep string) []string {
 	parts := make([]string, 0)

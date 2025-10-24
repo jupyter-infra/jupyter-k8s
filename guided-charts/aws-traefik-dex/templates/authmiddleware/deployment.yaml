@@ -101,6 +101,10 @@ spec:
             value: "{{ .Values.authmiddleware.cookieSameSite }}"
           - name: PATH_REGEX_PATTERN
             value: "{{ .Values.authmiddleware.pathRegexPattern }}"
+          - name: WORKSPACE_NAMESPACE_PATH_REGEX
+            value: "{{ .Values.authmiddleware.workspaceNamespacePathRegex }}"
+          - name: WORKSPACE_NAME_PATH_REGEX
+            value: "{{ .Values.authmiddleware.workspaceNamePathRegex }}"
           - name: CSRF_AUTH_KEY
             valueFrom:
               secretKeyRef:
@@ -112,6 +116,10 @@ spec:
             value: "{{ .Values.authmiddleware.csrfCookieMaxAge }}"
           - name: CSRF_COOKIE_SECURE
             value: "{{ .Values.authmiddleware.csrfCookieSecure }}"
+          - name: OIDC_USERNAME_PREFIX
+            value: "{{ .Values.dex.oidcUsernamePrefix }}"
+          - name: OIDC_GROUPS_PREFIX
+            value: "{{ .Values.dex.oidcGroupPrefix }}"
         volumeMounts:
           - name: tmp
             mountPath: /tmp

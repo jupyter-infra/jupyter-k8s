@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -40,13 +40,13 @@ var _ = Describe("Workspace Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		workspace := &workspacesv1alpha1.Workspace{}
+		workspace := &workspacev1alpha1.Workspace{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind Workspace")
 			err := k8sClient.Get(ctx, typeNamespacedName, workspace)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &workspacesv1alpha1.Workspace{
+				resource := &workspacev1alpha1.Workspace{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -59,7 +59,7 @@ var _ = Describe("Workspace Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &workspacesv1alpha1.Workspace{}
+			resource := &workspacev1alpha1.Workspace{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 

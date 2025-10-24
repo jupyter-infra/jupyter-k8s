@@ -3,6 +3,7 @@
 ## Project Overview
 
 Jupyter-k8s is a Kubernetes operator for Jupyter notebooks and other IDEs. It manages compute, storage, networking, and access control for multiple users in a secure, scalable, usable and flexible way.
+- the project is not live yet, do not worry about backward compatibility.
 
 ### Kubernetes Custom Resources
 

@@ -16,7 +16,7 @@ webhooks:
       service:
         name: jupyter-k8s-webhook-service
         namespace: {{ .Release.Namespace }}
-        path: /mutate-workspaces-jupyter-org-v1alpha1-workspace
+        path: /mutate-workspace-jupyter-org-v1alpha1-workspace
     failurePolicy: Fail
     sideEffects: None
     admissionReviewVersions:
@@ -26,7 +26,7 @@ webhooks:
           - CREATE
           - UPDATE
         apiGroups:
-          - workspaces.jupyter.org
+          - workspace.jupyter.org
         apiVersions:
           - v1alpha1
         resources:
@@ -49,7 +49,7 @@ webhooks:
       service:
         name: jupyter-k8s-webhook-service
         namespace: {{ .Release.Namespace }}
-        path: /validate-workspaces-jupyter-org-v1alpha1-workspace
+        path: /validate-workspace-jupyter-org-v1alpha1-workspace
     failurePolicy: Fail
     sideEffects: None
     admissionReviewVersions:
@@ -60,7 +60,7 @@ webhooks:
           - UPDATE
           - DELETE
         apiGroups:
-          - workspaces.jupyter.org
+          - workspace.jupyter.org
         apiVersions:
           - v1alpha1
         resources:

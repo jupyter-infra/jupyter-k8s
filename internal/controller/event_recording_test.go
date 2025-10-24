@@ -26,7 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
 var _ = Describe("Event Recording", func() {
@@ -54,12 +54,12 @@ var _ = Describe("Event Recording", func() {
 	Context("Template Validation Events", func() {
 		It("should record ValidationFailed event when validation fails", func() {
 			By("creating a workspace with invalid template overrides")
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-validation-failed",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{
+				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Test Validation Failed",
 					TemplateRef: stringPtr("test-template"),
 					Image:       "disallowed-image:latest",
@@ -68,11 +68,11 @@ var _ = Describe("Event Recording", func() {
 			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
 
 			By("creating a template with image restrictions")
-			template := &workspacesv1alpha1.WorkspaceTemplate{
+			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-template",
 				},
-				Spec: workspacesv1alpha1.WorkspaceTemplateSpec{
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Test Template",
 					DefaultImage: "allowed-image:latest",
 					AllowedImages: []string{
@@ -125,12 +125,12 @@ var _ = Describe("Event Recording", func() {
 
 		It("should record Validated event when validation passes", func() {
 			By("creating a workspace with valid template overrides")
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-validation-passed",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{
+				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Test Validation Passed",
 					TemplateRef: stringPtr("test-template-valid"),
 					Image:       "allowed-image:latest",
@@ -139,11 +139,11 @@ var _ = Describe("Event Recording", func() {
 			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
 
 			By("creating a template that allows the image")
-			template := &workspacesv1alpha1.WorkspaceTemplate{
+			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-template-valid",
 				},
-				Spec: workspacesv1alpha1.WorkspaceTemplateSpec{
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Test Template Valid",
 					DefaultImage: "allowed-image:latest",
 					AllowedImages: []string{
@@ -198,12 +198,12 @@ var _ = Describe("Event Recording", func() {
 	Context("Resource Bounds Validation Events", func() {
 		It("should record event when CPU exceeds bounds", func() {
 			By("creating a workspace with CPU exceeding template max")
-			workspace := &workspacesv1alpha1.Workspace{
+			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cpu-exceeded",
 					Namespace: "default",
 				},
-				Spec: workspacesv1alpha1.WorkspaceSpec{
+				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Test CPU Exceeded",
 					TemplateRef: stringPtr("bounded-template"),
 					Resources: &corev1.ResourceRequirements{
@@ -216,15 +216,15 @@ var _ = Describe("Event Recording", func() {
 			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
 
 			By("creating a template with CPU bounds")
-			template := &workspacesv1alpha1.WorkspaceTemplate{
+			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "bounded-template",
 				},
-				Spec: workspacesv1alpha1.WorkspaceTemplateSpec{
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Bounded Template",
 					DefaultImage: "test-image:latest",
-					ResourceBounds: &workspacesv1alpha1.ResourceBounds{
-						CPU: &workspacesv1alpha1.ResourceRange{
+					ResourceBounds: &workspacev1alpha1.ResourceBounds{
+						CPU: &workspacev1alpha1.ResourceRange{
 							Min: resource.MustParse("250m"),
 							Max: resource.MustParse("2"),
 						},

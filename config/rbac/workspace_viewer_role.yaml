@@ -1,7 +1,7 @@
 # This rule is not used by the project jupyter-k8s itself.
 # It is provided to allow the cluster admin to help manage permissions for users.
 #
-# Grants read-only access to workspaces.jupyter.org resources.
+# Grants read-only access to workspace.jupyter.org resources.
 # This role is intended for users who need visibility into these resources
 # without permissions to modify them. It is ideal for monitoring purposes and limited-access viewing.
 
@@ -14,7 +14,7 @@ metadata:
   name: workspace-viewer-role
 rules:
 - apiGroups:
-  - workspaces.jupyter.org
+  - workspace.jupyter.org
   resources:
   - workspaces
   verbs:
@@ -22,7 +22,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - workspaces.jupyter.org
+  - workspace.jupyter.org
   resources:
   - workspaces/status
   verbs:

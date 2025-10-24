@@ -40,7 +40,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	workspacesv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/extensionapi"
 	webhookv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook/v1alpha1"
@@ -62,7 +62,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(workspacesv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(workspacev1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -281,10 +281,17 @@ func main() {
 
 	// nolint:goconst
 	if enableExtensionAPI {
-		if err := extensionapi.SetupExtensionAPIServerWithManager(); err != nil {
+		setupLog.Info("Setting up extension API server")
+		// Create config with a different port to avoid conflict with metrics
+		config := extensionapi.NewConfig(extensionapi.WithServerPort(7443))
+		if err := extensionapi.SetupExtensionAPIServerWithManager(mgr, config); err != nil {
 			setupLog.Error(err, "unable to create extension API server", "extensionapi", "Server")
 			os.Exit(1)
+		} else {
+			setupLog.Info("Extension API server setup successful", "port", config.ServerPort)
 		}
+	} else {
+		setupLog.Info("Extension API server is disabled. Use --enable-extension-api to enable it.")
 	}
 	// +kubebuilder:scaffold:builder
 

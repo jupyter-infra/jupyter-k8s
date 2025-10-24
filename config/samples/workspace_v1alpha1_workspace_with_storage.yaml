@@ -1,13 +1,12 @@
-apiVersion: workspaces.jupyter.org/v1alpha1
+apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   labels:
     app.kubernetes.io/name: jupyter-k8s
     app.kubernetes.io/managed-by: kustomize
-  name: workspace-sample
+  name: workspace-with-storage
 spec:
-  displayName: sample-running
-  image: uv
+  displayName: "Jupyter Server with Storage"
   desiredStatus: Running
   resources:
     requests:
@@ -16,3 +15,7 @@ spec:
     limits:
       memory: "256Mi"
       cpu: "200m"
+  storage:
+    storageClassName: "standard"
+    size: "1Gi"
+    mountPath: "/home/jovyan/work"
