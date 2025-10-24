@@ -46,8 +46,8 @@ func NewPodExecUtil() (*PodExecUtil, error) {
 	}, nil
 }
 
-// ExecInPod executes a command in a specific container of a pod
-func (p *PodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string) (string, error) {
+// ExecInPod executes a command in a specific container of a pod with optional stdin input
+func (p *PodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string, stdin string) (string, error) {
 	logger := logf.FromContext(ctx).WithValues("pod", pod.Name, "container", containerName, "cmd", cmd)
 
 	// Create exec request
@@ -57,9 +57,12 @@ func (p *PodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, containerN
 		Namespace(pod.Namespace).
 		SubResource("exec")
 
+	// Enable stdin only if we have stdin data
+	hasStdin := stdin != ""
 	req.VersionedParams(&corev1.PodExecOptions{
 		Container: containerName,
 		Command:   cmd,
+		Stdin:     hasStdin,
 		Stdout:    true,
 		Stderr:    true,
 	}, scheme.ParameterCodec)
@@ -71,17 +74,24 @@ func (p *PodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, containerN
 	}
 
 	var stdout, stderr bytes.Buffer
-	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+	streamOptions := remotecommand.StreamOptions{
 		Stdout: &stdout,
 		Stderr: &stderr,
-	})
+	}
+
+	// Add stdin only if we have data
+	if hasStdin {
+		streamOptions.Stdin = strings.NewReader(stdin)
+	}
+
+	err = exec.StreamWithContext(ctx, streamOptions)
 
 	output := strings.TrimSpace(stdout.String())
 	if err != nil {
-		logger.V(1).Info("Command execution failed", "error", err, "stderr", stderr.String())
+		logger.V(1).Info("Command execution failed", "hasStdin", hasStdin, "error", err, "stderr", stderr.String())
 		return output, err
 	}
 
-	logger.V(1).Info("Command executed successfully", "output", output)
+	logger.V(1).Info("Command executed successfully", "hasStdin", hasStdin, "output", output)
 	return output, nil
 }

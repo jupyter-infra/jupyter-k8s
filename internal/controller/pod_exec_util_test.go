@@ -113,6 +113,15 @@ type mockExecutor struct {
 	stderr    string
 }
 
+// Mock executor that captures StreamOptions
+type mockExecutorWithCapture struct {
+	streamErr         error
+	stdout            string
+	stderr            string
+	capturedStdin     *bool
+	capturedStdinData *string
+}
+
 func (m *mockExecutor) Stream(options remotecommand.StreamOptions) error {
 	return m.StreamWithContext(context.Background(), options)
 }
@@ -132,6 +141,34 @@ func (m *mockExecutor) StreamWithContext(ctx context.Context, options remotecomm
 	}
 
 	return nil
+}
+
+func (m *mockExecutorWithCapture) Stream(options remotecommand.StreamOptions) error {
+	return m.StreamWithContext(context.Background(), options)
+}
+
+func (m *mockExecutorWithCapture) StreamWithContext(ctx context.Context, options remotecommand.StreamOptions) error {
+	// Capture whether stdin was provided
+	if m.capturedStdin != nil {
+		*m.capturedStdin = options.Stdin != nil
+	}
+
+	// Capture actual stdin data
+	if options.Stdin != nil && m.capturedStdinData != nil {
+		buf := make([]byte, 1024)
+		n, _ := options.Stdin.Read(buf)
+		*m.capturedStdinData = string(buf[:n])
+	}
+
+	// Write mock output to provided streams
+	if options.Stdout != nil && m.stdout != "" {
+		_, _ = options.Stdout.Write([]byte(m.stdout))
+	}
+	if options.Stderr != nil && m.stderr != "" {
+		_, _ = options.Stderr.Write([]byte(m.stderr))
+	}
+
+	return m.streamErr
 }
 
 func TestExecInPod_Success(t *testing.T) {
@@ -164,8 +201,9 @@ func TestExecInPod_Success(t *testing.T) {
 		},
 	}
 
-	// Test successful execution
-	output, err := util.ExecInPod(context.Background(), pod, "test-container", []string{"echo", "hello"})
+	// Test successful execution without stdin
+	noStdin := ""
+	output, err := util.ExecInPod(context.Background(), pod, "test-container", []string{"echo", "hello"}, noStdin)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -200,7 +238,8 @@ func TestExecInPod_ExecutorCreationFailure(t *testing.T) {
 	}
 
 	// Test executor creation failure
-	output, err := util.ExecInPod(context.Background(), pod, "test-container", []string{"echo", "hello"})
+	noStdin := ""
+	output, err := util.ExecInPod(context.Background(), pod, "test-container", []string{"echo", "hello"}, noStdin)
 
 	if err == nil {
 		t.Fatal("Expected error when executor creation fails")
@@ -242,7 +281,8 @@ func TestExecInPod_StreamExecutionFailure(t *testing.T) {
 	}
 
 	// Test stream execution failure
-	output, err := util.ExecInPod(context.Background(), pod, "test-container", []string{"failing-command"})
+	noStdin := ""
+	output, err := util.ExecInPod(context.Background(), pod, "test-container", []string{"failing-command"}, noStdin)
 
 	if err == nil {
 		t.Fatal("Expected error when stream execution fails")
@@ -253,5 +293,55 @@ func TestExecInPod_StreamExecutionFailure(t *testing.T) {
 	// Should still return partial output even on error
 	if output != "partial output" {
 		t.Errorf("Expected 'partial output', got: '%s'", output)
+	}
+}
+
+func TestExecInPod_WithStdin(t *testing.T) {
+	util, err := NewPodExecUtil()
+	if err != nil {
+		t.Skipf("Skipping integration test - requires valid Kubernetes config: %v", err)
+		return
+	}
+
+	// Save original
+	original := newSPDYExecutor
+	defer func() { newSPDYExecutor = original }()
+
+	// Capture stdin data from StreamOptions
+	var stdinProvided bool
+	var stdinData string
+	mockExec := &mockExecutorWithCapture{
+		stdout:            "stdin processed",
+		capturedStdin:     &stdinProvided,
+		capturedStdinData: &stdinData,
+	}
+	newSPDYExecutor = func(config *rest.Config, method string, url *url.URL) (remotecommand.Executor, error) {
+		return mockExec, nil
+	}
+
+	// Create test pod
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod",
+			Namespace: "test-namespace",
+		},
+	}
+
+	// Test execution with stdin
+	inputData := "test-input\nsecond-line\n"
+	output, err := util.ExecInPod(context.Background(), pod, "test-container", []string{"bash", "-c", "read line1 && read line2 && echo processed"}, inputData)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if output != "stdin processed" {
+		t.Errorf("Expected 'stdin processed', got: '%s'", output)
+	}
+	if !stdinProvided {
+		t.Error("Expected StreamOptions.Stdin to be provided when stdin data is given")
+	}
+	expectedData := "test-input\nsecond-line\n"
+	if stdinData != expectedData {
+		t.Errorf("Expected stdin data '%s', got '%s'", expectedData, stdinData)
 	}
 }
