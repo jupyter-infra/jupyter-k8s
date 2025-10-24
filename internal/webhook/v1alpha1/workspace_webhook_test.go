@@ -33,6 +33,13 @@ import (
 	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 )
 
+// createUserContext creates a context with user information for testing
+func createUserContext(baseCtx context.Context, operation, username string, groups ...string) context.Context {
+	userInfo := &authenticationv1.UserInfo{Username: username, Groups: groups}
+	req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo, Operation: admissionv1.Operation(operation)}}
+	return admission.NewContextWithRequest(baseCtx, req)
+}
+
 var _ = Describe("Workspace Webhook", func() {
 	var (
 		workspace *workspacesv1alpha1.Workspace
@@ -61,9 +68,7 @@ var _ = Describe("Workspace Webhook", func() {
 
 	Context("Defaulter", func() {
 		It("should add created-by annotation when none exists", func() {
-			userInfo := &authenticationv1.UserInfo{Username: "test-user"}
-			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
-			ctx = admission.NewContextWithRequest(ctx, req)
+			ctx = createUserContext(ctx, "CREATE", "test-user")
 
 			err := defaulter.Default(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
@@ -75,9 +80,7 @@ var _ = Describe("Workspace Webhook", func() {
 
 		It("should not overwrite existing created-by annotation", func() {
 			workspace.Annotations = map[string]string{controller.AnnotationCreatedBy: "original-user"}
-			userInfo := &authenticationv1.UserInfo{Username: "new-user"}
-			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
-			ctx = admission.NewContextWithRequest(ctx, req)
+			ctx = createUserContext(ctx, "UPDATE", "new-user")
 
 			err := defaulter.Default(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
@@ -90,9 +93,7 @@ var _ = Describe("Workspace Webhook", func() {
 				"custom-annotation":            "custom-value",
 				controller.AnnotationCreatedBy: "original-user",
 			}
-			userInfo := &authenticationv1.UserInfo{Username: "new-user"}
-			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
-			ctx = admission.NewContextWithRequest(ctx, req)
+			ctx = createUserContext(ctx, "UPDATE", "new-user")
 
 			err := defaulter.Default(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
@@ -114,6 +115,16 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("expected an Workspace object"))
 		})
+
+		It("should not add created-by annotation for UPDATE operations", func() {
+			updateCtx := createUserContext(ctx, "UPDATE", "update-user")
+
+			err := defaulter.Default(updateCtx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspace.Annotations).NotTo(HaveKey(controller.AnnotationCreatedBy))
+			Expect(workspace.Annotations).To(HaveKey(controller.AnnotationLastUpdatedBy))
+			Expect(workspace.Annotations[controller.AnnotationLastUpdatedBy]).To(Equal("update-user"))
+		})
 	})
 
 	Context("Validator", func() {
@@ -124,18 +135,18 @@ var _ = Describe("Workspace Webhook", func() {
 		})
 
 		It("should validate workspace update successfully", func() {
+			userCtx := createUserContext(ctx, "UPDATE", "test-user")
+
 			oldWorkspace := workspace.DeepCopy()
 			workspace.Spec.DisplayName = "Updated Workspace"
 
-			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, workspace)
+			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, workspace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(BeEmpty())
 		})
 
 		It("should reject OwnerOnly workspace update by non-owner", func() {
-			userInfo := &authenticationv1.UserInfo{Username: "different-user"}
-			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
-			userCtx := admission.NewContextWithRequest(ctx, req)
+			userCtx := createUserContext(ctx, "UPDATE", "different-user")
 
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
@@ -155,21 +166,21 @@ var _ = Describe("Workspace Webhook", func() {
 		})
 
 		It("should allow Public workspace update", func() {
+			userCtx := createUserContext(ctx, "UPDATE", "test-user")
+
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
 			newWorkspace := workspace.DeepCopy()
 			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
 			newWorkspace.Spec.Image = "jupyter/scipy-notebook:latest"
 
-			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, newWorkspace)
+			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(BeEmpty())
 		})
 
 		It("should allow OwnerOnly workspace update by owner", func() {
-			userInfo := &authenticationv1.UserInfo{Username: "owner-user"}
-			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
-			userCtx := admission.NewContextWithRequest(ctx, req)
+			userCtx := createUserContext(ctx, "UPDATE", "owner-user")
 
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
@@ -188,9 +199,7 @@ var _ = Describe("Workspace Webhook", func() {
 		})
 
 		It("should allow OwnerOnly workspace deletion by owner", func() {
-			userInfo := &authenticationv1.UserInfo{Username: "owner-user"}
-			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
-			userCtx := admission.NewContextWithRequest(ctx, req)
+			userCtx := createUserContext(ctx, "DELETE", "owner-user")
 
 			ownerOnlyWorkspace := workspace.DeepCopy()
 			ownerOnlyWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
@@ -204,6 +213,8 @@ var _ = Describe("Workspace Webhook", func() {
 		})
 
 		It("should reject update that changes created-by annotation", func() {
+			userCtx := createUserContext(ctx, "UPDATE", "different-user")
+
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "original-user",
@@ -213,24 +224,92 @@ var _ = Describe("Workspace Webhook", func() {
 				controller.AnnotationCreatedBy: "malicious-user",
 			}
 
-			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, newWorkspace)
+			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("created-by annotation is immutable"))
 			Expect(warnings).To(BeEmpty())
 		})
 
 		It("should allow changing ownershipType from OwnerOnly to Public", func() {
+			ownerCtx := createUserContext(ctx, "UPDATE", "owner-user")
+
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
+			oldWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "owner-user",
+			}
 			newWorkspace := workspace.DeepCopy()
 			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
+			newWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "owner-user",
+			}
 
-			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, newWorkspace)
+			warnings, err := validator.ValidateUpdate(ownerCtx, oldWorkspace, newWorkspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("should reject changing ownershipType from Public to OwnerOnly by non-owner", func() {
+			nonOwnerCtx := createUserContext(ctx, "UPDATE", "different-user")
+
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
+			oldWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "original-user",
+			}
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
+			newWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "original-user",
+			}
+
+			warnings, err := validator.ValidateUpdate(nonOwnerCtx, oldWorkspace, newWorkspace)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("access denied"))
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("should allow changing ownershipType from Public to OwnerOnly by workspace creator", func() {
+			creatorCtx := createUserContext(ctx, "UPDATE", "creator-user")
+
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
+			oldWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "creator-user",
+			}
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
+			newWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "creator-user",
+			}
+
+			warnings, err := validator.ValidateUpdate(creatorCtx, oldWorkspace, newWorkspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("should allow changing ownershipType from Public to OwnerOnly by admin", func() {
+			adminCtx := createUserContext(ctx, "UPDATE", "admin-user", "system:masters")
+
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
+			oldWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "original-user",
+			}
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
+			newWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "original-user",
+			}
+
+			warnings, err := validator.ValidateUpdate(adminCtx, oldWorkspace, newWorkspace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(BeEmpty())
 		})
 
 		It("should reject update that removes created-by annotation", func() {
+			userCtx := createUserContext(ctx, "UPDATE", "different-user")
+
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "original-user",
@@ -241,13 +320,15 @@ var _ = Describe("Workspace Webhook", func() {
 				"other-annotation": "other-value",
 			}
 
-			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, newWorkspace)
+			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("created-by annotation is immutable"))
 			Expect(warnings).To(BeEmpty())
 		})
 
 		It("should reject update that removes all annotations", func() {
+			userCtx := createUserContext(ctx, "UPDATE", "different-user")
+
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "original-user",
@@ -256,19 +337,14 @@ var _ = Describe("Workspace Webhook", func() {
 			newWorkspace := workspace.DeepCopy()
 			newWorkspace.Annotations = nil
 
-			warnings, err := validator.ValidateUpdate(ctx, oldWorkspace, newWorkspace)
+			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("created-by annotation cannot be removed"))
 			Expect(warnings).To(BeEmpty())
 		})
 
 		It("should allow admin to modify created-by annotation", func() {
-			userInfo := &authenticationv1.UserInfo{
-				Username: "admin-user",
-				Groups:   []string{"system:masters"},
-			}
-			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
-			adminCtx := admission.NewContextWithRequest(ctx, req)
+			adminCtx := createUserContext(ctx, "UPDATE", "admin-user", "system:masters")
 
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Annotations = map[string]string{
@@ -281,6 +357,24 @@ var _ = Describe("Workspace Webhook", func() {
 
 			warnings, err := validator.ValidateUpdate(adminCtx, oldWorkspace, newWorkspace)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("should reject update that sets created-by annotation to empty string", func() {
+			userCtx := createUserContext(ctx, "UPDATE", "different-user")
+
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "original-user",
+			}
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "",
+			}
+
+			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("created-by annotation is immutable"))
 			Expect(warnings).To(BeEmpty())
 		})
 	})
