@@ -37,6 +37,12 @@ const (
 	PhaseCreating = "Creating"
 	PhaseRunning  = "Running"
 	PhaseStopped  = "Stopped"
+
+	// Preemption annotation value
+	PreemptedReason = "Workspace preempted due to resource contention"
+
+	// Kubernetes resource kinds
+	KindPod = "Pod"
 	// Status messages
 	MessageCreating = "Jupyter server is starting"
 	MessageRunning  = "Jupyter server is running"

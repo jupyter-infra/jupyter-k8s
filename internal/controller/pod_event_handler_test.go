@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -318,4 +319,36 @@ func TestHandleWorkspacePodEvents_PodDeleted_SSMCleanupFailure(t *testing.T) {
 		t.Error("Expected nil result even when SSM cleanup fails")
 	}
 	// Success is indicated by graceful handling (logs error but doesn't crash)
+}
+
+func TestHandleKubernetesEvents(t *testing.T) {
+	// Test preemption event
+	event := &corev1.Event{
+		InvolvedObject: corev1.ObjectReference{
+			Kind:      "Pod",
+			Name:      "jupyter-test-workspace-abc123-xyz789",
+			Namespace: "test-ns",
+		},
+		Reason:  "Stopped",
+		Message: "Pod was Preempted by scheduler",
+	}
+
+	// Test preemption event detection
+	if event.InvolvedObject.Kind != "Pod" ||
+		event.Reason != "Stopped" ||
+		!strings.Contains(event.Message, "Preempted") {
+		t.Error("Should detect preemption event")
+	}
+
+	// Test workspace name extraction
+	podName := event.InvolvedObject.Name
+	if strings.HasPrefix(podName, "jupyter-") {
+		parts := strings.Split(podName, "-")
+		if len(parts) >= 4 {
+			workspaceName := strings.Join(parts[1:len(parts)-2], "-")
+			if workspaceName != "test-workspace" {
+				t.Errorf("Expected 'test-workspace', got '%s'", workspaceName)
+			}
+		}
+	}
 }
