@@ -101,9 +101,11 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 
 // SetupWorkspaceWebhookWithManager registers the webhook for Workspace in the manager.
 func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
+	templateValidator := NewTemplateValidator(mgr.GetClient())
+
 	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.Workspace{}).
-		WithValidator(&WorkspaceCustomValidator{}).
-		WithDefaulter(&WorkspaceCustomDefaulter{}).
+		WithValidator(&WorkspaceCustomValidator{templateValidator: templateValidator}).
+		WithDefaulter(&WorkspaceCustomDefaulter{templateValidator: templateValidator}).
 		Complete()
 }
 
@@ -115,7 +117,7 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as it is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceCustomDefaulter struct {
-	// TODO(user): Add more fields as needed for defaulting
+	templateValidator *TemplateValidator
 }
 
 var _ webhook.CustomDefaulter = &WorkspaceCustomDefaulter{}
@@ -149,6 +151,12 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 		workspacelog.Info("Added last-updated-by annotation", "workspace", workspace.GetName(), "user", sanitizedUsername, "namespace", workspace.GetNamespace())
 	}
 
+	// Apply template defaults
+	if err := d.templateValidator.ApplyTemplateDefaults(ctx, workspace); err != nil {
+		workspacelog.Error(err, "Failed to apply template defaults", "workspace", workspace.GetName())
+		return fmt.Errorf("failed to apply template defaults: %w", err)
+	}
+
 	return nil
 }
 
@@ -163,20 +171,23 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceCustomValidator struct {
-	// TODO(user): Add more fields as needed for validation
+	templateValidator *TemplateValidator
 }
 
 var _ webhook.CustomValidator = &WorkspaceCustomValidator{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type Workspace.
-func (v *WorkspaceCustomValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	workspace, ok := obj.(*workspacev1alpha1.Workspace)
 	if !ok {
 		return nil, fmt.Errorf("expected a Workspace object but got %T", obj)
 	}
 	workspacelog.Info("Validation for Workspace upon creation", "name", workspace.GetName(), "namespace", workspace.GetNamespace())
 
-	// TODO(user): fill in your validation logic upon object creation.
+	// Validate template constraints
+	if err := v.templateValidator.ValidateWorkspace(ctx, workspace); err != nil {
+		return nil, err
+	}
 
 	return nil, nil
 }
@@ -197,6 +208,20 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 	isAdmin := false
 	if req, err := admission.RequestFromContext(ctx); err == nil {
 		isAdmin = isAdminUser(req.UserInfo.Groups)
+	}
+
+	// Validate templateRef immutability
+	oldTemplateRef := ""
+	if oldWorkspace.Spec.TemplateRef != nil {
+		oldTemplateRef = *oldWorkspace.Spec.TemplateRef
+	}
+	newTemplateRef := ""
+	if newWorkspace.Spec.TemplateRef != nil {
+		newTemplateRef = *newWorkspace.Spec.TemplateRef
+	}
+
+	if oldTemplateRef != newTemplateRef && !isAdmin {
+		return nil, fmt.Errorf("templateRef is immutable and cannot be changed")
 	}
 
 	// Validate that ownership annotations are immutable (except for admins)
@@ -229,6 +254,11 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 		if err := validateOwnershipPermission(ctx, oldWorkspace); err != nil {
 			return nil, err
 		}
+	}
+
+	// Validate template constraints for new workspace
+	if err := v.templateValidator.ValidateWorkspace(ctx, newWorkspace); err != nil {
+		return nil, err
 	}
 
 	return nil, nil
