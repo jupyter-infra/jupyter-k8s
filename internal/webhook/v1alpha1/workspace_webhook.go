@@ -185,7 +185,7 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, obj runti
 	workspacelog.Info("Validation for Workspace upon creation", "name", workspace.GetName(), "namespace", workspace.GetNamespace())
 
 	// Validate template constraints
-	if err := v.templateValidator.ValidateWorkspace(ctx, workspace); err != nil {
+	if err := v.templateValidator.ValidateCreateWorkspace(ctx, workspace); err != nil {
 		return nil, err
 	}
 
@@ -256,8 +256,8 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 		}
 	}
 
-	// Validate template constraints for new workspace
-	if err := v.templateValidator.ValidateWorkspace(ctx, newWorkspace); err != nil {
+	// Validate template constraints for new workspace (only changed fields)
+	if err := v.templateValidator.ValidateUpdateWorkspace(ctx, oldWorkspace, newWorkspace); err != nil {
 		return nil, err
 	}
 
