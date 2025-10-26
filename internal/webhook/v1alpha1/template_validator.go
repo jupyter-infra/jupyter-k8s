@@ -364,6 +364,30 @@ func (tv *TemplateValidator) ApplyTemplateDefaults(ctx context.Context, workspac
 		}
 	}
 
+	if workspace.Spec.ContainerConfig == nil && template.Spec.DefaultContainerConfig != nil {
+		workspace.Spec.ContainerConfig = template.Spec.DefaultContainerConfig.DeepCopy()
+	}
+
+	if workspace.Spec.NodeSelector == nil && template.Spec.DefaultNodeSelector != nil {
+		workspace.Spec.NodeSelector = make(map[string]string)
+		for k, v := range template.Spec.DefaultNodeSelector {
+			workspace.Spec.NodeSelector[k] = v
+		}
+	}
+
+	if workspace.Spec.Affinity == nil && template.Spec.DefaultAffinity != nil {
+		workspace.Spec.Affinity = template.Spec.DefaultAffinity.DeepCopy()
+	}
+
+	if workspace.Spec.Tolerations == nil && template.Spec.DefaultTolerations != nil {
+		workspace.Spec.Tolerations = make([]corev1.Toleration, len(template.Spec.DefaultTolerations))
+		copy(workspace.Spec.Tolerations, template.Spec.DefaultTolerations)
+	}
+
+	if workspace.Spec.OwnershipType == "" && template.Spec.DefaultOwnershipType != "" {
+		workspace.Spec.OwnershipType = template.Spec.DefaultOwnershipType
+	}
+
 	// Add template tracking label
 	if workspace.Labels == nil {
 		workspace.Labels = make(map[string]string)
