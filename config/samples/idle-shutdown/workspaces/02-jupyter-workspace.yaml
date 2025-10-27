@@ -1,5 +1,5 @@
 # Example Workspace using template without any idle shutdown override
-apiVersion: workspaces.jupyter.org/v1alpha1
+apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: workspace-idle-inherit

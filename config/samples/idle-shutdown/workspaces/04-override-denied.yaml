@@ -1,5 +1,5 @@
 # Test workspace that tries to override a locked template (should FAIL)
-apiVersion: workspaces.jupyter.org/v1alpha1
+apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: workspace-override-denied

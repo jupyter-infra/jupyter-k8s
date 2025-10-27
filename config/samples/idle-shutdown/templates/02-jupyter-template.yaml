@@ -1,5 +1,5 @@
 # Example WorkspaceTemplate for Jupyter Lab with idle shutdown
-apiVersion: workspaces.jupyter.org/v1alpha1
+apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
   name: jupyter-template

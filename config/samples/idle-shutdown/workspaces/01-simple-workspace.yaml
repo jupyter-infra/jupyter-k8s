@@ -1,5 +1,5 @@
 # Test: Workspace with COMPLETE idle shutdown spec (no template needed)
-apiVersion: workspaces.jupyter.org/v1alpha1
+apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: workspace-complete-idle
