@@ -43,11 +43,7 @@ func NewTemplateValidator(k8sClient client.Client) *TemplateValidator {
 
 // ValidateCreateWorkspace validates workspace against template constraints
 func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
-	// If no template reference, workspace must specify image
 	if workspace.Spec.TemplateRef == nil {
-		if workspace.Spec.Image == "" {
-			return fmt.Errorf("workspace must specify either templateRef or image")
-		}
 		return nil
 	}
 
@@ -90,11 +86,7 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 
 // ValidateUpdateWorkspace validates only changed fields in workspace against template constraints
 func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWorkspace, newWorkspace *workspacev1alpha1.Workspace) error {
-	// If no template reference, workspace must specify image
 	if newWorkspace.Spec.TemplateRef == nil {
-		if newWorkspace.Spec.Image == "" {
-			return fmt.Errorf("workspace must specify either templateRef or image")
-		}
 		return nil
 	}
 
