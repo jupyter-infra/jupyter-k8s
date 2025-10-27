@@ -334,7 +334,13 @@ setup-kind: ## Set up a Kind cluster for development if it does not exist
 .PHONY: teardown-kind
 teardown-kind: ## Tear down the Kind cluster, registry, and clean up images
 	# Delete the Kind cluster
-	$(KIND) delete cluster --name=$(DEV_KIND_CLUSTER)
+	$(KIND) delete cluster --name=$(DEV_KIND_CLUSTER) || { \
+		echo "Failed to delete cluster normally. Attempting manual cleanup..."; \
+		echo "Removing container $(DEV_KIND_CLUSTER)-control-plane directly..."; \
+		$(CONTAINER_TOOL) rm -f $(DEV_KIND_CLUSTER)-control-plane || true; \
+		echo "Retrying cluster deletion..."; \
+		$(KIND) delete cluster --name=$(DEV_KIND_CLUSTER) || echo "Cluster deletion completed with manual cleanup"; \
+	}
 	# Stop and remove registry container if running
 	$(CONTAINER_TOOL) stop registry || true
 	$(CONTAINER_TOOL) rm registry || true

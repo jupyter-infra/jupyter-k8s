@@ -42,7 +42,7 @@ func (s *ExtensionServer) CheckRBACPermission(
 	}
 
 	// Create the SubjectAccessReview
-	sarResult, err := sarClient.AuthorizationV1().SubjectAccessReviews().Create(
+	sarResult, err := sarClient.Create(
 		context.Background(),
 		sarRequest,
 		v1.CreateOptions{})

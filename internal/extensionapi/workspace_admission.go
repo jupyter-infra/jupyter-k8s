@@ -130,7 +130,7 @@ func getWorkspaceAccessType(workspace *workspacev1alpha1.Workspace) string {
 // getWorkspaceOwner gets the username of the workspace owner
 func getWorkspaceOwner(workspace *workspacev1alpha1.Workspace) string {
 	// Look for owner annotation
-	if workspace.Annotations != nil {
+	if workspace != nil && workspace.Annotations != nil {
 		if owner, exists := workspace.Annotations[OwnerAnnotation]; exists && owner != "" {
 			return owner
 		}
