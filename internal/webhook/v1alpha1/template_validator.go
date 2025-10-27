@@ -58,27 +58,27 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 
 	// Validate image
 	if workspace.Spec.Image != "" {
-		if violation := tv.validateImageAllowed(workspace.Spec.Image, template.Spec.AllowedImages, template.Spec.DefaultImage); violation != nil {
+		if violation := tv.validateImageAllowed(workspace.Spec.Image, template); violation != nil {
 			violations = append(violations, *violation)
 		}
 	}
 
 	// Validate resources
 	if workspace.Spec.Resources != nil {
-		if resourceViolations := tv.validateResourceBounds(*workspace.Spec.Resources, template.Spec.ResourceBounds); len(resourceViolations) > 0 {
+		if resourceViolations := tv.validateResourceBounds(*workspace.Spec.Resources, template); len(resourceViolations) > 0 {
 			violations = append(violations, resourceViolations...)
 		}
 	}
 
 	// Only validate storage if it changed
 	if workspace.Spec.Storage != nil && !workspace.Spec.Storage.Size.IsZero() {
-		if violation := tv.validateStorageSize(workspace.Spec.Storage.Size, template.Spec.PrimaryStorage); violation != nil {
+		if violation := tv.validateStorageSize(workspace.Spec.Storage.Size, template); violation != nil {
 			violations = append(violations, *violation)
 		}
 	}
 
 	if len(violations) > 0 {
-		return fmt.Errorf("workspace violates template constraints: %s", formatViolations(violations))
+		return fmt.Errorf("workspace violates template '%s' constraints: %s", *workspace.Spec.TemplateRef, formatViolations(violations))
 	}
 
 	return nil
@@ -101,14 +101,14 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 
 	// Only validate image if it changed
 	if oldWorkspace.Spec.Image != newWorkspace.Spec.Image && newWorkspace.Spec.Image != "" {
-		if violation := tv.validateImageAllowed(newWorkspace.Spec.Image, template.Spec.AllowedImages, template.Spec.DefaultImage); violation != nil {
+		if violation := tv.validateImageAllowed(newWorkspace.Spec.Image, template); violation != nil {
 			violations = append(violations, *violation)
 		}
 	}
 
 	// Only validate resources if they changed
 	if !resourcesEqual(oldWorkspace.Spec.Resources, newWorkspace.Spec.Resources) && newWorkspace.Spec.Resources != nil {
-		if resourceViolations := tv.validateResourceBounds(*newWorkspace.Spec.Resources, template.Spec.ResourceBounds); len(resourceViolations) > 0 {
+		if resourceViolations := tv.validateResourceBounds(*newWorkspace.Spec.Resources, template); len(resourceViolations) > 0 {
 			violations = append(violations, resourceViolations...)
 		}
 	}
@@ -116,23 +116,23 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 	// Only validate storage if it changed
 	if !storageEqual(oldWorkspace.Spec.Storage, newWorkspace.Spec.Storage) &&
 		newWorkspace.Spec.Storage != nil && !newWorkspace.Spec.Storage.Size.IsZero() {
-		if violation := tv.validateStorageSize(newWorkspace.Spec.Storage.Size, template.Spec.PrimaryStorage); violation != nil {
+		if violation := tv.validateStorageSize(newWorkspace.Spec.Storage.Size, template); violation != nil {
 			violations = append(violations, *violation)
 		}
 	}
 
 	if len(violations) > 0 {
-		return fmt.Errorf("workspace violates template constraints: %s", formatViolations(violations))
+		return fmt.Errorf("workspace violates template '%s' constraints: %s", *newWorkspace.Spec.TemplateRef, formatViolations(violations))
 	}
 
 	return nil
 }
 
 // validateImageAllowed checks if image is in allowed list
-func (tv *TemplateValidator) validateImageAllowed(image string, allowedImages []string, defaultImage string) *controller.TemplateViolation {
-	effectiveAllowedImages := allowedImages
-	if len(allowedImages) == 0 {
-		effectiveAllowedImages = []string{defaultImage}
+func (tv *TemplateValidator) validateImageAllowed(image string, template *workspacev1alpha1.WorkspaceTemplate) *controller.TemplateViolation {
+	effectiveAllowedImages := template.Spec.AllowedImages
+	if len(template.Spec.AllowedImages) == 0 {
+		effectiveAllowedImages = []string{template.Spec.DefaultImage}
 	}
 
 	for _, allowed := range effectiveAllowedImages {
@@ -144,14 +144,14 @@ func (tv *TemplateValidator) validateImageAllowed(image string, allowedImages []
 	return &controller.TemplateViolation{
 		Type:    controller.ViolationTypeImageNotAllowed,
 		Field:   "spec.image",
-		Message: "Image is not in the template's allowed list",
+		Message: fmt.Sprintf("Image '%s' is not allowed by template '%s'. Allowed images: %v", image, template.Name, effectiveAllowedImages),
 		Allowed: fmt.Sprintf("%v", effectiveAllowedImages),
 		Actual:  image,
 	}
 }
 
 // validateResourceBounds checks if resources are within bounds
-func (tv *TemplateValidator) validateResourceBounds(resources corev1.ResourceRequirements, bounds *workspacev1alpha1.ResourceBounds) []controller.TemplateViolation {
+func (tv *TemplateValidator) validateResourceBounds(resources corev1.ResourceRequirements, template *workspacev1alpha1.WorkspaceTemplate) []controller.TemplateViolation {
 	var violations []controller.TemplateViolation
 
 	// Validate limits >= requests
@@ -184,6 +184,7 @@ func (tv *TemplateValidator) validateResourceBounds(resources corev1.ResourceReq
 		}
 	}
 
+	bounds := template.Spec.ResourceBounds
 	if bounds == nil {
 		return violations
 	}
@@ -195,7 +196,7 @@ func (tv *TemplateValidator) validateResourceBounds(resources corev1.ResourceReq
 				violations = append(violations, controller.TemplateViolation{
 					Type:    controller.ViolationTypeResourceExceeded,
 					Field:   "spec.resources.requests.cpu",
-					Message: "CPU request is below template minimum",
+					Message: fmt.Sprintf("CPU request %s is below minimum %s required by template '%s'", cpuRequest.String(), bounds.CPU.Min.String(), template.Name),
 					Allowed: fmt.Sprintf("min: %s", bounds.CPU.Min.String()),
 					Actual:  cpuRequest.String(),
 				})
@@ -204,7 +205,7 @@ func (tv *TemplateValidator) validateResourceBounds(resources corev1.ResourceReq
 				violations = append(violations, controller.TemplateViolation{
 					Type:    controller.ViolationTypeResourceExceeded,
 					Field:   "spec.resources.requests.cpu",
-					Message: "CPU request exceeds template maximum",
+					Message: fmt.Sprintf("CPU request %s exceeds maximum %s allowed by template '%s'", cpuRequest.String(), bounds.CPU.Max.String(), template.Name),
 					Allowed: fmt.Sprintf("max: %s", bounds.CPU.Max.String()),
 					Actual:  cpuRequest.String(),
 				})
@@ -219,7 +220,7 @@ func (tv *TemplateValidator) validateResourceBounds(resources corev1.ResourceReq
 				violations = append(violations, controller.TemplateViolation{
 					Type:    controller.ViolationTypeResourceExceeded,
 					Field:   "spec.resources.requests.memory",
-					Message: "Memory request is below template minimum",
+					Message: fmt.Sprintf("Memory request %s is below minimum %s required by template '%s'", memRequest.String(), bounds.Memory.Min.String(), template.Name),
 					Allowed: fmt.Sprintf("min: %s", bounds.Memory.Min.String()),
 					Actual:  memRequest.String(),
 				})
@@ -228,7 +229,7 @@ func (tv *TemplateValidator) validateResourceBounds(resources corev1.ResourceReq
 				violations = append(violations, controller.TemplateViolation{
 					Type:    controller.ViolationTypeResourceExceeded,
 					Field:   "spec.resources.requests.memory",
-					Message: "Memory request exceeds template maximum",
+					Message: fmt.Sprintf("Memory request %s exceeds maximum %s allowed by template '%s'", memRequest.String(), bounds.Memory.Max.String(), template.Name),
 					Allowed: fmt.Sprintf("max: %s", bounds.Memory.Max.String()),
 					Actual:  memRequest.String(),
 				})
@@ -240,7 +241,8 @@ func (tv *TemplateValidator) validateResourceBounds(resources corev1.ResourceReq
 }
 
 // validateStorageSize checks if storage size is within bounds
-func (tv *TemplateValidator) validateStorageSize(size resource.Quantity, config *workspacev1alpha1.StorageConfig) *controller.TemplateViolation {
+func (tv *TemplateValidator) validateStorageSize(size resource.Quantity, template *workspacev1alpha1.WorkspaceTemplate) *controller.TemplateViolation {
+	config := template.Spec.PrimaryStorage
 	if config == nil {
 		return nil
 	}
@@ -249,7 +251,7 @@ func (tv *TemplateValidator) validateStorageSize(size resource.Quantity, config 
 		return &controller.TemplateViolation{
 			Type:    controller.ViolationTypeStorageExceeded,
 			Field:   "spec.storage.size",
-			Message: "Storage size is below template minimum",
+			Message: fmt.Sprintf("Storage size %s is below minimum %s required by template '%s'", size.String(), config.MinSize.String(), template.Name),
 			Allowed: fmt.Sprintf("min: %s", config.MinSize.String()),
 			Actual:  size.String(),
 		}
@@ -259,7 +261,7 @@ func (tv *TemplateValidator) validateStorageSize(size resource.Quantity, config 
 		return &controller.TemplateViolation{
 			Type:    controller.ViolationTypeStorageExceeded,
 			Field:   "spec.storage.size",
-			Message: "Storage size exceeds template maximum",
+			Message: fmt.Sprintf("Storage size %s exceeds maximum %s allowed by template '%s'", size.String(), config.MaxSize.String(), template.Name),
 			Allowed: fmt.Sprintf("max: %s", config.MaxSize.String()),
 			Actual:  size.String(),
 		}
@@ -349,10 +351,29 @@ func (tv *TemplateValidator) ApplyTemplateDefaults(ctx context.Context, workspac
 		workspace.Spec.Resources = template.Spec.DefaultResources.DeepCopy()
 	}
 
-	if workspace.Spec.Storage == nil && template.Spec.PrimaryStorage != nil &&
-		!template.Spec.PrimaryStorage.DefaultSize.IsZero() {
-		workspace.Spec.Storage = &workspacev1alpha1.StorageSpec{
-			Size: template.Spec.PrimaryStorage.DefaultSize,
+	// Apply storage defaults
+	if template.Spec.PrimaryStorage != nil {
+		// Create storage if it doesn't exist and we have a default size
+		if workspace.Spec.Storage == nil && !template.Spec.PrimaryStorage.DefaultSize.IsZero() {
+			workspace.Spec.Storage = &workspacev1alpha1.StorageSpec{}
+		}
+
+		// Apply individual storage defaults if storage exists
+		if workspace.Spec.Storage != nil {
+			// Apply default size if not specified
+			if workspace.Spec.Storage.Size.IsZero() && !template.Spec.PrimaryStorage.DefaultSize.IsZero() {
+				workspace.Spec.Storage.Size = template.Spec.PrimaryStorage.DefaultSize
+			}
+
+			// Apply default storage class name if not specified
+			if workspace.Spec.Storage.StorageClassName == nil && template.Spec.PrimaryStorage.DefaultStorageClassName != nil {
+				workspace.Spec.Storage.StorageClassName = template.Spec.PrimaryStorage.DefaultStorageClassName
+			}
+
+			// Apply default mount path if not specified
+			if workspace.Spec.Storage.MountPath == "" && template.Spec.PrimaryStorage.DefaultMountPath != "" {
+				workspace.Spec.Storage.MountPath = template.Spec.PrimaryStorage.DefaultMountPath
+			}
 		}
 	}
 
