@@ -163,7 +163,7 @@ func (tr *TemplateResolver) validateAndApplyOverrides(ctx context.Context, resol
 	if workspace.Spec.Image != "" {
 		// Note: defaultImage is already validated to be non-empty earlier in resolveTemplate
 		defaultImage := template.Spec.DefaultImage
-		if violation := tr.ValidateImageAllowed(workspace.Spec.Image, template.Spec.AllowedImages, defaultImage); violation != nil {
+		if violation := tr.validateImageAllowed(workspace.Spec.Image, template.Spec.AllowedImages, defaultImage); violation != nil {
 			violations = append(violations, *violation)
 		} else {
 			resolved.Image = workspace.Spec.Image
@@ -173,7 +173,7 @@ func (tr *TemplateResolver) validateAndApplyOverrides(ctx context.Context, resol
 
 	// Override resources if workspace specifies them
 	if workspace.Spec.Resources != nil {
-		if resourceViolations := tr.ValidateResourceBounds(*workspace.Spec.Resources, template.Spec.ResourceBounds); len(resourceViolations) > 0 {
+		if resourceViolations := tr.validateResourceBounds(*workspace.Spec.Resources, template.Spec.ResourceBounds); len(resourceViolations) > 0 {
 			violations = append(violations, resourceViolations...)
 		} else {
 			resolved.Resources = *workspace.Spec.Resources
@@ -184,7 +184,7 @@ func (tr *TemplateResolver) validateAndApplyOverrides(ctx context.Context, resol
 	// Override storage size if workspace specifies one
 	if workspace.Spec.Storage != nil && !workspace.Spec.Storage.Size.IsZero() && resolved.StorageConfiguration != nil {
 		storageQuantity := workspace.Spec.Storage.Size
-		if violation := tr.ValidateStorageSize(storageQuantity, template.Spec.PrimaryStorage); violation != nil {
+		if violation := tr.validateStorageSize(storageQuantity, template.Spec.PrimaryStorage); violation != nil {
 			violations = append(violations, *violation)
 		} else {
 			resolved.StorageConfiguration.DefaultSize = storageQuantity
@@ -195,10 +195,10 @@ func (tr *TemplateResolver) validateAndApplyOverrides(ctx context.Context, resol
 	return violations
 }
 
-// ValidateImageAllowed checks if the image is in the template's allowed list
+// validateImageAllowed checks if the image is in the template's allowed list
 // When allowedImages is empty, only the defaultImage is allowed (secure by default)
 // Returns a violation if the image is not allowed, nil otherwise
-func (tr *TemplateResolver) ValidateImageAllowed(image string, allowedImages []string, defaultImage string) *TemplateViolation {
+func (tr *TemplateResolver) validateImageAllowed(image string, allowedImages []string, defaultImage string) *TemplateViolation {
 	effectiveAllowedImages := allowedImages
 	if len(allowedImages) == 0 {
 		effectiveAllowedImages = []string{defaultImage}
@@ -222,9 +222,9 @@ func (tr *TemplateResolver) ValidateImageAllowed(image string, allowedImages []s
 	}
 }
 
-// ValidateResourceBounds checks if resources are within template bounds
+// validateResourceBounds checks if resources are within template bounds
 // Returns a list of violations for any resources that exceed bounds
-func (tr *TemplateResolver) ValidateResourceBounds(resources corev1.ResourceRequirements, bounds *workspacev1alpha1.ResourceBounds) []TemplateViolation {
+func (tr *TemplateResolver) validateResourceBounds(resources corev1.ResourceRequirements, bounds *workspacev1alpha1.ResourceBounds) []TemplateViolation {
 	var violations []TemplateViolation
 
 	// First validate that limits >= requests for all resources
@@ -339,9 +339,9 @@ func (tr *TemplateResolver) ValidateResourceBounds(resources corev1.ResourceRequ
 	return violations
 }
 
-// ValidateStorageSize checks if storage size is within template bounds
+// validateStorageSize checks if storage size is within template bounds
 // Returns a violation if the size is outside bounds, nil otherwise
-func (tr *TemplateResolver) ValidateStorageSize(size resource.Quantity, storageConfig *workspacev1alpha1.StorageConfig) *TemplateViolation {
+func (tr *TemplateResolver) validateStorageSize(size resource.Quantity, storageConfig *workspacev1alpha1.StorageConfig) *TemplateViolation {
 	if storageConfig == nil {
 		return nil
 	}
