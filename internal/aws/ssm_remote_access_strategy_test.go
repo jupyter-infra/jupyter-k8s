@@ -48,8 +48,8 @@ type MockPodExecUtil struct {
 	mock.Mock
 }
 
-func (m *MockPodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string) (string, error) {
-	args := m.Called(ctx, pod, containerName, cmd)
+func (m *MockPodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string, stdin string) (string, error) {
+	args := m.Called(ctx, pod, containerName, cmd, stdin)
 	return args.String(0), args.Error(1)
 }
 
@@ -227,7 +227,7 @@ func TestInitSSMAgent_AlreadyCompleted(t *testing.T) {
 	// Create mock PodExecUtil that simulates completed registration
 	mockPodExecUtil := &MockPodExecUtil{}
 	mockPodExecUtil.On("ExecInPod", mock.Anything, mock.Anything, SSMAgentSidecarContainerName,
-		[]string{"test", "-f", SSMRegistrationMarkerFile}).Return("", nil) // File exists
+		[]string{"test", "-f", SSMRegistrationMarkerFile}, "").Return("", nil) // File exists
 
 	mockSSMClient := &MockSSMRemoteAccessClient{}
 	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
@@ -260,13 +260,19 @@ func TestInitSSMAgent_SuccessFlow(t *testing.T) {
 
 	// First call: check if registration completed (return error = not completed)
 	mockPodExecUtil.On("ExecInPod", mock.Anything, mock.Anything, SSMAgentSidecarContainerName,
-		[]string{"test", "-f", SSMRegistrationMarkerFile}).Return("", errors.New("file not found"))
+		[]string{"test", "-f", SSMRegistrationMarkerFile}, "").Return("", errors.New("file not found"))
 
-	// Second call: registration script execution
+	// Second call: registration script execution with stdin
 	mockPodExecUtil.On("ExecInPod", mock.Anything, mock.Anything, SSMAgentSidecarContainerName,
 		mock.MatchedBy(func(cmd []string) bool {
 			return len(cmd) == 3 && cmd[0] == bashCommand && cmd[1] == "-c" &&
+				strings.Contains(cmd[2], "read ACTIVATION_ID && read ACTIVATION_CODE") &&
+				strings.Contains(cmd[2], "REGION=us-west-2") &&
 				strings.Contains(cmd[2], "register-ssm.sh")
+		}), mock.MatchedBy(func(stdin string) bool {
+			return strings.Contains(stdin, "test-activation-id") &&
+				strings.Contains(stdin, "test-activation-code") &&
+				!strings.Contains(stdin, "us-west-2") // Region should not be in stdin
 		})).Return("", nil)
 
 	// Third call: remote access server start
@@ -274,11 +280,11 @@ func TestInitSSMAgent_SuccessFlow(t *testing.T) {
 		mock.MatchedBy(func(cmd []string) bool {
 			return len(cmd) == 3 && cmd[0] == bashCommand && cmd[1] == "-c" &&
 				strings.Contains(cmd[2], "remote-access-server")
-		})).Return("", nil)
+		}), "").Return("", nil)
 
 	// Fourth call: completion marker creation
 	mockPodExecUtil.On("ExecInPod", mock.Anything, mock.Anything, SSMAgentSidecarContainerName,
-		[]string{"touch", SSMRegistrationMarkerFile}).Return("", nil)
+		[]string{"touch", SSMRegistrationMarkerFile}, "").Return("", nil)
 
 	// Create mock SSM client
 	mockSSMClient := &MockSSMRemoteAccessClient{}
@@ -322,15 +328,17 @@ func TestInitSSMAgent_RegistrationFailure(t *testing.T) {
 
 	// First call: check if registration completed (return error = not completed)
 	mockPodExecUtil.On("ExecInPod", mock.Anything, mock.Anything, SSMAgentSidecarContainerName,
-		[]string{"test", "-f", SSMRegistrationMarkerFile}).Return("", errors.New("file not found"))
+		[]string{"test", "-f", SSMRegistrationMarkerFile}, "").Return("", errors.New("file not found"))
 
 	// Second call: registration script execution fails
 	expectedError := errors.New("registration script failed")
 	mockPodExecUtil.On("ExecInPod", mock.Anything, mock.Anything, SSMAgentSidecarContainerName,
 		mock.MatchedBy(func(cmd []string) bool {
 			return len(cmd) == 3 && cmd[0] == bashCommand && cmd[1] == "-c" &&
+				strings.Contains(cmd[2], "read ACTIVATION_ID && read ACTIVATION_CODE") &&
+				strings.Contains(cmd[2], "REGION=us-west-2") &&
 				strings.Contains(cmd[2], "register-ssm.sh")
-		})).Return("", expectedError)
+		}), mock.Anything).Return("", expectedError)
 
 	// Create mock SSM client
 	mockSSMClient := &MockSSMRemoteAccessClient{}
