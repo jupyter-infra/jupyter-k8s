@@ -1002,6 +1002,39 @@ spec:
               displayName:
                 description: Display Name of the server
                 type: string
+              idleShutdown:
+                description: IdleShutdown specifies idle shutdown configuration
+                properties:
+                  detection:
+                    description: Detection specifies how to detect idle state
+                    properties:
+                      endpointCheck:
+                        description: EndpointCheck specifies HTTP endpoint to check
+                          for idle status
+                        properties:
+                          path:
+                            description: Path to access on the HTTP server
+                            type: string
+                          port:
+                            description: Port to access on the container
+                            type: integer
+                        required:
+                        - path
+                        - port
+                        type: object
+                    type: object
+                  enabled:
+                    description: Enabled indicates if idle shutdown is enabled
+                    type: boolean
+                  timeoutMinutes:
+                    description: TimeoutMinutes specifies idle timeout in minutes
+                    minimum: 1
+                    type: integer
+                required:
+                - detection
+                - enabled
+                - timeoutMinutes
+                type: object
               image:
                 description: Image specifies the container image to use
                 type: string

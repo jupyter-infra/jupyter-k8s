@@ -995,6 +995,41 @@ spec:
                       type: string
                     type: array
                 type: object
+              defaultIdleShutdown:
+                description: |-
+                  DefaultIdleShutdown provides default idle shutdown configuration
+                  Includes timeout, detection endpoint, and enable/disable
+                properties:
+                  detection:
+                    description: Detection specifies how to detect idle state
+                    properties:
+                      endpointCheck:
+                        description: EndpointCheck specifies HTTP endpoint to check
+                          for idle status
+                        properties:
+                          path:
+                            description: Path to access on the HTTP server
+                            type: string
+                          port:
+                            description: Port to access on the container
+                            type: integer
+                        required:
+                        - path
+                        - port
+                        type: object
+                    type: object
+                  enabled:
+                    description: Enabled indicates if idle shutdown is enabled
+                    type: boolean
+                  timeoutMinutes:
+                    description: TimeoutMinutes specifies idle timeout in minutes
+                    minimum: 1
+                    type: integer
+                required:
+                - detection
+                - enabled
+                - timeoutMinutes
+                type: object
               defaultImage:
                 description: DefaultImage is the default container image for workspaces
                   using this template
@@ -1281,6 +1316,22 @@ spec:
                   - name
                   type: object
                 type: array
+              idleShutdownOverrides:
+                description: IdleShutdownOverrides controls override behavior and
+                  bounds
+                properties:
+                  allow:
+                    default: true
+                    description: Allow controls whether workspaces can override idle
+                      shutdown
+                    type: boolean
+                  maxTimeoutMinutes:
+                    description: MaxTimeoutMinutes is the maximum allowed timeout
+                    type: integer
+                  minTimeoutMinutes:
+                    description: MinTimeoutMinutes is the minimum allowed timeout
+                    type: integer
+                type: object
               primaryStorage:
                 description: PrimaryStorage defines storage configuration
                 properties:
@@ -1389,9 +1440,6 @@ spec:
             - displayName
             type: object
         type: object
-        x-kubernetes-validations:
-        - message: template spec is immutable after creation
-          rule: self.spec == oldSelf.spec
     served: true
     storage: true
     subresources: {}
