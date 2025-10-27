@@ -6,7 +6,7 @@ import "net/http"
 func (s *ExtensionServer) handleDiscovery(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(`{
+	_, err := w.Write([]byte(`{
 		"kind": "APIResourceList",
 		"apiVersion": "v1",
 		"groupVersion": "connection.workspace.jupyter.org/v1alpha1",
@@ -24,4 +24,8 @@ func (s *ExtensionServer) handleDiscovery(w http.ResponseWriter, _ *http.Request
 			"verbs": ["create"]
 		}]
 	}`))
+
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "failed to write discovery body")
+	}
 }
