@@ -24,7 +24,7 @@ type SSMRemoteAccessClientInterface interface {
 
 // PodExecInterface defines the interface for executing commands in pods.
 type PodExecInterface interface {
-	ExecInPod(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string) (string, error)
+	ExecInPod(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string, stdin string) (string, error)
 }
 
 // Constants for SSM remote access strategy
@@ -133,12 +133,13 @@ func (s *SSMRemoteAccessStrategy) CleanupSSMManagedNodes(ctx context.Context, po
 // isSSMRegistrationCompleted checks if SSM registration is already done for this pod
 func (s *SSMRemoteAccessStrategy) isSSMRegistrationCompleted(ctx context.Context, pod *corev1.Pod) bool {
 	logger := logf.FromContext(ctx).WithValues("pod", pod.Name)
+	noStdin := "" // For commands that don't need stdin input
 
 	// TODO: improve race condition handling for rapid pod events
 
 	// Check for completion marker file in sidecar
 	cmd := []string{"test", "-f", SSMRegistrationMarkerFile}
-	_, err := s.podExecUtil.ExecInPod(ctx, pod, SSMAgentSidecarContainerName, cmd)
+	_, err := s.podExecUtil.ExecInPod(ctx, pod, SSMAgentSidecarContainerName, cmd, noStdin)
 
 	completed := err == nil
 	logger.V(2).Info("SSM registration completion check", "completed", completed)
@@ -148,6 +149,7 @@ func (s *SSMRemoteAccessStrategy) isSSMRegistrationCompleted(ctx context.Context
 // performSSMRegistration handles the SSM activation and registration process
 func (s *SSMRemoteAccessStrategy) performSSMRegistration(ctx context.Context, pod *corev1.Pod, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) error {
 	logger := logf.FromContext(ctx).WithValues("pod", pod.Name, "workspace", workspace.Name)
+	noStdin := "" // For commands that don't need stdin input
 
 	if s.ssmClient == nil {
 		return fmt.Errorf("SSM client not available")
@@ -160,25 +162,29 @@ func (s *SSMRemoteAccessStrategy) performSSMRegistration(ctx context.Context, po
 		return fmt.Errorf("failed to create SSM activation: %w", err)
 	}
 
-	// Step 2: Run register-ssm.sh with environment variables
+	// Step 2: Run register-ssm.sh with sensitive values passed via stdin
 	logger.Info("Running SSM registration script in sidecar")
 	region := s.ssmClient.GetRegion()
-	cmd := []string{"bash", "-c", fmt.Sprintf("env ACTIVATION_ID=%s ACTIVATION_CODE=%s REGION=%s %s", activationId, activationCode, region, SSMRegistrationScript)}
-	if _, err := s.podExecUtil.ExecInPod(ctx, pod, SSMAgentSidecarContainerName, cmd); err != nil {
+
+	// Use stdin to pass only sensitive values securely
+	cmd := []string{"bash", "-c", fmt.Sprintf("read ACTIVATION_ID && read ACTIVATION_CODE && env ACTIVATION_ID=\"$ACTIVATION_ID\" ACTIVATION_CODE=\"$ACTIVATION_CODE\" REGION=%s %s", region, SSMRegistrationScript)}
+	stdinData := fmt.Sprintf("%s\n%s\n", activationId, activationCode)
+
+	if _, err := s.podExecUtil.ExecInPod(ctx, pod, SSMAgentSidecarContainerName, cmd, stdinData); err != nil {
 		return fmt.Errorf("failed to execute SSM registration script: %w", err)
 	}
 
 	// Step 3: Start remote access server in main container
 	logger.Info("Starting remote access server in main container")
 	serverCmd := []string{"bash", "-c", fmt.Sprintf("sudo %s > /dev/null 2>&1 &", RemoteAccessServerPath)}
-	if _, err := s.podExecUtil.ExecInPod(ctx, pod, WorkspaceContainerName, serverCmd); err != nil {
+	if _, err := s.podExecUtil.ExecInPod(ctx, pod, WorkspaceContainerName, serverCmd, noStdin); err != nil {
 		return fmt.Errorf("failed to start remote access server: %w", err)
 	}
 
 	// Step 4: Create completion marker file
 	logger.Info("Creating SSM registration completion marker")
 	markerCmd := []string{"touch", SSMRegistrationMarkerFile}
-	if _, err := s.podExecUtil.ExecInPod(ctx, pod, SSMAgentSidecarContainerName, markerCmd); err != nil {
+	if _, err := s.podExecUtil.ExecInPod(ctx, pod, SSMAgentSidecarContainerName, markerCmd, noStdin); err != nil {
 		return fmt.Errorf("failed to create completion marker: %w", err)
 	}
 
