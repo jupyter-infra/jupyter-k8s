@@ -3,7 +3,6 @@ package extensionapi
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/client-go/kubernetes"
+	v1 "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -24,19 +24,23 @@ var (
 type ExtensionServer struct {
 	config     *ExtensionConfig
 	k8sClient  client.Client
-	sarClient  *kubernetes.Clientset
+	sarClient  v1.SubjectAccessReviewInterface
 	logger     *logr.Logger
-	httpServer *http.Server
-	routes     map[string]func(http.ResponseWriter, *http.Request)
-	mux        *http.ServeMux
+	httpServer interface {
+		ListenAndServe() error
+		ListenAndServeTLS(certFile, keyFile string) error
+		Shutdown(ctx context.Context) error
+	}
+	routes map[string]func(http.ResponseWriter, *http.Request)
+	mux    *http.ServeMux
 }
 
-// NewExtensionServer creates a new extension API server
-func NewExtensionServer(
+// newExtensionServer creates a new extension API server
+func newExtensionServer(
 	config *ExtensionConfig,
 	logger *logr.Logger,
 	k8sClient client.Client,
-	sarClient *kubernetes.Clientset) *ExtensionServer {
+	sarClient v1.SubjectAccessReviewInterface) *ExtensionServer {
 	mux := http.NewServeMux()
 
 	server := &ExtensionServer{
@@ -54,23 +58,11 @@ func NewExtensionServer(
 		},
 	}
 
-	// Register health check route
-	server.RegisterRoute("/health", server.handleHealth)
-
-	// Register API discovery route
-	server.RegisterRoute(server.config.ApiPath, server.handleDiscovery)
-
-	// Register all namespaced routes
-	server.RegisterNamespacedRoutes(map[string]func(http.ResponseWriter, *http.Request){
-		"connection":             server.HandleConnectionCreate,
-		"connectionaccessreview": server.handleConnectionAccessReview,
-	})
-
 	return server
 }
 
-// LoggerMiddleware wraps an http.Handler and adds a logger to the request context
-func (s *ExtensionServer) LoggerMiddleware(next http.HandlerFunc) http.HandlerFunc {
+// loggerMiddleware wraps an http.Handler and adds a logger to the request context
+func (s *ExtensionServer) loggerMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Create request-specific logger with path info
 		reqLogger := (*s.logger).WithValues(
@@ -87,8 +79,8 @@ func (s *ExtensionServer) LoggerMiddleware(next http.HandlerFunc) http.HandlerFu
 	}
 }
 
-// RegisterRoute registers a route handler
-func (s *ExtensionServer) RegisterRoute(name string, handler func(http.ResponseWriter, *http.Request)) {
+// registerRoute registers a route handler
+func (s *ExtensionServer) registerRoute(name string, handler func(http.ResponseWriter, *http.Request)) {
 	// Store original handler in routes map
 	s.routes[name] = handler
 
@@ -99,16 +91,16 @@ func (s *ExtensionServer) RegisterRoute(name string, handler func(http.ResponseW
 	}
 
 	// Wrap handler with the logger middleware
-	wrappedHandler := s.LoggerMiddleware(handler)
+	wrappedHandler := s.loggerMiddleware(handler)
 
 	// Register the wrapped handler
 	s.mux.HandleFunc(path, wrappedHandler)
 }
 
-// RegisterNamespacedRoutes registers multiple route handlers for resources with namespaces in the URL path
+// registerNamespacedRoutes registers multiple route handlers for resources with namespaces in the URL path
 // It efficiently handles paths like "/apis/connection.workspace.jupyter.org/v1alpha1/namespaces/{namespace}/{resource}"
 // by registering a single handler for the namespaced path prefix and routing to the appropriate handler
-func (s *ExtensionServer) RegisterNamespacedRoutes(resourceHandlers map[string]func(http.ResponseWriter, *http.Request)) {
+func (s *ExtensionServer) registerNamespacedRoutes(resourceHandlers map[string]func(http.ResponseWriter, *http.Request)) {
 	// Store all the resource handlers in the routes map for reference
 	basePattern := s.config.ApiPath
 	namespacedPathPrefix := basePattern + "/namespaces/"
@@ -121,7 +113,7 @@ func (s *ExtensionServer) RegisterNamespacedRoutes(resourceHandlers map[string]f
 	}
 
 	// Create a single wrapped handler that will route to the appropriate resource handler
-	wrappedHandler := s.LoggerMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	wrappedHandler := s.loggerMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		// Extract namespace from path
 		namespace, err := GetNamespaceFromPath(r.URL.Path)
 		if err != nil {
@@ -157,6 +149,21 @@ func (s *ExtensionServer) RegisterNamespacedRoutes(resourceHandlers map[string]f
 	setupLog.Info("Registered namespaced routes handler", "pathPrefix", namespacedPathPrefix)
 }
 
+// registerAllRoutes register the actual routes to the server
+func (s *ExtensionServer) registerAllRoutes() {
+	// Register health check route
+	s.registerRoute("/health", s.handleHealth)
+
+	// Register API discovery route
+	s.registerRoute(s.config.ApiPath, s.handleDiscovery)
+
+	// Register all namespaced routes
+	s.registerNamespacedRoutes(map[string]func(http.ResponseWriter, *http.Request){
+		"connection":             s.HandleConnectionCreate,
+		"connectionaccessreview": s.handleConnectionAccessReview,
+	})
+}
+
 // Start starts the extension API server and implements the controller-runtime's Runnable interface
 func (s *ExtensionServer) Start(ctx context.Context) error {
 	setupLog.Info("Starting extension API server", "port", s.config.ServerPort, "disableTLS", s.config.DisableTLS)
@@ -174,9 +181,7 @@ func (s *ExtensionServer) Start(ctx context.Context) error {
 			err = s.httpServer.ListenAndServe()
 		} else {
 			// Configure TLS
-			s.httpServer.TLSConfig = &tls.Config{
-				MinVersion: tls.VersionTLS12,
-			}
+			// We don't need to set TLSConfig as it's handled by ListenAndServeTLS
 
 			// Start HTTPS server
 			setupLog.Info("Starting server with HTTPS", "certPath", s.config.CertPath, "keyPath", s.config.KeyPath)
@@ -227,14 +232,15 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	k8sClient := mgr.GetClient()
 
 	// Retrieve the sar client
-	sarClient, err := kubernetes.NewForConfig(mgr.GetConfig())
-
+	clientSet, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		return fmt.Errorf("failed to instantiate the sar client: %w", err)
 	}
+	sarClient := clientSet.AuthorizationV1().SubjectAccessReviews()
 
 	// Create server with config
-	server := NewExtensionServer(config, &logger, k8sClient, sarClient)
+	server := newExtensionServer(config, &logger, k8sClient, sarClient)
+	server.registerAllRoutes()
 
 	// Add the server as a runnable to the manager
 	if err := mgr.Add(server); err != nil {
