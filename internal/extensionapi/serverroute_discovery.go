@@ -1,20 +1,24 @@
 package extensionapi
 
-import "net/http"
+import (
+	"fmt"
+	"net/http"
+)
 
 // handleDiscovery responds with API resource discovery information
 func (s *ExtensionServer) handleDiscovery(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, err := w.Write([]byte(`{
+
+	response := fmt.Sprintf(`{
 		"kind": "APIResourceList",
 		"apiVersion": "v1",
-		"groupVersion": "connection.workspace.jupyter.org/v1alpha1",
+		"groupVersion": "%s",
 		"resources": [{
 			"name": "connections",
 			"singularName": "connection",
 			"namespaced": true,
-			"kind": "Connection",
+			"kind": "%s",
 			"verbs": ["create"]
 		}, {
 			"name": "connectionaccessreviews",
@@ -23,8 +27,9 @@ func (s *ExtensionServer) handleDiscovery(w http.ResponseWriter, _ *http.Request
 			"kind": "ConnectionAccessReview",
 			"verbs": ["create"]
 		}]
-	}`))
+	}`, WorkspaceConnectionAPIVersion, WorkspaceConnectionKind)
 
+	_, err := w.Write([]byte(response))
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "failed to write discovery body")
 	}

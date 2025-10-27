@@ -49,6 +49,19 @@ func (m *MockSSMRemoteAccessClient) CleanupActivationsByPodUID(ctx context.Conte
 	return args.Error(0)
 }
 
+func (m *MockSSMRemoteAccessClient) FindInstanceByPodUID(ctx context.Context, podUID string) (string, error) {
+	args := m.Called(ctx, podUID)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockSSMRemoteAccessClient) StartSession(ctx context.Context, instanceID, documentName string) (*SessionInfo, error) {
+	args := m.Called(ctx, instanceID, documentName)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*SessionInfo), args.Error(1)
+}
+
 // MockPodExecUtil implements PodExecInterface for testing
 type MockPodExecUtil struct {
 	mock.Mock
