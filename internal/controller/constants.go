@@ -25,6 +25,7 @@ const (
 	LabelWorkspaceNamespace      = "workspace.jupyter.org/workspaceNamespace"
 	LabelAccessStrategyName      = "workspace.jupyter.org/accessStrategyName"
 	LabelAccessStrategyNamespace = "workspace.jupyter.org/accessStrategyNamespace"
+	LabelWorkspaceTemplate       = "workspace.jupyter.org/template"
 
 	// Label values
 	AppLabelValue = "jupyter"
