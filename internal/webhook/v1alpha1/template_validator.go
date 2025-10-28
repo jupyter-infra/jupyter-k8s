@@ -41,17 +41,24 @@ func NewTemplateValidator(k8sClient client.Client) *TemplateValidator {
 	}
 }
 
+// fetchTemplate retrieves a template by name
+func (tv *TemplateValidator) fetchTemplate(ctx context.Context, templateName string) (*workspacev1alpha1.WorkspaceTemplate, error) {
+	template := &workspacev1alpha1.WorkspaceTemplate{}
+	if err := tv.client.Get(ctx, types.NamespacedName{Name: templateName}, template); err != nil {
+		return nil, fmt.Errorf("failed to get template %s: %w", templateName, err)
+	}
+	return template, nil
+}
+
 // ValidateCreateWorkspace validates workspace against template constraints
 func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
 	if workspace.Spec.TemplateRef == nil {
 		return nil
 	}
 
-	// Fetch template
-	template := &workspacev1alpha1.WorkspaceTemplate{}
-	templateKey := types.NamespacedName{Name: *workspace.Spec.TemplateRef}
-	if err := tv.client.Get(ctx, templateKey, template); err != nil {
-		return fmt.Errorf("failed to get template %s: %w", *workspace.Spec.TemplateRef, err)
+	template, err := tv.fetchTemplate(ctx, *workspace.Spec.TemplateRef)
+	if err != nil {
+		return err
 	}
 
 	var violations []controller.TemplateViolation
@@ -90,11 +97,9 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 		return nil
 	}
 
-	// Fetch template
-	template := &workspacev1alpha1.WorkspaceTemplate{}
-	templateKey := types.NamespacedName{Name: *newWorkspace.Spec.TemplateRef}
-	if err := tv.client.Get(ctx, templateKey, template); err != nil {
-		return fmt.Errorf("failed to get template %s: %w", *newWorkspace.Spec.TemplateRef, err)
+	template, err := tv.fetchTemplate(ctx, *newWorkspace.Spec.TemplateRef)
+	if err != nil {
+		return err
 	}
 
 	var violations []controller.TemplateViolation
@@ -335,11 +340,9 @@ func (tv *TemplateValidator) ApplyTemplateDefaults(ctx context.Context, workspac
 		return nil
 	}
 
-	// Fetch template
-	template := &workspacev1alpha1.WorkspaceTemplate{}
-	templateKey := types.NamespacedName{Name: *workspace.Spec.TemplateRef}
-	if err := tv.client.Get(ctx, templateKey, template); err != nil {
-		return fmt.Errorf("failed to get template %s: %w", *workspace.Spec.TemplateRef, err)
+	template, err := tv.fetchTemplate(ctx, *workspace.Spec.TemplateRef)
+	if err != nil {
+		return err
 	}
 
 	// Apply defaults
