@@ -408,7 +408,7 @@ func (tv *TemplateValidator) ApplyTemplateDefaults(ctx context.Context, workspac
 	if workspace.Labels == nil {
 		workspace.Labels = make(map[string]string)
 	}
-	workspace.Labels["workspace.jupyter.org/template"] = *workspace.Spec.TemplateRef
+	workspace.Labels[controller.LabelWorkspaceTemplate] = *workspace.Spec.TemplateRef
 
 	return nil
 }
