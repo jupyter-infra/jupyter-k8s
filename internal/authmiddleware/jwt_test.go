@@ -12,6 +12,7 @@ import (
 // Test constants
 const (
 	testUserValue   = "test-user"
+	testUIDValue    = "test-uid"
 	testPathValue   = "/workspaces/ns1/app1"
 	testDomainValue = "example.com"
 )
@@ -73,11 +74,12 @@ func TestGenerateToken(t *testing.T) {
 	// Test data
 	testUser := testUserValue
 	testGroups := []string{"group1", "group2"}
+	testUID := testUIDValue
 	testPath := testPathValue
 	testDomain := testDomainValue
 
 	// Generate token
-	tokenString, err := manager.GenerateToken(testUser, testGroups, testPath, testDomain, TokenTypeSession)
+	tokenString, err := manager.GenerateToken(testUser, testGroups, testUID, nil, testPath, testDomain, TokenTypeSession)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -156,6 +158,10 @@ func TestGenerateToken(t *testing.T) {
 		t.Errorf("Groups claim incorrect: got %v, expected %v", claims.Groups, testGroups)
 	}
 
+	if claims.UID != testUID {
+		t.Errorf("UID claim incorrect: got %q, expected %q", claims.UID, testUID)
+	}
+
 	if claims.Path != testPath {
 		t.Errorf("Path claim incorrect: got %q, expected %q", claims.Path, testPath)
 	}
@@ -182,11 +188,12 @@ func TestGenerateTokenWithNilGroups(t *testing.T) {
 	// Test data
 	testUser := testUserValue
 	var testGroups []string // Nil by default
+	testUID := testUIDValue
 	testPath := testPathValue
 	testDomain := testDomainValue
 
 	// Generate token
-	tokenString, err := manager.GenerateToken(testUser, testGroups, testPath, testDomain, TokenTypeSession)
+	tokenString, err := manager.GenerateToken(testUser, testGroups, testUID, nil, testPath, testDomain, TokenTypeSession)
 	if err != nil {
 		t.Fatalf("Failed to generate token with nil groups: %v", err)
 	}
@@ -231,11 +238,12 @@ func TestGenerateTokenWithEmptyGroups(t *testing.T) {
 	// Test data
 	testUser := testUserValue
 	testGroups := []string{} // Empty slice
+	testUID := testUIDValue
 	testPath := testPathValue
 	testDomain := testDomainValue
 
 	// Generate token
-	tokenString, err := manager.GenerateToken(testUser, testGroups, testPath, testDomain, TokenTypeSession)
+	tokenString, err := manager.GenerateToken(testUser, testGroups, testUID, nil, testPath, testDomain, TokenTypeSession)
 	if err != nil {
 		t.Fatalf("Failed to generate token with empty groups: %v", err)
 	}
@@ -280,11 +288,12 @@ func TestValidateToken(t *testing.T) {
 	// Test data
 	testUser := testUserValue
 	testGroups := []string{"group1", "group2"}
+	testUID := testUIDValue
 	testPath := testPathValue
 	testDomain := testDomainValue
 
 	// Generate valid token
-	validToken, err := manager.GenerateToken(testUser, testGroups, testPath, testDomain, TokenTypeSession)
+	validToken, err := manager.GenerateToken(testUser, testGroups, testUID, nil, testPath, testDomain, TokenTypeSession)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -367,11 +376,12 @@ func TestRefreshToken(t *testing.T) {
 	// Test data
 	testUser := testUserValue
 	testGroups := []string{"group1", "group2"}
+	testUID := testUIDValue
 	testPath := testPathValue
 	testDomain := testDomainValue
 
 	// Generate original token
-	originalToken, err := manager.GenerateToken(testUser, testGroups, testPath, testDomain, TokenTypeSession)
+	originalToken, err := manager.GenerateToken(testUser, testGroups, testUID, nil, testPath, testDomain, TokenTypeSession)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -437,12 +447,113 @@ func TestRefreshToken(t *testing.T) {
 		t.Errorf("Groups claim changed: got %v, expected %v", refreshedClaims.Groups, testGroups)
 	}
 
+	if refreshedClaims.UID != testUID {
+		t.Errorf("UID claim changed: got %q, expected %q", refreshedClaims.UID, testUID)
+	}
+
 	if refreshedClaims.Path != testPath {
 		t.Errorf("Path claim changed: got %q, expected %q", refreshedClaims.Path, testPath)
 	}
 
 	if refreshedClaims.Domain != testDomain {
 		t.Errorf("Domain claim changed: got %q, expected %q", refreshedClaims.Domain, testDomain)
+	}
+}
+
+// TestUpdateSkipRefreshToken_HappyCase tests the logic of flipping the skip flag to false
+func TestUpdateSkipRefreshToken_HappyCase(t *testing.T) {
+	// Create test config
+	cfg := &Config{
+		JWTSigningKey: "test-signing-key",
+		JWTIssuer:     "test-issuer",
+		JWTAudience:   "test-audience",
+		JWTExpiration: 30 * time.Minute,
+	}
+
+	// Create a JWT manager
+	manager := NewJWTManager(cfg)
+
+	// Test data
+	testUser := testUserValue
+	testGroups := []string{"group1", "group2"}
+	testUID := testUIDValue
+	testPath := testPathValue
+	testDomain := testDomainValue
+
+	// Generate token with SkipRefresh = true
+	originalToken, err := manager.GenerateToken(testUser, testGroups, testUID, nil, testPath, testDomain, TokenTypeSession)
+	if err != nil {
+		t.Fatalf("Failed to generate token: %v", err)
+	}
+
+	// Parse original token to get claims
+	originalClaims, err := manager.ValidateToken(originalToken)
+	if err != nil {
+		t.Fatalf("Failed to validate original token: %v", err)
+	}
+
+	// Set SkipRefresh flag to true
+	originalClaims.SkipRefresh = true
+
+	// Update the token with SkipRefresh = false
+	updatedToken, err := manager.UpdateSkipRefreshToken(originalClaims)
+	if err != nil {
+		t.Fatalf("Failed to update token: %v", err)
+	}
+
+	// Parse updated token
+	updatedClaims, err := manager.ValidateToken(updatedToken)
+	if err != nil {
+		t.Fatalf("Failed to validate updated token: %v", err)
+	}
+
+	// Check that SkipRefresh was set to false
+	if updatedClaims.SkipRefresh {
+		t.Error("SkipRefresh flag was not set to false")
+	}
+
+	// Check that other claims remain unchanged
+	if updatedClaims.User != testUser {
+		t.Errorf("User claim changed: got %q, expected %q", updatedClaims.User, testUser)
+	}
+
+	if !reflect.DeepEqual(updatedClaims.Groups, testGroups) {
+		t.Errorf("Groups claim changed: got %v, expected %v", updatedClaims.Groups, testGroups)
+	}
+
+	if updatedClaims.UID != testUID {
+		t.Errorf("UID claim changed: got %q, expected %q", updatedClaims.UID, testUID)
+	}
+
+	if updatedClaims.Path != testPath {
+		t.Errorf("Path claim changed: got %q, expected %q", updatedClaims.Path, testPath)
+	}
+
+	if updatedClaims.Domain != testDomain {
+		t.Errorf("Domain claim changed: got %q, expected %q", updatedClaims.Domain, testDomain)
+	}
+}
+
+// TestUpdateSkipRefreshToken_FailCase tests the logic when the claims are invalid
+func TestUpdateSkipRefreshToken_FailCase(t *testing.T) {
+	// Create test config
+	cfg := &Config{
+		JWTSigningKey: "test-signing-key",
+		JWTIssuer:     "test-issuer",
+		JWTAudience:   "test-audience",
+		JWTExpiration: 30 * time.Minute,
+	}
+
+	// Create a JWT manager
+	manager := NewJWTManager(cfg)
+
+	// Test with nil claims
+	token, err := manager.UpdateSkipRefreshToken(nil)
+	if err == nil {
+		t.Error("Expected error with nil claims, got nil")
+	}
+	if token != "" {
+		t.Errorf("Expected empty token with nil claims, got: %v", token)
 	}
 }
 
@@ -525,6 +636,17 @@ func TestShouldRefreshToken(t *testing.T) {
 			},
 			want: false,
 		},
+		{
+			name: "token within refresh window but with skip flag",
+			claims: &Claims{
+				RegisteredClaims: jwt5.RegisteredClaims{
+					IssuedAt:  jwt5.NewNumericDate(now.Add(-6 * time.Hour)),
+					ExpiresAt: jwt5.NewNumericDate(now.Add(10 * time.Minute)),
+				},
+				SkipRefresh: true,
+			},
+			want: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -535,6 +657,7 @@ func TestShouldRefreshToken(t *testing.T) {
 				JWTIssuer:         "test-issuer",
 				JWTAudience:       "test-audience",
 				JWTExpiration:     60 * time.Minute,
+				JWTRefreshEnable:  true,
 				JWTRefreshWindow:  refreshWindow,
 				JWTRefreshHorizon: refreshHorizon,
 			}
@@ -543,6 +666,27 @@ func TestShouldRefreshToken(t *testing.T) {
 			got := jwtManager.ShouldRefreshToken(tt.claims)
 			if got != tt.want {
 				t.Errorf("ShouldRefreshToken() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("norefresh-%s", tt.name), func(t *testing.T) {
+			// Create a JWT manager with the configured refresh window
+			cfg := &Config{
+				JWTSigningKey:     "test-key",
+				JWTIssuer:         "test-issuer",
+				JWTAudience:       "test-audience",
+				JWTExpiration:     60 * time.Minute,
+				JWTRefreshEnable:  false,
+				JWTRefreshWindow:  refreshWindow,
+				JWTRefreshHorizon: refreshHorizon,
+			}
+			jwtManager := NewJWTManager(cfg)
+
+			got := jwtManager.ShouldRefreshToken(tt.claims)
+			if got != false {
+				t.Errorf("ShouldRefreshToken() should be false when config.JWTRefreshEnable is false.")
 			}
 		})
 	}
@@ -559,6 +703,7 @@ func TestShouldRefreshTokenWithDifferentWindows(t *testing.T) {
 			IssuedAt:  jwt5.NewNumericDate(now.Add(-120 * time.Minute)),
 			ExpiresAt: jwt5.NewNumericDate(now.Add(30 * time.Minute)),
 		},
+		SkipRefresh: false,
 	}
 
 	// Test with different refresh windows
@@ -583,6 +728,7 @@ func TestShouldRefreshTokenWithDifferentWindows(t *testing.T) {
 				JWTIssuer:         "test-issuer",
 				JWTAudience:       "test-audience",
 				JWTExpiration:     60 * time.Minute,
+				JWTRefreshEnable:  true,
 				JWTRefreshWindow:  tc.refreshWindow,
 				JWTRefreshHorizon: tc.refreshHorizon,
 			}

@@ -6,6 +6,7 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	authorizationv1 "k8s.io/api/authorization/v1"
 )
 
 var _ = Describe("SubjectAccessReview", func() {
@@ -37,7 +38,7 @@ var _ = Describe("SubjectAccessReview", func() {
 
 		It("Should use the server SAR client to submit a SAR", func() {
 			// Call the function under test
-			_, err := server.CheckRBACPermission(testNS, testUser, testGroups, &testLogger)
+			_, err := server.CheckRBACPermission(testNS, testUser, testGroups, nil, &testLogger)
 
 			// Verify no error
 			Expect(err).NotTo(HaveOccurred())
@@ -48,7 +49,7 @@ var _ = Describe("SubjectAccessReview", func() {
 
 		It("Should pass the username and groups to the SAR", func() {
 			// Call the function under test
-			_, err := server.CheckRBACPermission(testNS, testUser, testGroups, &testLogger)
+			_, err := server.CheckRBACPermission(testNS, testUser, testGroups, nil, &testLogger)
 
 			// Verify no error
 			Expect(err).NotTo(HaveOccurred())
@@ -61,7 +62,7 @@ var _ = Describe("SubjectAccessReview", func() {
 
 		It("Should include the correct resource attributes in the SAR", func() {
 			// Call the function under test
-			_, err := server.CheckRBACPermission(testNS, testUser, testGroups, &testLogger)
+			_, err := server.CheckRBACPermission(testNS, testUser, testGroups, nil, &testLogger)
 
 			// Verify no error
 			Expect(err).NotTo(HaveOccurred())
@@ -81,7 +82,7 @@ var _ = Describe("SubjectAccessReview", func() {
 			mockClient.SetupAllowed("test reason allowed")
 
 			// Call the function under test
-			result, err := server.CheckRBACPermission(testNS, testUser, testGroups, &testLogger)
+			result, err := server.CheckRBACPermission(testNS, testUser, testGroups, nil, &testLogger)
 
 			// Verify no error
 			Expect(err).NotTo(HaveOccurred())
@@ -97,7 +98,7 @@ var _ = Describe("SubjectAccessReview", func() {
 			mockClient.SetupDenied("test reason denied")
 
 			// Call the function under test
-			result, err := server.CheckRBACPermission(testNS, testUser, testGroups, &testLogger)
+			result, err := server.CheckRBACPermission(testNS, testUser, testGroups, nil, &testLogger)
 
 			// Verify no error
 			Expect(err).NotTo(HaveOccurred())
@@ -114,7 +115,7 @@ var _ = Describe("SubjectAccessReview", func() {
 			mockClient.SetupError(mockErr)
 
 			// Call the function under test
-			result, err := server.CheckRBACPermission(testNS, testUser, testGroups, &testLogger)
+			result, err := server.CheckRBACPermission(testNS, testUser, testGroups, nil, &testLogger)
 
 			// Verify error is returned
 			Expect(err).To(HaveOccurred())
@@ -135,7 +136,7 @@ var _ = Describe("SubjectAccessReview", func() {
 				server.sarClient = mockClient
 
 				// Call the function under test with this namespace
-				_, err := server.CheckRBACPermission(ns, testUser, testGroups, &testLogger)
+				_, err := server.CheckRBACPermission(ns, testUser, testGroups, nil, &testLogger)
 
 				// Verify no error
 				Expect(err).NotTo(HaveOccurred())
@@ -144,6 +145,25 @@ var _ = Describe("SubjectAccessReview", func() {
 				Expect(mockClient.LastCreateParams).NotTo(BeNil())
 				Expect(mockClient.LastCreateParams.Spec.ResourceAttributes.Namespace).To(Equal(ns))
 			}
+		})
+
+		It("Should pass extra auth data to the SAR", func() {
+			// Create test extra data
+			testExtra := map[string]authorizationv1.ExtraValue{
+				"impersonation.kubernetes.io/uid": {"12345"},
+				"system.authentication.provider":  {"oidc"},
+				"oidc.example.com/groups":         {"developers", "testers"},
+			}
+
+			// Call the function under test with extra data
+			_, err := server.CheckRBACPermission(testNS, testUser, testGroups, testExtra, &testLogger)
+
+			// Verify no error
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify that the extra data was passed to the SAR
+			Expect(mockClient.LastCreateParams).NotTo(BeNil())
+			Expect(mockClient.LastCreateParams.Spec.Extra).To(Equal(testExtra))
 		})
 	})
 })

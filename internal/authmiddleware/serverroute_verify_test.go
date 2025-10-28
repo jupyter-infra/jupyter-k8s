@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -199,6 +201,7 @@ func TestHandleVerifyNoRefreshBeforeWindow(t *testing.T) {
 	claims := &Claims{
 		User:      "testuser",
 		Groups:    []string{"group1", "group2"},
+		UID:       "testuid",
 		Path:      testAppPath2,
 		Domain:    "example.com",
 		TokenType: TokenTypeSession, // Add session token type
@@ -267,8 +270,31 @@ func TestHandleVerifyNoRefreshBeforeWindow(t *testing.T) {
 	}
 }
 
-// TestHandleVerifyWithRefresh tests that handleVerify refreshes the JWT during the RefreshWindow and returns a 2xx
-func TestHandleVerifyWithRefresh(t *testing.T) {
+// createVerifyRefreshTestServer creates a minimal server for testing
+// The mockRestClient parameter is currently unused, but kept for future expansion
+// when we need to test with a configured REST client
+func createVerifyRefreshTestServer(cookieHandler CookieHandler, jwtHandler JWTHandler) *Server {
+	config := &Config{
+		PathRegexPattern:            DefaultPathRegexPattern,
+		WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+		WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+		JWTRefreshEnable:            true,
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	server := &Server{
+		config:        config,
+		logger:        logger,
+		cookieManager: cookieHandler,
+		jwtManager:    jwtHandler,
+	}
+
+	return server
+}
+
+// TestHandleVerifyWithRefresh_HappyPath tests that handleVerify refreshes the JWT during the RefreshWindow,
+// returns a 200 and refreshes the JWT/cookiewhen the ConnectionAccessReview returns allowed=true.
+func TestHandleVerifyWithRefresh_HappyPath(t *testing.T) {
 	fwdUrl := fmt.Sprintf("%s/lab", testAppPath2)
 
 	// Create a request with required headers
@@ -279,8 +305,9 @@ func TestHandleVerifyWithRefresh(t *testing.T) {
 
 	// Create claims
 	claims := &Claims{
-		User:      "testuser",
+		User:      "testuser1",
 		Groups:    []string{"group1", "group2"},
+		UID:       "testuid",
 		Path:      testAppPath2,
 		Domain:    "example.com",
 		TokenType: TokenTypeSession, // Add session token type
@@ -290,8 +317,9 @@ func TestHandleVerifyWithRefresh(t *testing.T) {
 	tokenValidated := false
 	tokenRefreshChecked := false
 	tokenRefreshed := false
+	tokenSkipUpdated := false
 	cookieSet := false
-	newToken := "refreshed-token"
+	newToken := "refreshed-token1"
 
 	// Create mock handlers
 	cookieHandler := &MockCookieHandler{
@@ -323,27 +351,48 @@ func TestHandleVerifyWithRefresh(t *testing.T) {
 		RefreshTokenFunc: func(claims *Claims) (string, error) {
 			tokenRefreshed = true
 			// Verify claims
-			if claims.User != "testuser" {
-				t.Errorf("Expected user 'testuser', got '%s'", claims.User)
+			if claims.User != "testuser1" {
+				t.Errorf("Expected user 'testuser1', got '%s'", claims.User)
 			}
 			if claims.Path != testAppPath2 {
 				t.Errorf("Expected path '%s', got '%s'", testAppPath2, claims.Path)
 			}
 			return newToken, nil
 		},
+		UpdateSkipRefreshTokenFunc: func(claims *Claims) (string, error) {
+			tokenSkipUpdated = true
+			return newToken, nil
+		},
 	}
 
 	// Create server with mocks
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	cfg := &Config{
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-	}
-	server := &Server{
-		config:        cfg,
-		logger:        logger,
-		cookieManager: cookieHandler,
-		jwtManager:    jwtHandler,
-	}
+	server := createVerifyRefreshTestServer(cookieHandler, jwtHandler)
+
+	// Create a mock K8s server for testing
+	mockServer := NewMockK8sServer(t)
+	defer mockServer.Close()
+
+	reason := "User is authorized by RBAC and is the owner of private workspace"
+	mockedResponse := CreateConnectionAccessReviewResponse(
+		"ns2",
+		"app2",
+		claims.User,
+		claims.Groups,
+		claims.UID,
+		true,  // allowed
+		false, // not found
+		reason,
+	)
+
+	// Set up the mock server to return a 200 with allowed response
+	mockServer.SetupServer200OK(mockedResponse)
+
+	// Create a REST client pointing to our test server
+	restClient, err := mockServer.CreateRESTClient()
+	require.NoError(t, err)
+
+	// Set the REST client
+	server.restClient = restClient
 
 	// Call handler
 	server.handleVerify(w, req)
@@ -362,6 +411,254 @@ func TestHandleVerifyWithRefresh(t *testing.T) {
 	}
 	if !tokenRefreshed {
 		t.Error("RefreshToken was not called")
+	}
+	if tokenSkipUpdated {
+		t.Error("UpdateSkipRefreshToken should not have been called")
+	}
+	if !cookieSet {
+		t.Error("SetCookie was not called")
+	}
+}
+
+// TestHandleVerifyWithRefresh_NoLongerAuthorizedPath tests that handleVerify refreshes the JWT during the RefreshWindow,
+// returns a 403 when the ConnectionAccessReview returns allowed=false.
+func TestHandleVerifyWithRefresh_NoLongerAuthorizedPath_Returns403(t *testing.T) {
+	fwdUrl := fmt.Sprintf("%s/lab", testAppPath2)
+
+	// Create a request with required headers
+	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
+	req.Header.Set("X-Forwarded-Uri", fwdUrl)
+	req.Header.Set("X-Forwarded-Host", "example.com")
+	w := httptest.NewRecorder()
+
+	// Create claims
+	claims := &Claims{
+		User:      "testuser2",
+		Groups:    []string{"group1", "group2"},
+		UID:       "testuid",
+		Path:      testAppPath2,
+		Domain:    "example.com",
+		TokenType: TokenTypeSession, // Add session token type
+	}
+
+	// Track method calls
+	tokenValidated := false
+	tokenRefreshChecked := false
+	tokenRefreshed := false
+	tokenSkipUpdated := false
+	cookieSet := false
+	newToken := "refreshed-token2"
+
+	// Create mock handlers
+	cookieHandler := &MockCookieHandler{
+		GetCookieFunc: func(r *http.Request, path string) (string, error) {
+			return "valid-token2", nil
+		},
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {
+			cookieSet = true
+			// Verify parameters
+			if token != newToken {
+				t.Errorf("Expected token '%s', got '%s'", newToken, token)
+			}
+			if path != testAppPath2 {
+				t.Errorf("Expected path %s, got '%s'", testAppPath2, path)
+			}
+		},
+	}
+
+	jwtHandler := &MockJWTHandler{
+		ValidateTokenFunc: func(tokenString string) (*Claims, error) {
+			tokenValidated = true
+			return claims, nil
+		},
+		ShouldRefreshTokenFunc: func(claims *Claims) bool {
+			tokenRefreshChecked = true
+			// Do refresh
+			return true
+		},
+		RefreshTokenFunc: func(claims *Claims) (string, error) {
+			tokenRefreshed = true
+			// Verify claims
+			if claims.User != "testuser" {
+				t.Errorf("Expected user 'testuser2', got '%s'", claims.User)
+			}
+			if claims.Path != testAppPath2 {
+				t.Errorf("Expected path '%s', got '%s'", testAppPath2, claims.Path)
+			}
+			return newToken, nil
+		},
+		UpdateSkipRefreshTokenFunc: func(claims *Claims) (string, error) {
+			tokenSkipUpdated = true
+			return newToken, nil
+		},
+	}
+
+	// Create server with mocks
+	server := createVerifyRefreshTestServer(cookieHandler, jwtHandler)
+
+	// Create a mock K8s server for testing
+	mockServer := NewMockK8sServer(t)
+	defer mockServer.Close()
+
+	reason := "User is not authorized by RBAC"
+	mockedResponse := CreateConnectionAccessReviewResponse(
+		"ns2",
+		"app2",
+		claims.User,
+		claims.Groups,
+		claims.UID,
+		false, // no longer allowed
+		false, // not found
+		reason,
+	)
+
+	// Set up the mock server to return a 200 with disallowed response
+	mockServer.SetupServer200OK(mockedResponse)
+
+	// Create a REST client pointing to our test server
+	restClient, err := mockServer.CreateRESTClient()
+	require.NoError(t, err)
+
+	// Set the REST client
+	server.restClient = restClient
+
+	// Call handler
+	server.handleVerify(w, req)
+
+	// Check response
+	if w.Code != http.StatusForbidden {
+		t.Errorf("Expected status %d, got %d", http.StatusForbidden, w.Code)
+	}
+
+	// Verify method calls
+	if !tokenValidated {
+		t.Error("Token was not validated")
+	}
+	if !tokenRefreshChecked {
+		t.Error("ShouldRefreshToken was not called")
+	}
+	if tokenSkipUpdated {
+		t.Error("UpdateSkipRefreshToken should not have been called")
+	}
+	if tokenRefreshed {
+		t.Error("RefreshToken should not have been called")
+	}
+	if cookieSet {
+		t.Error("SetCookie should not have been called")
+	}
+}
+
+// TestHandleVerifyWithRefresh_ConnectionAccessReviewFails_RefreshCookieToSkipFutureRefresh tests
+// that handleVerify during the refresh window, returns a 200 without and update the JWT/cookie
+// to skip future refreshes when the ConnectionAccessReview fails.
+func TestHandleVerifyWithRefresh_ConnectionAccessReviewFails_RefreshCookieToSkipFutureRefresh(t *testing.T) {
+	fwdUrl := fmt.Sprintf("%s/lab", testAppPath2)
+
+	// Create a request with required headers
+	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
+	req.Header.Set("X-Forwarded-Uri", fwdUrl)
+	req.Header.Set("X-Forwarded-Host", "example.com")
+	w := httptest.NewRecorder()
+
+	// Create claims
+	claims := &Claims{
+		User:      "testuser3",
+		Groups:    []string{"group1", "group2"},
+		UID:       "testuid",
+		Path:      testAppPath2,
+		Domain:    "example.com",
+		TokenType: TokenTypeSession, // Add session token type
+	}
+
+	// Track method calls
+	tokenValidated := false
+	tokenRefreshChecked := false
+	tokenRefreshed := false
+	tokenSkipUpdated := false
+	cookieSet := false
+	newToken := "refreshed-token3"
+
+	// Create mock handlers
+	cookieHandler := &MockCookieHandler{
+		GetCookieFunc: func(r *http.Request, path string) (string, error) {
+			return "valid-token3", nil
+		},
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {
+			cookieSet = true
+			// Verify parameters
+			if token != newToken {
+				t.Errorf("Expected token '%s', got '%s'", newToken, token)
+			}
+			if path != testAppPath2 {
+				t.Errorf("Expected path %s, got '%s'", testAppPath2, path)
+			}
+		},
+	}
+
+	jwtHandler := &MockJWTHandler{
+		ValidateTokenFunc: func(tokenString string) (*Claims, error) {
+			tokenValidated = true
+			return claims, nil
+		},
+		ShouldRefreshTokenFunc: func(claims *Claims) bool {
+			tokenRefreshChecked = true
+			// Do refresh
+			return true
+		},
+		RefreshTokenFunc: func(claims *Claims) (string, error) {
+			tokenRefreshed = true
+			// Verify claims
+			if claims.User != "testuser3" {
+				t.Errorf("Expected user 'testuser3', got '%s'", claims.User)
+			}
+			if claims.Path != testAppPath2 {
+				t.Errorf("Expected path '%s', got '%s'", testAppPath2, claims.Path)
+			}
+			return newToken, nil
+		},
+		UpdateSkipRefreshTokenFunc: func(claims *Claims) (string, error) {
+			tokenSkipUpdated = true
+			return newToken, nil
+		},
+	}
+
+	// Create server with mocks
+	server := createVerifyRefreshTestServer(cookieHandler, jwtHandler)
+
+	// Create a mock K8s server for testing
+	mockServer := NewMockK8sServer(t)
+	defer mockServer.Close()
+
+	// Set up the mock server to return a 500 with disallowed response
+	mockServer.SetupServer500InternalServerError()
+
+	// Create a REST client pointing to our test server
+	restClient, err := mockServer.CreateRESTClient()
+	require.NoError(t, err)
+
+	// Set the REST client
+	server.restClient = restClient
+
+	// Call handler
+	server.handleVerify(w, req)
+
+	// Check response
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	// Verify method calls
+	if !tokenValidated {
+		t.Error("Token was not validated")
+	}
+	if !tokenRefreshChecked {
+		t.Error("ShouldRefreshToken was not called")
+	}
+	if tokenRefreshed {
+		t.Error("RefreshToken should not have been called")
+	}
+	if !tokenSkipUpdated {
+		t.Error("UpdateSkipRefreshToken was not called")
 	}
 	if !cookieSet {
 		t.Error("SetCookie was not called")

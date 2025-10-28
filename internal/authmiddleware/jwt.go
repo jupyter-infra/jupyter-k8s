@@ -21,9 +21,10 @@ var (
 
 // JWTHandler exposes JWTManager interface to facilitate unit-testing
 type JWTHandler interface {
-	GenerateToken(user string, groups []string, path string, domain string, tokenType string) (string, error)
+	GenerateToken(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string) (string, error)
 	ValidateToken(tokenString string) (*Claims, error)
 	RefreshToken(claims *Claims) (string, error)
+	UpdateSkipRefreshToken(claims *Claims) (string, error)
 	ShouldRefreshToken(claims *Claims) bool
 }
 
@@ -33,6 +34,7 @@ type JWTManager struct {
 	issuer         string
 	audience       string
 	expiration     time.Duration
+	enableRefresh  bool
 	refreshWindow  time.Duration
 	refreshHorizon time.Duration
 }
@@ -44,13 +46,21 @@ func NewJWTManager(cfg *Config) *JWTManager {
 		issuer:         cfg.JWTIssuer,
 		audience:       cfg.JWTAudience,
 		expiration:     cfg.JWTExpiration,
+		enableRefresh:  cfg.JWTRefreshEnable,
 		refreshWindow:  cfg.JWTRefreshWindow,
 		refreshHorizon: cfg.JWTRefreshHorizon,
 	}
 }
 
 // GenerateToken creates a new JWT token for the given user and groups
-func (m *JWTManager) GenerateToken(user string, groups []string, path string, domain string, tokenType string) (string, error) {
+func (m *JWTManager) GenerateToken(
+	username string,
+	groups []string,
+	uid string,
+	extra map[string][]string,
+	path string,
+	domain string,
+	tokenType string) (string, error) {
 	now := time.Now().UTC()
 	claims := &Claims{
 		RegisteredClaims: jwt5.RegisteredClaims{
@@ -59,13 +69,16 @@ func (m *JWTManager) GenerateToken(user string, groups []string, path string, do
 			NotBefore: jwt5.NewNumericDate(now),
 			Issuer:    m.issuer,
 			Audience:  []string{m.audience},
-			Subject:   user,
+			Subject:   username,
 		},
-		User:      user,
-		Groups:    groups,
-		Path:      path,
-		Domain:    domain,
-		TokenType: tokenType,
+		User:        username,
+		Groups:      groups,
+		UID:         uid,
+		Extra:       extra,
+		Path:        path,
+		Domain:      domain,
+		TokenType:   tokenType,
+		SkipRefresh: false,
 	}
 
 	token := jwt5.NewWithClaims(jwt5.SigningMethodHS256, claims)
@@ -121,6 +134,8 @@ func (m *JWTManager) RefreshToken(claims *Claims) (string, error) {
 	// Preserve user, groups, path and domain from the original claims
 	user := claims.User
 	groups := claims.Groups
+	uid := claims.UID
+	extra := claims.Extra
 	path := claims.Path
 	domain := claims.Domain
 
@@ -137,6 +152,8 @@ func (m *JWTManager) RefreshToken(claims *Claims) (string, error) {
 	// Restore the original custom claims
 	claims.User = user
 	claims.Groups = groups
+	claims.UID = uid
+	claims.Extra = extra
 	claims.Path = path
 	claims.Domain = domain
 
@@ -144,11 +161,26 @@ func (m *JWTManager) RefreshToken(claims *Claims) (string, error) {
 	return token.SignedString(m.signingKey)
 }
 
+// UpdateSkipRefreshToken creates a new token with the same claims but skipRefresh=false
+func (m *JWTManager) UpdateSkipRefreshToken(claims *Claims) (string, error) {
+	if claims == nil {
+		return "", errors.New("claims cannot be nil")
+	}
+	claims.SkipRefresh = false
+	token := jwt5.NewWithClaims(jwt5.SigningMethodHS256, claims)
+	return token.SignedString(m.signingKey)
+}
+
 // ShouldRefreshToken determines if a token should be refreshed based on its expiration time
 // and the manager's refresh window
 func (m *JWTManager) ShouldRefreshToken(claims *Claims) bool {
+	// abort if config does not allow cookie refresh
+	if !m.enableRefresh {
+		return false
+	}
+
 	// If claims or ExpiresAt is nil, we can't determine if refresh is needed
-	if claims == nil || claims.ExpiresAt == nil {
+	if claims == nil || claims.ExpiresAt == nil || claims.SkipRefresh {
 		return false
 	}
 
