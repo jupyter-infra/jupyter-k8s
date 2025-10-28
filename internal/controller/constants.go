@@ -41,6 +41,9 @@ const (
 	// Preemption annotation value
 	PreemptedReason = "Workspace preempted due to resource contention"
 
+	// Annotation keys
+	PreemptionReasonAnnotation = "workspace.jupyter.org/preemption-reason"
+
 	// Kubernetes resource kinds
 	KindPod = "Pod"
 	// Status messages

@@ -216,7 +216,7 @@ func (h *PodEventHandler) updateWorkspaceDesiredStatus(ctx context.Context, work
 		if workspace.Annotations == nil {
 			workspace.Annotations = make(map[string]string)
 		}
-		workspace.Annotations["workspace.jupyter.org/stopped-reason"] = PreemptedReason
+		workspace.Annotations[PreemptionReasonAnnotation] = PreemptedReason
 	}
 
 	if workspace.Spec.DesiredStatus != desiredStatus {

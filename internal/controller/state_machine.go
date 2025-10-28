@@ -134,7 +134,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 			logger.Info("Deployment and Service are both deleted, updating to Stopped status")
 
 			// Record workspace stopped event with specific message for preemption
-			if workspace.Annotations != nil && workspace.Annotations["workspace.jupyter.org/stopped-reason"] == PreemptedReason {
+			if workspace.Annotations != nil && workspace.Annotations[PreemptionReasonAnnotation] == PreemptedReason {
 				sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceStopped", PreemptedReason)
 			} else {
 				sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceStopped", "Workspace has been stopped")

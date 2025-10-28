@@ -369,7 +369,7 @@ func (sm *StatusManager) UpdateStoppedStatus(
 	snapshotStatus *workspacev1alpha1.WorkspaceStatus) error {
 	// Check if workspace was stopped due to preemption
 	var availableCondition metav1.Condition
-	if workspace.Annotations != nil && workspace.Annotations["workspace.jupyter.org/stopped-reason"] == PreemptedReason {
+	if workspace.Annotations != nil && workspace.Annotations[PreemptionReasonAnnotation] == PreemptedReason {
 		availableCondition = NewCondition(
 			ConditionTypeAvailable,
 			metav1.ConditionFalse,

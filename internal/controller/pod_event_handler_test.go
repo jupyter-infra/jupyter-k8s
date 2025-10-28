@@ -352,3 +352,55 @@ func TestHandleKubernetesEvents(t *testing.T) {
 		}
 	}
 }
+
+// TestWorkspaceNameExtraction tests workspace name extraction edge cases
+func TestWorkspaceNameExtraction(t *testing.T) {
+	tests := []struct {
+		name         string
+		podName      string
+		expectedName string
+		shouldMatch  bool
+	}{
+		{
+			name:         "Standard workspace with hyphens",
+			podName:      "jupyter-my-long-workspace-name-7d4b8c9f6d-x8k2m",
+			expectedName: "my-long-workspace-name",
+			shouldMatch:  true,
+		},
+		{
+			name:        "Edge case: Too few parts (truncated)",
+			podName:     "jupyter-workspace-x8k2m",
+			shouldMatch: false,
+		},
+		{
+			name:         "Edge case: Very long name near 63 char limit",
+			podName:      "jupyter-very-long-workspace-name-that-might-be-truncated-7d4b8c-x8k2m",
+			expectedName: "very-long-workspace-name-that-might-be-truncated",
+			shouldMatch:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !strings.HasPrefix(tt.podName, "jupyter-") {
+				if tt.shouldMatch {
+					t.Errorf("Expected to match but pod name doesn't have jupyter- prefix")
+				}
+				return
+			}
+
+			parts := strings.Split(tt.podName, "-")
+			if len(parts) < 4 {
+				if tt.shouldMatch {
+					t.Errorf("Expected to match but pod name has too few parts: %d", len(parts))
+				}
+				return
+			}
+
+			workspaceName := strings.Join(parts[1:len(parts)-2], "-")
+			if tt.shouldMatch && workspaceName != tt.expectedName {
+				t.Errorf("Expected workspace name '%s', got '%s'", tt.expectedName, workspaceName)
+			}
+		})
+	}
+}
