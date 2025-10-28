@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
@@ -23,7 +24,13 @@ type StateMachine struct {
 }
 
 // NewStateMachine creates a new StateMachine
-func NewStateMachine(resourceManager *ResourceManager, statusManager *StatusManager, templateResolver *TemplateResolver, recorder record.EventRecorder, idleChecker *WorkspaceIdleChecker) *StateMachine {
+func NewStateMachine(
+	resourceManager *ResourceManager,
+	statusManager *StatusManager,
+	templateResolver *TemplateResolver,
+	recorder record.EventRecorder,
+	idleChecker *WorkspaceIdleChecker,
+) *StateMachine {
 	return &StateMachine{
 		resourceManager:  resourceManager,
 		statusManager:    statusManager,
@@ -350,21 +357,19 @@ func (sm *StateMachine) handleIdleShutdownForRunningWorkspace(
 
 	// If idle shutdown is not enabled, no requeue needed
 	if idleConfig == nil || !idleConfig.Enabled {
-		logger.V(1).Info("Idle shutdown not enabled")
+		logger.V(2).Info("Idle shutdown not enabled")
 		return ctrl.Result{}, nil
 	}
 
-	logger.Info("Resolved idle config",
+	logger.Info("Processing idle shutdown",
 		"enabled", idleConfig.Enabled,
 		"timeoutMinutes", idleConfig.TimeoutMinutes,
-		"hasEndpointCheck", idleConfig.Detection.EndpointCheck != nil)
-
-	logger.Info("Processing idle shutdown",
-		"timeout", idleConfig.TimeoutMinutes,
-		"resourceVersion", workspace.ResourceVersion)
+		"hasEndpointCheck", idleConfig.Detection.EndpointCheck != nil,
+		"workspace", workspace.Name,
+		"namespace", workspace.Namespace)
 
 	// Check if pods are actually ready for idle checking
-	podsReady, err := sm.areWorkspacePodsReady(ctx, workspace)
+	podsReady, err := sm.isAtLeastOneWorkspacePodReady(ctx, workspace)
 	if err != nil {
 		logger.Error(err, "Failed to check pod readiness")
 		return ctrl.Result{RequeueAfter: IdleCheckInterval}, nil
@@ -377,38 +382,26 @@ func (sm *StateMachine) handleIdleShutdownForRunningWorkspace(
 
 	logger.Info("Checking workspace idle status")
 
-	isIdle, shouldRetry, err := sm.checkIdleStatus(ctx, workspace, idleConfig)
+	result, err := sm.idleChecker.CheckWorkspaceIdle(ctx, workspace, idleConfig)
 	if err != nil {
-		if !shouldRetry {
+		if !result.ShouldRetry {
 			logger.Error(err, "Permanent failure checking idle status, disabling idle shutdown for this workspace")
 			return ctrl.Result{}, nil // No requeue - permanent failure
 		}
 		// Temporary errors - keep retrying
 		logger.Error(err, "Temporary failure checking idle status, will retry")
-	} else if isIdle {
-		logger.Info("Workspace idle timeout reached, stopping workspace",
-			"timeout", idleConfig.TimeoutMinutes)
-		return sm.stopWorkspaceDueToIdle(ctx, workspace, idleConfig)
+	} else {
+		logger.V(1).Info("Successfully checked idle status", "isIdle", result.IsIdle)
+		if result.IsIdle {
+			logger.Info("Workspace idle timeout reached, stopping workspace",
+				"timeout", idleConfig.TimeoutMinutes)
+			return sm.stopWorkspaceDueToIdle(ctx, workspace, idleConfig)
+		}
 	}
 
 	// Requeue for next idle check
 	logger.V(1).Info("Scheduling next idle check", "interval", IdleCheckInterval)
 	return ctrl.Result{RequeueAfter: IdleCheckInterval}, nil
-}
-
-// checkIdleStatus checks idle status and returns whether workspace is idle
-func (sm *StateMachine) checkIdleStatus(ctx context.Context, workspace *workspacev1alpha1.Workspace, idleConfig *workspacev1alpha1.IdleShutdownSpec) (bool, bool, error) {
-	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name)
-
-	// Check idle status using resolved config
-	isIdle, shouldRetry, err := sm.idleChecker.CheckWorkspaceIdle(ctx, workspace, idleConfig)
-	if err != nil {
-		logger.Error(err, "Failed to check idle status")
-		return false, shouldRetry, err
-	}
-
-	logger.V(1).Info("Successfully checked idle status", "isIdle", isIdle)
-	return isIdle, shouldRetry, nil
 }
 
 // stopWorkspaceDueToIdle stops the workspace due to idle timeout
@@ -428,12 +421,12 @@ func (sm *StateMachine) stopWorkspaceDueToIdle(ctx context.Context, workspace *w
 
 	logger.Info("Updated workspace desired status to Stopped")
 
-	// Immediate requeue to start stopping process
-	return ctrl.Result{RequeueAfter: 0}, nil
+	// Requeue after a minimal wait
+	return ctrl.Result{RequeueAfter: 10 * time.Millisecond}, nil
 }
 
-// areWorkspacePodsReady checks if workspace pods are ready for idle checking
-func (sm *StateMachine) areWorkspacePodsReady(ctx context.Context, workspace *workspacev1alpha1.Workspace) (bool, error) {
+// isAtLeastOneWorkspacePodReady checks if workspace pods are ready for idle checking
+func (sm *StateMachine) isAtLeastOneWorkspacePodReady(ctx context.Context, workspace *workspacev1alpha1.Workspace) (bool, error) {
 	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name)
 
 	// List pods with the workspace labels

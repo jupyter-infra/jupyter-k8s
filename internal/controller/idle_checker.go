@@ -11,6 +11,17 @@ import (
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
+// IdleCheckResult represents the result of an idle check operation
+type IdleCheckResult struct {
+	// IsIdle indicates whether the workspace is idle and should be shut down
+	IsIdle bool
+
+	// ShouldRetry indicates whether a failed check should be retried
+	// true = temporary failure, retry later
+	// false = permanent failure, stop checking
+	ShouldRetry bool
+}
+
 // WorkspaceIdleChecker provides utilities for checking workspace idle status
 type WorkspaceIdleChecker struct {
 	client client.Client
@@ -24,27 +35,26 @@ func NewWorkspaceIdleChecker(k8sClient client.Client) *WorkspaceIdleChecker {
 }
 
 // CheckWorkspaceIdle checks if a workspace is idle using the configured detection method
-func (w *WorkspaceIdleChecker) CheckWorkspaceIdle(ctx context.Context, workspace *workspacev1alpha1.Workspace, idleConfig *workspacev1alpha1.IdleShutdownSpec) (bool, bool, error) {
+func (w *WorkspaceIdleChecker) CheckWorkspaceIdle(ctx context.Context, workspace *workspacev1alpha1.Workspace, idleConfig *workspacev1alpha1.IdleShutdownSpec) (*IdleCheckResult, error) {
 	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name, "namespace", workspace.Namespace)
 
 	// Find the workspace pod
 	pod, err := w.findWorkspacePod(ctx, workspace)
 	if err != nil {
 		logger.Error(err, "Failed to find workspace pod")
-		return false, true, fmt.Errorf("failed to find workspace pod: %w", err)
+		return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("failed to find workspace pod: %w", err)
 	}
-
-	logger.V(1).Info("Found workspace pod", "pod", pod.Name)
 
 	// Create appropriate detector
 	detector, err := CreateIdleDetector(&idleConfig.Detection)
 	if err != nil {
 		logger.Error(err, "Failed to create idle detector")
-		return false, false, fmt.Errorf("failed to create idle detector: %w", err)
+		return &IdleCheckResult{IsIdle: false, ShouldRetry: false}, fmt.Errorf("failed to create idle detector: %w", err)
 	}
 
 	// Use detector to check idle status
-	return detector.CheckIdle(ctx, workspace.Name, pod, idleConfig)
+	isIdle, shouldRetry, err := detector.CheckIdle(ctx, workspace.Name, pod, idleConfig)
+	return &IdleCheckResult{IsIdle: isIdle, ShouldRetry: shouldRetry}, err
 }
 
 // findWorkspacePod finds the pod for a workspace
