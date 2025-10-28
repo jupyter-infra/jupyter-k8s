@@ -24,6 +24,8 @@ import (
 	. "github.com/onsi/gomega"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -489,6 +491,288 @@ var _ = Describe("Workspace Webhook", func() {
 
 			err := validateOwnershipPermission(userCtx, ownerOnlyWorkspace)
 			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("Template Validator Functions", func() {
+		var template *workspacev1alpha1.WorkspaceTemplate
+
+		BeforeEach(func() {
+			template = &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					AllowedImages: []string{"jupyter/base-notebook:latest", "jupyter/scipy-notebook:latest"},
+					DefaultImage:  "jupyter/base-notebook:latest",
+				},
+			}
+		})
+
+		Context("validateImageAllowed", func() {
+			It("should allow image in allowed list", func() {
+				violation := validateImageAllowed("jupyter/base-notebook:latest", template)
+				Expect(violation).To(BeNil())
+			})
+
+			It("should reject image not in allowed list", func() {
+				violation := validateImageAllowed("malicious/image:latest", template)
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(controller.ViolationTypeImageNotAllowed))
+				Expect(violation.Message).To(ContainSubstring("malicious/image:latest"))
+				Expect(violation.Message).To(ContainSubstring("test-template"))
+			})
+
+			It("should use default image when allowed list is empty", func() {
+				template.Spec.AllowedImages = []string{}
+				violation := validateImageAllowed("jupyter/base-notebook:latest", template)
+				Expect(violation).To(BeNil())
+			})
+
+			It("should reject when allowed list is empty and image doesn't match default", func() {
+				template.Spec.AllowedImages = []string{}
+				violation := validateImageAllowed("other/image:latest", template)
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(controller.ViolationTypeImageNotAllowed))
+			})
+		})
+
+		Context("validateStorageSize", func() {
+			BeforeEach(func() {
+				template.Spec.PrimaryStorage = &workspacev1alpha1.StorageConfig{
+					MinSize: &[]resource.Quantity{resource.MustParse("1Gi")}[0],
+					MaxSize: &[]resource.Quantity{resource.MustParse("10Gi")}[0],
+				}
+			})
+
+			It("should allow storage within bounds", func() {
+				violation := validateStorageSize(resource.MustParse("5Gi"), template)
+				Expect(violation).To(BeNil())
+			})
+
+			It("should reject storage below minimum", func() {
+				violation := validateStorageSize(resource.MustParse("500Mi"), template)
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(controller.ViolationTypeStorageExceeded))
+				Expect(violation.Message).To(ContainSubstring("below minimum"))
+				Expect(violation.Message).To(ContainSubstring("test-template"))
+			})
+
+			It("should reject storage above maximum", func() {
+				violation := validateStorageSize(resource.MustParse("20Gi"), template)
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(controller.ViolationTypeStorageExceeded))
+				Expect(violation.Message).To(ContainSubstring("exceeds maximum"))
+				Expect(violation.Message).To(ContainSubstring("test-template"))
+			})
+
+			It("should allow any size when no storage config", func() {
+				template.Spec.PrimaryStorage = nil
+				violation := validateStorageSize(resource.MustParse("100Gi"), template)
+				Expect(violation).To(BeNil())
+			})
+		})
+
+		Context("storageEqual", func() {
+			It("should return true for nil storages", func() {
+				Expect(storageEqual(nil, nil)).To(BeTrue())
+			})
+
+			It("should return false when one is nil", func() {
+				storage := &workspacev1alpha1.StorageSpec{Size: resource.MustParse("1Gi")}
+				Expect(storageEqual(nil, storage)).To(BeFalse())
+				Expect(storageEqual(storage, nil)).To(BeFalse())
+			})
+
+			It("should return true for equal storages", func() {
+				storage1 := &workspacev1alpha1.StorageSpec{
+					Size:      resource.MustParse("1Gi"),
+					MountPath: "/data",
+				}
+				storage2 := &workspacev1alpha1.StorageSpec{
+					Size:      resource.MustParse("1Gi"),
+					MountPath: "/data",
+				}
+				Expect(storageEqual(storage1, storage2)).To(BeTrue())
+			})
+
+			It("should return false for different sizes", func() {
+				storage1 := &workspacev1alpha1.StorageSpec{Size: resource.MustParse("1Gi")}
+				storage2 := &workspacev1alpha1.StorageSpec{Size: resource.MustParse("2Gi")}
+				Expect(storageEqual(storage1, storage2)).To(BeFalse())
+			})
+
+			It("should return false for different mount paths", func() {
+				storage1 := &workspacev1alpha1.StorageSpec{
+					Size:      resource.MustParse("1Gi"),
+					MountPath: "/data1",
+				}
+				storage2 := &workspacev1alpha1.StorageSpec{
+					Size:      resource.MustParse("1Gi"),
+					MountPath: "/data2",
+				}
+				Expect(storageEqual(storage1, storage2)).To(BeFalse())
+			})
+		})
+
+		Context("validateResourceBounds", func() {
+			BeforeEach(func() {
+				template.Spec.ResourceBounds = &workspacev1alpha1.ResourceBounds{
+					CPU: &workspacev1alpha1.ResourceRange{
+						Min: resource.MustParse("100m"),
+						Max: resource.MustParse("2"),
+					},
+					Memory: &workspacev1alpha1.ResourceRange{
+						Min: resource.MustParse("128Mi"),
+						Max: resource.MustParse("4Gi"),
+					},
+				}
+			})
+
+			It("should allow resources within bounds", func() {
+				resources := corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("500m"),
+						corev1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+				}
+				violations := validateResourceBounds(resources, template)
+				Expect(violations).To(BeEmpty())
+			})
+
+			It("should reject CPU below minimum", func() {
+				resources := corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("50m"),
+					},
+				}
+				violations := validateResourceBounds(resources, template)
+				Expect(violations).To(HaveLen(1))
+				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+				Expect(violations[0].Message).To(ContainSubstring("below minimum"))
+				Expect(violations[0].Message).To(ContainSubstring("test-template"))
+			})
+
+			It("should reject CPU above maximum", func() {
+				resources := corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("4"),
+					},
+				}
+				violations := validateResourceBounds(resources, template)
+				Expect(violations).To(HaveLen(1))
+				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+				Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
+				Expect(violations[0].Message).To(ContainSubstring("test-template"))
+			})
+
+			It("should reject memory below minimum", func() {
+				resources := corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("64Mi"),
+					},
+				}
+				violations := validateResourceBounds(resources, template)
+				Expect(violations).To(HaveLen(1))
+				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+				Expect(violations[0].Message).To(ContainSubstring("below minimum"))
+			})
+
+			It("should reject memory above maximum", func() {
+				resources := corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
+					},
+				}
+				violations := validateResourceBounds(resources, template)
+				Expect(violations).To(HaveLen(1))
+				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+				Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
+			})
+
+			It("should reject CPU limit less than request", func() {
+				resources := corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("1"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("500m"),
+					},
+				}
+				violations := validateResourceBounds(resources, template)
+				Expect(violations).To(HaveLen(1))
+				Expect(violations[0].Message).To(ContainSubstring("CPU limit must be greater than or equal to CPU request"))
+			})
+
+			It("should reject memory limit less than request", func() {
+				resources := corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("2Gi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("1Gi"),
+					},
+				}
+				violations := validateResourceBounds(resources, template)
+				Expect(violations).To(HaveLen(1))
+				Expect(violations[0].Message).To(ContainSubstring("Memory limit must be greater than or equal to memory request"))
+			})
+
+			It("should allow resources when no bounds defined", func() {
+				template.Spec.ResourceBounds = nil
+				resources := corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("10"),
+						corev1.ResourceMemory: resource.MustParse("100Gi"),
+					},
+				}
+				violations := validateResourceBounds(resources, template)
+				Expect(violations).To(BeEmpty())
+			})
+		})
+
+		Context("resourcesEqual", func() {
+			It("should return true for nil resources", func() {
+				Expect(resourcesEqual(nil, nil)).To(BeTrue())
+			})
+
+			It("should return false when one is nil", func() {
+				resources := &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+				}
+				Expect(resourcesEqual(nil, resources)).To(BeFalse())
+				Expect(resourcesEqual(resources, nil)).To(BeFalse())
+			})
+
+			It("should return true for equal resources", func() {
+				resources1 := &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+					Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
+				}
+				resources2 := &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+					Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
+				}
+				Expect(resourcesEqual(resources1, resources2)).To(BeTrue())
+			})
+
+			It("should return false for different requests", func() {
+				resources1 := &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+				}
+				resources2 := &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
+				}
+				Expect(resourcesEqual(resources1, resources2)).To(BeFalse())
+			})
+
+			It("should return false for different limits", func() {
+				resources1 := &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+				}
+				resources2 := &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
+				}
+				Expect(resourcesEqual(resources1, resources2)).To(BeFalse())
+			})
 		})
 	})
 })
