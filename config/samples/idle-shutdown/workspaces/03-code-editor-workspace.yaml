@@ -13,6 +13,6 @@ spec:
     enabled: true
     timeoutMinutes: 5  # 5 minutes (within 1-10 range)
     detection:
-      endpointCheck:
+      httpGet:
         path: "/api/idle"
         port: 8888

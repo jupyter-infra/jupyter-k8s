@@ -10,9 +10,9 @@ spec:
   # Complete idle shutdown config - no template needed
   idleShutdown:
     enabled: true
-    timeoutMinutes: 3
+    timeoutMinutes: 2
     detection:
-      endpointCheck:
+      httpGet:
         path: "/api/idle"
         port: 8888
   # Use Code Editor (same as template)

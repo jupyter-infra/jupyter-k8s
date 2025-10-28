@@ -26,44 +26,50 @@ type IdleDetector interface {
 // CreateIdleDetector factory function
 func CreateIdleDetector(detection *workspacev1alpha1.IdleDetectionSpec) (IdleDetector, error) {
 	switch {
-	case detection.EndpointCheck != nil:
-		return NewEndpointCheckDetector(), nil
-	// add support for more detection methods here
+	case detection.HTTPGet != nil:
+		return NewHTTPGetDetector(), nil
 	default:
 		return nil, fmt.Errorf("no detection method configured")
 	}
 }
 
-// EndpointCheckDetector implements HTTP endpoint checking
-type EndpointCheckDetector struct {
+// HTTPGetDetector implements HTTP endpoint checking
+type HTTPGetDetector struct {
 	execUtil *PodExecUtil
 }
 
-// NewEndpointCheckDetector creates a new EndpointCheckDetector
-func NewEndpointCheckDetector() *EndpointCheckDetector {
+// NewHTTPGetDetector creates a new HTTPGetDetector
+func NewHTTPGetDetector() *HTTPGetDetector {
 	execUtil, _ := NewPodExecUtil()
-	return &EndpointCheckDetector{
+	return &HTTPGetDetector{
 		execUtil: execUtil,
 	}
 }
 
 // CheckIdle implements the IdleDetector interface for HTTP endpoint checking
-func (e *EndpointCheckDetector) CheckIdle(ctx context.Context, workspaceName string, pod *corev1.Pod, idleConfig *workspacev1alpha1.IdleShutdownSpec) (bool, bool, error) {
+func (h *HTTPGetDetector) CheckIdle(ctx context.Context, workspaceName string, pod *corev1.Pod, idleConfig *workspacev1alpha1.IdleShutdownSpec) (bool, bool, error) {
 	logger := logf.FromContext(ctx).WithValues("pod", pod.Name)
 
-	// Get endpoint config from resolved idle config
-	endpointConfig := idleConfig.Detection.EndpointCheck
-	if endpointConfig == nil {
-		return false, false, fmt.Errorf("endpoint check config is nil")
+	// Get HTTP config from resolved idle config
+	httpGetConfig := idleConfig.Detection.HTTPGet
+	if httpGetConfig == nil {
+		return false, false, fmt.Errorf("httpGet config is nil")
 	}
 
+	// Build URL with scheme support
+	scheme := string(httpGetConfig.Scheme)
+	if scheme == "" {
+		scheme = "http"
+	}
+	port := httpGetConfig.Port.String()
+	url := fmt.Sprintf("%s://localhost:%s%s", scheme, port, httpGetConfig.Path)
+
 	// Single curl call with status code
-	cmd := []string{"curl", "-s", "-w", "\\nHTTP Status: %{http_code}\\n",
-		fmt.Sprintf("http://localhost:%d%s", endpointConfig.Port, endpointConfig.Path)}
+	cmd := []string{"curl", "-s", "-w", "\\nHTTP Status: %{http_code}\\n", url}
 
-	logger.V(1).Info("Calling idle endpoint", "port", endpointConfig.Port, "path", endpointConfig.Path)
+	logger.V(1).Info("Calling idle endpoint", "port", port, "path", httpGetConfig.Path)
 
-	output, err := e.execUtil.ExecInPod(ctx, pod, "", cmd, "")
+	output, err := h.execUtil.ExecInPod(ctx, pod, "", cmd, "")
 	if err != nil {
 		// Handle curl exit codes - connection refused (temporary failure)
 		if strings.Contains(err.Error(), "exit code 7") {
@@ -107,7 +113,7 @@ func (e *EndpointCheckDetector) CheckIdle(ctx context.Context, workspaceName str
 		}
 
 		// Check if workspace is idle based on timeout
-		isIdle := e.checkIdleTimeout(ctx, workspaceName, &idleResp, idleConfig)
+		isIdle := h.checkIdleTimeout(ctx, workspaceName, &idleResp, idleConfig)
 		logger.V(1).Info("Successfully retrieved idle status", "lastActivity", idleResp.LastActivity, "isIdle", isIdle)
 		return isIdle, true, nil
 	default:
@@ -117,7 +123,7 @@ func (e *EndpointCheckDetector) CheckIdle(ctx context.Context, workspaceName str
 }
 
 // checkIdleTimeout checks if workspace should be stopped due to idle timeout
-func (e *EndpointCheckDetector) checkIdleTimeout(ctx context.Context, workspaceName string, idleResp *EndpointIdleResponse, idleConfig *workspacev1alpha1.IdleShutdownSpec) bool {
+func (h *HTTPGetDetector) checkIdleTimeout(ctx context.Context, workspaceName string, idleResp *EndpointIdleResponse, idleConfig *workspacev1alpha1.IdleShutdownSpec) bool {
 	logger := logf.FromContext(ctx).WithValues("workspace", workspaceName)
 
 	// Parse last activity time with case-insensitive timezone

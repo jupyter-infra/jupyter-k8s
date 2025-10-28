@@ -1008,18 +1008,54 @@ spec:
                   detection:
                     description: Detection specifies how to detect idle state
                     properties:
-                      endpointCheck:
-                        description: EndpointCheck specifies HTTP endpoint to check
-                          for idle status
+                      httpGet:
+                        description: HTTPGet specifies the HTTP request to perform
+                          for idle detection
                         properties:
+                          host:
+                            description: |-
+                              Host name to connect to, defaults to the pod IP. You probably want to set
+                              "Host" in httpHeaders instead.
+                            type: string
+                          httpHeaders:
+                            description: Custom headers to set in the request. HTTP
+                              allows repeated headers.
+                            items:
+                              description: HTTPHeader describes a custom header to
+                                be used in HTTP probes
+                              properties:
+                                name:
+                                  description: |-
+                                    The header field name.
+                                    This will be canonicalized upon output, so case-variant names will be understood as the same header.
+                                  type: string
+                                value:
+                                  description: The header field value
+                                  type: string
+                              required:
+                              - name
+                              - value
+                              type: object
+                            type: array
+                            x-kubernetes-list-type: atomic
                           path:
-                            description: Path to access on the HTTP server
+                            description: Path to access on the HTTP server.
                             type: string
                           port:
-                            description: Port to access on the container
-                            type: integer
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: |-
+                              Name or number of the port to access on the container.
+                              Number must be in the range 1 to 65535.
+                              Name must be an IANA_SVC_NAME.
+                            x-kubernetes-int-or-string: true
+                          scheme:
+                            description: |-
+                              Scheme to use for connecting to the host.
+                              Defaults to HTTP.
+                            type: string
                         required:
-                        - path
                         - port
                         type: object
                     type: object

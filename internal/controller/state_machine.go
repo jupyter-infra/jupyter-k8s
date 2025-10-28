@@ -364,7 +364,7 @@ func (sm *StateMachine) handleIdleShutdownForRunningWorkspace(
 	logger.Info("Processing idle shutdown",
 		"enabled", idleConfig.Enabled,
 		"timeoutMinutes", idleConfig.TimeoutMinutes,
-		"hasEndpointCheck", idleConfig.Detection.EndpointCheck != nil,
+		"hasHTTPGet", idleConfig.Detection.HTTPGet != nil,
 		"workspace", workspace.Name,
 		"namespace", workspace.Namespace)
 

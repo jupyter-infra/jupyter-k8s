@@ -13,6 +13,6 @@ spec:
     enabled: true
     timeoutMinutes: 10  # Try to override template's 2 minutes
     detection:
-      endpointCheck:
+      httpGet:
         path: "/api/idle"
         port: 8888

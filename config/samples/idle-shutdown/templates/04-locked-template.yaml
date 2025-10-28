@@ -23,7 +23,7 @@ spec:
     enabled: true
     timeoutMinutes: 2  # Short timeout for testing
     detection:
-      endpointCheck:
+      httpGet:
         path: "/api/idle"
         port: 8888
   # DENY overrides
