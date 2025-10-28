@@ -19,7 +19,7 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: authmiddleware-auth
+  name: authmiddleware-bearer-auth
   namespace: {{ .Values.namespace }}
   labels:
     app: authmiddleware
