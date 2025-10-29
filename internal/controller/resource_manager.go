@@ -254,6 +254,7 @@ func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, workspace
 		}
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
+
 	return deployment, nil
 }
 
