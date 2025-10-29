@@ -163,7 +163,7 @@ func (m *KMSJWTManager) ValidateToken(tokenString string) (*authmiddleware.Claim
 
 	// Validate standard claims manually
 	now := time.Now().UTC()
-	if claims.ExpiresAt != nil && claims.ExpiresAt.Time.Before(now) {
+	if claims.ExpiresAt != nil && claims.ExpiresAt.Before(now) {
 		return nil, ErrTokenExpired
 	}
 
