@@ -10,6 +10,11 @@ domain: ""
 # If provided, enables SSL termination at the NLB level
 awsCertificateArn: ""
 
+# External DNS configuration
+externalDns:
+  # Whether to enable external-dns annotations for automatic DNS record creation
+  enabled: true
+
 # Remote access configuration
 remoteAccess:
   enabled: false
