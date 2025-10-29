@@ -51,7 +51,7 @@ const (
 	LongRequeueDelay = 60 * time.Second
 
 	// Idle shutdown constants
-	IdleCheckInterval = 1 * time.Minute
+	IdleCheckInterval = 5 * time.Minute
 )
 
 // GenerateDeploymentName creates a consistent deployment name

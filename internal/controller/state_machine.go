@@ -380,8 +380,6 @@ func (sm *StateMachine) handleIdleShutdownForRunningWorkspace(
 		return ctrl.Result{RequeueAfter: IdleCheckInterval}, nil
 	}
 
-	logger.Info("Checking workspace idle status")
-
 	result, err := sm.idleChecker.CheckWorkspaceIdle(ctx, workspace, idleConfig)
 	if err != nil {
 		if !result.ShouldRetry {
