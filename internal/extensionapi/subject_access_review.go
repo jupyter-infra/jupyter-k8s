@@ -23,6 +23,7 @@ func (s *ExtensionServer) CheckRBACPermission(
 	namespace string,
 	username string,
 	groups []string,
+	extra map[string]authorizationv1.ExtraValue,
 	logger *rlog.Logger,
 ) (*RBACPermissionResult, error) {
 	sarClient := s.sarClient
@@ -38,6 +39,7 @@ func (s *ExtensionServer) CheckRBACPermission(
 			},
 			User:   username,
 			Groups: groups,
+			Extra:  extra,
 		},
 	}
 
