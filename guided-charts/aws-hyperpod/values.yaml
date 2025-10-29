@@ -25,6 +25,7 @@ storageClass:
     parameters:
       type: gp3
       fsType: ext4
+      encrypted: "true"
 
 # Authmiddleware configuration
 authmiddleware:
