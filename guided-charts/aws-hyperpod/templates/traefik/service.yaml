@@ -13,6 +13,10 @@ metadata:
     service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
     # TODO figure out TLS encryption
     service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+    {{- if .Values.awsCertificateArn }}
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: {{ .Values.awsCertificateArn | quote }}
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
+    {{- end }}
     # Configure NLB attributes according to AWS docs using the consolidated attributes approach
     # refer to https://docs.aws.amazon.com/elasticloadbalancing/latest/APIReference/API_LoadBalancerAttribute.html
     # service.beta.kubernetes.io/aws-load-balancer-attributes: "load_balancing.cross_zone.enabled=true,access_logs.s3.enabled=false"
