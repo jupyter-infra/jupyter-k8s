@@ -38,7 +38,9 @@ jobs:
           kind load docker-image jupyter-k8s:v0.1.0
 
       - name: Install Helm
-        run: sudo snap install helm --classic
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
 
       - name: Verify Helm installation
         run: helm version
