@@ -55,6 +55,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 			testWorkspaceName string
 			testUsername      string
 			testGroups        []string
+			testUID           string
 		)
 
 		BeforeEach(func() {
@@ -79,6 +80,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 			testWorkspaceName = "test-workspace1"
 			testUsername = "test-user1"
 			testGroups = []string{"system:authenticated", "github:test-group1"}
+			testUID = "test-uid1"
 		})
 
 		It("Should accept a POST request", func() {
@@ -103,7 +105,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "OwnerOnly",
+					AccessType: "OwnerOnly",
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -134,7 +136,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "OwnerOnly",
+					AccessType: "OwnerOnly",
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -165,7 +167,8 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 				"spec": {
 					"workspaceName": "test-workspace1",
 					"user": "test-user1",
-					"groups": ["system:authenticated", "github:test-group1"]
+					"groups": ["system:authenticated", "github:test-group1"],
+					"uid": "test-uid1"
 				}
 			}`)
 			recorder := httptest.NewRecorder()
@@ -182,7 +185,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "OwnerOnly",
+					AccessType: "OwnerOnly",
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -193,6 +196,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 			Expect(mockSarClient.LastCreateParams).NotTo(BeNil())
 			Expect(mockSarClient.LastCreateParams.Spec.User).To(Equal(testUsername))
 			Expect(mockSarClient.LastCreateParams.Spec.Groups).To(Equal(testGroups))
+			Expect(mockSarClient.LastCreateParams.Spec.UID).To(Equal(testUID))
 		})
 
 		It("Should pass Extra from the request to SubjectAccessReview", func() {
@@ -225,7 +229,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "OwnerOnly",
+					AccessType: "OwnerOnly",
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
