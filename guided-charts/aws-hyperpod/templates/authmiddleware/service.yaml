@@ -1,0 +1,20 @@
+{{- if .Values.authmiddleware.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: authmiddleware
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: authmiddleware
+    component: auth
+spec:
+  type: ClusterIP
+  selector:
+    app: authmiddleware
+    component: auth
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+{{- end }}
