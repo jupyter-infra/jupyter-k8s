@@ -10,11 +10,11 @@ Jupyter-k8s is a Kubernetes operator for Jupyter notebooks and other IDEs. It ma
 - **Workspace**: A compute unit with dedicated storage, unique URL, and access control list for users
 - **WorkspaceAccessStrategy**: Handles network routing with HTTPS ingress or tunneling out from workspaces
 - **WorkspaceTemplate**: Provides default settings and bounds for variations
-- **WorkspaceShare**: Associates a Grantee (k8s username or group) with a Workspace for access
 
 ## Architecture
 
 ### Kubernetes Controller
+**Code:** `./internal/controller` and `./internal/webhook`
 
 The Kubernetes controller implements the operator pattern to manage workspace resources:
 - **Reconciliation Loops**: Continuously reconciles desired state with actual cluster state
@@ -23,7 +23,22 @@ The Kubernetes controller implements the operator pattern to manage workspace re
 - **Event Recording**: Logs significant events for auditing and troubleshooting
 - **Admission Webhooks**: Validates and mutates resources before they are stored in etcd
 
+### Extension API
+**Code:** `./internal/extensionapi`
+
+In addition to the controller, the jupyter-k8s operator starts an extension API server in the
+same pod as the controller, and managed by the same manager.
+
+The extension API serves APIs under `connection.workspace.jupyter.org` that cannot be represented
+as CRD.
+- `create Connection`
+- `create ConnectionAccessReview`
+`ConnectionAccessReview` performs an RBAC check on a virtual resource `workspaces/connection` in
+`workspace.jupyter.org` API group, and simulates the validation webhook.
+
 ### Auth Middleware
+**Code:** `./internal/authmiddleware`
+
 The auth middleware component provides authentication and authorization for workspace access:
 
 - **JWT-Based Authentication**: Uses JSON Web Tokens (JWT) for stateless authentication
@@ -45,7 +60,6 @@ The auth middleware component provides authentication and authorization for work
   - Refreshes tokens when nearing expiration
 
 - `/health`: System health check endpoint for monitoring
-
 
 ### Deployment Modes
 

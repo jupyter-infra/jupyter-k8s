@@ -67,15 +67,45 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	if s.jwtManager.ShouldRefreshToken(claims) {
 		s.logger.Debug("Refreshing token", "user", claims.User, "path", claims.Path)
 
-		// Refresh token
-		newToken, err := s.jwtManager.RefreshToken(claims)
-		if err != nil {
-			// Log but don't fail the request - just continue with the existing token
-			s.logger.Warn("Failed to refresh token", "error", err)
+		// Verify that the user still has access to the specific Workspace
+		accessReviewResult, workspaceInfo, accessErr := s.VerifyWorkspaceAccessFromJwt(r.Context(), requestPath, claims)
+
+		// UNHAPPY CASE 1: we can't check authZ for some reason, stop attempting to refresh
+		if accessErr != nil {
+			s.logger.Warn("Failed to retrieve the accessReview for cookie refresh", "error", err)
+			newToken, err := s.jwtManager.UpdateSkipRefreshToken(claims)
+			if err != nil {
+				s.logger.Warn("Failed to update token to skip", "error", err)
+			} else {
+				// Set refreshed cookie with the same path as the original token
+				s.cookieManager.SetCookie(w, newToken, claims.Path)
+				s.logger.Info("Token refreshed successfully", "user", claims.User, "path", claims.Path)
+			}
+			// UNHAPPY CASE 2: user is no longer allowed, return 403
+		} else if !accessReviewResult.Allowed {
+			s.logger.Info(
+				"JWT renewal denied: ConnectionAccessReview.Allowed is false",
+				"workspace",
+				workspaceInfo.Name,
+				"workspaceNamespace",
+				workspaceInfo.Namespace,
+				"reason",
+				accessReviewResult.Reason)
+			s.cookieManager.ClearCookie(w, claims.Path)
+			http.Error(w, "Access denied: you are no longer authorized to access this workspace", http.StatusForbidden)
+			return
+			// HAPPY CASE: user is allowed, refresh their cookie
 		} else {
-			// Set refreshed cookie with the same path as the original token
-			s.cookieManager.SetCookie(w, newToken, claims.Path)
-			s.logger.Debug("Token refreshed successfully", "user", claims.User, "path", claims.Path)
+			// Refresh token
+			newToken, err := s.jwtManager.RefreshToken(claims)
+			if err != nil {
+				// Log but don't fail the request - just continue with the existing token
+				s.logger.Warn("Failed to refresh token", "error", err)
+			} else {
+				// Set refreshed cookie with the same path as the original token
+				s.cookieManager.SetCookie(w, newToken, claims.Path)
+				s.logger.Info("Token refreshed successfully", "user", claims.User, "path", claims.Path)
+			}
 		}
 	}
 

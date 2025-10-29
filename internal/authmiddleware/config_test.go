@@ -71,6 +71,15 @@ func checkAuthDefaults(t *testing.T, config *Config) {
 	if config.JWTExpiration != DefaultJwtExpiration {
 		t.Errorf("Expected JWTExpiration to be %v, got %v", DefaultJwtExpiration, config.JWTExpiration)
 	}
+	if config.JWTRefreshEnable != DefaultJwtRefreshEnable {
+		t.Errorf("Expected JWTRefreshEbable to be %t, got %t", DefaultJwtRefreshEnable, config.JWTRefreshEnable)
+	}
+	if config.JWTRefreshHorizon != DefaultJwtRefreshHorizon {
+		t.Errorf("Expected JWTRefreshHorizon to be %v, got %v", DefaultJwtRefreshHorizon, config.JWTRefreshHorizon)
+	}
+	if config.JWTRefreshWindow != DefaultJwtRefreshWindow {
+		t.Errorf("Expected JWTRefreshWindow to be %v, got %v", DefaultJwtRefreshWindow, config.JWTRefreshWindow)
+	}
 }
 
 func checkCookieDefaults(t *testing.T, config *Config) {
@@ -168,6 +177,9 @@ func TestNewConfigEnvOverrides(t *testing.T) {
 	setEnv(t, EnvJwtIssuer, "custom-issuer")
 	setEnv(t, EnvJwtAudience, "custom-audience")
 	setEnv(t, EnvJwtExpiration, "30m")
+	setEnv(t, EnvEnableJwtRefresh, "false")
+	setEnv(t, EnvJwtRefreshHorizon, "24h")
+	setEnv(t, EnvJwtRefreshWindow, "5m")
 
 	// Cookie configuration
 	setEnv(t, EnvCookieName, "custom_auth")
@@ -200,6 +212,7 @@ func TestNewConfigEnvOverrides(t *testing.T) {
 	vars := []string{
 		EnvPort, EnvReadTimeout, EnvWriteTimeout, EnvShutdownTimeout, EnvTrustedProxies,
 		EnvJwtSigningKey, EnvJwtIssuer, EnvJwtAudience, EnvJwtExpiration,
+		EnvEnableJwtRefresh, EnvJwtRefreshHorizon, EnvJwtRefreshWindow,
 		EnvCookieName, EnvCookieSecure, EnvCookieDomain, EnvCookiePath,
 		EnvCookieMaxAge, EnvCookieHttpOnly, EnvCookieSameSite,
 		EnvPathRegexPattern, EnvWorkspaceNamespacePathRegex, EnvWorkspaceNamePathRegex,
@@ -266,6 +279,15 @@ func checkAuthConfig(t *testing.T, config *Config) {
 	}
 	if config.JWTExpiration != 30*time.Minute {
 		t.Errorf("Expected JWTExpiration to be 30m, got %v", config.JWTExpiration)
+	}
+	if config.JWTRefreshEnable != false {
+		t.Errorf("Expected JWTRefreshEnable to be false,, got %t", config.JWTRefreshEnable)
+	}
+	if config.JWTRefreshHorizon != 24*time.Hour {
+		t.Errorf("Expected JWTExpiration to be 24h, got %v", config.JWTRefreshHorizon)
+	}
+	if config.JWTRefreshWindow != 5*time.Minute {
+		t.Errorf("Expected JWTExpiration to be 5m, got %v", config.JWTRefreshWindow)
 	}
 }
 
