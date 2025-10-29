@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -15,6 +16,7 @@ import (
 const (
 	testInstanceID = "mi-1234567890abcdef0"
 	testSessionID  = "sess-1234567890abcdef0"
+	testPodUID     = "test-pod-uid-123"
 )
 
 // MockSSMClient implements SSMClientInterface for testing
@@ -28,6 +30,22 @@ func (m *MockSSMClient) CreateActivation(ctx context.Context, params *ssm.Create
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*ssm.CreateActivationOutput), args.Error(1)
+}
+
+func (m *MockSSMClient) DescribeActivations(ctx context.Context, params *ssm.DescribeActivationsInput, optFns ...func(*ssm.Options)) (*ssm.DescribeActivationsOutput, error) {
+	args := m.Called(ctx, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ssm.DescribeActivationsOutput), args.Error(1)
+}
+
+func (m *MockSSMClient) DeleteActivation(ctx context.Context, params *ssm.DeleteActivationInput, optFns ...func(*ssm.Options)) (*ssm.DeleteActivationOutput, error) {
+	args := m.Called(ctx, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ssm.DeleteActivationOutput), args.Error(1)
 }
 
 func (m *MockSSMClient) DescribeInstanceInformation(ctx context.Context, params *ssm.DescribeInstanceInformationInput, optFns ...func(*ssm.Options)) (*ssm.DescribeInstanceInformationOutput, error) {
@@ -325,4 +343,113 @@ func TestCleanupByPodUID_NoInstances(t *testing.T) {
 
 	// Verify no deregister calls were made
 	mockClient.AssertNotCalled(t, "DeregisterManagedInstance")
+}
+
+func TestCleanupActivationsByPodUID_Success(t *testing.T) {
+	// Setup
+	mockClient := &MockSSMClient{}
+	client := NewSSMClientWithMock(mockClient, "us-west-2")
+	ctx := context.Background()
+	podUID := testPodUID
+
+	// Mock DescribeActivations response - single activation
+	describeOutput := &ssm.DescribeActivationsOutput{
+		ActivationList: []types.Activation{
+			{
+				ActivationId: aws.String("activation-123"),
+			},
+		},
+	}
+	mockClient.On("DescribeActivations", ctx, mock.MatchedBy(func(input *ssm.DescribeActivationsInput) bool {
+		return len(input.Filters) == 1 &&
+			string(input.Filters[0].FilterKey) == "DefaultInstanceName" &&
+			len(input.Filters[0].FilterValues) == 1 &&
+			input.Filters[0].FilterValues[0] == fmt.Sprintf("%s-%s", SSMInstanceNamePrefix, podUID)
+	})).Return(describeOutput, nil)
+
+	// Mock DeleteActivation response
+	deleteOutput := &ssm.DeleteActivationOutput{}
+	mockClient.On("DeleteActivation", ctx, mock.MatchedBy(func(input *ssm.DeleteActivationInput) bool {
+		return *input.ActivationId == "activation-123"
+	})).Return(deleteOutput, nil)
+
+	// Execute
+	err := client.CleanupActivationsByPodUID(ctx, podUID)
+
+	// Assert
+	assert.NoError(t, err)
+	mockClient.AssertExpectations(t)
+}
+
+func TestCleanupActivationsByPodUID_NoActivations(t *testing.T) {
+	// Setup
+	mockClient := &MockSSMClient{}
+	client := NewSSMClientWithMock(mockClient, "us-west-2")
+	ctx := context.Background()
+	podUID := testPodUID
+
+	// Mock DescribeActivations response - empty list
+	describeOutput := &ssm.DescribeActivationsOutput{
+		ActivationList: []types.Activation{},
+	}
+	mockClient.On("DescribeActivations", ctx, mock.AnythingOfType("*ssm.DescribeActivationsInput")).Return(describeOutput, nil)
+
+	// Execute
+	err := client.CleanupActivationsByPodUID(ctx, podUID)
+
+	// Assert
+	assert.NoError(t, err)
+	mockClient.AssertExpectations(t)
+	// Verify no delete calls were made
+	mockClient.AssertNotCalled(t, "DeleteActivation")
+}
+
+func TestCleanupActivationsByPodUID_DescribeError(t *testing.T) {
+	// Setup
+	mockClient := &MockSSMClient{}
+	client := NewSSMClientWithMock(mockClient, "us-west-2")
+	ctx := context.Background()
+	podUID := testPodUID
+
+	// Mock DescribeActivations error
+	expectedError := errors.New("AWS API error: access denied")
+	mockClient.On("DescribeActivations", ctx, mock.AnythingOfType("*ssm.DescribeActivationsInput")).Return(nil, expectedError)
+
+	// Execute
+	err := client.CleanupActivationsByPodUID(ctx, podUID)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to describe SSM activations for pod")
+	mockClient.AssertExpectations(t)
+}
+
+func TestCleanupActivationsByPodUID_DeleteError(t *testing.T) {
+	// Setup
+	mockClient := &MockSSMClient{}
+	client := NewSSMClientWithMock(mockClient, "us-west-2")
+	ctx := context.Background()
+	podUID := testPodUID
+
+	// Mock DescribeActivations response - single activation
+	describeOutput := &ssm.DescribeActivationsOutput{
+		ActivationList: []types.Activation{
+			{
+				ActivationId: aws.String("activation-123"),
+			},
+		},
+	}
+	mockClient.On("DescribeActivations", ctx, mock.AnythingOfType("*ssm.DescribeActivationsInput")).Return(describeOutput, nil)
+
+	// Mock DeleteActivation error
+	expectedError := errors.New("AWS API error: activation not found")
+	mockClient.On("DeleteActivation", ctx, mock.AnythingOfType("*ssm.DeleteActivationInput")).Return(nil, expectedError)
+
+	// Execute
+	err := client.CleanupActivationsByPodUID(ctx, podUID)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to delete 1 out of 1 activations for pod")
+	mockClient.AssertExpectations(t)
 }
