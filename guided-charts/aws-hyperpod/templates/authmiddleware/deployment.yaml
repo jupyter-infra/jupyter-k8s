@@ -70,19 +70,15 @@ spec:
             value: "{{ .Values.authmiddleware.writeTimeout }}"
           - name: SHUTDOWN_TIMEOUT
             value: "{{ .Values.authmiddleware.shutdownTimeout }}"
-          - name: JWT_SIGNING_KEY
-            valueFrom:
-              secretKeyRef:
-                name: authmiddleware-secrets
-                key: jwt-signing-key
+          - name: JWT_VALIDATION_TYPE
+            value: "{{ .Values.authmiddleware.jwtValidationType }}"
+          {{- if eq .Values.authmiddleware.jwtValidationType "hmac" }}
           - name: JWT_ISSUER
             value: "{{ .Values.authmiddleware.jwtIssuer }}"
           - name: JWT_AUDIENCE
             value: "{{ .Values.authmiddleware.jwtAudience }}"
           - name: JWT_EXPIRATION
             value: "{{ .Values.authmiddleware.jwtExpiration }}"
-          - name: JWT_REFRESH_ENABLE
-            value: "{{ .Values.authmiddleware.jwtRefreshEnable }}"
           - name: JWT_REFRESH_WINDOW
             value: "{{ .Values.authmiddleware.jwtRefreshWindow }}"
           - name: JWT_REFRESH_HORIZON
@@ -103,25 +99,14 @@ spec:
             value: "{{ .Values.authmiddleware.cookieSameSite }}"
           - name: PATH_REGEX_PATTERN
             value: "{{ .Values.authmiddleware.pathRegexPattern }}"
-          - name: WORKSPACE_NAMESPACE_PATH_REGEX
-            value: "{{ .Values.authmiddleware.workspaceNamespacePathRegex }}"
-          - name: WORKSPACE_NAME_PATH_REGEX
-            value: "{{ .Values.authmiddleware.workspaceNamePathRegex }}"
-          - name: CSRF_AUTH_KEY
-            valueFrom:
-              secretKeyRef:
-                name: authmiddleware-secrets
-                key: csrf-auth-key
           - name: CSRF_COOKIE_NAME
             value: "{{ .Values.authmiddleware.csrfCookieName }}"
           - name: CSRF_COOKIE_MAX_AGE
             value: "{{ .Values.authmiddleware.csrfCookieMaxAge }}"
           - name: CSRF_COOKIE_SECURE
             value: "{{ .Values.authmiddleware.csrfCookieSecure }}"
-          - name: OIDC_USERNAME_PREFIX
-            value: "{{ .Values.dex.oidcUsernamePrefix }}"
-          - name: OIDC_GROUPS_PREFIX
-            value: "{{ .Values.dex.oidcGroupPrefix }}"
+          - name: ENABLE_BEARER_URL_AUTH
+            value: "{{ .Values.authmiddleware.enableBearerAuth }}"
         volumeMounts:
           - name: tmp
             mountPath: /tmp

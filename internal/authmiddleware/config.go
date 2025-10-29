@@ -23,6 +23,7 @@ const (
 	EnvJwtIssuer         = "JWT_ISSUER"
 	EnvJwtAudience       = "JWT_AUDIENCE"
 	EnvJwtExpiration     = "JWT_EXPIRATION"
+	EnvEnableJwtRefresh  = "JWT_REFRESH_ENABLE"
 	EnvJwtRefreshWindow  = "JWT_REFRESH_WINDOW"
 	EnvJwtRefreshHorizon = "JWT_REFRESH_HORIZON"
 	EnvEnableBearerAuth  = "ENABLE_BEARER_URL_AUTH"
@@ -69,6 +70,7 @@ const (
 	DefaultJwtIssuer         = "workspaces-auth"
 	DefaultJwtAudience       = "workspace-users"
 	DefaultJwtExpiration     = 1 * time.Hour
+	DefaultJwtRefreshEnable  = true
 	DefaultJwtRefreshWindow  = 15 * time.Minute // 25% of the default expiration
 	DefaultJwtRefreshHorizon = 12 * time.Hour
 	DefaultEnableBearerAuth  = false
@@ -114,6 +116,7 @@ type Config struct {
 	JWTIssuer         string
 	JWTAudience       string
 	JWTExpiration     time.Duration
+	JWTRefreshEnable  bool
 	JWTRefreshWindow  time.Duration
 	JWTRefreshHorizon time.Duration
 	EnableBearerAuth  bool
@@ -192,6 +195,7 @@ func createDefaultConfig() *Config {
 		JWTIssuer:         DefaultJwtIssuer,
 		JWTAudience:       DefaultJwtAudience,
 		JWTExpiration:     DefaultJwtExpiration,
+		JWTRefreshEnable:  DefaultJwtRefreshEnable,
 		JWTRefreshWindow:  DefaultJwtRefreshWindow,
 		JWTRefreshHorizon: DefaultJwtRefreshHorizon,
 		EnableBearerAuth:  DefaultEnableBearerAuth,
@@ -289,6 +293,14 @@ func applyJWTConfig(config *Config) error {
 			return fmt.Errorf("invalid %s: %w", EnvJwtExpiration, err)
 		}
 		config.JWTExpiration = d
+	}
+
+	if enableJwtRefresh := os.Getenv(EnvEnableJwtRefresh); enableJwtRefresh != "" {
+		enable, err := strconv.ParseBool(enableJwtRefresh)
+		if err != nil {
+			return fmt.Errorf("invalid %s: %w", enableJwtRefresh, err)
+		}
+		config.JWTRefreshEnable = enable
 	}
 
 	if refreshWindow := os.Getenv(EnvJwtRefreshWindow); refreshWindow != "" {
