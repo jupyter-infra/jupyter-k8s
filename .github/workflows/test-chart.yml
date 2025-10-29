@@ -38,9 +38,8 @@ jobs:
           kind load docker-image jupyter-k8s:v0.1.0
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: 'latest'
+        run: |
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
       - name: Verify Helm installation
         run: helm version
