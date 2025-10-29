@@ -133,6 +133,10 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="templateRef is immutable"
 	// +optional
 	TemplateRef *string `json:"templateRef,omitempty"`
+
+	// AppType specifies the application type for this workspace
+	// +optional
+	AppType string `json:"appType,omitempty"`
 }
 
 // AccessResourceStatus defines the status of a resource created from a template
