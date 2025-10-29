@@ -211,7 +211,14 @@ func TestHandleBearerAuthSuccess(t *testing.T) {
 				TokenType: TokenTypeBootstrap, // Correct type for bearer auth
 			}, nil
 		},
-		GenerateTokenFunc: func(user string, groups []string, path string, domain string, tokenType string) (string, error) {
+		GenerateTokenFunc: func(
+			user string,
+			groups []string,
+			uid string,
+			extra map[string][]string,
+			path string,
+			domain string,
+			tokenType string) (string, error) {
 			return "session-token", nil
 		},
 	}

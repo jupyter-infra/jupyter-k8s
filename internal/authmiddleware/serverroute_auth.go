@@ -42,6 +42,7 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Determine k8s username
+	k8sUID := user
 	k8sUsername := GetOidcUsername(s.config, preferredUsername)
 	k8sGroups := GetOidcGroups(s.config, splitGroups(groups))
 
@@ -60,6 +61,8 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 			appPath,
 			k8sUsername,
 			k8sGroups,
+			k8sUID,
+			nil, // we cannot retrieve user.Info.GetExtra() in oauth flow
 		)
 
 		if err != nil {
@@ -102,7 +105,7 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate JWT token with app path and domain for authorization scope
-	token, err := s.jwtManager.GenerateToken(k8sUsername, k8sGroups, appPath, host, TokenTypeSession)
+	token, err := s.jwtManager.GenerateToken(k8sUsername, k8sGroups, k8sUID, nil, appPath, host, TokenTypeSession)
 	if err != nil {
 		s.logger.Error("Failed to generate token", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)

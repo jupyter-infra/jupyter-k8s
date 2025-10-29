@@ -215,6 +215,8 @@ func TestCreateConnectionAccessReview_ReturnsErrorWhenK8SClientNotSet(t *testing
 		[]string{"group1", "group2"},
 		TestDefaultNamespace,
 		"workspace1",
+		"test-uid1",
+		nil,
 	)
 
 	// Verify that we get an error and false
@@ -227,6 +229,7 @@ func TestCreateConnectionAccessReview_CallsCreateAccessReview(t *testing.T) {
 	// Define test username and groups
 	username := testUserValue
 	groups := []string{"group1", "group2"}
+	uid := "test-uid1"
 	namespace := "testNamespace"
 	workspaceName := "testWorkspaceName"
 
@@ -241,6 +244,7 @@ func TestCreateConnectionAccessReview_CallsCreateAccessReview(t *testing.T) {
 		workspaceName,
 		username,
 		groups,
+		uid,
 		true,  // allowed
 		false, // not found
 		reason,
@@ -271,6 +275,8 @@ func TestCreateConnectionAccessReview_CallsCreateAccessReview(t *testing.T) {
 		groups,
 		namespace,
 		workspaceName,
+		"test-uid2",
+		nil,
 	)
 
 	// Verify the results
@@ -318,6 +324,8 @@ func TestCreateConnectionAccessReview_ReturnsError_WhenApiCallFails(t *testing.T
 		groups,
 		namespace,
 		workspaceName,
+		"test-uid3",
+		nil,
 	)
 
 	assert.Error(t, err, "Expected error for Internal server error response")
@@ -328,6 +336,7 @@ func TestVerifyWorkspaceAccess_ReturnsResultInfoAndNoError_WhenAccessReviewSucce
 	// Define test values
 	username := testUserValue
 	groups := []string{"group1", "group2"}
+	uid := "test-uid4"
 	namespace := "default"
 	workspaceName := "myworkspace"
 
@@ -338,6 +347,7 @@ func TestVerifyWorkspaceAccess_ReturnsResultInfoAndNoError_WhenAccessReviewSucce
 		workspaceName,
 		username,
 		groups,
+		uid,
 		false, // allowed
 		true,  // not found
 		reason,
@@ -373,6 +383,8 @@ func TestVerifyWorkspaceAccess_ReturnsResultInfoAndNoError_WhenAccessReviewSucce
 		path,
 		username,
 		groups,
+		uid,
+		nil,
 	)
 
 	// Verify the results - should be allowed with no error
@@ -420,6 +432,7 @@ func TestVerifyWorkspaceAccess_ReturnsNilAndNoError_WhenPathInterpolationFails(t
 	// Define test values
 	username := testUserValue
 	groups := []string{"group1", "group2"}
+	uid := "test-uid5"
 	// This path won't match the regex patterns configured above
 	path := "/workspaces/default/myworkspace/lab"
 
@@ -429,6 +442,8 @@ func TestVerifyWorkspaceAccess_ReturnsNilAndNoError_WhenPathInterpolationFails(t
 		path,
 		username,
 		groups,
+		uid,
+		nil,
 	)
 
 	assert.Error(t, err, "Expected error when path is invalid")
@@ -464,6 +479,7 @@ func TestVerifyWorkspaceAccess_ReturnsNoResponseAndNoError_WhenAccessReviewFails
 	// Define test values
 	username := testUserValue
 	groups := []string{"group1", "group2"}
+	uid := "test-uid6"
 	// Use the predefined test workspace path
 	path := testWorkspacePath
 
@@ -473,6 +489,8 @@ func TestVerifyWorkspaceAccess_ReturnsNoResponseAndNoError_WhenAccessReviewFails
 		path,
 		username,
 		groups,
+		uid,
+		nil,
 	)
 
 	assert.Error(t, err, "Expected error when create ConnectionAccessReview fails")
