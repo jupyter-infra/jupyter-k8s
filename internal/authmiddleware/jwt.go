@@ -166,7 +166,7 @@ func (m *JWTManager) UpdateSkipRefreshToken(claims *Claims) (string, error) {
 	if claims == nil {
 		return "", errors.New("claims cannot be nil")
 	}
-	claims.SkipRefresh = false
+	claims.SkipRefresh = true
 	token := jwt5.NewWithClaims(jwt5.SigningMethodHS256, claims)
 	return token.SignedString(m.signingKey)
 }

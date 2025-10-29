@@ -492,10 +492,11 @@ func TestUpdateSkipRefreshToken_HappyCase(t *testing.T) {
 		t.Fatalf("Failed to validate original token: %v", err)
 	}
 
-	// Set SkipRefresh flag to true
-	originalClaims.SkipRefresh = true
+	if originalClaims.SkipRefresh {
+		t.Error("originalClaims.SkipRefresh should not already be true")
+	}
 
-	// Update the token with SkipRefresh = false
+	// Update the token with SkipRefresh = true
 	updatedToken, err := manager.UpdateSkipRefreshToken(originalClaims)
 	if err != nil {
 		t.Fatalf("Failed to update token: %v", err)
@@ -508,7 +509,7 @@ func TestUpdateSkipRefreshToken_HappyCase(t *testing.T) {
 	}
 
 	// Check that SkipRefresh was set to false
-	if updatedClaims.SkipRefresh {
+	if !updatedClaims.SkipRefresh {
 		t.Error("SkipRefresh flag was not set to false")
 	}
 

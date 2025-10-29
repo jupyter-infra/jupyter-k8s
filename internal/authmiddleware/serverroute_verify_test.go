@@ -220,6 +220,9 @@ func TestHandleVerifyNoRefreshBeforeWindow(t *testing.T) {
 		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {
 			t.Error("SetCookie should not have been called")
 		},
+		ClearCookieFunc: func(w http.ResponseWriter, path string) {
+			t.Error("ClearCookie should not have been called")
+		},
 	}
 
 	jwtHandler := &MockJWTHandler{
@@ -336,6 +339,9 @@ func TestHandleVerifyWithRefresh_HappyPath(t *testing.T) {
 				t.Errorf("Expected path %s, got '%s'", testAppPath2, path)
 			}
 		},
+		ClearCookieFunc: func(w http.ResponseWriter, path string) {
+			t.Error("ClearCookie should not have been called")
+		},
 	}
 
 	jwtHandler := &MockJWTHandler{
@@ -420,9 +426,10 @@ func TestHandleVerifyWithRefresh_HappyPath(t *testing.T) {
 	}
 }
 
-// TestHandleVerifyWithRefresh_NoLongerAuthorizedPath tests that handleVerify refreshes the JWT during the RefreshWindow,
-// returns a 403 when the ConnectionAccessReview returns allowed=false.
-func TestHandleVerifyWithRefresh_NoLongerAuthorizedPath_Returns403(t *testing.T) {
+// TestHandleVerifyWithRefresh_NoLongerAuthorizedPath_Returns403AndClearCookie tests that
+// handleVerify refreshes the JWT during the RefreshWindow, returns a 403 and clear the cookie
+// when the ConnectionAccessReview returns allowed=false.
+func TestHandleVerifyWithRefresh_NoLongerAuthorizedPath_Returns403AndClearCookie(t *testing.T) {
 	fwdUrl := fmt.Sprintf("%s/lab", testAppPath2)
 
 	// Create a request with required headers
@@ -447,6 +454,7 @@ func TestHandleVerifyWithRefresh_NoLongerAuthorizedPath_Returns403(t *testing.T)
 	tokenRefreshed := false
 	tokenSkipUpdated := false
 	cookieSet := false
+	cookieCleared := false
 	newToken := "refreshed-token2"
 
 	// Create mock handlers
@@ -460,6 +468,13 @@ func TestHandleVerifyWithRefresh_NoLongerAuthorizedPath_Returns403(t *testing.T)
 			if token != newToken {
 				t.Errorf("Expected token '%s', got '%s'", newToken, token)
 			}
+			if path != testAppPath2 {
+				t.Errorf("Expected path %s, got '%s'", testAppPath2, path)
+			}
+		},
+		ClearCookieFunc: func(w http.ResponseWriter, path string) {
+			cookieCleared = true
+			// Verify parameters
 			if path != testAppPath2 {
 				t.Errorf("Expected path %s, got '%s'", testAppPath2, path)
 			}
@@ -546,12 +561,15 @@ func TestHandleVerifyWithRefresh_NoLongerAuthorizedPath_Returns403(t *testing.T)
 	if cookieSet {
 		t.Error("SetCookie should not have been called")
 	}
+	if !cookieCleared {
+		t.Error("ClearCookie was not called")
+	}
 }
 
-// TestHandleVerifyWithRefresh_ConnectionAccessReviewFails_RefreshCookieToSkipFutureRefresh tests
-// that handleVerify during the refresh window, returns a 200 without and update the JWT/cookie
-// to skip future refreshes when the ConnectionAccessReview fails.
-func TestHandleVerifyWithRefresh_ConnectionAccessReviewFails_RefreshCookieToSkipFutureRefresh(t *testing.T) {
+// TestHandleVerifyWithRefresh_ConnectionAccessReviewFails_UpdateCookieToSkipFutureRefreshes tests
+// that handleVerify returns a 200 and update the JWT/cookie with a skip
+// flag that prevents future refreshes when the ConnectionAccessReview fails.
+func TestHandleVerifyWithRefresh_ConnectionAccessReviewFails_UpdateCookieToSkipFutureRefreshes(t *testing.T) {
 	fwdUrl := fmt.Sprintf("%s/lab", testAppPath2)
 
 	// Create a request with required headers
@@ -592,6 +610,9 @@ func TestHandleVerifyWithRefresh_ConnectionAccessReviewFails_RefreshCookieToSkip
 			if path != testAppPath2 {
 				t.Errorf("Expected path %s, got '%s'", testAppPath2, path)
 			}
+		},
+		ClearCookieFunc: func(w http.ResponseWriter, path string) {
+			t.Error("ClearCookie should not have been called")
 		},
 	}
 

@@ -275,7 +275,7 @@ make test-e2e
 
 MIT License
 
-Copyright (c) 2025 jupyter-ai-contrib
+Copyright (c) 2025 Amazon Web Services
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

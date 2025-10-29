@@ -79,7 +79,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 			} else {
 				// Set refreshed cookie with the same path as the original token
 				s.cookieManager.SetCookie(w, newToken, claims.Path)
-				s.logger.Debug("Token refreshed successfully", "user", claims.User, "path", claims.Path)
+				s.logger.Info("Token refreshed successfully", "user", claims.User, "path", claims.Path)
 			}
 			// UNHAPPY CASE 2: user is no longer allowed, return 403
 		} else if !accessReviewResult.Allowed {
@@ -91,6 +91,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 				workspaceInfo.Namespace,
 				"reason",
 				accessReviewResult.Reason)
+			s.cookieManager.ClearCookie(w, claims.Path)
 			http.Error(w, "Access denied: you are no longer authorized to access this workspace", http.StatusForbidden)
 			return
 			// HAPPY CASE: user is allowed, refresh their cookie
@@ -103,7 +104,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 			} else {
 				// Set refreshed cookie with the same path as the original token
 				s.cookieManager.SetCookie(w, newToken, claims.Path)
-				s.logger.Debug("Token refreshed successfully", "user", claims.User, "path", claims.Path)
+				s.logger.Info("Token refreshed successfully", "user", claims.User, "path", claims.Path)
 			}
 		}
 	}
