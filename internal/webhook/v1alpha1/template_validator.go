@@ -202,6 +202,10 @@ func (tv *TemplateValidator) ApplyTemplateDefaults(ctx context.Context, workspac
 		workspace.Spec.OwnershipType = template.Spec.DefaultOwnershipType
 	}
 
+	if workspace.Spec.AppType == "" && template.Spec.AppType != "" {
+		workspace.Spec.AppType = template.Spec.AppType
+	}
+
 	// Add template tracking label
 	if workspace.Labels == nil {
 		workspace.Labels = make(map[string]string)

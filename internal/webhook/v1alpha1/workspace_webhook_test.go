@@ -503,6 +503,7 @@ var _ = Describe("Workspace Webhook", func() {
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					AllowedImages: []string{"jupyter/base-notebook:latest", "jupyter/scipy-notebook:latest"},
 					DefaultImage:  "jupyter/base-notebook:latest",
+					AppType:       "jupyter",
 				},
 			}
 		})
