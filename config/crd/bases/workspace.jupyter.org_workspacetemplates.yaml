@@ -67,6 +67,10 @@ spec:
                   type: string
                 maxItems: 50
                 type: array
+              appType:
+                description: AppType specifies the application type for workspaces
+                  using this template
+                type: string
               defaultAffinity:
                 description: DefaultAffinity specifies default node affinity and anti-affinity
                   rules

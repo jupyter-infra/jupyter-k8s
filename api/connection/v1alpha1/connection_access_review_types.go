@@ -22,10 +22,11 @@ import (
 
 // ConnectionAccessReviewSpec defines the parameters of the ConnectionAccessReview
 type ConnectionAccessReviewSpec struct {
-	WorkspaceName string   `json:"workspaceName"`
-	Groups        []string `json:"groups"`
-	UID           string   `json:"uid,omitempty"`
-	User          string   `json:"user"`
+	WorkspaceName string              `json:"workspaceName"`
+	Groups        []string            `json:"groups"`
+	UID           string              `json:"uid,omitempty"`
+	User          string              `json:"user"`
+	Extra         map[string][]string `json:"extra,omitempty"`
 }
 
 // ConnectionAccessReviewStatus defines the observed state of the ConnectionAccessReview

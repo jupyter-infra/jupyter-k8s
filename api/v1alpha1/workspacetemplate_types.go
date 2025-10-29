@@ -100,6 +100,10 @@ type WorkspaceTemplateSpec struct {
 	// IdleShutdownOverrides controls override behavior and bounds
 	// +optional
 	IdleShutdownOverrides *IdleShutdownOverridePolicy `json:"idleShutdownOverrides,omitempty"`
+	
+	// AppType specifies the application type for workspaces using this template
+	// +optional
+	AppType string `json:"appType,omitempty"`
 }
 
 // ResourceBounds defines minimum and maximum resource limits
