@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -39,6 +40,11 @@ func (m *MockSSMRemoteAccessClient) GetRegion() string {
 }
 
 func (m *MockSSMRemoteAccessClient) CleanupManagedInstancesByPodUID(ctx context.Context, podUID string) error {
+	args := m.Called(ctx, podUID)
+	return args.Error(0)
+}
+
+func (m *MockSSMRemoteAccessClient) CleanupActivationsByPodUID(ctx context.Context, podUID string) error {
 	args := m.Called(ctx, podUID)
 	return args.Error(0)
 }
@@ -255,6 +261,17 @@ func TestInitSSMAgent_AlreadyCompleted(t *testing.T) {
 }
 
 func TestInitSSMAgent_SuccessFlow(t *testing.T) {
+	// Set required environment variable for test
+	originalEKSClusterARN := os.Getenv(EKSClusterARNEnv)
+	_ = os.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+	defer func() {
+		if originalEKSClusterARN == "" {
+			_ = os.Unsetenv(EKSClusterARNEnv)
+		} else {
+			_ = os.Setenv(EKSClusterARNEnv, originalEKSClusterARN)
+		}
+	}()
+
 	// Create mock PodExecUtil that simulates successful registration flow
 	mockPodExecUtil := &MockPodExecUtil{}
 
@@ -289,11 +306,33 @@ func TestInitSSMAgent_SuccessFlow(t *testing.T) {
 	// Create mock SSM client
 	mockSSMClient := &MockSSMRemoteAccessClient{}
 	mockSSMClient.On("GetRegion").Return("us-west-2")
-	mockSSMClient.On("CreateActivation", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(&SSMActivation{
-			ActivationId:   "test-activation-id",
-			ActivationCode: "test-activation-code",
-		}, nil)
+	mockSSMClient.On("CreateActivation",
+		mock.Anything, // ctx
+		mock.Anything, // description
+		mock.Anything, // instanceName
+		mock.Anything, // iamRole
+		mock.MatchedBy(func(tags map[string]string) bool {
+			// Verify required tags are present (hardcoded to catch constant changes)
+			expectedTags := []string{
+				"sagemaker.amazonaws.com/managed-by",
+				"sagemaker.amazonaws.com/eks-cluster-arn",
+				"workspace-name",
+				"namespace",
+				"workspace-pod-uid",
+			}
+
+			for _, tag := range expectedTags {
+				if _, exists := tags[tag]; !exists {
+					return false
+				}
+			}
+
+			// Verify specific tag values (hardcoded to catch constant changes)
+			return tags["sagemaker.amazonaws.com/managed-by"] == "amazon-sagemaker-spaces"
+		})).Return(&SSMActivation{
+		ActivationId:   "test-activation-id",
+		ActivationCode: "test-activation-code",
+	}, nil)
 
 	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
 	assert.NoError(t, err)
@@ -323,6 +362,17 @@ func TestInitSSMAgent_SuccessFlow(t *testing.T) {
 }
 
 func TestInitSSMAgent_RegistrationFailure(t *testing.T) {
+	// Set required environment variable for test
+	originalEKSClusterARN := os.Getenv(EKSClusterARNEnv)
+	_ = os.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+	defer func() {
+		if originalEKSClusterARN == "" {
+			_ = os.Unsetenv(EKSClusterARNEnv)
+		} else {
+			_ = os.Setenv(EKSClusterARNEnv, originalEKSClusterARN)
+		}
+	}()
+
 	// Create mock PodExecUtil that simulates registration failure
 	mockPodExecUtil := &MockPodExecUtil{}
 
@@ -404,6 +454,7 @@ func TestCleanupSSMManagedNodes_Success(t *testing.T) {
 
 	// Set up expectation for successful cleanup
 	mockSSMClient.On("CleanupManagedInstancesByPodUID", mock.Anything, "test-pod-uid-123").Return(nil)
+	mockSSMClient.On("CleanupActivationsByPodUID", mock.Anything, "test-pod-uid-123").Return(nil)
 
 	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
 	assert.NoError(t, err)
@@ -417,8 +468,9 @@ func TestCleanupSSMManagedNodes_Success(t *testing.T) {
 	assert.NoError(t, err)
 	mockSSMClient.AssertExpectations(t)
 
-	// Verify the method was called with the correct pod UID
+	// Verify the methods were called with the correct pod UID
 	mockSSMClient.AssertCalled(t, "CleanupManagedInstancesByPodUID", mock.Anything, "test-pod-uid-123")
+	mockSSMClient.AssertCalled(t, "CleanupActivationsByPodUID", mock.Anything, "test-pod-uid-123")
 }
 
 func TestCleanupSSMManagedNodes_CleanupFailure(t *testing.T) {
@@ -427,8 +479,9 @@ func TestCleanupSSMManagedNodes_CleanupFailure(t *testing.T) {
 	mockPodExecUtil := &MockPodExecUtil{}
 
 	// Set up expectation for cleanup failure
-	expectedError := errors.New("AWS API error: instance not found")
-	mockSSMClient.On("CleanupManagedInstancesByPodUID", mock.Anything, "test-pod-uid-123").Return(expectedError)
+	expectedError := errors.New("AWS API error: activation not found")
+	mockSSMClient.On("CleanupManagedInstancesByPodUID", mock.Anything, "test-pod-uid-123").Return(nil)
+	mockSSMClient.On("CleanupActivationsByPodUID", mock.Anything, "test-pod-uid-123").Return(expectedError)
 
 	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
 	assert.NoError(t, err)
@@ -440,9 +493,10 @@ func TestCleanupSSMManagedNodes_CleanupFailure(t *testing.T) {
 	err = strategy.CleanupSSMManagedNodes(context.Background(), pod)
 
 	assert.Error(t, err)
-	assert.Equal(t, expectedError, err) // Should return the exact same error
+	assert.Contains(t, err.Error(), "failed to cleanup activations for pod test-pod-uid-123")
 	mockSSMClient.AssertExpectations(t)
 
-	// Verify the method was called with the correct pod UID
+	// Verify both methods were called with the correct pod UID
 	mockSSMClient.AssertCalled(t, "CleanupManagedInstancesByPodUID", mock.Anything, "test-pod-uid-123")
+	mockSSMClient.AssertCalled(t, "CleanupActivationsByPodUID", mock.Anything, "test-pod-uid-123")
 }

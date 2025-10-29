@@ -26,6 +26,8 @@ func GetSSMDocumentName() (string, error) {
 // SSMClientInterface defines the interface for SSM operations we need
 type SSMClientInterface interface {
 	CreateActivation(ctx context.Context, params *ssm.CreateActivationInput, optFns ...func(*ssm.Options)) (*ssm.CreateActivationOutput, error)
+	DescribeActivations(ctx context.Context, params *ssm.DescribeActivationsInput, optFns ...func(*ssm.Options)) (*ssm.DescribeActivationsOutput, error)
+	DeleteActivation(ctx context.Context, params *ssm.DeleteActivationInput, optFns ...func(*ssm.Options)) (*ssm.DeleteActivationOutput, error)
 	DescribeInstanceInformation(ctx context.Context, params *ssm.DescribeInstanceInformationInput, optFns ...func(*ssm.Options)) (*ssm.DescribeInstanceInformationOutput, error)
 	DeregisterManagedInstance(ctx context.Context, params *ssm.DeregisterManagedInstanceInput, optFns ...func(*ssm.Options)) (*ssm.DeregisterManagedInstanceOutput, error)
 	StartSession(ctx context.Context, params *ssm.StartSessionInput, optFns ...func(*ssm.Options)) (*ssm.StartSessionOutput, error)
@@ -321,5 +323,74 @@ func (s *SSMClient) CleanupManagedInstancesByPodUID(ctx context.Context, podUID 
 		"region", s.region,
 	)
 
+	return nil
+}
+
+// CleanupActivationsByPodUID finds and deletes SSM activations for a specific pod UID
+func (s *SSMClient) CleanupActivationsByPodUID(ctx context.Context, podUID string) error {
+	logger := log.FromContext(ctx).WithName("ssm-client")
+	logger.Info("Cleaning up SSM activations for pod", "podUID", podUID, "region", s.region)
+
+	instanceName := fmt.Sprintf("%s-%s", SSMInstanceNamePrefix, podUID)
+
+	// Create filter for DefaultInstanceName
+	filters := []types.DescribeActivationsFilter{
+		{
+			FilterKey:    types.DescribeActivationsFilterKeys("DefaultInstanceName"),
+			FilterValues: []string{instanceName},
+		},
+	}
+
+	// Find activations with the instance name
+	input := &ssm.DescribeActivationsInput{
+		Filters: filters,
+	}
+
+	result, err := s.client.DescribeActivations(ctx, input)
+	if err != nil {
+		logger.Error(err, "Failed to describe SSM activations", "instanceName", instanceName)
+		return fmt.Errorf("failed to describe SSM activations for pod %s: %w", podUID, err)
+	}
+
+	if len(result.ActivationList) == 0 {
+		logger.V(1).Info("No SSM activations found for pod", "podUID", podUID)
+		return nil
+	}
+
+	// Delete each found activation
+	var errs []error
+	for _, activation := range result.ActivationList {
+		activationId := aws.ToString(activation.ActivationId)
+		if err := s.deleteActivation(ctx, activationId); err != nil {
+			logger.Error(err, "Failed to delete activation", "activationId", activationId, "podUID", podUID)
+			errs = append(errs, err)
+			continue
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to delete %d out of %d activations for pod %s", len(errs), len(result.ActivationList), podUID)
+	}
+
+	logger.Info("Successfully cleaned up all SSM activations for pod", "podUID", podUID, "activationCount", len(result.ActivationList))
+	return nil
+}
+
+// deleteActivation deletes an SSM activation
+func (s *SSMClient) deleteActivation(ctx context.Context, activationId string) error {
+	logger := log.FromContext(ctx).WithName("ssm-client")
+	logger.Info("Deleting SSM activation", "activationId", activationId)
+
+	input := &ssm.DeleteActivationInput{
+		ActivationId: aws.String(activationId),
+	}
+
+	_, err := s.client.DeleteActivation(ctx, input)
+	if err != nil {
+		logger.Error(err, "Failed to delete SSM activation", "activationId", activationId)
+		return fmt.Errorf("failed to delete SSM activation %s: %w", activationId, err)
+	}
+
+	logger.Info("Successfully deleted SSM activation", "activationId", activationId)
 	return nil
 }
