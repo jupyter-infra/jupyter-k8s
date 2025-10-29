@@ -3,6 +3,8 @@ package extensionapi
 import (
 	"fmt"
 	"net/http"
+
+	connectionv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
 )
 
 // handleDiscovery responds with API resource discovery information
@@ -15,8 +17,8 @@ func (s *ExtensionServer) handleDiscovery(w http.ResponseWriter, _ *http.Request
 		"apiVersion": "v1",
 		"groupVersion": "%s",
 		"resources": [{
-			"name": "connections",
-			"singularName": "connection",
+			"name": "workspaceconnections",
+			"singularName": "workspaceconnection",
 			"namespaced": true,
 			"kind": "%s",
 			"verbs": ["create"]
@@ -27,7 +29,7 @@ func (s *ExtensionServer) handleDiscovery(w http.ResponseWriter, _ *http.Request
 			"kind": "ConnectionAccessReview",
 			"verbs": ["create"]
 		}]
-	}`, WorkspaceConnectionAPIVersion, WorkspaceConnectionKind)
+	}`, connectionv1alpha1.WorkspaceConnectionAPIVersion, connectionv1alpha1.WorkspaceConnectionKind)
 
 	_, err := w.Write([]byte(response))
 	if err != nil {

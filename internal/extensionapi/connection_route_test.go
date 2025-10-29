@@ -6,40 +6,42 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	connectionv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
 )
 
 func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 	tests := []struct {
 		name        string
-		req         *WorkspaceConnectionRequest
+		req         *connectionv1alpha1.WorkspaceConnectionRequest
 		expectError bool
 		errorMsg    string
 	}{
 		{
 			name: "valid vscode request",
-			req: &WorkspaceConnectionRequest{
-				Spec: WorkspaceConnectionRequestSpec{
+			req: &connectionv1alpha1.WorkspaceConnectionRequest{
+				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
 					WorkspaceName:           "test-workspace",
-					WorkspaceConnectionType: ConnectionTypeVSCodeRemote,
+					WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeVSCodeRemote,
 				},
 			},
 			expectError: false,
 		},
 		{
 			name: "valid web-ui request",
-			req: &WorkspaceConnectionRequest{
-				Spec: WorkspaceConnectionRequestSpec{
+			req: &connectionv1alpha1.WorkspaceConnectionRequest{
+				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
 					WorkspaceName:           "test-workspace",
-					WorkspaceConnectionType: ConnectionTypeWebUI,
+					WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeWebUI,
 				},
 			},
 			expectError: false,
 		},
 		{
 			name: "missing workspace name",
-			req: &WorkspaceConnectionRequest{
-				Spec: WorkspaceConnectionRequestSpec{
-					WorkspaceConnectionType: ConnectionTypeVSCodeRemote,
+			req: &connectionv1alpha1.WorkspaceConnectionRequest{
+				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
+					WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeVSCodeRemote,
 				},
 			},
 			expectError: true,
@@ -47,8 +49,8 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 		},
 		{
 			name: "missing connection type",
-			req: &WorkspaceConnectionRequest{
-				Spec: WorkspaceConnectionRequestSpec{
+			req: &connectionv1alpha1.WorkspaceConnectionRequest{
+				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
 					WorkspaceName: "test-workspace",
 				},
 			},
@@ -57,8 +59,8 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 		},
 		{
 			name: "invalid connection type",
-			req: &WorkspaceConnectionRequest{
-				Spec: WorkspaceConnectionRequestSpec{
+			req: &connectionv1alpha1.WorkspaceConnectionRequest{
+				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
 					WorkspaceName:           "test-workspace",
 					WorkspaceConnectionType: "invalid-type",
 				},
@@ -122,9 +124,9 @@ func TestHandleConnectionCreateValidation(t *testing.T) {
 			name:   "missing workspace name",
 			method: "POST",
 			path:   "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections",
-			body: WorkspaceConnectionRequest{
-				Spec: WorkspaceConnectionRequestSpec{
-					WorkspaceConnectionType: ConnectionTypeVSCodeRemote,
+			body: connectionv1alpha1.WorkspaceConnectionRequest{
+				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
+					WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeVSCodeRemote,
 				},
 			},
 			expectedStatus: http.StatusBadRequest,
@@ -151,5 +153,79 @@ func TestHandleConnectionCreateValidation(t *testing.T) {
 				t.Errorf("expected status %d, got %d", tt.expectedStatus, w.Code)
 			}
 		})
+	}
+}
+
+func TestHandleConnectionCreate_VSCodeMissingClusterARN(t *testing.T) {
+	server := &ExtensionServer{
+		config: &ExtensionConfig{}, // Empty config, no EKSClusterARN
+	}
+
+	req := connectionv1alpha1.WorkspaceConnectionRequest{
+		Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
+			WorkspaceName:           "test-workspace",
+			WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeVSCodeRemote,
+		},
+	}
+
+	bodyBytes, _ := json.Marshal(req)
+	httpReq := httptest.NewRequest("POST", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", bytes.NewReader(bodyBytes))
+	w := httptest.NewRecorder()
+
+	server.HandleConnectionCreate(w, httpReq)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, w.Code)
+	}
+}
+
+func TestGenerateVSCodeURL_MissingSSMDocument(t *testing.T) {
+	server := &ExtensionServer{
+		config: &ExtensionConfig{
+			EKSClusterARN: "arn:aws:eks:us-east-1:123456789012:cluster/test",
+		},
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	_, _, err := server.generateVSCodeURL(req, "test-workspace", "default")
+
+	if err == nil {
+		t.Error("expected error when AWS_SSM_DOCUMENT_NAME is not set")
+	}
+}
+
+func TestGenerateVSCodeURL_MissingClusterARN(t *testing.T) {
+	server := &ExtensionServer{
+		config: &ExtensionConfig{
+			EKSClusterARN: "", // Empty cluster ARN
+		},
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	_, _, err := server.generateVSCodeURL(req, "test-workspace", "default")
+
+	if err == nil {
+		t.Error("expected error when EKSClusterARN is empty")
+	}
+}
+
+func TestHandleConnectionCreate_InvalidConnectionType(t *testing.T) {
+	server := &ExtensionServer{}
+
+	req := connectionv1alpha1.WorkspaceConnectionRequest{
+		Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
+			WorkspaceName:           "test-workspace",
+			WorkspaceConnectionType: "invalid-type",
+		},
+	}
+
+	body, _ := json.Marshal(req)
+	httpReq := httptest.NewRequest("POST", "/apis/connection.workspace.jupyter.org/v1alpha1/namespaces/default/workspaceconnectionrequests", bytes.NewBuffer(body))
+	w := httptest.NewRecorder()
+
+	server.HandleConnectionCreate(w, httpReq)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
 	}
 }

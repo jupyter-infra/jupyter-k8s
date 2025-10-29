@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"strings"
 
+	connectionv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -21,35 +22,6 @@ type noOpPodExec struct{}
 
 func (n *noOpPodExec) ExecInPod(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string, stdin string) (string, error) {
 	return "", fmt.Errorf("pod exec not supported in connection URL generation")
-}
-
-// WorkspaceConnectionRequest represents the request body for creating a workspace connection
-type WorkspaceConnectionRequest struct {
-	APIVersion string                         `json:"apiVersion"`
-	Kind       string                         `json:"kind"`
-	Metadata   map[string]interface{}         `json:"metadata"`
-	Spec       WorkspaceConnectionRequestSpec `json:"spec"`
-}
-
-// WorkspaceConnectionRequestSpec represents the spec of a workspace connection request
-type WorkspaceConnectionRequestSpec struct {
-	WorkspaceName           string `json:"workspaceName"`
-	WorkspaceConnectionType string `json:"workspaceConnectionType"`
-}
-
-// WorkspaceConnectionResponse represents the response for a workspace connection
-type WorkspaceConnectionResponse struct {
-	APIVersion string                            `json:"apiVersion"`
-	Kind       string                            `json:"kind"`
-	Metadata   map[string]interface{}            `json:"metadata"`
-	Spec       WorkspaceConnectionRequestSpec    `json:"spec"`
-	Status     WorkspaceConnectionResponseStatus `json:"status"`
-}
-
-// WorkspaceConnectionResponseStatus represents the status of a workspace connection response
-type WorkspaceConnectionResponseStatus struct {
-	WorkspaceConnectionType string `json:"workspaceConnectionType"`
-	WorkspaceConnectionURL  string `json:"workspaceConnectionUrl"`
 }
 
 // HandleConnectionCreate handles POST requests to create a connection
@@ -62,12 +34,11 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	}
 
 	// Extract namespace from URL path
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 6 {
+	namespace, err := GetNamespaceFromPath(r.URL.Path)
+	if err != nil {
 		WriteError(w, http.StatusBadRequest, "Invalid URL path")
 		return
 	}
-	namespace := pathParts[5] // /apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/{namespace}/connections
 
 	// Parse request body
 	body, err := io.ReadAll(r.Body)
@@ -76,7 +47,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 		return
 	}
 
-	var req WorkspaceConnectionRequest
+	var req connectionv1alpha1.WorkspaceConnectionRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		WriteError(w, http.StatusBadRequest, "Invalid JSON")
 		return
@@ -89,9 +60,8 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	}
 
 	// Check if CLUSTER_ARN is configured early for VSCode connections
-	if req.Spec.WorkspaceConnectionType == ConnectionTypeVSCodeRemote {
-		eksClusterARN := os.Getenv(aws.EKSClusterARNEnv)
-		if eksClusterARN == "" {
+	if req.Spec.WorkspaceConnectionType == connectionv1alpha1.ConnectionTypeVSCodeRemote {
+		if s.config.EKSClusterARN == "" {
 			WriteError(w, http.StatusInternalServerError, "EKS_CLUSTER_ARN not configured. Please upgrade helm chart with eksClusterArn parameter")
 			return
 		}
@@ -107,9 +77,9 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	// Generate response based on connection type
 	var responseType, responseURL string
 	switch req.Spec.WorkspaceConnectionType {
-	case ConnectionTypeVSCodeRemote:
+	case connectionv1alpha1.ConnectionTypeVSCodeRemote:
 		responseType, responseURL, err = s.generateVSCodeURL(r, req.Spec.WorkspaceName, namespace)
-	case ConnectionTypeWebUI:
+	case connectionv1alpha1.ConnectionTypeWebUI:
 		responseType, responseURL, err = s.generateWebUIURL(r, req.Spec.WorkspaceName, namespace)
 	default:
 		WriteError(w, http.StatusBadRequest, "Invalid workspace connection type")
@@ -123,12 +93,14 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	}
 
 	// Create response
-	response := WorkspaceConnectionResponse{
-		APIVersion: WorkspaceConnectionAPIVersion,
-		Kind:       WorkspaceConnectionKind,
-		Metadata:   req.Metadata,
+	response := connectionv1alpha1.WorkspaceConnectionResponse{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: connectionv1alpha1.WorkspaceConnectionAPIVersion,
+			Kind:       connectionv1alpha1.WorkspaceConnectionKind,
+		},
+		ObjectMeta: req.ObjectMeta,
 		Spec:       req.Spec,
-		Status: WorkspaceConnectionResponseStatus{
+		Status: connectionv1alpha1.WorkspaceConnectionResponseStatus{
 			WorkspaceConnectionType: responseType,
 			WorkspaceConnectionURL:  responseURL,
 		},
@@ -142,7 +114,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 }
 
 // validateWorkspaceConnectionRequest validates the workspace connection request
-func validateWorkspaceConnectionRequest(req *WorkspaceConnectionRequest) error {
+func validateWorkspaceConnectionRequest(req *connectionv1alpha1.WorkspaceConnectionRequest) error {
 	if req.Spec.WorkspaceName == "" {
 		return fmt.Errorf("workspaceName is required")
 	}
@@ -153,7 +125,7 @@ func validateWorkspaceConnectionRequest(req *WorkspaceConnectionRequest) error {
 
 	// Validate connection type against enum
 	switch req.Spec.WorkspaceConnectionType {
-	case ConnectionTypeVSCodeRemote, ConnectionTypeWebUI:
+	case connectionv1alpha1.ConnectionTypeVSCodeRemote, connectionv1alpha1.ConnectionTypeWebUI:
 		// Valid types
 	default:
 		return fmt.Errorf("invalid workspaceConnectionType: %s", req.Spec.WorkspaceConnectionType)
@@ -163,14 +135,21 @@ func validateWorkspaceConnectionRequest(req *WorkspaceConnectionRequest) error {
 }
 
 // generateVSCodeURL generates a VSCode connection URL using SSM remote access strategy
+// Returns (connectionType, connectionURL, error)
 func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, namespace string) (string, string, error) {
 	logger := ctrl.Log.WithName("vscode-handler")
 
-	// Get cluster ARN (already validated earlier)
-	eksClusterARN := os.Getenv(aws.EKSClusterARNEnv)
+	// Get cluster ARN from config (already validated earlier)
+	eksClusterARN := s.config.EKSClusterARN
 
 	// Get pod UID from workspace name
-	podUID, err := workspace.GetPodUIDFromWorkspaceName(workspaceName)
+	config := ctrl.GetConfigOrDie()
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return "", "", err
+	}
+
+	podUID, err := workspace.GetPodUIDFromWorkspaceName(clientset, workspaceName)
 	if err != nil {
 		logger.Error(err, "Failed to get pod UID", "workspaceName", workspaceName)
 		return "", "", err
@@ -190,11 +169,12 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 		return "", "", err
 	}
 
-	return ConnectionTypeVSCodeRemote, url, nil
+	return connectionv1alpha1.ConnectionTypeVSCodeRemote, url, nil
 }
 
 // generateWebUIURL generates a Web UI connection URL
+// Returns (connectionType, connectionURL, error)
 func (s *ExtensionServer) generateWebUIURL(r *http.Request, workspaceName, namespace string) (string, string, error) {
 	// TODO: Implement Web UI URL generation with JWT tokens
-	return ConnectionTypeWebUI, "https://placeholder-webui-url.com", nil
+	return connectionv1alpha1.ConnectionTypeWebUI, "https://placeholder-webui-url.com", nil
 }
