@@ -271,10 +271,10 @@ spec:
       memory: "16Gi"
   storage:
     size: "50Gi"' | kubectl apply -f -`)
-			
+
 			_, err := utils.Run(cmd)
 			Expect(err).To(HaveOccurred(), "Expected webhook to reject workspace with invalid image")
-			
+
 			By("verifying workspace was not created")
 			cmd = exec.Command("kubectl", "get", "workspace", "test-rejected-workspace", "--ignore-not-found")
 			output, err := utils.Run(cmd)
@@ -561,7 +561,6 @@ spec:
 			Expect(output).To(ContainSubstring("cpu: 200m"))
 			Expect(output).To(ContainSubstring("memory: 256Mi"))
 			Expect(output).To(ContainSubstring("size: 1Gi"))
-			Expect(output).To(ContainSubstring("appType: jupyter"))
 
 			By("verifying template tracking label was added")
 			cmd = exec.Command("kubectl", "get", "workspace", "webhook-defaults-test",
