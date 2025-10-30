@@ -1,0 +1,18 @@
+# Test workspace that tries to override a locked template (should FAIL)
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-override-denied
+  namespace: default
+spec:
+  displayName: "Workspace Override Denied Test"
+  templateRef: "locked-template"
+  desiredStatus: "Running"
+  # This override should be REJECTED by template validation
+  idleShutdown:
+    enabled: true
+    timeoutMinutes: 10  # Try to override template's 2 minutes
+    detection:
+      httpGet:
+        path: "/api/idle"
+        port: 8888

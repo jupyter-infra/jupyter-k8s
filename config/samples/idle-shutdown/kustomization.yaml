@@ -1,0 +1,17 @@
+## Idle Shutdown Template Samples ##
+# Apply all idle shutdown examples: kubectl apply -k config/samples/idle-shutdown/
+
+resources:
+# Templates
+- templates/02-jupyter-template.yaml
+- templates/03-code-editor-template.yaml
+- templates/04-locked-template.yaml
+
+# Valid workspace examples
+- workspaces/01-simple-workspace.yaml
+- workspaces/02-jupyter-workspace.yaml
+- workspaces/03-code-editor-workspace.yaml
+
+# Violation examples (these will fail validation)
+# Uncomment to test validation errors:
+- workspaces/04-override-denied.yaml

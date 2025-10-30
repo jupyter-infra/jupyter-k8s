@@ -99,7 +99,7 @@ var _ = Describe("Event Recording", func() {
 				pvcBuilder,
 				accessResourceBuilder,
 				statusManager)
-			stateMachine = NewStateMachine(resourceManager, statusManager, templateResolver, fakeRecorder)
+			stateMachine = NewStateMachine(resourceManager, statusManager, templateResolver, fakeRecorder, NewWorkspaceIdleChecker(k8sClient))
 
 			By("reconciling the workspace")
 			_, err := stateMachine.ReconcileDesiredState(ctx, workspace)
@@ -170,7 +170,7 @@ var _ = Describe("Event Recording", func() {
 				pvcBuilder,
 				accessResourceBuilder,
 				statusManager)
-			stateMachine = NewStateMachine(resourceManager, statusManager, templateResolver, fakeRecorder)
+			stateMachine = NewStateMachine(resourceManager, statusManager, templateResolver, fakeRecorder, NewWorkspaceIdleChecker(k8sClient))
 
 			By("reconciling the workspace")
 			_, err := stateMachine.ReconcileDesiredState(ctx, workspace)
@@ -250,7 +250,7 @@ var _ = Describe("Event Recording", func() {
 				pvcBuilder,
 				accessResourceBuilder,
 				statusManager)
-			stateMachine = NewStateMachine(resourceManager, statusManager, templateResolver, fakeRecorder)
+			stateMachine = NewStateMachine(resourceManager, statusManager, templateResolver, fakeRecorder, NewWorkspaceIdleChecker(k8sClient))
 
 			By("reconciling the workspace")
 			_, err := stateMachine.ReconcileDesiredState(ctx, workspace)
