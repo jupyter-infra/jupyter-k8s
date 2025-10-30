@@ -1,0 +1,52 @@
+{{- if .Values.authmiddleware.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: authmiddleware-network-policy
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: authmiddleware
+    component: auth
+spec:
+  podSelector:
+    matchLabels:
+      app: authmiddleware
+      component: auth
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from traefik pods in the same namespace only
+  - from:
+    - podSelector:
+        matchLabels:
+          app: traefik
+          component: router
+      # Ensure the traffic only comes from pods in the same namespace
+      namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ .Values.namespace }}
+    ports:
+    - port: 8080
+      protocol: TCP
+  # Allow traffic for readiness and liveness probes
+  - ports:
+    - port: 8080
+      protocol: TCP
+    from:
+    - ipBlock:
+        cidr: 10.0.0.0/8  # Kubernetes internal network - adjust if needed
+  egress:
+  # Allow DNS resolution
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+  # Allow HTTPS outbound connections (for API server connections)
+  - ports:
+    - port: 443
+      protocol: TCP
+    - port: 6443
+      protocol: TCP  # Kubernetes API server
+{{- end }}
