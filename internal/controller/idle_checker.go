@@ -53,8 +53,8 @@ func (w *WorkspaceIdleChecker) CheckWorkspaceIdle(ctx context.Context, workspace
 	}
 
 	// Use detector to check idle status
-	isIdle, shouldRetry, err := detector.CheckIdle(ctx, workspace.Name, pod, idleConfig)
-	return &IdleCheckResult{IsIdle: isIdle, ShouldRetry: shouldRetry}, err
+	result, err := detector.CheckIdle(ctx, workspace.Name, pod, idleConfig)
+	return result, err
 }
 
 // findWorkspacePod finds the pod for a workspace
