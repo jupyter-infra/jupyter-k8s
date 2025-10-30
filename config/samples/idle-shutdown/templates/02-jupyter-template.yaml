@@ -1,0 +1,33 @@
+# Example WorkspaceTemplate for Jupyter Lab with idle shutdown
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: jupyter-template
+spec:
+  displayName: "Jupyter Lab Template"
+  description: "Template for Jupyter Lab with idle shutdown support"
+  defaultImage: "public.ecr.aws/sagemaker/sagemaker-distribution:3.2.0-cpu"
+  allowedImages:
+    - "public.ecr.aws/sagemaker/sagemaker-distribution:3.2.0-cpu"
+  defaultResources:
+    requests:
+      cpu: "1000m"
+      memory: "2Gi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
+  defaultContainerConfig:
+    command: ["jupyter", "lab", "--core-mode", "--ip", "0.0.0.0", "--port", "8888"]
+  # Default idle shutdown configuration for Jupyter
+  defaultIdleShutdown:
+    enabled: true
+    timeoutMinutes: 3  # 3 minutes for testing
+    detection:
+      httpGet:
+        path: "/api/idle"
+        port: 8888
+  # Allow overrides with bounds
+  idleShutdownOverrides:
+    allow: true
+    minTimeoutMinutes: 1    # At least 1 minute
+    maxTimeoutMinutes: 10   # At most 10 minutes
