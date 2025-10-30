@@ -75,9 +75,9 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 
 	// Check if CLUSTER_ID is configured early for VSCode connections
 	if req.Spec.WorkspaceConnectionType == connectionv1alpha1.ConnectionTypeVSCodeRemote {
-		if s.config.EKSClusterARN == "" {
+		if s.config.ClusterId == "" {
 			logger.Error(nil, "CLUSTER_ID environment variable not configured")
-			WriteError(w, http.StatusBadRequest, "CLUSTER_ID not configured. Please upgrade helm chart with clusterId parameter")
+			WriteError(w, http.StatusBadRequest, "CLUSTER_ID not configured. Please set controllerManager.container.env.CLUSTER_ID in helm values")
 			return
 		}
 	}
@@ -154,9 +154,9 @@ func validateWorkspaceConnectionRequest(req *connectionv1alpha1.WorkspaceConnect
 // Returns (connectionType, connectionURL, error)
 func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, namespace string) (string, string, error) {
 	logger := ctrl.Log.WithName("vscode-handler")
-	
-	// Get cluster ARN from config (already validated earlier)
-	eksClusterARN := s.config.EKSClusterARN
+
+	// Get cluster ID from config (already validated earlier)
+	clusterId := s.config.ClusterId
 
 	// Get pod UID from workspace name
 	config := ctrl.GetConfigOrDie()
@@ -180,7 +180,7 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 	}
 
 	// Generate VSCode connection URL using SSM strategy
-	url, err := ssmStrategy.GenerateVSCodeConnectionURL(r.Context(), workspaceName, namespace, podUID, eksClusterARN)
+	url, err := ssmStrategy.GenerateVSCodeConnectionURL(r.Context(), workspaceName, namespace, podUID, clusterId)
 	if err != nil {
 		return "", "", err
 	}
