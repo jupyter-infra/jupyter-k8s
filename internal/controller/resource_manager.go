@@ -274,9 +274,18 @@ func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deploym
 func (rm *ResourceManager) updateDeployment(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
 	logger := logf.FromContext(ctx)
 
+	// Take status snapshot before update
+	snapshotStatus := workspace.Status.DeepCopy()
+
+	// Report that deployment is being updated
+	if err := rm.statusManager.UpdateDeploymentUpdatingStatus(ctx, workspace, snapshotStatus); err != nil {
+		logger.Error(err, "Failed to update deployment updating status")
+		// Continue with update even if status update fails
+	}
+
 	accessStrategy, err := rm.GetAccessStrategyForWorkspace(ctx, workspace)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve access strategy for comparison: %w", err)
+		return nil, fmt.Errorf("failed to retrieve access strategy for deployment: %w", err)
 	}
 
 	// Update the deployment spec using the builder with access strategy

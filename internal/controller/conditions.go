@@ -48,6 +48,9 @@ const (
 	ReasonServiceError    = "ServiceError"
 	ReasonNoError         = "NoError"
 
+	// ConditionTypeProgressing reasons for updates
+	ReasonDeploymentUpdating = "DeploymentUpdating"
+
 	// ConditionTypeValid reasons
 	ReasonAllChecksPass          = "AllChecksPass"
 	ReasonTemplateViolation      = "TemplateViolation"
