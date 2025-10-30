@@ -83,7 +83,7 @@ func (m *KMSJWTManager) GenerateToken(user string, groups []string, path string,
 
 	// TODO: Fix this weird mutation of the header - should use proper custom header struct
 	// Create token with custom header containing encrypted data key
-	token := jwt5.NewWithClaims(jwt5.SigningMethodHS256, claims)
+	token := jwt5.NewWithClaims(jwt5.SigningMethodHS384, claims)
 
 	// Add encrypted data key to header (temporary approach)
 	token.Header["edk"] = base64.URLEncoding.EncodeToString(encryptedKey)
@@ -111,8 +111,8 @@ func (m *KMSJWTManager) ValidateToken(tokenString string) (*authmiddleware.Claim
 	// Parse token to extract header with encrypted data key
 	token, err := jwt5.ParseWithClaims(tokenString, &authmiddleware.Claims{}, func(token *jwt5.Token) (interface{}, error) {
 		// Verify signing method
-		if _, ok := token.Method.(*jwt5.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		if token.Method != jwt5.SigningMethodHS384 {
+			return nil, fmt.Errorf("unexpected signing method: %v, expected HS384", token.Header["alg"])
 		}
 
 		// Extract encrypted data key from header

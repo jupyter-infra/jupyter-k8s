@@ -2,11 +2,14 @@ package aws
 
 import (
 	"context"
+	"encoding/base64"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	jwt5 "github.com/golang-jwt/jwt/v5"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/authmiddleware"
 )
 
 // MockKMSClient implements a mock KMS client for testing
@@ -179,5 +182,49 @@ func TestKMSJWTManager_CacheMiss(t *testing.T) {
 	// Verify KMS decrypt was called (cache miss)
 	if !mockKMS.decryptCalled {
 		t.Error("Expected KMS decrypt to be called on cache miss")
+	}
+}
+
+func TestKMSJWTManager_RejectsWrongSigningMethod(t *testing.T) {
+	mockKMS := &MockKMSClient{
+		dataKey:      []byte("test-data-key-32-bytes-long-key"),
+		encryptedKey: []byte("encrypted-data-key-blob"),
+	}
+
+	manager := &KMSJWTManager{
+		kmsClient:  NewKMSWrapper(mockKMS, "us-east-1"),
+		keyId:      "test-key-id",
+		issuer:     "test-issuer",
+		audience:   "test-audience",
+		expiration: 30 * time.Minute,
+		keyCache:   make(map[string][]byte),
+	}
+
+	// Create a token with HS256 (wrong algorithm)
+	claims := &authmiddleware.Claims{
+		RegisteredClaims: jwt5.RegisteredClaims{
+			Subject:  "test-user",
+			Issuer:   "test-issuer",
+			Audience: []string{"test-audience"},
+		},
+	}
+	
+	token := jwt5.NewWithClaims(jwt5.SigningMethodHS256, claims)
+	token.Header["edk"] = base64.URLEncoding.EncodeToString(mockKMS.encryptedKey)
+	
+	maliciousToken, err := token.SignedString(mockKMS.dataKey)
+	if err != nil {
+		t.Fatalf("Failed to create malicious token: %v", err)
+	}
+
+	// Should reject token with wrong signing method
+	_, err = manager.ValidateToken(maliciousToken)
+	if err == nil {
+		t.Fatal("Expected validation to fail for wrong signing method")
+	}
+
+	expectedError := "token is unverifiable: error while executing keyfunc: unexpected signing method: HS256, expected HS384"
+	if err.Error() != expectedError {
+		t.Errorf("Expected error %q, got %q", expectedError, err.Error())
 	}
 }
