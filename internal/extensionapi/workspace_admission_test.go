@@ -53,7 +53,7 @@ var _ = Describe("WorkspaceAdmission", func() {
 					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "Public",
+					AccessType: "Public",
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -90,7 +90,7 @@ var _ = Describe("WorkspaceAdmission", func() {
 					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "Public",
+					AccessType: "Public",
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -118,7 +118,7 @@ var _ = Describe("WorkspaceAdmission", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "OwnerOnly", // Private
+					AccessType: "OwnerOnly", // Private
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -147,7 +147,7 @@ var _ = Describe("WorkspaceAdmission", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "OwnerOnly", // Private
+					AccessType: "OwnerOnly", // Private
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -188,10 +188,10 @@ var _ = Describe("WorkspaceAdmission", func() {
 	})
 
 	Context("getWorkspaceAccessType", func() {
-		It("Should return private if Workspace.Spec.OwnershipType=Private", func() {
+		It("Should return private if Workspace.Spec.AccessType=Private", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "Private",
+					AccessType: "Private",
 				},
 			}
 
@@ -199,10 +199,10 @@ var _ = Describe("WorkspaceAdmission", func() {
 			Expect(result).To(Equal(AccessTypePrivate))
 		})
 
-		It("Should return public if Workspace.Spec.OwnershipType=Public", func() {
+		It("Should return public if Workspace.Spec.AccessType=Public", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "Public",
+					AccessType: "Public",
 				},
 			}
 
@@ -210,10 +210,10 @@ var _ = Describe("WorkspaceAdmission", func() {
 			Expect(result).To(Equal(AccessTypePublic))
 		})
 
-		It("Should return private if Workspace.Spec.OwnershipType=OwnerOnly", func() {
+		It("Should return private if Workspace.Spec.AccessType=OwnerOnly", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "OwnerOnly",
+					AccessType: "OwnerOnly",
 				},
 			}
 
@@ -221,10 +221,10 @@ var _ = Describe("WorkspaceAdmission", func() {
 			Expect(result).To(Equal(AccessTypePrivate))
 		})
 
-		It("Should return private if Workspace.Spec.OwnershipType=SomethingElse", func() {
+		It("Should return private if Workspace.Spec.AccessType=SomethingElse", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "SomethingElse",
+					AccessType: "SomethingElse",
 				},
 			}
 
@@ -232,7 +232,7 @@ var _ = Describe("WorkspaceAdmission", func() {
 			Expect(result).To(Equal(AccessTypePrivate))
 		})
 
-		It("Should return private if Workspace.Spec.OwnershipType is missing", func() {
+		It("Should return private if Workspace.Spec.AccessType is missing", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				Spec: workspacev1alpha1.WorkspaceSpec{},
 			}

@@ -86,7 +86,8 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultTolerations []corev1.Toleration `json:"defaultTolerations,omitempty"`
 
-	// DefaultOwnershipType specifies the default access type for workspaces using this template
+	// DefaultOwnershipType specifies default ownershipType for workspaces using this template
+	// OwnershipType controls which users may edit/delete the workspace
 	// +kubebuilder:validation:Enum=Public;OwnerOnly
 	// +kubebuilder:default="Public"
 	// +optional
@@ -100,6 +101,12 @@ type WorkspaceTemplateSpec struct {
 	// IdleShutdownOverrides controls override behavior and bounds
 	// +optional
 	IdleShutdownOverrides *IdleShutdownOverridePolicy `json:"idleShutdownOverrides,omitempty"`
+	// DefaultAccessType specifies the default accessType for workspaces using this template
+	// AccessType controls which users may create connections to the workspace.
+	// +kubebuilder:validation:Enum=Public;OwnerOnly
+	// +kubebuilder:default="Public"
+	// +optional
+	DefaultAccessType string `json:"defaultAccessType,omitempty"`
 
 	// DefaultLifecycle specifies default lifecycle hooks for workspaces using this template
 	// +optional

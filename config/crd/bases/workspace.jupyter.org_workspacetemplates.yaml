@@ -71,6 +71,15 @@ spec:
                 description: AppType specifies the application type for workspaces
                   using this template
                 type: string
+              defaultAccessType:
+                default: Public
+                description: |-
+                  DefaultAccessType specifies the default accessType for workspaces using this template
+                  AccessType controls which users may create connections to the workspace.
+                enum:
+                - Public
+                - OwnerOnly
+                type: string
               defaultAffinity:
                 description: DefaultAffinity specifies default node affinity and anti-affinity
                   rules
@@ -1310,8 +1319,9 @@ spec:
                 type: object
               defaultOwnershipType:
                 default: Public
-                description: DefaultOwnershipType specifies the default access type
-                  for workspaces using this template
+                description: |-
+                  DefaultOwnershipType specifies default ownershipType for workspaces using this template
+                  OwnershipType controls which users may edit/delete the workspace
                 enum:
                 - Public
                 - OwnerOnly

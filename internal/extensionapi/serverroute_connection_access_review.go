@@ -64,6 +64,7 @@ func (s *ExtensionServer) handleConnectionAccessReview(w http.ResponseWriter, r 
 	workspaceName := accessReview.Spec.WorkspaceName
 	username := accessReview.Spec.User
 	groups := accessReview.Spec.Groups
+	uid := accessReview.Spec.UID
 
 	// Convert map[string][]string to map[string]authorizationv1.ExtraValue
 	extra := make(map[string]authorizationv1.ExtraValue)
@@ -71,7 +72,8 @@ func (s *ExtensionServer) handleConnectionAccessReview(w http.ResponseWriter, r 
 		extra[k] = authorizationv1.ExtraValue(v)
 	}
 
-	result, err := s.CheckWorkspaceConnectionPermission(namespace, workspaceName, username, groups, extra, &logger)
+	result, err := s.CheckWorkspaceConnectionPermission(
+		namespace, workspaceName, username, groups, uid, extra, &logger)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to verify access permission")
 		return

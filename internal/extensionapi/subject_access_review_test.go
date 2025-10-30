@@ -18,6 +18,7 @@ var _ = Describe("SubjectAccessReview", func() {
 			testNS     string
 			testUser   string
 			testGroups []string
+			testUID    string
 		)
 
 		BeforeEach(func() {
@@ -34,11 +35,12 @@ var _ = Describe("SubjectAccessReview", func() {
 			testNS = "test-namespace"
 			testUser = "test-user"
 			testGroups = []string{"system:authenticated", "test-group"}
+			testUID = "test-uid"
 		})
 
 		It("Should use the server SAR client to submit a SAR", func() {
 			// Call the function under test
-			_, err := server.CheckRBACPermission(testNS, testUser, testGroups, nil, &testLogger)
+			_, err := server.CheckRBACPermission(testNS, testUser, testGroups, testUID, nil, &testLogger)
 
 			// Verify no error
 			Expect(err).NotTo(HaveOccurred())
@@ -49,7 +51,7 @@ var _ = Describe("SubjectAccessReview", func() {
 
 		It("Should pass the username and groups to the SAR", func() {
 			// Call the function under test
-			_, err := server.CheckRBACPermission(testNS, testUser, testGroups, nil, &testLogger)
+			_, err := server.CheckRBACPermission(testNS, testUser, testGroups, testUID, nil, &testLogger)
 
 			// Verify no error
 			Expect(err).NotTo(HaveOccurred())
@@ -58,11 +60,12 @@ var _ = Describe("SubjectAccessReview", func() {
 			Expect(mockClient.LastCreateParams).NotTo(BeNil())
 			Expect(mockClient.LastCreateParams.Spec.User).To(Equal(testUser))
 			Expect(mockClient.LastCreateParams.Spec.Groups).To(Equal(testGroups))
+			Expect(mockClient.LastCreateParams.Spec.UID).To(Equal(testUID))
 		})
 
 		It("Should include the correct resource attributes in the SAR", func() {
 			// Call the function under test
-			_, err := server.CheckRBACPermission(testNS, testUser, testGroups, nil, &testLogger)
+			_, err := server.CheckRBACPermission(testNS, testUser, testGroups, testUID, nil, &testLogger)
 
 			// Verify no error
 			Expect(err).NotTo(HaveOccurred())
@@ -73,8 +76,8 @@ var _ = Describe("SubjectAccessReview", func() {
 			Expect(attrs).NotTo(BeNil())
 			Expect(attrs.Namespace).To(Equal(testNS))
 			Expect(attrs.Verb).To(Equal("create"))
-			Expect(attrs.Group).To(Equal("workspace.jupyter.org"))
-			Expect(attrs.Resource).To(Equal("workspaces/connection"))
+			Expect(attrs.Group).To(Equal("connection.workspace.jupyter.org"))
+			Expect(attrs.Resource).To(Equal("workspaceconnections"))
 		})
 
 		It("Should return allowed=true and the SAR reason if the SAR returns allowed", func() {
@@ -82,7 +85,7 @@ var _ = Describe("SubjectAccessReview", func() {
 			mockClient.SetupAllowed("test reason allowed")
 
 			// Call the function under test
-			result, err := server.CheckRBACPermission(testNS, testUser, testGroups, nil, &testLogger)
+			result, err := server.CheckRBACPermission(testNS, testUser, testGroups, testUID, nil, &testLogger)
 
 			// Verify no error
 			Expect(err).NotTo(HaveOccurred())
@@ -98,7 +101,7 @@ var _ = Describe("SubjectAccessReview", func() {
 			mockClient.SetupDenied("test reason denied")
 
 			// Call the function under test
-			result, err := server.CheckRBACPermission(testNS, testUser, testGroups, nil, &testLogger)
+			result, err := server.CheckRBACPermission(testNS, testUser, testGroups, testUID, nil, &testLogger)
 
 			// Verify no error
 			Expect(err).NotTo(HaveOccurred())
@@ -115,7 +118,7 @@ var _ = Describe("SubjectAccessReview", func() {
 			mockClient.SetupError(mockErr)
 
 			// Call the function under test
-			result, err := server.CheckRBACPermission(testNS, testUser, testGroups, nil, &testLogger)
+			result, err := server.CheckRBACPermission(testNS, testUser, testGroups, testUID, nil, &testLogger)
 
 			// Verify error is returned
 			Expect(err).To(HaveOccurred())
@@ -136,7 +139,7 @@ var _ = Describe("SubjectAccessReview", func() {
 				server.sarClient = mockClient
 
 				// Call the function under test with this namespace
-				_, err := server.CheckRBACPermission(ns, testUser, testGroups, nil, &testLogger)
+				_, err := server.CheckRBACPermission(ns, testUser, testGroups, testUID, nil, &testLogger)
 
 				// Verify no error
 				Expect(err).NotTo(HaveOccurred())
@@ -156,7 +159,7 @@ var _ = Describe("SubjectAccessReview", func() {
 			}
 
 			// Call the function under test with extra data
-			_, err := server.CheckRBACPermission(testNS, testUser, testGroups, testExtra, &testLogger)
+			_, err := server.CheckRBACPermission(testNS, testUser, testGroups, testUID, testExtra, &testLogger)
 
 			// Verify no error
 			Expect(err).NotTo(HaveOccurred())
