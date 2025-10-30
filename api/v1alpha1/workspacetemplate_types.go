@@ -99,7 +99,7 @@ type WorkspaceTemplateSpec struct {
 	// +kubebuilder:default="Public"
 	// +optional
 	DefaultAccessType string `json:"defaultAccessType,omitempty"`
-  
+
 	// DefaultLifecycle specifies default lifecycle hooks for workspaces using this template
 	// +optional
 	DefaultLifecycle *corev1.Lifecycle `json:"defaultLifecycle,omitempty"`

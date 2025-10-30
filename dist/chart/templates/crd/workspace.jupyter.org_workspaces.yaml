@@ -993,6 +993,9 @@ spec:
                         x-kubernetes-list-type: atomic
                     type: object
                 type: object
+              appType:
+                description: AppType specifies the application type for this workspace
+                type: string
               containerConfig:
                 description: ContainerConfig specifies container command and args
                   configuration
