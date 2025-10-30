@@ -56,6 +56,8 @@ func (s *Server) createConnectionAccessReview(
 	groups []string,
 	namespace string,
 	workspaceName string,
+	uid string,
+	extra map[string][]string,
 ) (*v1alpha1.ConnectionAccessReviewStatus, error) {
 	if s.restClient == nil {
 		return nil, fmt.Errorf("kubernetes REST client not initialized")
@@ -71,6 +73,14 @@ func (s *Server) createConnectionAccessReview(
 			User:          username,
 			Groups:        groups,
 		},
+	}
+
+	// Add the optional auth context arguments
+	if len(extra) > 0 {
+		reviewRequest.Spec.Extra = extra
+	}
+	if uid != "" {
+		reviewRequest.Spec.UID = uid
 	}
 
 	// The ConnectionAccessReview requires using a REST client rather than a standard k8s client
@@ -112,13 +122,14 @@ func (s *Server) createConnectionAccessReview(
 
 // VerifyWorkspaceAccess checks if the user has access to the workspace path
 // It extracts the workspace info from the path, call the connection API
-// create:ConnectionAccessReview, return a boolean for access, the result
-// of the ConnectionAccessReview and WorkspaceInfo.
+// create:ConnectionAccessReview, return the result and WorkspaceInfo.
 func (s *Server) VerifyWorkspaceAccess(
 	ctx context.Context,
 	path string,
 	username string,
 	groups []string,
+	uid string,
+	extra map[string][]string,
 ) (*v1alpha1.ConnectionAccessReviewStatus, *WorkspaceInfo, error) {
 	// Extract workspace info from path
 	workspaceInfo, err := s.ExtractWorkspaceInfo(path)
@@ -134,6 +145,8 @@ func (s *Server) VerifyWorkspaceAccess(
 		groups,
 		workspaceInfo.Namespace,
 		workspaceInfo.Name,
+		uid,
+		extra,
 	)
 
 	if err != nil {
@@ -141,4 +154,44 @@ func (s *Server) VerifyWorkspaceAccess(
 	}
 
 	return accessReviewResult, workspaceInfo, nil
+}
+
+// VerifyWorkspaceAccessFromJwt retrieves the user auth context as recorded in the JWT
+// (consisting in: username, groups, uid, extra), extracts the workspace info from the path,
+// call the connection API which makes a create:ConnectionAccessReview call,
+// return the result and WorkspaceInfo.
+func (s *Server) VerifyWorkspaceAccessFromJwt(
+	ctx context.Context,
+	path string,
+	claims *Claims,
+) (*v1alpha1.ConnectionAccessReviewStatus, *WorkspaceInfo, error) {
+	// Extract workspace info from path
+	workspaceInfo, err := s.ExtractWorkspaceInfo(path)
+	if err != nil {
+		s.logger.Info(fmt.Sprintf("Invalid workspace path: %s", path))
+		return nil, nil, err
+	}
+
+	username := claims.User
+	groups := claims.Groups
+	uid := claims.UID
+	extra := claims.Extra
+
+	// Check if user and/or groups are authorized to create a connection to the Workspace
+	accessReviewResult, err := s.createConnectionAccessReview(
+		ctx,
+		username,
+		groups,
+		workspaceInfo.Namespace,
+		workspaceInfo.Name,
+		uid,
+		extra,
+	)
+
+	if err != nil {
+		return nil, workspaceInfo, fmt.Errorf("failed to check workspace permission: %w", err)
+	}
+
+	return accessReviewResult, workspaceInfo, nil
+
 }

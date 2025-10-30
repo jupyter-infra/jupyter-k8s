@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -80,6 +81,7 @@ func (r *WorkspaceReconciler) SetStateMachine(sm *StateMachine) {
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
+// +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=traefik.io,resources=ingressroutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=traefik.io,resources=middlewares,verbs=get;list;watch;create;update;patch;delete
@@ -159,6 +161,24 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return hasWorkspace
 			})),
 		)
+
+		// Also watch Events to detect preemption
+		builder.Watches(
+			&corev1.Event{},
+			handler.EnqueueRequestsFromMapFunc(r.podEventHandler.HandleKubernetesEvents),
+			builderPkg.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				// Only watch preemption-related events to avoid processing all events
+				event, ok := obj.(*corev1.Event)
+				if !ok {
+					return false
+				}
+				// Handle both workload preemption events and pod stopped events due to preemption
+				return (event.InvolvedObject.Kind == KindPod &&
+					event.Reason == "Stopped" &&
+					strings.Contains(event.Message, "Preempted")) ||
+					(event.Reason == "Preempted")
+			})),
+		)
 	}
 
 	// Optional traefik configuration (backward compatibility)
@@ -216,7 +236,8 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	// Create state machine
 	templateResolver := NewTemplateResolver(k8sClient)
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
-	stateMachine := NewStateMachine(resourceManager, statusManager, templateResolver, eventRecorder)
+	idleChecker := NewWorkspaceIdleChecker(k8sClient)
+	stateMachine := NewStateMachine(resourceManager, statusManager, templateResolver, eventRecorder, idleChecker)
 
 	// Create pod event handler
 	podEventHandler := NewPodEventHandler(k8sClient, resourceManager)

@@ -9,6 +9,8 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	rlog "github.com/go-logr/logr"
+
+	connectionv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
 )
 
 // RBACPermissionResult contains the result of an RBAC permission check
@@ -23,6 +25,8 @@ func (s *ExtensionServer) CheckRBACPermission(
 	namespace string,
 	username string,
 	groups []string,
+	uid string,
+	extra map[string]authorizationv1.ExtraValue,
 	logger *rlog.Logger,
 ) (*RBACPermissionResult, error) {
 	sarClient := s.sarClient
@@ -33,11 +37,13 @@ func (s *ExtensionServer) CheckRBACPermission(
 			ResourceAttributes: &authorizationv1.ResourceAttributes{
 				Namespace: namespace,
 				Verb:      "create",
-				Group:     "workspace.jupyter.org",
-				Resource:  "workspaces/connection",
+				Group:     connectionv1alpha1.SchemeGroupVersion.Group,
+				Resource:  "workspaceconnections",
 			},
 			User:   username,
 			Groups: groups,
+			UID:    uid,
+			Extra:  extra,
 		},
 	}
 

@@ -77,7 +77,8 @@ func (s *Server) handleBearerAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate new long-term session token
-	sessionToken, err := s.jwtManager.GenerateToken(claims.Subject, claims.Groups, appPath, host, TokenTypeSession)
+	sessionToken, err := s.jwtManager.GenerateToken(
+		claims.Subject, claims.Groups, claims.UID, claims.Extra, appPath, host, TokenTypeSession)
 	if err != nil {
 		s.logger.Error("Failed to generate session token", "error", err, "user", claims.Subject)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)

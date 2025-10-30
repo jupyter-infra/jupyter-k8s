@@ -73,6 +73,26 @@ type AccessStrategyRef struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
+// IdleShutdownSpec defines idle shutdown configuration
+type IdleShutdownSpec struct {
+	// Enabled indicates if idle shutdown is enabled
+	Enabled bool `json:"enabled"`
+
+	// TimeoutMinutes specifies idle timeout in minutes
+	// +kubebuilder:validation:Minimum=1
+	TimeoutMinutes int `json:"timeoutMinutes"`
+
+	// Detection specifies how to detect idle state
+	Detection IdleDetectionSpec `json:"detection"`
+}
+
+// IdleDetectionSpec defines idle detection methods
+type IdleDetectionSpec struct {
+	// HTTPGet specifies the HTTP request to perform for idle detection
+	// +optional
+	HTTPGet *corev1.HTTPGetAction `json:"httpGet,omitempty"`
+}
+
 // WorkspaceSpec defines the desired state of Workspace
 type WorkspaceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -90,12 +110,19 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:Enum=Running;Stopped
 	DesiredStatus string `json:"desiredStatus,omitempty"`
 
-	// OwnershipType specifies who can modify the space.
-	// Public means anyone with RBAC permissions can update/delete the space.
-	// OwnerOnly means only the creator can update/delete the space.
+	// OwnershipType specifies who can modify the workspace.
+	// Public means anyone with RBAC permissions can update/delete the workspace.
+	// OwnerOnly means only the creator can update/delete the workspace.
 	// +kubebuilder:validation:Enum=Public;OwnerOnly
 	// +optional
 	OwnershipType string `json:"ownershipType,omitempty"`
+
+	// AccessType specifies who can connect to the workspace.
+	// Public means anyone with RBAC permissions can connect to workspace.
+	// OwnerOnly means only the creator can connect to the workspace.
+	// +kubebuilder:validation:Enum=Public;OwnerOnly
+	// +optional
+	AccessType string `json:"accessType,omitempty"`
 
 	// Resources specifies the resource requirements
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
@@ -133,6 +160,14 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="templateRef is immutable"
 	// +optional
 	TemplateRef *string `json:"templateRef,omitempty"`
+
+	// IdleShutdown specifies idle shutdown configuration
+	// +optional
+	IdleShutdown *IdleShutdownSpec `json:"idleShutdown,omitempty"`
+
+	// AppType specifies the application type for this workspace
+	// +optional
+	AppType string `json:"appType,omitempty"`
 }
 
 // AccessResourceStatus defines the status of a resource created from a template

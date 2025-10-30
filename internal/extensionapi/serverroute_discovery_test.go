@@ -121,7 +121,7 @@ var _ = Describe("ServerRouteDiscovery", func() {
 				resource, ok := res.(map[string]interface{})
 				Expect(ok).To(BeTrue(), "resource should be an object")
 
-				if resource["kind"] == "Connection" {
+				if resource["kind"] == "WorkspaceConnection" {
 					connectionResource = resource
 					break
 				}
@@ -131,7 +131,7 @@ var _ = Describe("ServerRouteDiscovery", func() {
 			Expect(connectionResource).NotTo(BeNil(), "should have a Connection resource")
 
 			// Verify the Connection resource has the correct properties
-			Expect(connectionResource["kind"]).To(Equal("Connection"))
+			Expect(connectionResource["kind"]).To(Equal("WorkspaceConnection"))
 			Expect(connectionResource["namespaced"]).To(BeTrue())
 
 			// Verify the verbs array contains "create"

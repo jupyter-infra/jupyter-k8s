@@ -38,6 +38,15 @@ const (
 	PhaseCreating = "Creating"
 	PhaseRunning  = "Running"
 	PhaseStopped  = "Stopped"
+
+	// Preemption annotation value
+	PreemptedReason = "Workspace preempted due to resource contention"
+
+	// Annotation keys
+	PreemptionReasonAnnotation = "workspace.jupyter.org/preemption-reason"
+
+	// Kubernetes resource kinds
+	KindPod = "Pod"
 	// Status messages
 	MessageCreating = "Jupyter server is starting"
 	MessageRunning  = "Jupyter server is running"
@@ -49,6 +58,9 @@ const (
 	// Reconciliation timing
 	PollRequeueDelay = 200 * time.Millisecond
 	LongRequeueDelay = 60 * time.Second
+
+	// Idle shutdown constants
+	IdleCheckInterval = 5 * time.Minute
 )
 
 // GenerateDeploymentName creates a consistent deployment name

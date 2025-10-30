@@ -26,6 +26,8 @@ type ExtensionConfig struct {
 	ReadTimeoutSeconds  int
 	WriteTimeoutSeconds int
 	AllowedOrigin       string
+	// AWS section
+	EKSClusterARN string
 }
 
 // ConfigOption is a function that modifies an ExtensionConfig
@@ -91,6 +93,13 @@ func WithWriteTimeoutSeconds(timeoutSeconds int) ConfigOption {
 func WithAllowedOrigin(origin string) ConfigOption {
 	return func(c *ExtensionConfig) {
 		c.AllowedOrigin = origin
+	}
+}
+
+// WithEKSClusterARN sets the EKS cluster ARN
+func WithEKSClusterARN(arn string) ConfigOption {
+	return func(c *ExtensionConfig) {
+		c.EKSClusterARN = arn
 	}
 }
 

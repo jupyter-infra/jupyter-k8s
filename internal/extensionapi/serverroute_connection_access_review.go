@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	connectionv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
+	authorizationv1 "k8s.io/api/authorization/v1"
 )
 
 // handleConnectionAccessReview handles requests to the connectionaccessreview resource
@@ -63,8 +64,16 @@ func (s *ExtensionServer) handleConnectionAccessReview(w http.ResponseWriter, r 
 	workspaceName := accessReview.Spec.WorkspaceName
 	username := accessReview.Spec.User
 	groups := accessReview.Spec.Groups
+	uid := accessReview.Spec.UID
 
-	result, err := s.CheckWorkspaceConnectionPermission(namespace, workspaceName, username, groups, &logger)
+	// Convert map[string][]string to map[string]authorizationv1.ExtraValue
+	extra := make(map[string]authorizationv1.ExtraValue)
+	for k, v := range accessReview.Spec.Extra {
+		extra[k] = authorizationv1.ExtraValue(v)
+	}
+
+	result, err := s.CheckWorkspaceConnectionPermission(
+		namespace, workspaceName, username, groups, uid, extra, &logger)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "Failed to verify access permission")
 		return

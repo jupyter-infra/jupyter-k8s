@@ -86,11 +86,35 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultTolerations []corev1.Toleration `json:"defaultTolerations,omitempty"`
 
-	// DefaultOwnershipType specifies the default access type for workspaces using this template
+	// DefaultOwnershipType specifies default ownershipType for workspaces using this template
+	// OwnershipType controls which users may edit/delete the workspace
 	// +kubebuilder:validation:Enum=Public;OwnerOnly
 	// +kubebuilder:default="Public"
 	// +optional
 	DefaultOwnershipType string `json:"defaultOwnershipType,omitempty"`
+
+	// DefaultIdleShutdown provides default idle shutdown configuration
+	// Includes timeout, detection endpoint, and enable/disable
+	// +optional
+	DefaultIdleShutdown *IdleShutdownSpec `json:"defaultIdleShutdown,omitempty"`
+
+	// IdleShutdownOverrides controls override behavior and bounds
+	// +optional
+	IdleShutdownOverrides *IdleShutdownOverridePolicy `json:"idleShutdownOverrides,omitempty"`
+	// DefaultAccessType specifies the default accessType for workspaces using this template
+	// AccessType controls which users may create connections to the workspace.
+	// +kubebuilder:validation:Enum=Public;OwnerOnly
+	// +kubebuilder:default="Public"
+	// +optional
+	DefaultAccessType string `json:"defaultAccessType,omitempty"`
+
+	// DefaultLifecycle specifies default lifecycle hooks for workspaces using this template
+	// +optional
+	DefaultLifecycle *corev1.Lifecycle `json:"defaultLifecycle,omitempty"`
+
+	// AppType specifies the application type for workspaces using this template
+	// +optional
+	AppType string `json:"appType,omitempty"`
 }
 
 // ResourceBounds defines minimum and maximum resource limits
@@ -148,12 +172,27 @@ type StorageConfig struct {
 	DefaultMountPath string `json:"defaultMountPath,omitempty"`
 }
 
+// IdleShutdownOverridePolicy defines idle shutdown override constraints
+type IdleShutdownOverridePolicy struct {
+	// Allow controls whether workspaces can override idle shutdown
+	// +kubebuilder:default=true
+	// +optional
+	Allow *bool `json:"allow,omitempty"`
+
+	// MinTimeoutMinutes is the minimum allowed timeout
+	// +optional
+	MinTimeoutMinutes *int `json:"minTimeoutMinutes,omitempty"`
+
+	// MaxTimeoutMinutes is the maximum allowed timeout
+	// +optional
+	MaxTimeoutMinutes *int `json:"maxTimeoutMinutes,omitempty"`
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Display Name",type="string",JSONPath=".spec.displayName"
 // +kubebuilder:printcolumn:name="Default Image",type="string",JSONPath=".spec.defaultImage"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:validation:XValidation:rule="self.spec == oldSelf.spec",message="template spec is immutable after creation"
 
 // WorkspaceTemplate is the Schema for the workspacetemplates API
 // Templates define reusable, secure-by-default configurations for workspaces.

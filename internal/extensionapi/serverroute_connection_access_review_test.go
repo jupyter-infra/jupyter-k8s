@@ -55,6 +55,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 			testWorkspaceName string
 			testUsername      string
 			testGroups        []string
+			testUID           string
 		)
 
 		BeforeEach(func() {
@@ -79,6 +80,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 			testWorkspaceName = "test-workspace1"
 			testUsername = "test-user1"
 			testGroups = []string{"system:authenticated", "github:test-group1"}
+			testUID = "test-uid1"
 		})
 
 		It("Should accept a POST request", func() {
@@ -103,7 +105,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "OwnerOnly",
+					AccessType: "OwnerOnly",
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -134,7 +136,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "OwnerOnly",
+					AccessType: "OwnerOnly",
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -165,7 +167,8 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 				"spec": {
 					"workspaceName": "test-workspace1",
 					"user": "test-user1",
-					"groups": ["system:authenticated", "github:test-group1"]
+					"groups": ["system:authenticated", "github:test-group1"],
+					"uid": "test-uid1"
 				}
 			}`)
 			recorder := httptest.NewRecorder()
@@ -182,7 +185,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "OwnerOnly",
+					AccessType: "OwnerOnly",
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -193,6 +196,66 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 			Expect(mockSarClient.LastCreateParams).NotTo(BeNil())
 			Expect(mockSarClient.LastCreateParams.Spec.User).To(Equal(testUsername))
 			Expect(mockSarClient.LastCreateParams.Spec.Groups).To(Equal(testGroups))
+			Expect(mockSarClient.LastCreateParams.Spec.UID).To(Equal(testUID))
+		})
+
+		It("Should pass Extra from the request to SubjectAccessReview", func() {
+			// Extra data is directly in the JSON request
+
+			// Create a request with Extra in the spec
+			req := createTestRequest("POST", "/apis/connection.workspace.jupyter.org/v1alpha1/namespaces/test-namespace1/connectionaccessreview", `{
+				"spec": {
+					"workspaceName": "test-workspace1",
+					"user": "test-user1",
+					"groups": ["system:authenticated", "github:test-group1"],
+					"extra": {
+						"impersonation.kubernetes.io/uid": ["12345"],
+						"system.authentication.provider": ["oidc"],
+						"oidc.example.com/groups": ["developers", "testers"]
+					}
+				}
+			}`)
+			recorder := httptest.NewRecorder()
+
+			mockSarClient.SetupAllowed("Permitted by RBAC")
+
+			// Create a test workspace
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      testWorkspaceName,
+					Namespace: testNamespace,
+					Annotations: map[string]string{
+						OwnerAnnotation: testUsername,
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					AccessType: "OwnerOnly",
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
+
+			server.handleConnectionAccessReview(recorder, req)
+
+			// Verify that the SAR client was called with the Extra data
+			Expect(mockSarClient.LastCreateParams).NotTo(BeNil())
+
+			// Check that the Extra map exists and has the UID field
+			Expect(mockSarClient.LastCreateParams.Spec.Extra).To(HaveKey("impersonation.kubernetes.io/uid"))
+
+			// Check that the UID value is correct
+			uidValues := mockSarClient.LastCreateParams.Spec.Extra["impersonation.kubernetes.io/uid"]
+			Expect(uidValues).To(HaveLen(1))
+			Expect(uidValues[0]).To(Equal("12345"))
+
+			// Check the other fields
+			providerValues := mockSarClient.LastCreateParams.Spec.Extra["system.authentication.provider"]
+			Expect(providerValues).To(HaveLen(1))
+			Expect(providerValues[0]).To(Equal("oidc"))
+
+			groupValues := mockSarClient.LastCreateParams.Spec.Extra["oidc.example.com/groups"]
+			Expect(groupValues).To(HaveLen(2))
+			Expect(groupValues).To(ContainElement("developers"))
+			Expect(groupValues).To(ContainElement("testers"))
 		})
 		It("Should return an error if reading the request.body fails", func() {
 			req := createTestRequest("POST", "/apis/connection.workspace.jupyter.org/v1alpha1/namespaces/test-namespace1/connectionaccessreview", "")

@@ -159,6 +159,7 @@ authmiddleware:
   jwtIssuer: "jupyter-k8s-auth"
   jwtAudience: "workspace-users"
   jwtExpiration: "1h"
+  jwtRefreshEnable: "true"
   jwtRefreshWindow: "15m"
   jwtRefreshHorizon: "12h"
   # Cookie configuration
