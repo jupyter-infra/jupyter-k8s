@@ -29,6 +29,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	logger := GetLoggerFromContext(r.Context())
 
 	if r.Method != "POST" {
+		logger.Error(nil, "Invalid HTTP method", "method", r.Method)
 		WriteError(w, http.StatusBadRequest, "Connection must use POST method")
 		return
 	}
@@ -36,6 +37,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	// Extract namespace from URL path
 	namespace, err := GetNamespaceFromPath(r.URL.Path)
 	if err != nil {
+		logger.Error(err, "Failed to extract namespace from URL path", "path", r.URL.Path)
 		WriteError(w, http.StatusBadRequest, "Invalid URL path")
 		return
 	}
@@ -43,26 +45,39 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	// Parse request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		logger.Error(err, "Failed to read request body")
 		WriteError(w, http.StatusBadRequest, "Failed to read request body")
 		return
 	}
 
 	var req connectionv1alpha1.WorkspaceConnectionRequest
 	if err := json.Unmarshal(body, &req); err != nil {
+		logger.Error(err, "Failed to parse JSON request body")
 		WriteError(w, http.StatusBadRequest, "Invalid JSON")
 		return
 	}
 
 	// Validate request
 	if err := validateWorkspaceConnectionRequest(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, err.Error())
+		logger.Error(err, "Invalid workspace connection request")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		status := map[string]interface{}{
+			"kind":       "Status",
+			"apiVersion": "v1",
+			"status":     "Failure",
+			"message":    err.Error(),
+			"code":       http.StatusBadRequest,
+		}
+		json.NewEncoder(w).Encode(status)
 		return
 	}
 
-	// Check if CLUSTER_ARN is configured early for VSCode connections
+	// Check if CLUSTER_ID is configured early for VSCode connections
 	if req.Spec.WorkspaceConnectionType == connectionv1alpha1.ConnectionTypeVSCodeRemote {
 		if s.config.EKSClusterARN == "" {
-			WriteError(w, http.StatusInternalServerError, "EKS_CLUSTER_ARN not configured. Please upgrade helm chart with eksClusterArn parameter")
+			logger.Error(nil, "CLUSTER_ID environment variable not configured")
+			WriteError(w, http.StatusBadRequest, "CLUSTER_ID not configured. Please upgrade helm chart with clusterId parameter")
 			return
 		}
 	}
@@ -82,13 +97,14 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	case connectionv1alpha1.ConnectionTypeWebUI:
 		responseType, responseURL, err = s.generateWebUIURL(r, req.Spec.WorkspaceName, namespace)
 	default:
+		logger.Error(nil, "Invalid workspace connection type", "connectionType", req.Spec.WorkspaceConnectionType)
 		WriteError(w, http.StatusBadRequest, "Invalid workspace connection type")
 		return
 	}
 
 	if err != nil {
 		logger.Error(err, "Failed to generate connection URL", "connectionType", req.Spec.WorkspaceConnectionType)
-		WriteError(w, http.StatusInternalServerError, "Failed to generate connection URL")
+		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -138,7 +154,7 @@ func validateWorkspaceConnectionRequest(req *connectionv1alpha1.WorkspaceConnect
 // Returns (connectionType, connectionURL, error)
 func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, namespace string) (string, string, error) {
 	logger := ctrl.Log.WithName("vscode-handler")
-
+	
 	// Get cluster ARN from config (already validated earlier)
 	eksClusterARN := s.config.EKSClusterARN
 
