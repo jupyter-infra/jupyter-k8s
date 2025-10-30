@@ -72,7 +72,6 @@ spec:
             value: "{{ .Values.authmiddleware.shutdownTimeout }}"
           - name: JWT_VALIDATION_TYPE
             value: "{{ .Values.authmiddleware.jwtValidationType }}"
-          {{- if eq .Values.authmiddleware.jwtValidationType "hmac" }}
           - name: JWT_ISSUER
             value: "{{ .Values.authmiddleware.jwtIssuer }}"
           - name: JWT_AUDIENCE

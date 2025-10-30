@@ -6,7 +6,8 @@ version: 0.1.0
 appVersion: "0.1.0"
 icon: "https://example.com/icon.png"
 
-# Dependencies
-# Require traefik CRDs to be installed (https://traefik.github.io/charts)
-# Not adding as a dependency because of `helm` install issues
-# Run `helm upgrade --install traefik-crd traefik/traefik-crds` first
+dependencies:
+  - name: traefik
+    version: "32.1.1"
+    repository: "https://traefik.github.io/charts"
+    condition: traefik.enabled
