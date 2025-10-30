@@ -1,11 +1,13 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -62,4 +64,30 @@ func (sb *ServiceBuilder) buildServiceSpec(workspace *workspacev1alpha1.Workspac
 			},
 		},
 	}
+}
+
+// NeedsUpdate checks if the existing service needs to be updated based on workspace changes
+func (sb *ServiceBuilder) NeedsUpdate(ctx context.Context, existingService *corev1.Service, workspace *workspacev1alpha1.Workspace) (bool, error) {
+	// Build the desired service spec
+	desiredService, err := sb.BuildService(workspace)
+	if err != nil {
+		return false, fmt.Errorf("failed to build desired service: %w", err)
+	}
+
+	// Compare service specs using semantic equality
+	return !equality.Semantic.DeepEqual(existingService.Spec, desiredService.Spec), nil
+}
+
+// UpdateServiceSpec updates the existing service with the desired spec
+func (sb *ServiceBuilder) UpdateServiceSpec(ctx context.Context, existingService *corev1.Service, workspace *workspacev1alpha1.Workspace) error {
+	// Build the desired service spec
+	desiredService, err := sb.BuildService(workspace)
+	if err != nil {
+		return fmt.Errorf("failed to build desired service: %w", err)
+	}
+
+	// Update the service spec while preserving metadata like resourceVersion
+	existingService.Spec = desiredService.Spec
+
+	return nil
 }

@@ -438,3 +438,20 @@ func (sm *StatusManager) UpdateDeploymentUpdatingStatus(
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &[]metav1.Condition{progressingCondition})
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
+
+// UpdateServiceUpdatingStatus sets Progressing to true when service is being updated
+func (sm *StatusManager) UpdateServiceUpdatingStatus(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus,
+) error {
+	progressingCondition := NewCondition(
+		ConditionTypeProgressing,
+		metav1.ConditionTrue,
+		ReasonServiceUpdating,
+		"Service is being updated",
+	)
+
+	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &[]metav1.Condition{progressingCondition})
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
+}

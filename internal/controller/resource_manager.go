@@ -308,7 +308,7 @@ func (rm *ResourceManager) updateDeployment(ctx context.Context, deployment *app
 	return deployment, nil
 }
 
-// EnsureServiceExists creates a service if it doesn't exist
+// EnsureServiceExists creates a service if it doesn't exist, or updates it if the spec differs
 func (rm *ResourceManager) EnsureServiceExists(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.Service, error) {
 	service, err := rm.getService(ctx, workspace)
 	if err != nil {
@@ -317,6 +317,50 @@ func (rm *ResourceManager) EnsureServiceExists(ctx context.Context, workspace *w
 		}
 		return nil, fmt.Errorf("failed to get service: %w", err)
 	}
+
+	return rm.ensureServiceUpToDate(ctx, service, workspace)
+}
+
+// ensureServiceUpToDate checks if service needs update and updates it if necessary
+func (rm *ResourceManager) ensureServiceUpToDate(ctx context.Context, service *corev1.Service, workspace *workspacev1alpha1.Workspace) (*corev1.Service, error) {
+	needsUpdate, err := rm.serviceBuilder.NeedsUpdate(ctx, service, workspace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if service needs update: %w", err)
+	}
+
+	if needsUpdate {
+		return rm.updateService(ctx, service, workspace)
+	}
+
+	return service, nil
+}
+
+// updateService updates an existing service with new spec
+func (rm *ResourceManager) updateService(ctx context.Context, service *corev1.Service, workspace *workspacev1alpha1.Workspace) (*corev1.Service, error) {
+	logger := logf.FromContext(ctx)
+
+	// Take status snapshot before update
+	snapshotStatus := workspace.Status.DeepCopy()
+
+	// Report that service is being updated
+	if err := rm.statusManager.UpdateServiceUpdatingStatus(ctx, workspace, snapshotStatus); err != nil {
+		logger.Error(err, "Failed to update service updating status")
+		// Continue with update even if status update fails
+	}
+
+	// Update the service spec using the builder
+	if err := rm.serviceBuilder.UpdateServiceSpec(ctx, service, workspace); err != nil {
+		return nil, fmt.Errorf("failed to update service spec: %w", err)
+	}
+
+	logger.Info("Updating Service",
+		"service", service.Name,
+		"namespace", service.Namespace)
+
+	if err := rm.client.Update(ctx, service); err != nil {
+		return nil, fmt.Errorf("failed to update service: %w", err)
+	}
+
 	return service, nil
 }
 
