@@ -157,7 +157,7 @@ type WorkspaceSpec struct {
 	// IdleShutdown specifies idle shutdown configuration
 	// +optional
 	IdleShutdown *IdleShutdownSpec `json:"idleShutdown,omitempty"`
-	
+
 	// AppType specifies the application type for this workspace
 	// +optional
 	AppType string `json:"appType,omitempty"`
