@@ -7,8 +7,16 @@ import (
 	"regexp"
 )
 
-// WriteError writes an error response in Kubernetes Status format
+// WriteError writes an error response in JSON format
 func WriteError(w http.ResponseWriter, statusCode int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	errorResponse := map[string]string{"error": message}
+	_ = json.NewEncoder(w).Encode(errorResponse)
+}
+
+// WriteKubernetesError writes an error response in Kubernetes Status format
+func WriteKubernetesError(w http.ResponseWriter, statusCode int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	status := map[string]interface{}{
@@ -18,7 +26,7 @@ func WriteError(w http.ResponseWriter, statusCode int, message string) {
 		"message":    message,
 		"code":       statusCode,
 	}
-	json.NewEncoder(w).Encode(status)
+	_ = json.NewEncoder(w).Encode(status)
 }
 
 // GetNamespaceFromPath extracts the namespace from a URL path using regex

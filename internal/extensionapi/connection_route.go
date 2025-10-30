@@ -30,7 +30,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 
 	if r.Method != "POST" {
 		logger.Error(nil, "Invalid HTTP method", "method", r.Method)
-		WriteError(w, http.StatusBadRequest, "Connection must use POST method")
+		WriteKubernetesError(w, http.StatusBadRequest, "Connection must use POST method")
 		return
 	}
 
@@ -38,7 +38,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	namespace, err := GetNamespaceFromPath(r.URL.Path)
 	if err != nil {
 		logger.Error(err, "Failed to extract namespace from URL path", "path", r.URL.Path)
-		WriteError(w, http.StatusBadRequest, "Invalid URL path")
+		WriteKubernetesError(w, http.StatusBadRequest, "Invalid URL path")
 		return
 	}
 
@@ -46,30 +46,21 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		logger.Error(err, "Failed to read request body")
-		WriteError(w, http.StatusBadRequest, "Failed to read request body")
+		WriteKubernetesError(w, http.StatusBadRequest, "Failed to read request body")
 		return
 	}
 
 	var req connectionv1alpha1.WorkspaceConnectionRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		logger.Error(err, "Failed to parse JSON request body")
-		WriteError(w, http.StatusBadRequest, "Invalid JSON")
+		WriteKubernetesError(w, http.StatusBadRequest, "Invalid JSON")
 		return
 	}
 
 	// Validate request
 	if err := validateWorkspaceConnectionRequest(&req); err != nil {
 		logger.Error(err, "Invalid workspace connection request")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		status := map[string]interface{}{
-			"kind":       "Status",
-			"apiVersion": "v1",
-			"status":     "Failure",
-			"message":    err.Error(),
-			"code":       http.StatusBadRequest,
-		}
-		json.NewEncoder(w).Encode(status)
+		WriteKubernetesError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -77,7 +68,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	if req.Spec.WorkspaceConnectionType == connectionv1alpha1.ConnectionTypeVSCodeRemote {
 		if s.config.ClusterId == "" {
 			logger.Error(nil, "CLUSTER_ID environment variable not configured")
-			WriteError(w, http.StatusBadRequest, "CLUSTER_ID not configured. Please set controllerManager.container.env.CLUSTER_ID in helm values")
+			WriteKubernetesError(w, http.StatusBadRequest, "CLUSTER_ID not configured. Please set controllerManager.container.env.CLUSTER_ID in helm values")
 			return
 		}
 	}
@@ -98,13 +89,13 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 		responseType, responseURL, err = s.generateWebUIURL(r, req.Spec.WorkspaceName, namespace)
 	default:
 		logger.Error(nil, "Invalid workspace connection type", "connectionType", req.Spec.WorkspaceConnectionType)
-		WriteError(w, http.StatusBadRequest, "Invalid workspace connection type")
+		WriteKubernetesError(w, http.StatusBadRequest, "Invalid workspace connection type")
 		return
 	}
 
 	if err != nil {
 		logger.Error(err, "Failed to generate connection URL", "connectionType", req.Spec.WorkspaceConnectionType)
-		WriteError(w, http.StatusInternalServerError, err.Error())
+		WriteKubernetesError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
