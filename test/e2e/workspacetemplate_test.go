@@ -213,13 +213,12 @@ spec:
 				WithTimeout(10 * time.Second). // valid state should be set fast, before compute is ready
 				Should(Succeed())
 
-			By("verifying Degraded condition is False or workspace is progressing")
+			By("verifying Degraded condition is False")
 			cmd = exec.Command("kubectl", "get", "workspace", "workspace-with-template",
 				"-o", "jsonpath={.status.conditions[?(@.type==\"Degraded\")].status}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
-
-			Expect(string(output)).To(Or(Equal("False"), Equal("True")))
+			Expect(output).To(Equal("False"))
 		})
 
 		It("should log template resolution and validation", func() {
