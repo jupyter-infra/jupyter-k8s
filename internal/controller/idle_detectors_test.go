@@ -75,11 +75,13 @@ func TestCreateIdleDetector_NoDetectionMethod_Error(t *testing.T) {
 }
 
 // Tests for NewHTTPGetDetector
-func TestNewHTTPGetDetector_Success(t *testing.T) {
-	detector := NewHTTPGetDetector()
+func TestNewHTTPGetDetectorWithExec_Success(t *testing.T) {
+	mockExecUtil := &MockPodExecUtil{}
+	detector := NewHTTPGetDetectorWithExec(mockExecUtil)
 
 	assert.NotNil(t, detector)
 	assert.NotNil(t, detector.execUtil)
+	assert.Equal(t, mockExecUtil, detector.execUtil)
 }
 
 // Mock for testing HTTPGetDetector.CheckIdle
@@ -94,9 +96,7 @@ func (m *MockPodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, contai
 
 // Helper to create HTTPGetDetector with mock
 func createDetectorWithMock(mockExecUtil *MockPodExecUtil) *HTTPGetDetector {
-	return &HTTPGetDetector{
-		execUtil: mockExecUtil,
-	}
+	return NewHTTPGetDetectorWithExec(mockExecUtil)
 }
 
 // Test HTTPGetDetector.checkIdleTimeout (private method but critical logic)

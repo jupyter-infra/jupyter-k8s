@@ -45,12 +45,21 @@ type HTTPGetDetector struct {
 	execUtil PodExecInterface
 }
 
-// NewHTTPGetDetector creates a new HTTPGetDetector
-func NewHTTPGetDetector() *HTTPGetDetector {
-	execUtil, _ := NewPodExecUtil()
+// NewHTTPGetDetectorWithExec creates a new HTTPGetDetector with the provided PodExecInterface
+func NewHTTPGetDetectorWithExec(execUtil PodExecInterface) *HTTPGetDetector {
 	return &HTTPGetDetector{
 		execUtil: execUtil,
 	}
+}
+
+// NewHTTPGetDetector creates a new HTTPGetDetector with a real PodExecUtil
+func NewHTTPGetDetector() *HTTPGetDetector {
+	execUtil, err := NewPodExecUtil()
+	if err != nil {
+		// In production, this should not happen if k8s config is available
+		panic(fmt.Sprintf("Failed to create pod exec util: %v", err))
+	}
+	return NewHTTPGetDetectorWithExec(execUtil)
 }
 
 // CheckIdle implements the IdleDetector interface for HTTP endpoint checking
