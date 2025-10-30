@@ -90,22 +90,15 @@ func (rm *ResourceManager) getPVC(ctx context.Context, workspace *workspacev1alp
 func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
 	logger := logf.FromContext(ctx)
 
-	deployment, err := rm.deploymentBuilder.BuildDeployment(ctx, workspace, resolvedTemplate)
+	accessStrategy, err := rm.GetAccessStrategyForWorkspace(ctx, workspace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve access strategy for deployment: %w", err)
+	}
+
+	deployment, err := rm.deploymentBuilder.BuildDeploymentWithAccessStrategy(ctx, workspace, resolvedTemplate, accessStrategy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build deployment: %w", err)
 	}
-
-	// Modify deployment build per AccessStrategy
-	accessStrategy, getAccessStrategyErr := rm.GetAccessStrategyForWorkspace(ctx, workspace)
-	if getAccessStrategyErr != nil {
-		return nil, fmt.Errorf("failed to retrieve access strategy for deployment: %w", getAccessStrategyErr)
-	}
-	if accessStrategy != nil {
-		if err := rm.deploymentBuilder.ApplyAccessStrategyToDeployment(deployment, workspace, accessStrategy); err != nil {
-			return nil, fmt.Errorf("failed to apply access strategy to deployment: %w", getAccessStrategyErr)
-		}
-	}
-
 	// Apply the changes to deployment
 	logger.Info("Creating Deployment",
 		"deployment", deployment.Name,
@@ -245,7 +238,7 @@ func (rm *ResourceManager) IsServiceMissingOrDeleting(service *corev1.Service) b
 	return service == nil
 }
 
-// EnsureDeploymentExists creates a deployment if it doesn't exist
+// EnsureDeploymentExists creates a deployment if it doesn't exist, or updates it if the pod spec differs
 func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
 	deployment, err := rm.getDeployment(ctx, workspace)
 	if err != nil {
@@ -254,6 +247,55 @@ func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, workspace
 		}
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
+
+	return rm.ensureDeploymentUpToDate(ctx, deployment, workspace, resolvedTemplate)
+}
+
+// ensureDeploymentUpToDate checks if deployment needs update and updates it if necessary
+func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
+	accessStrategy, err := rm.GetAccessStrategyForWorkspace(ctx, workspace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve access strategy for comparison: %w", err)
+	}
+
+	needsUpdate, err := rm.deploymentBuilder.NeedsUpdate(ctx, deployment, workspace, resolvedTemplate, accessStrategy)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if deployment needs update: %w", err)
+	}
+
+	if needsUpdate {
+		return rm.updateDeployment(ctx, deployment, workspace, resolvedTemplate)
+	}
+
+	return deployment, nil
+}
+
+// updateDeployment updates an existing deployment with new pod spec
+func (rm *ResourceManager) updateDeployment(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
+	logger := logf.FromContext(ctx)
+
+	accessStrategy, err := rm.GetAccessStrategyForWorkspace(ctx, workspace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve access strategy for comparison: %w", err)
+	}
+
+	// Update the deployment spec using the builder with access strategy
+	updatedDeployment, err := rm.deploymentBuilder.BuildDeploymentWithAccessStrategy(ctx, workspace, resolvedTemplate, accessStrategy)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build updated deployment: %w", err)
+	}
+
+	// Update the existing deployment spec while preserving metadata like resourceVersion
+	deployment.Spec = updatedDeployment.Spec
+
+	logger.Info("Updating Deployment",
+		"deployment", deployment.Name,
+		"namespace", deployment.Namespace)
+
+	if err := rm.client.Update(ctx, deployment); err != nil {
+		return nil, fmt.Errorf("failed to update deployment: %w", err)
+	}
+
 	return deployment, nil
 }
 

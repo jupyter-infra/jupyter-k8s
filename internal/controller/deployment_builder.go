@@ -8,6 +8,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -45,6 +46,24 @@ func (db *DeploymentBuilder) BuildDeployment(ctx context.Context, workspace *wor
 
 	if err := controllerutil.SetControllerReference(workspace, deployment, db.scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference: %w", err)
+	}
+
+	return deployment, nil
+}
+
+// BuildDeploymentWithAccessStrategy creates a Deployment resource with access strategy applied
+// This is a helper function that should be called from ResourceManager
+func (db *DeploymentBuilder) BuildDeploymentWithAccessStrategy(ctx context.Context, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*appsv1.Deployment, error) {
+	// Build the base deployment
+	deployment, err := db.BuildDeployment(ctx, workspace, resolvedTemplate)
+	if err != nil {
+		return nil, err
+	}
+
+	if accessStrategy != nil {
+		if err := db.ApplyAccessStrategyToDeployment(deployment, workspace, accessStrategy); err != nil {
+			return nil, fmt.Errorf("failed to apply access strategy to deployment: %w", err)
+		}
 	}
 
 	return deployment, nil
@@ -230,4 +249,30 @@ func (db *DeploymentBuilder) parseResourceRequirements(workspace *workspacev1alp
 			corev1.ResourceMemory: defaultMemory,
 		},
 	}
+}
+
+// NeedsUpdate checks if the existing deployment needs to be updated based on workspace changes
+func (db *DeploymentBuilder) NeedsUpdate(ctx context.Context, existingDeployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (bool, error) {
+	// Build the desired deployment spec with access strategy applied
+	desiredDeployment, err := db.BuildDeploymentWithAccessStrategy(ctx, workspace, resolvedTemplate, accessStrategy)
+	if err != nil {
+		return false, fmt.Errorf("failed to build desired deployment: %w", err)
+	}
+
+	// Compare pod template specs using semantic equality
+	return !equality.Semantic.DeepEqual(existingDeployment.Spec.Template.Spec, desiredDeployment.Spec.Template.Spec), nil
+}
+
+// UpdateDeploymentSpec updates the existing deployment with the desired spec
+func (db *DeploymentBuilder) UpdateDeploymentSpec(ctx context.Context, existingDeployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) error {
+	// Build the desired deployment spec
+	desiredDeployment, err := db.BuildDeployment(ctx, workspace, resolvedTemplate)
+	if err != nil {
+		return fmt.Errorf("failed to build desired deployment: %w", err)
+	}
+
+	// Update the deployment spec while preserving metadata like resourceVersion
+	existingDeployment.Spec = desiredDeployment.Spec
+
+	return nil
 }
