@@ -17,7 +17,7 @@ remoteAccess:
 storageClass:
   ebs:
     create: true
-    name: ebs-sc
+    name: sagemaker-spaces-default-storage-class
     isDefault: false
     provisioner: ebs.csi.aws.com
     reclaimPolicy: Delete
