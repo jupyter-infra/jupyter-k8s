@@ -36,8 +36,8 @@ var _ = Describe("SchedulingDefaulter", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 				DefaultNodeSelector: map[string]string{
-					"node-type":    "compute",
-					"environment":  "production",
+					"node-type":   "compute",
+					"environment": "production",
 				},
 				DefaultAffinity: &corev1.Affinity{
 					NodeAffinity: &corev1.NodeAffinity{

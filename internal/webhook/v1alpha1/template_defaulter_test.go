@@ -41,10 +41,10 @@ var _ = Describe("TemplateDefaulter", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		
+
 		scheme := runtime.NewScheme()
 		_ = workspacev1alpha1.AddToScheme(scheme)
-		
+
 		template = &workspacev1alpha1.WorkspaceTemplate{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test-template",
