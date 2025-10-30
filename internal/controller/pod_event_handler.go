@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -95,6 +96,57 @@ func (h *PodEventHandler) HandleWorkspacePodEvents(ctx context.Context, obj clie
 	return nil
 }
 
+// HandleKubernetesEvents processes Kubernetes events for preemption detection
+func (h *PodEventHandler) HandleKubernetesEvents(ctx context.Context, obj client.Object) []reconcile.Request {
+	event, ok := obj.(*corev1.Event)
+	if !ok {
+		return nil
+	}
+
+	logger := logf.FromContext(ctx).WithValues("event", event.Name, "pod", event.InvolvedObject.Name)
+
+	// Check if this is a preemption event
+	if event.InvolvedObject.Kind == KindPod &&
+		event.Reason == PhaseStopped &&
+		strings.Contains(event.Message, "Preempted") {
+
+		logger.Info("Detected pod preemption event",
+			"pod", event.InvolvedObject.Name,
+			"namespace", event.InvolvedObject.Namespace,
+			"message", event.Message)
+
+		// Extract workspace name from pod name
+		podName := event.InvolvedObject.Name
+		if !strings.HasPrefix(podName, "jupyter-") {
+			return nil
+		}
+
+		parts := strings.Split(podName, "-")
+		if len(parts) < 4 {
+			return nil
+		}
+
+		// Remove "jupyter-" prefix and last two hash suffixes
+		workspaceName := strings.Join(parts[1:len(parts)-2], "-")
+
+		logger.Info("Pod was preempted, updating workspace desiredStatus to Stopped",
+			"workspace", workspaceName)
+		h.updateWorkspaceDesiredStatus(ctx, workspaceName, event.InvolvedObject.Namespace, PhaseStopped)
+
+		// Return reconciliation request to trigger workspace reconciliation
+		return []reconcile.Request{
+			{
+				NamespacedName: client.ObjectKey{
+					Name:      workspaceName,
+					Namespace: event.InvolvedObject.Namespace,
+				},
+			},
+		}
+	}
+
+	return nil
+}
+
 // handlePodRunning handles when a workspace pod enters running state
 func (h *PodEventHandler) handlePodRunning(ctx context.Context, pod *corev1.Pod, workspaceName string) {
 	logger := logf.FromContext(ctx).WithValues("pod", pod.Name, "workspace", workspaceName)
@@ -142,5 +194,38 @@ func (h *PodEventHandler) handlePodDeleted(ctx context.Context, pod *corev1.Pod,
 		if err := h.ssmRemoteAccessStrategy.CleanupSSMManagedNodes(ctx, pod); err != nil {
 			logger.Error(err, "Failed to cleanup SSM managed nodes")
 		}
+	}
+}
+
+// updateWorkspaceDesiredStatus updates the workspace desiredStatus
+func (h *PodEventHandler) updateWorkspaceDesiredStatus(ctx context.Context, workspaceName string, namespace string, desiredStatus string) {
+	logger := logf.FromContext(ctx).WithValues("workspace", workspaceName, "namespace", namespace)
+
+	workspace := &workspacev1alpha1.Workspace{}
+	err := h.client.Get(ctx, client.ObjectKey{
+		Name:      workspaceName,
+		Namespace: namespace,
+	}, workspace)
+	if err != nil {
+		logger.Error(err, "Failed to get workspace for status update")
+		return
+	}
+
+	// Add annotation to track preemption reason
+	if desiredStatus == PhaseStopped {
+		if workspace.Annotations == nil {
+			workspace.Annotations = make(map[string]string)
+		}
+		workspace.Annotations[PreemptionReasonAnnotation] = PreemptedReason
+	}
+
+	if workspace.Spec.DesiredStatus != desiredStatus {
+		workspace.Spec.DesiredStatus = desiredStatus
+	}
+
+	if err := h.client.Update(ctx, workspace); err != nil {
+		logger.Error(err, "Failed to update workspace")
+	} else {
+		logger.Info("Successfully updated workspace due to preemption", "desiredStatus", desiredStatus)
 	}
 }

@@ -367,13 +367,24 @@ func (sm *StatusManager) UpdateStoppedStatus(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
 	snapshotStatus *workspacev1alpha1.WorkspaceStatus) error {
-	// ensure AvailableCondition is set to false with ReasonDesiredStateStopped
-	availableCondition := NewCondition(
-		ConditionTypeAvailable,
-		metav1.ConditionFalse,
-		ReasonDesiredStateStopped,
-		"Workspace is stopped",
-	)
+	// Check if workspace was stopped due to preemption
+	var availableCondition metav1.Condition
+	if workspace.Annotations != nil && workspace.Annotations[PreemptionReasonAnnotation] == PreemptedReason {
+		availableCondition = NewCondition(
+			ConditionTypeAvailable,
+			metav1.ConditionFalse,
+			"Preempted",
+			"Workspace preempted due to resource contention",
+		)
+	} else {
+		// ensure AvailableCondition is set to false with ReasonDesiredStateStopped
+		availableCondition = NewCondition(
+			ConditionTypeAvailable,
+			metav1.ConditionFalse,
+			ReasonDesiredStateStopped,
+			"Workspace is stopped",
+		)
+	}
 
 	// ensure ProgressingCondition is set to false with ReasonDesiredStateStopped
 	progressingCondition := NewCondition(

@@ -39,7 +39,7 @@ func (sm *StateMachine) ReconcileDesiredState(
 	snapshotStatus := workspace.DeepCopy().Status
 
 	switch desiredStatus {
-	case "Stopped":
+	case PhaseStopped:
 		return sm.reconcileDesiredStoppedStatus(ctx, workspace, &snapshotStatus)
 	case "Running":
 		return sm.reconcileDesiredRunningStatus(ctx, workspace, &snapshotStatus)
@@ -133,8 +133,12 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 			// All resources are fully deleted, update to stopped status
 			logger.Info("Deployment and Service are both deleted, updating to Stopped status")
 
-			// Record workspace stopped event
-			sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceStopped", "Workspace has been stopped")
+			// Record workspace stopped event with specific message for preemption
+			if workspace.Annotations != nil && workspace.Annotations[PreemptionReasonAnnotation] == PreemptedReason {
+				sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceStopped", PreemptedReason)
+			} else {
+				sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceStopped", "Workspace has been stopped")
+			}
 
 			if err := sm.statusManager.UpdateStoppedStatus(ctx, workspace, snapshotStatus); err != nil {
 				return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
