@@ -29,40 +29,46 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	logger := GetLoggerFromContext(r.Context())
 
 	if r.Method != "POST" {
-		WriteError(w, http.StatusBadRequest, "Connection must use POST method")
+		logger.Error(nil, "Invalid HTTP method", "method", r.Method)
+		WriteKubernetesError(w, http.StatusBadRequest, "Connection must use POST method")
 		return
 	}
 
 	// Extract namespace from URL path
 	namespace, err := GetNamespaceFromPath(r.URL.Path)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid URL path")
+		logger.Error(err, "Failed to extract namespace from URL path", "path", r.URL.Path)
+		WriteKubernetesError(w, http.StatusBadRequest, "Invalid URL path")
 		return
 	}
 
 	// Parse request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, "Failed to read request body")
+		logger.Error(err, "Failed to read request body")
+		WriteKubernetesError(w, http.StatusBadRequest, "Failed to read request body")
 		return
 	}
 
 	var req connectionv1alpha1.WorkspaceConnectionRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid JSON")
+		logger.Error(err, "Failed to parse JSON request body")
+		WriteKubernetesError(w, http.StatusBadRequest, "Invalid JSON")
 		return
 	}
 
 	// Validate request
 	if err := validateWorkspaceConnectionRequest(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, err.Error())
+		logger.Error(err, "Invalid workspace connection request")
+		WriteKubernetesError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// Check if CLUSTER_ARN is configured early for VSCode connections
+	// Check if CLUSTER_ID is configured early for VSCode connections
 	if req.Spec.WorkspaceConnectionType == connectionv1alpha1.ConnectionTypeVSCodeRemote {
-		if s.config.EKSClusterARN == "" {
-			WriteError(w, http.StatusInternalServerError, "EKS_CLUSTER_ARN not configured. Please upgrade helm chart with eksClusterArn parameter")
+		if s.config.ClusterId == "" {
+			logger.Error(nil, "CLUSTER_ID environment variable not configured")
+			WriteKubernetesError(w, http.StatusBadRequest, "CLUSTER_ID not configured. Please set controllerManager.container.env.CLUSTER_ID in helm values")
 			return
 		}
 	}
@@ -82,13 +88,14 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	case connectionv1alpha1.ConnectionTypeWebUI:
 		responseType, responseURL, err = s.generateWebUIURL(r, req.Spec.WorkspaceName, namespace)
 	default:
-		WriteError(w, http.StatusBadRequest, "Invalid workspace connection type")
+		logger.Error(nil, "Invalid workspace connection type", "connectionType", req.Spec.WorkspaceConnectionType)
+		WriteKubernetesError(w, http.StatusBadRequest, "Invalid workspace connection type")
 		return
 	}
 
 	if err != nil {
 		logger.Error(err, "Failed to generate connection URL", "connectionType", req.Spec.WorkspaceConnectionType)
-		WriteError(w, http.StatusInternalServerError, "Failed to generate connection URL")
+		WriteKubernetesError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -139,8 +146,8 @@ func validateWorkspaceConnectionRequest(req *connectionv1alpha1.WorkspaceConnect
 func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, namespace string) (string, string, error) {
 	logger := ctrl.Log.WithName("vscode-handler")
 
-	// Get cluster ARN from config (already validated earlier)
-	eksClusterARN := s.config.EKSClusterARN
+	// Get cluster ID from config (already validated earlier)
+	clusterId := s.config.ClusterId
 
 	// Get pod UID from workspace name
 	config := ctrl.GetConfigOrDie()
@@ -164,7 +171,7 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 	}
 
 	// Generate VSCode connection URL using SSM strategy
-	url, err := ssmStrategy.GenerateVSCodeConnectionURL(r.Context(), workspaceName, namespace, podUID, eksClusterARN)
+	url, err := ssmStrategy.GenerateVSCodeConnectionURL(r.Context(), workspaceName, namespace, podUID, clusterId)
 	if err != nil {
 		return "", "", err
 	}
