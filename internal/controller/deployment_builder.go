@@ -71,11 +71,34 @@ func (db *DeploymentBuilder) BuildDeploymentWithAccessStrategy(ctx context.Conte
 
 // buildObjectMeta creates the metadata for the Deployment
 func (db *DeploymentBuilder) buildObjectMeta(workspace *workspacev1alpha1.Workspace) metav1.ObjectMeta {
+	labels := GenerateLabels(workspace.Name)
+
+	// Copy all workspace labels to deployment
+	if workspace.Labels != nil {
+		for key, value := range workspace.Labels {
+			labels[key] = value
+		}
+	}
+
 	return metav1.ObjectMeta{
 		Name:      GenerateDeploymentName(workspace.Name),
 		Namespace: workspace.Namespace,
-		Labels:    GenerateLabels(workspace.Name),
+		Labels:    labels,
 	}
+}
+
+// buildPodLabels creates labels for pod template, including workspace labels
+func (db *DeploymentBuilder) buildPodLabels(workspace *workspacev1alpha1.Workspace) map[string]string {
+	labels := GenerateLabels(workspace.Name)
+
+	// Copy all workspace labels to pod
+	if workspace.Labels != nil {
+		for key, value := range workspace.Labels {
+			labels[key] = value
+		}
+	}
+
+	return labels
 }
 
 // buildDeploymentSpec creates the deployment specification
@@ -90,7 +113,7 @@ func (db *DeploymentBuilder) buildDeploymentSpec(workspace *workspacev1alpha1.Wo
 		},
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: GenerateLabels(workspace.Name),
+				Labels: db.buildPodLabels(workspace),
 			},
 			Spec: db.buildPodSpec(workspace, resolvedTemplate, resources),
 		},

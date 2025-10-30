@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"os"
 
 	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -20,6 +21,9 @@ type SSMRemoteAccessClientInterface interface {
 	CreateActivation(ctx context.Context, description string, instanceName string, iamRole string, tags map[string]string) (*SSMActivation, error)
 	GetRegion() string
 	CleanupManagedInstancesByPodUID(ctx context.Context, podUID string) error
+	CleanupActivationsByPodUID(ctx context.Context, podUID string) error
+	FindInstanceByPodUID(ctx context.Context, podUID string) (string, error)
+	StartSession(ctx context.Context, instanceID, documentName string) (*SessionInfo, error)
 }
 
 // PodExecInterface defines the interface for executing commands in pods.
@@ -125,9 +129,21 @@ func (s *SSMRemoteAccessStrategy) CleanupSSMManagedNodes(ctx context.Context, po
 		return fmt.Errorf("SSM client not available")
 	}
 
-	// TODO: also cleanup the hybrid activation
+	logger := logf.FromContext(ctx).WithValues("pod", pod.Name)
 
-	return s.ssmClient.CleanupManagedInstancesByPodUID(ctx, string(pod.UID))
+	// Cleanup managed instances
+	if err := s.ssmClient.CleanupManagedInstancesByPodUID(ctx, string(pod.UID)); err != nil {
+		logger.Error(err, "Failed to cleanup managed instances")
+		// Don't return early - try to cleanup activations too
+	}
+
+	// Cleanup hybrid activations
+	if err := s.ssmClient.CleanupActivationsByPodUID(ctx, string(pod.UID)); err != nil {
+		logger.Error(err, "Failed to cleanup activations")
+		return fmt.Errorf("failed to cleanup activations for pod %s: %w", pod.UID, err)
+	}
+
+	return nil
 }
 
 // isSSMRegistrationCompleted checks if SSM registration is already done for this pod
@@ -209,17 +225,24 @@ func (s *SSMRemoteAccessStrategy) createSSMActivation(ctx context.Context, pod *
 		return "", "", fmt.Errorf("SSM_MANAGED_NODE_ROLE not found in access strategy")
 	}
 
-	// Prepare tags
-	tags := map[string]string{
-		TagManagedBy:       "jupyter-k8s-operator",
-		TagWorkspaceName:   workspace.Name,
-		TagNamespace:       workspace.Namespace,
-		TagWorkspacePodUID: string(pod.UID),
+	// Get EKS cluster ARN from environment variable
+	eksClusterARN := os.Getenv(EKSClusterARNEnv)
+	if eksClusterARN == "" {
+		return "", "", fmt.Errorf("%s environment variable is required", EKSClusterARNEnv)
 	}
 
-	// Create description
+	// Prepare tags - include SageMaker required tags for policy compliance
+	tags := map[string]string{
+		SageMakerManagedByTagKey:  SageMakerManagedByTagValue,
+		SageMakerEKSClusterTagKey: eksClusterARN,
+		TagWorkspaceName:          workspace.Name,
+		TagNamespace:              workspace.Namespace,
+		TagWorkspacePodUID:        string(pod.UID),
+	}
+
+	// Create description and instance name with fixed prefix
 	description := fmt.Sprintf("Activation for %s/%s (pod: %s)", workspace.Namespace, workspace.Name, string(pod.UID))
-	instanceName := fmt.Sprintf("%s-%s", workspace.Name, pod.Name)
+	instanceName := fmt.Sprintf("%s-%s", SSMInstanceNamePrefix, string(pod.UID))
 
 	// Pass the IAM role directly to the SSM client
 	activation, err := s.ssmClient.CreateActivation(ctx, description, instanceName, iamRole, tags)
@@ -233,4 +256,43 @@ func (s *SSMRemoteAccessStrategy) createSSMActivation(ctx context.Context, pod *
 		"iamRole", iamRole)
 
 	return activation.ActivationCode, activation.ActivationId, nil
+}
+
+// GenerateVSCodeConnectionURL generates a VSCode connection URL using SSM session
+func (s *SSMRemoteAccessStrategy) GenerateVSCodeConnectionURL(ctx context.Context, workspaceName string, namespace string, podUID string, eksClusterARN string) (string, error) {
+	logger := logf.FromContext(ctx).WithName("ssm-vscode-connection")
+
+	// Find managed instance by pod UID
+	instanceID, err := s.ssmClient.FindInstanceByPodUID(ctx, podUID)
+	if err != nil {
+		return "", fmt.Errorf("failed to find instance by pod UID: %w", err)
+	}
+
+	logger.Info("Found managed instance for pod", "podUID", podUID, "instanceID", instanceID)
+
+	// Get SSM document name from environment variable
+	documentName, err := GetSSMDocumentName()
+	if err != nil {
+		return "", fmt.Errorf("failed to get SSM document name: %w", err)
+	}
+
+	// Start SSM session
+	sessionInfo, err := s.ssmClient.StartSession(ctx, instanceID, documentName)
+	if err != nil {
+		return "", fmt.Errorf("failed to start SSM session: %w", err)
+	}
+
+	logger.Info("SSM session started successfully", "instanceID", instanceID, "sessionID", sessionInfo.SessionID)
+
+	// Generate VSCode URL
+	url := fmt.Sprintf("%s?sessionId=%s&sessionToken=%s&streamUrl=%s&workspaceName=%s&namespace=%s&eksClusterArn=%s",
+		VSCodeScheme,
+		sessionInfo.SessionID,
+		sessionInfo.TokenValue,
+		sessionInfo.StreamURL,
+		workspaceName,
+		namespace,
+		eksClusterARN)
+
+	return url, nil
 }
