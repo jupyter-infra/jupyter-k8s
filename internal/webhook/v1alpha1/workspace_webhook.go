@@ -211,6 +211,12 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 	}
 	workspacelog.Info("Validation for Workspace upon update", "name", newWorkspace.GetName(), "namespace", newWorkspace.GetNamespace())
 
+	// Skip validation if workspace is being deleted (has deletionTimestamp)
+	// This allows finalizer removal even if template is already deleted
+	if !newWorkspace.DeletionTimestamp.IsZero() {
+		return nil, nil
+	}
+
 	// Check if user is admin
 	isAdmin := false
 	if req, err := admission.RequestFromContext(ctx); err == nil {

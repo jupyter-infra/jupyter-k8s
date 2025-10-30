@@ -123,17 +123,24 @@ spec:
 			"workspace-with-template", "test-valid-workspace",
 			"cpu-exceed-test", "valid-overrides-test",
 			"deletion-protection-test", "cel-immutability-test",
-			"--ignore-not-found", "--wait=false")
+			"--ignore-not-found", "--timeout=60s")
 		_, _ = utils.Run(cmd)
+
+		By("waiting for all workspaces to be fully deleted")
+		Eventually(func(g Gomega) {
+			cmd := exec.Command("kubectl", "get", "workspace", "--no-headers")
+			output, err := utils.Run(cmd)
+			g.Expect(err != nil || strings.TrimSpace(output) == "").To(BeTrue(),
+				"Workspaces still exist after cleanup")
+		}).WithTimeout(180 * time.Second).WithPolling(5 * time.Second).Should(Succeed())
 
 		By("cleaning up test templates")
 		_, _ = fmt.Fprintf(GinkgoWriter, "Deleting test templates...\n")
 		// Templates with lazy finalizers will only delete after workspaces are gone
-		// Using --wait=false allows kubectl to return immediately while deletion proceeds
 		cmd = exec.Command("kubectl", "delete", "workspacetemplate",
 			"production-notebook-template", "restricted-template",
 			"immutability-test-template",
-			"--ignore-not-found", "--wait=false")
+			"--ignore-not-found", "--timeout=60s")
 		_, _ = utils.Run(cmd)
 
 		By("undeploying the controller-manager")
@@ -163,8 +170,18 @@ spec:
 		_, _ = fmt.Fprintf(GinkgoWriter, "Deleting %d workspace(s): %v\n", len(workspaces), workspaces)
 		cmd = exec.Command("kubectl", "delete", "workspace")
 		cmd.Args = append(cmd.Args, workspaces...)
-		cmd.Args = append(cmd.Args, "--ignore-not-found")
+		cmd.Args = append(cmd.Args, "--ignore-not-found", "--timeout=60s")
 		_, _ = utils.Run(cmd)
+
+		By("waiting for workspaces to be fully deleted")
+		Eventually(func(g Gomega) {
+			cmd := exec.Command("kubectl", "get", "workspace",
+				"-l", "workspace.jupyter.org/template="+templateName,
+				"--no-headers")
+			output, err := utils.Run(cmd)
+			g.Expect(err != nil || strings.TrimSpace(output) == "").To(BeTrue(),
+				fmt.Sprintf("Workspaces using template %s still exist", templateName))
+		}).WithTimeout(180 * time.Second).WithPolling(5 * time.Second).Should(Succeed())
 	}
 
 	Context("Template Creation and Usage", func() {
