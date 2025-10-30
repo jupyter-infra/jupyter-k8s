@@ -1,0 +1,28 @@
+# Test: Workspace with COMPLETE idle shutdown spec (no template needed)
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-complete-idle
+  namespace: default
+spec:
+  displayName: "Workspace with Complete Idle Config"
+  desiredStatus: "Running"
+  # Complete idle shutdown config - no template needed
+  idleShutdown:
+    enabled: true
+    timeoutMinutes: 2
+    detection:
+      httpGet:
+        path: "/api/idle"
+        port: 8888
+  # Use Code Editor (same as template)
+  image: "public.ecr.aws/sagemaker/sagemaker-distribution:3.2.0-cpu"
+  resources:
+    requests:
+      cpu: "1000m"
+      memory: "2Gi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
+  containerConfig:
+    command: ["sagemaker-code-editor", "--host", "0.0.0.0", "--port", "8888", "--without-connection-token", "--accept-server-license-terms"]

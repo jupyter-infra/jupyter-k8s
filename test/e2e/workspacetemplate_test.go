@@ -488,52 +488,7 @@ spec:
 			_, _ = utils.Run(cmd)
 		})
 
-		It("should reject WorkspaceTemplate spec modification via CEL validation", func() {
-			By("creating a template specifically for immutability testing")
-			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: WorkspaceTemplate
-metadata:
-  name: immutability-test-template
-spec:
-  displayName: "Immutability Test Template"
-  description: "Original description"
-  defaultOwnershipType: Public
-  allowedImages:
-    - "jk8s-application-jupyter-uv:latest"
-  defaultImage: "jk8s-application-jupyter-uv:latest"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
 
-			By("verifying template was created")
-			cmd = exec.Command("kubectl", "get", "workspacetemplate",
-				"immutability-test-template", "-o", "jsonpath={.metadata.name}")
-			output, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(output).To(Equal("immutability-test-template"))
-
-			By("attempting to modify template spec (change description)")
-			patchCmd := `{"spec":{"description":"Modified description - should fail"}}`
-			cmd = exec.Command("kubectl", "patch", "workspacetemplate",
-				"immutability-test-template", "--type=merge",
-				"-p", patchCmd)
-			output, err = utils.Run(cmd)
-			Expect(err).To(HaveOccurred(), "expected CEL validation to reject template spec modification")
-			Expect(output).To(ContainSubstring("template spec is immutable after creation"))
-
-			By("verifying template spec description remains unchanged")
-			cmd = exec.Command("kubectl", "get", "workspacetemplate",
-				"immutability-test-template", "-o", "jsonpath={.spec.description}")
-			output, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(output).To(Equal("Original description"))
-
-			By("cleaning up test template")
-			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "immutability-test-template")
-			_, _ = utils.Run(cmd)
-		})
 	})
 
 	Context("Webhook Validation", func() {

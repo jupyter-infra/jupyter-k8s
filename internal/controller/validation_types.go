@@ -53,8 +53,10 @@ type TemplateViolation struct {
 
 // Common violation types
 const (
-	ViolationTypeImageNotAllowed  = "ImageNotAllowed"
-	ViolationTypeResourceExceeded = "ResourceExceeded"
-	ViolationTypeStorageExceeded  = "StorageExceeded"
-	ViolationTypeInvalidTemplate  = "InvalidTemplate"
+	ViolationTypeImageNotAllowed                = "ImageNotAllowed"
+	ViolationTypeResourceExceeded               = "ResourceExceeded"
+	ViolationTypeStorageExceeded                = "StorageExceeded"
+	ViolationTypeInvalidTemplate                = "InvalidTemplate"
+	ViolationTypeIdleShutdownOverrideNotAllowed = "IdleShutdownOverrideNotAllowed"
+	ViolationTypeIdleShutdownTimeoutOutOfBounds = "IdleShutdownTimeoutOutOfBounds"
 )

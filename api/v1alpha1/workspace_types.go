@@ -74,6 +74,26 @@ type AccessStrategyRef struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
+// IdleShutdownSpec defines idle shutdown configuration
+type IdleShutdownSpec struct {
+	// Enabled indicates if idle shutdown is enabled
+	Enabled bool `json:"enabled"`
+
+	// TimeoutMinutes specifies idle timeout in minutes
+	// +kubebuilder:validation:Minimum=1
+	TimeoutMinutes int `json:"timeoutMinutes"`
+
+	// Detection specifies how to detect idle state
+	Detection IdleDetectionSpec `json:"detection"`
+}
+
+// IdleDetectionSpec defines idle detection methods
+type IdleDetectionSpec struct {
+	// HTTPGet specifies the HTTP request to perform for idle detection
+	// +optional
+	HTTPGet *corev1.HTTPGetAction `json:"httpGet,omitempty"`
+}
+
 // WorkspaceSpec defines the desired state of Workspace
 type WorkspaceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -140,6 +160,10 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="templateRef is immutable"
 	// +optional
 	TemplateRef *string `json:"templateRef,omitempty"`
+
+	// IdleShutdown specifies idle shutdown configuration
+	// +optional
+	IdleShutdown *IdleShutdownSpec `json:"idleShutdown,omitempty"`
 
 	// AppType specifies the application type for this workspace
 	// +optional

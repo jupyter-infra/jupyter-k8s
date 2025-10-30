@@ -4,6 +4,7 @@ controllerManager:
   container:
     env:
       CLUSTER_ADMIN_GROUP: "cluster-workspace-admin"
+      CLUSTER_ID: ""
     image:
       repository: controller
       tag: latest
