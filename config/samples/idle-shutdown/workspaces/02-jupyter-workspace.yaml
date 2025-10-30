@@ -1,0 +1,11 @@
+# Example Workspace using template without any idle shutdown override
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-idle-inherit
+  namespace: default
+spec:
+  displayName: "Workspace Inheriting Template Idle Config"
+  templateRef: "jupyter-template"
+  desiredStatus: "Running"
+  # No idleShutdown specified - will inherit template's defaultIdleShutdown

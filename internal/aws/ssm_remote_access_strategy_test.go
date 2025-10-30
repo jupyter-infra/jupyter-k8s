@@ -49,6 +49,19 @@ func (m *MockSSMRemoteAccessClient) CleanupActivationsByPodUID(ctx context.Conte
 	return args.Error(0)
 }
 
+func (m *MockSSMRemoteAccessClient) FindInstanceByPodUID(ctx context.Context, podUID string) (string, error) {
+	args := m.Called(ctx, podUID)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockSSMRemoteAccessClient) StartSession(ctx context.Context, instanceID, documentName string) (*SessionInfo, error) {
+	args := m.Called(ctx, instanceID, documentName)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*SessionInfo), args.Error(1)
+}
+
 // MockPodExecUtil implements PodExecInterface for testing
 type MockPodExecUtil struct {
 	mock.Mock
@@ -499,4 +512,58 @@ func TestCleanupSSMManagedNodes_CleanupFailure(t *testing.T) {
 	// Verify both methods were called with the correct pod UID
 	mockSSMClient.AssertCalled(t, "CleanupManagedInstancesByPodUID", mock.Anything, "test-pod-uid-123")
 	mockSSMClient.AssertCalled(t, "CleanupActivationsByPodUID", mock.Anything, "test-pod-uid-123")
+}
+
+func TestGenerateVSCodeConnectionURL_Success(t *testing.T) {
+	mockSSMClient := &MockSSMRemoteAccessClient{}
+	mockPodExecUtil := &MockPodExecUtil{}
+
+	// Mock FindInstanceByPodUID
+	mockSSMClient.On("FindInstanceByPodUID", mock.Anything, "test-pod-uid").Return("i-1234567890abcdef0", nil)
+
+	// Mock StartSession
+	mockSSMClient.On("StartSession", mock.Anything, "i-1234567890abcdef0", "test-document").Return(
+		&SessionInfo{
+			SessionID:  "sess-123",
+			TokenValue: "token-456",
+			StreamURL:  "wss://stream-url",
+		}, nil)
+
+	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
+	assert.NoError(t, err)
+
+	// Set environment variable for SSM document name
+	t.Setenv(AWSSSMDocumentNameEnv, "test-document")
+
+	url, err := strategy.GenerateVSCodeConnectionURL(context.Background(), "test-workspace", "default", "test-pod-uid", "arn:aws:eks:us-east-1:123456789012:cluster/test")
+
+	assert.NoError(t, err)
+	assert.Contains(t, url, "vscode://amazonwebservices.aws-toolkit-vscode/connect/sagemaker")
+	assert.Contains(t, url, "sessionId=sess-123")
+	assert.Contains(t, url, "sessionToken=token-456")
+	assert.Contains(t, url, "streamUrl=wss://stream-url")
+	mockSSMClient.AssertExpectations(t)
+}
+
+func TestGenerateVSCodeConnectionURL_StartSessionError(t *testing.T) {
+	mockSSMClient := &MockSSMRemoteAccessClient{}
+	mockPodExecUtil := &MockPodExecUtil{}
+
+	// Mock successful FindInstanceByPodUID
+	mockSSMClient.On("FindInstanceByPodUID", mock.Anything, "test-pod-uid").Return("i-1234567890abcdef0", nil)
+
+	// Mock StartSession failure
+	mockSSMClient.On("StartSession", mock.Anything, "i-1234567890abcdef0", "test-document").Return(nil, errors.New("session start failed"))
+
+	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
+	assert.NoError(t, err)
+
+	// Set environment variable for SSM document name
+	t.Setenv(AWSSSMDocumentNameEnv, "test-document")
+
+	url, err := strategy.GenerateVSCodeConnectionURL(context.Background(), "test-workspace", "default", "test-pod-uid", "arn:aws:eks:us-east-1:123456789012:cluster/test")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to start SSM session")
+	assert.Empty(t, url)
 }

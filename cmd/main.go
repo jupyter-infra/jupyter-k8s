@@ -283,7 +283,10 @@ func main() {
 	if enableExtensionAPI {
 		setupLog.Info("Setting up extension API server")
 		// Create config with a different port to avoid conflict with metrics
-		config := extensionapi.NewConfig(extensionapi.WithServerPort(7443))
+		config := extensionapi.NewConfig(
+			extensionapi.WithServerPort(7443),
+			extensionapi.WithClusterId(os.Getenv("CLUSTER_ID")),
+		)
 		if err := extensionapi.SetupExtensionAPIServerWithManager(mgr, config); err != nil {
 			setupLog.Error(err, "unable to create extension API server", "extensionapi", "Server")
 			os.Exit(1)
