@@ -120,7 +120,8 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
         # Add env section right after container: (macOS compatible)
         sed -i.bak '/container:/a\
     env:\
-      CLUSTER_ADMIN_GROUP: "cluster-workspace-admin"
+      CLUSTER_ADMIN_GROUP: "cluster-workspace-admin"\
+      CLUSTER_ID: ""
 ' "${CHART_DIR}/values.yaml" && rm "${CHART_DIR}/values.yaml.bak"
     fi
 

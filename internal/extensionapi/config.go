@@ -26,6 +26,8 @@ type ExtensionConfig struct {
 	ReadTimeoutSeconds  int
 	WriteTimeoutSeconds int
 	AllowedOrigin       string
+	// AWS section
+	ClusterId string
 }
 
 // ConfigOption is a function that modifies an ExtensionConfig
@@ -91,6 +93,13 @@ func WithWriteTimeoutSeconds(timeoutSeconds int) ConfigOption {
 func WithAllowedOrigin(origin string) ConfigOption {
 	return func(c *ExtensionConfig) {
 		c.AllowedOrigin = origin
+	}
+}
+
+// WithClusterId sets the cluster ID
+func WithClusterId(id string) ConfigOption {
+	return func(c *ExtensionConfig) {
+		c.ClusterId = id
 	}
 }
 

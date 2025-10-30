@@ -22,6 +22,8 @@ type SSMRemoteAccessClientInterface interface {
 	GetRegion() string
 	CleanupManagedInstancesByPodUID(ctx context.Context, podUID string) error
 	CleanupActivationsByPodUID(ctx context.Context, podUID string) error
+	FindInstanceByPodUID(ctx context.Context, podUID string) (string, error)
+	StartSession(ctx context.Context, instanceID, documentName string) (*SessionInfo, error)
 }
 
 // PodExecInterface defines the interface for executing commands in pods.
@@ -254,4 +256,43 @@ func (s *SSMRemoteAccessStrategy) createSSMActivation(ctx context.Context, pod *
 		"iamRole", iamRole)
 
 	return activation.ActivationCode, activation.ActivationId, nil
+}
+
+// GenerateVSCodeConnectionURL generates a VSCode connection URL using SSM session
+func (s *SSMRemoteAccessStrategy) GenerateVSCodeConnectionURL(ctx context.Context, workspaceName string, namespace string, podUID string, eksClusterARN string) (string, error) {
+	logger := logf.FromContext(ctx).WithName("ssm-vscode-connection")
+
+	// Find managed instance by pod UID
+	instanceID, err := s.ssmClient.FindInstanceByPodUID(ctx, podUID)
+	if err != nil {
+		return "", fmt.Errorf("failed to find instance by pod UID: %w", err)
+	}
+
+	logger.Info("Found managed instance for pod", "podUID", podUID, "instanceID", instanceID)
+
+	// Get SSM document name from environment variable
+	documentName, err := GetSSMDocumentName()
+	if err != nil {
+		return "", fmt.Errorf("failed to get SSM document name: %w", err)
+	}
+
+	// Start SSM session
+	sessionInfo, err := s.ssmClient.StartSession(ctx, instanceID, documentName)
+	if err != nil {
+		return "", fmt.Errorf("failed to start SSM session: %w", err)
+	}
+
+	logger.Info("SSM session started successfully", "instanceID", instanceID, "sessionID", sessionInfo.SessionID)
+
+	// Generate VSCode URL
+	url := fmt.Sprintf("%s?sessionId=%s&sessionToken=%s&streamUrl=%s&workspaceName=%s&namespace=%s&eksClusterArn=%s",
+		VSCodeScheme,
+		sessionInfo.SessionID,
+		sessionInfo.TokenValue,
+		sessionInfo.StreamURL,
+		workspaceName,
+		namespace,
+		eksClusterARN)
+
+	return url, nil
 }
