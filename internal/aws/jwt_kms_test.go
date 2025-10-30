@@ -208,10 +208,10 @@ func TestKMSJWTManager_RejectsWrongSigningMethod(t *testing.T) {
 			Audience: []string{"test-audience"},
 		},
 	}
-	
+
 	token := jwt5.NewWithClaims(jwt5.SigningMethodHS256, claims)
 	token.Header["edk"] = base64.URLEncoding.EncodeToString(mockKMS.encryptedKey)
-	
+
 	maliciousToken, err := token.SignedString(mockKMS.dataKey)
 	if err != nil {
 		t.Fatalf("Failed to create malicious token: %v", err)
