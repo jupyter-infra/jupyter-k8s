@@ -35,9 +35,9 @@ func createTestPod() *corev1.Pod {
 	}
 }
 
-func createTestIdleConfig(timeoutMinutes int) *workspacev1alpha1.IdleShutdownSpec {
+func createTestIdleConfig() *workspacev1alpha1.IdleShutdownSpec {
 	return &workspacev1alpha1.IdleShutdownSpec{
-		TimeoutMinutes: timeoutMinutes,
+		TimeoutMinutes: 30,
 		Detection: workspacev1alpha1.IdleDetectionSpec{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/api/idle",
@@ -121,7 +121,7 @@ func TestHTTPGetDetector_CheckIdle_Success_NotIdle(t *testing.T) {
 	// Setup test data
 	ctx := context.Background()
 	pod := createTestPod()
-	idleConfig := createTestIdleConfig(30) // 30 minute timeout
+	idleConfig := createTestIdleConfig() // 30 minute timeout
 
 	// Mock the response (recent activity = not idle)
 	recentTime := time.Now().Add(-5 * time.Minute).Format(time.RFC3339)
@@ -152,7 +152,7 @@ func TestHTTPGetDetector_CheckIdle_Success_IsIdle(t *testing.T) {
 	// Setup test data
 	ctx := context.Background()
 	pod := createTestPod()
-	idleConfig := createTestIdleConfig(30) // 30 minute timeout
+	idleConfig := createTestIdleConfig() // 30 minute timeout
 
 	// Mock the response (old activity = is idle)
 	oldTime := time.Now().Add(-45 * time.Minute).Format(time.RFC3339)
@@ -183,7 +183,7 @@ func TestHTTPGetDetector_CheckIdle_HTTP404_PermanentFailure(t *testing.T) {
 	// Setup test data
 	ctx := context.Background()
 	pod := createTestPod()
-	idleConfig := createTestIdleConfig(30)
+	idleConfig := createTestIdleConfig()
 
 	// Mock 404 response
 	curlOutput := `HTTP Status: 404`
@@ -213,7 +213,7 @@ func TestHTTPGetDetector_CheckIdle_ConnectionRefused_TemporaryFailure(t *testing
 	// Setup test data
 	ctx := context.Background()
 	pod := createTestPod()
-	idleConfig := createTestIdleConfig(30)
+	idleConfig := createTestIdleConfig()
 
 	// Mock connection refused error (curl exit code 7)
 	mockExecUtil.On("ExecInPod",
@@ -241,7 +241,7 @@ func TestHTTPGetDetector_CheckIdle_HTTP500_TemporaryFailure(t *testing.T) {
 	// Setup test data
 	ctx := context.Background()
 	pod := createTestPod()
-	idleConfig := createTestIdleConfig(30)
+	idleConfig := createTestIdleConfig()
 
 	// Test different HTTP 5xx status codes that should be treated as temporary failures
 	testCases := []struct {
