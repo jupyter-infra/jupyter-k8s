@@ -184,6 +184,7 @@ func (rm *ResourceManager) deleteService(ctx context.Context, service *corev1.Se
 	return nil
 }
 
+// EnsureDeploymentExists creates a deployment if it doesn't exist
 // IsDeploymentAvailable checks if the Deployment is considered available
 // based on its status conditions
 func (rm *ResourceManager) IsDeploymentAvailable(deployment *appsv1.Deployment) bool {
