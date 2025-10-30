@@ -150,10 +150,18 @@ func TestHandleAuth_HappyPath(t *testing.T) {
 	// expects
 	expectUsername := "github:valid-user"
 	expectGroups := []string{"github:org1:team1", "github:org1:team2"}
+	expectedUID := "user-uid"
 
 	// Create JWT handler mock
 	jwtHandler := &MockJWTHandler{
-		GenerateTokenFunc: func(user string, groups []string, path string, domain string, tokenType string) (string, error) {
+		GenerateTokenFunc: func(
+			user string,
+			groups []string,
+			uid string,
+			extra map[string][]string,
+			path string,
+			domain string,
+			tokenType string) (string, error) {
 			tokenGenerated = true
 			// Verify parameters
 			if user != expectUsername {
@@ -161,6 +169,9 @@ func TestHandleAuth_HappyPath(t *testing.T) {
 			}
 			if !reflect.DeepEqual(groups, expectGroups) {
 				t.Errorf("Expected groups %v, got %v", expectGroups, groups)
+			}
+			if uid != expectedUID {
+				t.Errorf("Expected uid '%s', got '%s", expectedUID, uid)
 			}
 			if path != testAppPath {
 				t.Errorf("Expected path '%s', got '%s'", testAppPath, path)
@@ -204,6 +215,7 @@ func TestHandleAuth_HappyPath(t *testing.T) {
 		"app1",
 		expectUsername,
 		expectGroups,
+		expectedUID,
 		true,  // allowed
 		false, // not found
 		reason,
@@ -346,6 +358,7 @@ func TestHandleAuth_Returns403_WhenVerifyAccessWorkspaceReturnsDisallowed(t *tes
 		"app1",
 		"github:user1",
 		[]string{"github:org6:group1", "github:org6:group2"},
+		"user-uid",
 		false, // allowed
 		false, // not found
 		reason,

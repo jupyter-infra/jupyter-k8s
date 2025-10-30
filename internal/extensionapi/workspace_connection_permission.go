@@ -3,6 +3,7 @@ package extensionapi
 
 import (
 	rlog "github.com/go-logr/logr"
+	authorizationv1 "k8s.io/api/authorization/v1"
 )
 
 // PermissionCheckResult contains the result of the permission check
@@ -21,10 +22,11 @@ func (s *ExtensionServer) CheckWorkspaceConnectionPermission(
 	workspaceName string,
 	username string,
 	groups []string,
+	extra map[string]authorizationv1.ExtraValue,
 	logger *rlog.Logger,
 ) (*PermissionCheckResult, error) {
 	// Step 1: Check RBAC permissions
-	rbacResult, err := s.CheckRBACPermission(namespace, username, groups, logger)
+	rbacResult, err := s.CheckRBACPermission(namespace, username, groups, extra, logger)
 	if err != nil {
 		logger.Error(err, "RBAC check failed with error")
 		return nil, err

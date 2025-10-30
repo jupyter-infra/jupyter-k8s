@@ -81,6 +81,8 @@ spec:
             value: "{{ .Values.authmiddleware.jwtAudience }}"
           - name: JWT_EXPIRATION
             value: "{{ .Values.authmiddleware.jwtExpiration }}"
+          - name: JWT_REFRESH_ENABLE
+            value: "{{ .Values.authmiddleware.jwtRefreshEnable }}"
           - name: JWT_REFRESH_WINDOW
             value: "{{ .Values.authmiddleware.jwtRefreshWindow }}"
           - name: JWT_REFRESH_HORIZON

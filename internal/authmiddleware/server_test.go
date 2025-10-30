@@ -473,7 +473,14 @@ func TestAuthIsNotProtectedByCSRF(t *testing.T) {
 
 	// Create JWT manager mock
 	jwtHandler := &MockJWTHandler{
-		GenerateTokenFunc: func(user string, groups []string, path string, domain string, tokenType string) (string, error) {
+		GenerateTokenFunc: func(
+			user string,
+			groups []string,
+			uid string,
+			extra map[string][]string,
+			path string,
+			domain string,
+			tokenType string) (string, error) {
 			return "test-token", nil
 		},
 	}
