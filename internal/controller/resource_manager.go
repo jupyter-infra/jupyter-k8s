@@ -242,7 +242,25 @@ func (rm *ResourceManager) IsServiceAvailable(service *corev1.Service) bool {
 // IsServiceMissingOrDeleting checks if the Service is either missing (nil)
 // or in the process of being deleted
 func (rm *ResourceManager) IsServiceMissingOrDeleting(service *corev1.Service) bool {
-	return service == nil
+	// If service is nil, it's missing
+	if service == nil {
+		return true
+	}
+
+	// Check if the service has a deletion timestamp (is being deleted)
+	return !service.DeletionTimestamp.IsZero()
+}
+
+// IsPVCMissingOrDeleting checks if the PVC is either missing (nil)
+// or in the process of being deleted
+func (rm *ResourceManager) IsPVCMissingOrDeleting(pvc *corev1.PersistentVolumeClaim) bool {
+	// If PVC is nil, it's missing
+	if pvc == nil {
+		return true
+	}
+
+	// Check if the PVC has a deletion timestamp (is being deleted)
+	return !pvc.DeletionTimestamp.IsZero()
 }
 
 // EnsureDeploymentExists creates a deployment if it doesn't exist
@@ -300,6 +318,25 @@ func (rm *ResourceManager) EnsureServiceDeleted(ctx context.Context, workspace *
 	return service, nil
 }
 
+// EnsurePVCDeleted initiates PVC deletion (used during workspace deletion, not stop)
+func (rm *ResourceManager) EnsurePVCDeleted(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.PersistentVolumeClaim, error) {
+	pvc, err := rm.getPVC(ctx, workspace)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil // Already deleted
+		}
+		return nil, fmt.Errorf("failed to get PVC: %w", err)
+	}
+
+	if pvc != nil && pvc.DeletionTimestamp.IsZero() {
+		logger := logf.FromContext(ctx)
+		logger.Info("Deleting PVC", "pvc", pvc.Name, "namespace", pvc.Namespace)
+		return pvc, rm.client.Delete(ctx, pvc)
+	}
+
+	return pvc, nil
+}
+
 // EnsurePVCExists creates a PVC if it doesn't exist
 // It uses workspace storage if specified, otherwise falls back to template storage configuration
 func (rm *ResourceManager) EnsurePVCExists(ctx context.Context, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
@@ -319,4 +356,71 @@ func (rm *ResourceManager) EnsurePVCExists(ctx context.Context, workspace *works
 		return nil, fmt.Errorf("failed to get PVC: %w", err)
 	}
 	return pvc, nil
+}
+
+// CleanupAllResources performs comprehensive cleanup of all workspace resources
+func (rm *ResourceManager) CleanupAllResources(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
+	logger := logf.FromContext(ctx)
+
+	// Delete access strategy resources first
+	accessError := rm.EnsureAccessResourcesDeleted(ctx, workspace)
+	if accessError != nil {
+		logger.Error(accessError, "Failed to delete access strategy resources")
+		// Continue with other deletions, don't block on access strategy
+	}
+
+	// Delete deployment (async operation)
+	_, err := rm.EnsureDeploymentDeleted(ctx, workspace)
+	if err != nil {
+		return fmt.Errorf("failed to delete deployment: %w", err)
+	}
+
+	// Delete service (async operation)
+	_, err = rm.EnsureServiceDeleted(ctx, workspace)
+	if err != nil {
+		return fmt.Errorf("failed to delete service: %w", err)
+	}
+
+	// Delete PVC (async operation - unlike stop, delete removes storage permanently)
+	_, err = rm.EnsurePVCDeleted(ctx, workspace)
+	if err != nil {
+		return fmt.Errorf("failed to delete PVC: %w", err)
+	}
+
+	// Check if all resources are fully deleted using helper function
+	if rm.AreAllResourcesDeleted(ctx, workspace) {
+		logger.Info("All resources successfully deleted")
+		return nil
+	}
+
+	// Resources still being deleted - requeue to check again
+	return fmt.Errorf("resources still being deleted, will retry")
+}
+
+// AreAllResourcesDeleted checks if all workspace resources are fully removed (not found)
+func (rm *ResourceManager) AreAllResourcesDeleted(ctx context.Context, workspace *workspacev1alpha1.Workspace) bool {
+	// Check deployment - must be NotFound (fully deleted)
+	_, err := rm.getDeployment(ctx, workspace)
+	if err == nil || !errors.IsNotFound(err) {
+		return false // Still exists or other error
+	}
+
+	// Check service - must be NotFound (fully deleted)
+	_, err = rm.getService(ctx, workspace)
+	if err == nil || !errors.IsNotFound(err) {
+		return false // Still exists or other error
+	}
+
+	// Check PVC - must be NotFound (fully deleted)
+	_, err = rm.getPVC(ctx, workspace)
+	if err == nil || !errors.IsNotFound(err) {
+		return false // Still exists or other error
+	}
+
+	// Check access resources are deleted
+	if !rm.AreAccessResourcesDeleted(workspace) {
+		return false
+	}
+
+	return true
 }

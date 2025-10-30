@@ -61,6 +61,9 @@ const (
 
 	// Idle shutdown constants
 	IdleCheckInterval = 5 * time.Minute
+
+	// Finalizer for workspace cleanup protection
+	WorkspaceFinalizerName = "workspace.jupyter.org/cleanup-protection"
 )
 
 // GenerateDeploymentName creates a consistent deployment name
