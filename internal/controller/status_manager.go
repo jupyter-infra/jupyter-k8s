@@ -455,3 +455,20 @@ func (sm *StatusManager) UpdateServiceUpdatingStatus(
 	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &[]metav1.Condition{progressingCondition})
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
+
+// UpdatePVCUpdatingStatus sets Progressing to true when PVC is being updated
+func (sm *StatusManager) UpdatePVCUpdatingStatus(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus,
+) error {
+	progressingCondition := NewCondition(
+		ConditionTypeProgressing,
+		metav1.ConditionTrue,
+		ReasonPVCUpdating,
+		"PVC is being updated",
+	)
+
+	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &[]metav1.Condition{progressingCondition})
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
+}

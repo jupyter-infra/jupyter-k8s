@@ -395,7 +395,7 @@ func (rm *ResourceManager) EnsureServiceDeleted(ctx context.Context, workspace *
 	return service, nil
 }
 
-// EnsurePVCExists creates a PVC if it doesn't exist
+// EnsurePVCExists creates a PVC if it doesn't exist, or updates it if the spec differs
 // It uses workspace storage if specified, otherwise falls back to template storage configuration
 func (rm *ResourceManager) EnsurePVCExists(ctx context.Context, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
 	// Check if storage is needed from either workspace or template
@@ -413,5 +413,49 @@ func (rm *ResourceManager) EnsurePVCExists(ctx context.Context, workspace *works
 		}
 		return nil, fmt.Errorf("failed to get PVC: %w", err)
 	}
+
+	return rm.ensurePVCUpToDate(ctx, pvc, workspace, resolvedTemplate)
+}
+
+// ensurePVCUpToDate checks if PVC needs update and updates it if necessary
+func (rm *ResourceManager) ensurePVCUpToDate(ctx context.Context, pvc *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
+	needsUpdate, err := rm.pvcBuilder.NeedsUpdate(ctx, pvc, workspace, resolvedTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if PVC needs update: %w", err)
+	}
+
+	if needsUpdate {
+		return rm.updatePVC(ctx, pvc, workspace, resolvedTemplate)
+	}
+
+	return pvc, nil
+}
+
+// updatePVC updates an existing PVC with new spec
+func (rm *ResourceManager) updatePVC(ctx context.Context, pvc *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
+	logger := logf.FromContext(ctx)
+
+	// Take status snapshot before update
+	snapshotStatus := workspace.Status.DeepCopy()
+
+	// Report that PVC is being updated
+	if err := rm.statusManager.UpdatePVCUpdatingStatus(ctx, workspace, snapshotStatus); err != nil {
+		logger.Error(err, "Failed to update PVC updating status")
+		// Continue with update even if status update fails
+	}
+
+	// Update the PVC spec using the builder
+	if err := rm.pvcBuilder.UpdatePVCSpec(ctx, pvc, workspace, resolvedTemplate); err != nil {
+		return nil, fmt.Errorf("failed to update PVC spec: %w", err)
+	}
+
+	logger.Info("Updating PVC",
+		"pvc", pvc.Name,
+		"namespace", pvc.Namespace)
+
+	if err := rm.client.Update(ctx, pvc); err != nil {
+		return nil, fmt.Errorf("failed to update PVC: %w", err)
+	}
+
 	return pvc, nil
 }

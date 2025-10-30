@@ -51,6 +51,7 @@ const (
 	// ConditionTypeProgressing reasons for updates
 	ReasonDeploymentUpdating = "DeploymentUpdating"
 	ReasonServiceUpdating    = "ServiceUpdating"
+	ReasonPVCUpdating        = "PVCUpdating"
 
 	// ConditionTypeValid reasons
 	ReasonAllChecksPass          = "AllChecksPass"
