@@ -227,27 +227,8 @@ spec:
 	Context("Template Validation", func() {
 		It("should reject workspace with image not in allowlist", func() {
 			By("attempting to create workspace with invalid image")
-			cmd := exec.Command("sh", "-c", `echo 'apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: test-rejected-workspace
-  namespace: default
-spec:
-  displayName: "Test Rejected Workspace"
-  desiredStatus: Running
-  templateRef:
-    name: "restricted-template"
-  image: "tensorflow/tensorflow:latest-gpu-jupyter"
-  ownershipType: Public
-  resources:
-    requests:
-      cpu: "4"
-      memory: "8Gi"
-    limits:
-      cpu: "8"
-      memory: "16Gi"
-  storage:
-    size: "50Gi"' | kubectl apply -f -`)
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/template-validation/rejected-image-workspace.yaml")
 			
 			_, err := utils.Run(cmd)
 			Expect(err).To(HaveOccurred(), "Expected webhook to reject workspace with invalid image")
@@ -261,21 +242,8 @@ spec:
 
 		It("should reject workspace exceeding CPU bounds", func() {
 			By("creating workspace with CPU exceeding template max")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: cpu-exceed-test
-spec:
-  displayName: "CPU Bounds Test"
-  templateRef:
-    name: "production-notebook-template"
-  ownershipType: Public
-  resources:
-    requests:
-      cpu: "10"  # Exceeds template max of 2
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/template-validation/cpu-exceed-workspace.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).To(HaveOccurred(), "Expected webhook to reject workspace with CPU exceeding template max")
 
@@ -291,27 +259,8 @@ spec:
 			var err error
 
 			By("creating workspace with valid resource overrides")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: valid-overrides-test
-spec:
-  displayName: "Valid Overrides Test"
-  templateRef:
-    name: "production-notebook-template"
-  ownershipType: Public
-  resources:
-    requests:
-      cpu: "100m"
-      memory: "128Mi"
-    limits:
-      cpu: "200m"
-      memory: "256Mi"
-  storage:
-    size: 100Mi
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/template-validation/valid-overrides-workspace.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -343,18 +292,8 @@ spec:
 			var err error
 
 			By("creating a workspace using production template")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: deletion-protection-test
-spec:
-  displayName: "Deletion Protection Test"
-  ownershipType: Public
-  templateRef:
-    name: "production-notebook-template"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/template-mutability/deletion-protection-workspace.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -439,36 +378,14 @@ spec:
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating restricted template for switching")
-			restrictedTemplateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: WorkspaceTemplate
-metadata:
-  name: restricted-template-mutability
-spec:
-  displayName: "Restricted Template"
-  description: "Restricted template for mutability testing"
-  defaultOwnershipType: Public
-  allowedImages:
-    - "jk8s-application-jupyter-uv:latest"
-  defaultImage: "jk8s-application-jupyter-uv:latest"
-`
-			cmd = exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", restrictedTemplateYaml))
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/template-mutability/restricted-template-mutability.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating workspace using production template")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: templateref-mutability-test
-spec:
-  displayName: "TemplateRef Mutability Test"
-  ownershipType: Public
-  templateRef:
-    name: production-notebook-template
-`
-			cmd = exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/template-mutability/templateref-mutability-workspace.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -503,7 +420,7 @@ spec:
 		It("should allow WorkspaceTemplate spec modification (mutability)", func() {
 			By("creating a template for mutability testing")
 			cmd := exec.Command("kubectl", "apply", "-f",
-				"static/template-mutability/mutability-test-template.yaml")
+				"test/e2e/static/template-mutability/mutability-test-template.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -538,18 +455,8 @@ spec:
 	Context("Webhook Validation", func() {
 		It("should apply template defaults during workspace creation", func() {
 			By("creating workspace without specifying image, resources, or storage")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: webhook-defaults-test
-spec:
-  displayName: "Webhook Defaults Test"
-  templateRef:
-    name: "production-notebook-template"
-  ownershipType: Public
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/webhook-defaults-workspace.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -576,24 +483,8 @@ spec:
 
 		It("should reject workspace creation with multiple violations", func() {
 			By("attempting to create workspace with multiple template violations")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: multi-violation-test
-spec:
-  displayName: "Multi Violation Test"
-  templateRef:
-    name: "restricted-template"
-  image: "invalid/image:latest"
-  resources:
-    requests:
-      cpu: "10"
-      memory: "20Gi"
-  storage:
-    size: "100Gi"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/multi-violation-workspace.yaml")
 			output, err := utils.Run(cmd)
 			Expect(err).To(HaveOccurred(), "Expected webhook to reject workspace with multiple violations")
 			Expect(output).To(ContainSubstring("violations"))
