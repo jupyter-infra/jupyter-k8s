@@ -50,6 +50,19 @@ func createTestIdleConfig(timeoutMinutes int) *workspacev1alpha1.IdleShutdownSpe
 
 // Tests for CreateIdleDetector
 func TestCreateIdleDetector_HTTPGet_Success(t *testing.T) {
+	// Override factory function to avoid K8s client creation in tests
+	originalCreateIdleDetector := CreateIdleDetector
+	CreateIdleDetector = func(detection *workspacev1alpha1.IdleDetectionSpec) (IdleDetector, error) {
+		if detection.HTTPGet != nil {
+			mockExecUtil := &MockPodExecUtil{}
+			return NewHTTPGetDetectorWithExec(mockExecUtil), nil
+		}
+		return nil, fmt.Errorf("no detection method configured")
+	}
+	defer func() {
+		CreateIdleDetector = originalCreateIdleDetector
+	}()
+
 	detection := &workspacev1alpha1.IdleDetectionSpec{
 		HTTPGet: &corev1.HTTPGetAction{
 			Path: "/api/idle",
