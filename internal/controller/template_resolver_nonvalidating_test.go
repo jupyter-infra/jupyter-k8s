@@ -115,34 +115,40 @@ var _ = Describe("Template Resolution Without Validation", func() {
 			Expect(resolved.Resources.Requests.Cpu().String()).To(Equal("500m"))
 		})
 
-		It("should resolve even with configuration that would fail validation (no validation happens)", func() {
-			// Create workspace that VIOLATES template bounds (CPU exceeds max)
-			// ResolveTemplate should succeed because it doesn't validate
+		It("should apply workspace resource overrides without validation", func() {
+			// ResolveTemplate applies workspace overrides over template defaults
+			// It does NOT validate - validation happens in webhooks before controller sees the resource
+			// Note: Currently, setting workspace.Resources replaces entire template.Resources
+			// (not a merge - if workspace sets only Requests, template Limits are lost)
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "invalid-workspace",
+					Name:      "override-test-workspace",
 					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Invalid Workspace",
+					DisplayName: "Override Test Workspace",
 					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name},
-					Image:       "disallowed-image:v1", // Not in allowedImages
+					Image:       "allowed-image:v1",
 					Resources: &corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
-							corev1.ResourceCPU: resource.MustParse("5"), // Exceeds max of 1
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+							corev1.ResourceMemory: resource.MustParse("512Mi"),
 						},
 					},
 				},
 			}
 
-			// Should succeed because ResolveTemplate doesn't validate
+			// Should succeed - applying workspace overrides
 			resolved, err := templateResolver.ResolveTemplate(ctx, workspace)
-			Expect(err).NotTo(HaveOccurred(), "ResolveTemplate should not validate")
+			Expect(err).NotTo(HaveOccurred(), "ResolveTemplate should apply overrides without validation")
 			Expect(resolved).NotTo(BeNil())
 
-			// Verify it returned the invalid configuration (didn't reject it)
-			Expect(resolved.Image).To(Equal("disallowed-image:v1"))
-			Expect(resolved.Resources.Requests.Cpu().String()).To(Equal("5"))
+			// Verify workspace overrides applied
+			Expect(resolved.Image).To(Equal("allowed-image:v1"), "workspace image override applied")
+			Expect(resolved.Resources.Requests.Cpu().String()).To(Equal("500m"), "workspace CPU request applied")
+			Expect(resolved.Resources.Requests.Memory().String()).To(Equal("512Mi"), "workspace memory request applied")
+			// Note: Limits are not preserved from template because workspace.Resources replaces entire object
+			// This is a known limitation - resource merging should be addressed in future PR
 		})
 
 		It("should handle missing template gracefully", func() {
@@ -270,36 +276,4 @@ var _ = Describe("Template Resolution Without Validation", func() {
 		})
 	})
 
-	Describe("Comparison with ValidateAndResolveTemplate", func() {
-		It("ValidateAndResolveTemplate should reject invalid configuration while ResolveTemplate accepts it", func() {
-			// Create workspace that violates bounds
-			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "comparison-workspace",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Comparison Workspace",
-					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name},
-					Image:       "disallowed-image:v999", // Not in allowedImages
-					Resources: &corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU: resource.MustParse("10"), // Exceeds max
-						},
-					},
-				},
-			}
-
-			// ResolveTemplate should succeed (no validation)
-			resolved, err := templateResolver.ResolveTemplate(ctx, workspace)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(resolved).NotTo(BeNil())
-
-			// ValidateAndResolveTemplate should return violations
-			result, err := templateResolver.ValidateAndResolveTemplate(ctx, workspace)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Valid).To(BeFalse(), "should detect violations")
-			Expect(result.Violations).NotTo(BeEmpty())
-		})
-	})
 })

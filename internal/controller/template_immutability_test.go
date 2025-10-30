@@ -21,6 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -226,8 +227,6 @@ var _ = Describe("Template Immutability", func() {
 		})
 	})
 
-<<<<<<< HEAD
-=======
 	Context("Template Spec Mutability", func() {
 		It("should allow template spec modification (mutability)", func() {
 			ctx := context.Background()
@@ -295,5 +294,4 @@ var _ = Describe("Template Immutability", func() {
 			Expect(verifyTemplate.Labels["new-label"]).To(Equal("test"))
 		})
 	})
->>>>>>> 4aaaf7b (make templates mutable, remove template enforcement from controller logic, add unit and e2e tests)
 })

@@ -73,7 +73,16 @@ type AccessStrategyRef struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
-<<<<<<< HEAD
+// TemplateRef defines a reference to a WorkspaceTemplate
+type TemplateRef struct {
+	// Name of the WorkspaceTemplate
+	Name string `json:"name"`
+
+	// Namespace where the WorkspaceTemplate is located (optional for cluster-scoped)
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
 // IdleShutdownSpec defines idle shutdown configuration
 type IdleShutdownSpec struct {
 	// Enabled indicates if idle shutdown is enabled
@@ -92,16 +101,6 @@ type IdleDetectionSpec struct {
 	// HTTPGet specifies the HTTP request to perform for idle detection
 	// +optional
 	HTTPGet *corev1.HTTPGetAction `json:"httpGet,omitempty"`
-=======
-// TemplateRef defines a reference to a WorkspaceTemplate
-type TemplateRef struct {
-	// Name of the WorkspaceTemplate
-	Name string `json:"name"`
-
-	// Namespace where the WorkspaceTemplate is located (optional for cluster-scoped)
-	// +optional
-	Namespace string `json:"namespace,omitempty"`
->>>>>>> 4aaaf7b (make templates mutable, remove template enforcement from controller logic, add unit and e2e tests)
 }
 
 // WorkspaceSpec defines the desired state of Workspace
@@ -274,21 +273,6 @@ type WorkspaceList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Workspace `json:"items"`
 }
-
-// Workspace condition types
-const (
-	// ConditionTemplateCompliant indicates whether workspace complies with current template
-	ConditionTemplateCompliant string = "TemplateCompliant"
-)
-
-// Workspace condition reasons
-const (
-	// ReasonTemplateNonCompliant indicates workspace violates current template
-	ReasonTemplateNonCompliant = "TemplateNonCompliant"
-
-	// ReasonTemplateCompliant indicates workspace meets template requirements
-	ReasonTemplateCompliant = "Compliant"
-)
 
 func init() {
 	SchemeBuilder.Register(&Workspace{}, &WorkspaceList{})

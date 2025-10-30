@@ -191,19 +191,11 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	logger := logf.FromContext(ctx)
 	logger.Info("Attempting to bring Workspace status to 'Running'")
 
-<<<<<<< HEAD
-	// Validate template BEFORE creating any resources
-	resolvedTemplate, shouldContinue, err := sm.handleTemplateValidation(ctx, workspace, snapshotStatus)
-	if !shouldContinue {
-		logger.Info("Template validation failed, stopping reconciliation", "error", err)
-		return ctrl.Result{}, nil
-=======
 	// Resolve template for defaults (validation already done by webhook)
 	resolvedTemplate, err := sm.resolveTemplate(ctx, workspace, snapshotStatus)
 	if err != nil {
 		// System error (template not found, etc.)
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
->>>>>>> 4aaaf7b (make templates mutable, remove template enforcement from controller logic, add unit and e2e tests)
 	}
 
 	// Ensure PVC exists first (if storage is configured)
@@ -319,41 +311,8 @@ func (sm *StateMachine) resolveTemplate(
 		return nil, err
 	}
 
-<<<<<<< HEAD
-	if !validation.Valid {
-		// Validation failed - policy enforced, stop reconciliation
-		logger.Info("Validation failed, rejecting workspace", "violations", len(validation.Violations))
-
-		// Log violation details
-		for i, violation := range validation.Violations {
-			logger.Info("Validation violation", "index", i, "type", violation.Type, "message", violation.Message)
-		}
-
-		// Record validation failure event
-		templateName := *workspace.Spec.TemplateRef
-		message := fmt.Sprintf("Validation failed for %s with %d violations", templateName, len(validation.Violations))
-		sm.recorder.Event(workspace, corev1.EventTypeWarning, "ValidationFailed", message)
-
-		if statusErr := sm.statusManager.SetInvalid(ctx, workspace, validation, snapshotStatus); statusErr != nil {
-			logger.Error(statusErr, "Failed to update validation status")
-		}
-		// No error - successful policy enforcement
-		return nil, false, nil
-	}
-
-	// Validation passed
-	logger.Info("Validation passed")
-
-	// Record successful validation event
-	templateName := *workspace.Spec.TemplateRef
-	message := "Validation passed for " + templateName
-	sm.recorder.Event(workspace, corev1.EventTypeNormal, "Validated", message)
-
-	return validation.Template, true, nil
-=======
 	logger.V(1).Info("Template resolved", "template", workspace.Spec.TemplateRef.Name)
 	return resolved, nil
->>>>>>> 4aaaf7b (make templates mutable, remove template enforcement from controller logic, add unit and e2e tests)
 }
 
 // handleIdleShutdownForRunningWorkspace handles idle shutdown logic for running workspaces

@@ -222,32 +222,6 @@ spec:
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("False"))
 		})
-
-		It("should log template resolution and validation", func() {
-			By("getting controller pod name")
-			cmd := exec.Command("kubectl", "get",
-				"pods", "-l", "control-plane=controller-manager",
-				"-o", "go-template={{ range .items }}"+
-					"{{ if not .metadata.deletionTimestamp }}"+
-					"{{ .metadata.name }}"+
-					"{{ \"\\n\" }}{{ end }}{{ end }}",
-				"-n", namespace,
-			)
-			podOutput, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			podNames := utils.GetNonEmptyLines(podOutput)
-			Expect(podNames).To(HaveLen(1), "expected 1 controller pod running")
-			controllerPodName := podNames[0]
-
-			By("checking controller logs for template resolution")
-			cmd = exec.Command("kubectl", "logs", controllerPodName, "-n", namespace,
-				"--tail=500")
-			output, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(output).To(ContainSubstring("Resolving template"))
-			Expect(output).To(ContainSubstring("Template resolved and validated successfully"))
-		})
 	})
 
 	Context("Template Validation", func() {
@@ -526,25 +500,10 @@ spec:
 			_, _ = utils.Run(cmd)
 		})
 
-<<<<<<< HEAD
-
-=======
 		It("should allow WorkspaceTemplate spec modification (mutability)", func() {
 			By("creating a template for mutability testing")
-			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: WorkspaceTemplate
-metadata:
-  name: mutability-test-template
-spec:
-  displayName: "Mutability Test Template"
-  description: "Original description"
-  defaultOwnershipType: Public
-  allowedImages:
-    - "jk8s-application-jupyter-uv:latest"
-  defaultImage: "jk8s-application-jupyter-uv:latest"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"static/template-mutability/mutability-test-template.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -574,7 +533,6 @@ spec:
 			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "mutability-test-template")
 			_, _ = utils.Run(cmd)
 		})
->>>>>>> 4aaaf7b (make templates mutable, remove template enforcement from controller logic, add unit and e2e tests)
 	})
 
 	Context("Webhook Validation", func() {
