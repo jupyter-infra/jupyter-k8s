@@ -27,6 +27,7 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 			testWorkspaceName string
 			testUsername      string
 			testGroups        []string
+			testUID           string
 		)
 
 		BeforeEach(func() {
@@ -51,6 +52,7 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 			testWorkspaceName = "test-workspace1"
 			testUsername = "test-user1"
 			testGroups = []string{"system:authenticated", "github:test-group1"}
+			testUID = "test-uid"
 		})
 
 		AfterEach(func() {})
@@ -59,7 +61,7 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 			mockSarClient.SetupDenied("No RBAC permission")
 
 			response, err := server.CheckWorkspaceConnectionPermission(
-				testNamespace, testWorkspaceName, testUsername, testGroups, nil, &logger,
+				testNamespace, testWorkspaceName, testUsername, testGroups, "", nil, &logger,
 			)
 
 			Expect(response).NotTo(BeNil())
@@ -73,7 +75,7 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 			mockSarClient.SetupDenied("No RBAC permission")
 
 			response, err := server.CheckWorkspaceConnectionPermission(
-				testNamespace, testWorkspaceName, testUsername, testGroups, nil, &logger,
+				testNamespace, testWorkspaceName, testUsername, testGroups, testUID, nil, &logger,
 			)
 
 			Expect(response).NotTo(BeNil())
@@ -85,11 +87,12 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 			Expect(ressourceAttrs).NotTo(BeNil())
 			Expect(ressourceAttrs.Namespace).To(Equal(testNamespace))
 			Expect(ressourceAttrs.Verb).To(Equal("create"))
-			Expect(ressourceAttrs.Group).To(Equal("workspace.jupyter.org"))
-			Expect(ressourceAttrs.Resource).To(Equal("workspaces/connection"))
+			Expect(ressourceAttrs.Group).To(Equal("connection.workspace.jupyter.org"))
+			Expect(ressourceAttrs.Resource).To(Equal("workspaceconnections"))
 
 			Expect(mockSarClient.LastCreateParams.Spec.User).To(Equal(testUsername))
 			Expect(mockSarClient.LastCreateParams.Spec.Groups).To(Equal(testGroups))
+			Expect(mockSarClient.LastCreateParams.Spec.UID).To(Equal(testUID))
 		})
 
 		It("Should not call Get(Workspace) when Create(SAR) returns allowed=false", func() {
@@ -107,7 +110,7 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 			}
 
 			_, err := potentialErrorServer.CheckWorkspaceConnectionPermission(
-				testNamespace, testWorkspaceName, testUsername, testGroups, nil, &logger,
+				testNamespace, testWorkspaceName, testUsername, testGroups, testUID, nil, &logger,
 			)
 
 			Expect(err).NotTo(HaveOccurred())
@@ -128,7 +131,7 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 			}
 
 			result, err := potentialErrorServer.CheckWorkspaceConnectionPermission(
-				testNamespace, testWorkspaceName, testUsername, testGroups, nil, &logger,
+				testNamespace, testWorkspaceName, testUsername, testGroups, testUID, nil, &logger,
 			)
 
 			Expect(err).To(HaveOccurred())
@@ -146,13 +149,13 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "Public",
+					AccessType: "Public",
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
 
 			response, err := server.CheckWorkspaceConnectionPermission(
-				testNamespace, testWorkspaceName, testUsername, testGroups, nil, &logger,
+				testNamespace, testWorkspaceName, testUsername, testGroups, testUID, nil, &logger,
 			)
 
 			Expect(response).NotTo(BeNil())
@@ -166,7 +169,7 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 			mockSarClient.SetupAllowed("Permitted by RBAC")
 
 			response, err := server.CheckWorkspaceConnectionPermission(
-				testNamespace, testWorkspaceName, testUsername, testGroups, nil, &logger,
+				testNamespace, testWorkspaceName, testUsername, testGroups, testUID, nil, &logger,
 			)
 
 			Expect(response).NotTo(BeNil())
@@ -195,7 +198,7 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
 
 			response, err := server.CheckWorkspaceConnectionPermission(
-				testNamespace, testWorkspaceName, testUsername, testGroups, nil, &logger,
+				testNamespace, testWorkspaceName, testUsername, testGroups, testUID, nil, &logger,
 			)
 
 			Expect(response).NotTo(BeNil())
@@ -224,7 +227,7 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
 
 			response, err := server.CheckWorkspaceConnectionPermission(
-				testNamespace, testWorkspaceName, testUsername, testGroups, nil, &logger,
+				testNamespace, testWorkspaceName, testUsername, testGroups, testUID, nil, &logger,
 			)
 
 			Expect(response).NotTo(BeNil())
@@ -248,7 +251,7 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 			}
 
 			response, err := errorServer.CheckWorkspaceConnectionPermission(
-				testNamespace, testWorkspaceName, testUsername, testGroups, nil, &logger,
+				testNamespace, testWorkspaceName, testUsername, testGroups, testUID, nil, &logger,
 			)
 
 			Expect(response).To(BeNil())
@@ -281,7 +284,7 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 
 			// This will fail after the RBAC check since we're using an error client
 			_, err := errorServer.CheckWorkspaceConnectionPermission(
-				testNamespace, testWorkspaceName, testUsername, testGroups, testExtra, &logger,
+				testNamespace, testWorkspaceName, testUsername, testGroups, testUID, testExtra, &logger,
 			)
 
 			// The test should fail with the workspace error, but we can verify the Extra was passed

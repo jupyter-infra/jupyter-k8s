@@ -65,6 +65,15 @@ spec:
                 required:
                 - name
                 type: object
+              accessType:
+                description: |-
+                  AccessType specifies who can connect to the workspace.
+                  Public means anyone with RBAC permissions can connect to workspace.
+                  OwnerOnly means only the creator can connect to the workspace.
+                enum:
+                - Public
+                - OwnerOnly
+                type: string
               affinity:
                 description: Affinity specifies node affinity and anti-affinity rules
                   for the workspace pod
@@ -1243,9 +1252,9 @@ spec:
                 type: object
               ownershipType:
                 description: |-
-                  OwnershipType specifies who can modify the space.
-                  Public means anyone with RBAC permissions can update/delete the space.
-                  OwnerOnly means only the creator can update/delete the space.
+                  OwnershipType specifies who can modify the workspace.
+                  Public means anyone with RBAC permissions can update/delete the workspace.
+                  OwnerOnly means only the creator can update/delete the workspace.
                 enum:
                 - Public
                 - OwnerOnly
