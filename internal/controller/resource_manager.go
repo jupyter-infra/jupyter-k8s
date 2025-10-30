@@ -235,7 +235,25 @@ func (rm *ResourceManager) IsServiceAvailable(service *corev1.Service) bool {
 // IsServiceMissingOrDeleting checks if the Service is either missing (nil)
 // or in the process of being deleted
 func (rm *ResourceManager) IsServiceMissingOrDeleting(service *corev1.Service) bool {
-	return service == nil
+	// If service is nil, it's missing
+	if service == nil {
+		return true
+	}
+
+	// Check if the service has a deletion timestamp (is being deleted)
+	return !service.DeletionTimestamp.IsZero()
+}
+
+// IsPVCMissingOrDeleting checks if the PVC is either missing (nil)
+// or in the process of being deleted
+func (rm *ResourceManager) IsPVCMissingOrDeleting(pvc *corev1.PersistentVolumeClaim) bool {
+	// If PVC is nil, it's missing
+	if pvc == nil {
+		return true
+	}
+
+	// Check if the PVC has a deletion timestamp (is being deleted)
+	return !pvc.DeletionTimestamp.IsZero()
 }
 
 // EnsureDeploymentExists creates a deployment if it doesn't exist, or updates it if the pod spec differs
@@ -407,7 +425,7 @@ func (rm *ResourceManager) EnsurePVCDeleted(ctx context.Context, workspace *work
 	return pvc, nil
 }
 
-// EnsurePVCExists creates a PVC if it doesn't exist
+// EnsurePVCExists creates a PVC if it doesn't exist, or updates it if the spec differs
 // It uses workspace storage if specified, otherwise falls back to template storage configuration
 func (rm *ResourceManager) EnsurePVCExists(ctx context.Context, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
 	// Check if storage is needed from either workspace or template
