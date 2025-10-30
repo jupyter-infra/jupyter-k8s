@@ -25,6 +25,7 @@ const (
 	LabelWorkspaceNamespace      = "workspace.jupyter.org/workspaceNamespace"
 	LabelAccessStrategyName      = "workspace.jupyter.org/accessStrategyName"
 	LabelAccessStrategyNamespace = "workspace.jupyter.org/accessStrategyNamespace"
+	LabelWorkspaceTemplate       = "workspace.jupyter.org/template"
 
 	// Label values
 	AppLabelValue = "jupyter"
@@ -37,6 +38,15 @@ const (
 	PhaseCreating = "Creating"
 	PhaseRunning  = "Running"
 	PhaseStopped  = "Stopped"
+
+	// Preemption annotation value
+	PreemptedReason = "Workspace preempted due to resource contention"
+
+	// Annotation keys
+	PreemptionReasonAnnotation = "workspace.jupyter.org/preemption-reason"
+
+	// Kubernetes resource kinds
+	KindPod = "Pod"
 	// Status messages
 	MessageCreating = "Jupyter server is starting"
 	MessageRunning  = "Jupyter server is running"

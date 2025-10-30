@@ -21,19 +21,27 @@ import (
 
 // MockJWTHandler implements the JWTHandler interface for testing
 type MockJWTHandler struct {
-	GenerateTokenFunc      func(user string, groups []string, path string, domain string, tokenType string) (string, error)
-	ValidateTokenFunc      func(tokenString string) (*Claims, error)
-	RefreshTokenFunc       func(claims *Claims) (string, error)
-	ShouldRefreshTokenFunc func(claims *Claims) bool
+	GenerateTokenFunc          func(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string) (string, error)
+	ValidateTokenFunc          func(tokenString string) (*Claims, error)
+	RefreshTokenFunc           func(claims *Claims) (string, error)
+	UpdateSkipRefreshTokenFunc func(claims *Claims) (string, error)
+	ShouldRefreshTokenFunc     func(claims *Claims) bool
 }
 
 // Ensure MockJWTHandler implements the JWTHandler interface
 var _ JWTHandler = (*MockJWTHandler)(nil)
 
 // GenerateToken calls the mock implementation
-func (m *MockJWTHandler) GenerateToken(user string, groups []string, path string, domain string, tokenType string) (string, error) {
+func (m *MockJWTHandler) GenerateToken(
+	user string,
+	groups []string,
+	uid string,
+	extra map[string][]string,
+	path string,
+	domain string,
+	tokenType string) (string, error) {
 	if m.GenerateTokenFunc != nil {
-		return m.GenerateTokenFunc(user, groups, path, domain, tokenType)
+		return m.GenerateTokenFunc(user, groups, uid, extra, path, domain, tokenType)
 	}
 	return "mock-token", nil
 }
@@ -52,6 +60,14 @@ func (m *MockJWTHandler) RefreshToken(claims *Claims) (string, error) {
 		return m.RefreshTokenFunc(claims)
 	}
 	return "refreshed-mock-token", nil
+}
+
+// UpdateSkipRefreshToken calls the mock implementation
+func (m *MockJWTHandler) UpdateSkipRefreshToken(claims *Claims) (string, error) {
+	if m.RefreshTokenFunc != nil {
+		return m.UpdateSkipRefreshTokenFunc(claims)
+	}
+	return "updated-mock-token", nil
 }
 
 // ShouldRefreshToken calls the mock implementation
@@ -232,9 +248,18 @@ func CreateConnectionAccessReviewResponse(
 	workspaceName string,
 	user string,
 	groups []string,
+	uid string,
 	allowed bool,
 	notFound bool,
-	reason string) *ConnectionAccessReviewResponse {
+	reason string,
+	extra ...map[string][]string) *ConnectionAccessReviewResponse {
+
+	// Default extra to nil if not provided
+	var extraMap map[string][]string
+	if len(extra) > 0 {
+		extraMap = extra[0]
+	}
+
 	return &ConnectionAccessReviewResponse{
 		Kind:       "ConnectionAccessReview",
 		ApiVersion: fmt.Sprintf("%s/%s", v1alpha1.SchemeGroupVersion.Group, v1alpha1.SchemeGroupVersion.Version),
@@ -243,6 +268,8 @@ func CreateConnectionAccessReviewResponse(
 			WorkspaceName: workspaceName,
 			User:          user,
 			Groups:        groups,
+			UID:           uid,
+			Extra:         extraMap,
 		},
 		Status: &v1alpha1.ConnectionAccessReviewStatus{
 			Allowed:  allowed,

@@ -91,6 +91,14 @@ type WorkspaceTemplateSpec struct {
 	// +kubebuilder:default="Public"
 	// +optional
 	DefaultOwnershipType string `json:"defaultOwnershipType,omitempty"`
+
+	// DefaultLifecycle specifies default lifecycle hooks for workspaces using this template
+	// +optional
+	DefaultLifecycle *corev1.Lifecycle `json:"defaultLifecycle,omitempty"`
+
+	// AppType specifies the application type for workspaces using this template
+	// +optional
+	AppType string `json:"appType,omitempty"`
 }
 
 // ResourceBounds defines minimum and maximum resource limits
