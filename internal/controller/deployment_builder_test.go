@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -552,6 +553,76 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(container.Lifecycle.PreStop).NotTo(BeNil())
 			Expect(container.Lifecycle.PreStop.Exec).NotTo(BeNil())
 			Expect(container.Lifecycle.PreStop.Exec.Command).To(Equal([]string{"/bin/sh", "-c", "echo 'stopping' > /tmp/stopping"}))
+		})
+	})
+
+	Context("Deployment Updates", func() {
+		var (
+			workspace          *workspacev1alpha1.Workspace
+			existingDeployment *appsv1.Deployment
+		)
+
+		BeforeEach(func() {
+			workspace = &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					Image: "jupyter/base-notebook:v1",
+					Resources: &corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("100m"),
+							corev1.ResourceMemory: resource.MustParse("256Mi"),
+						},
+					},
+				},
+			}
+
+			// Create existing deployment
+			var err error
+			existingDeployment, err = deploymentBuilder.BuildDeployment(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should detect when deployment needs update due to image change", func() {
+			// Change workspace image
+			workspace.Spec.Image = "jupyter/base-notebook:v2"
+
+			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(needsUpdate).To(BeTrue())
+		})
+
+		It("should detect when deployment needs update due to resource change", func() {
+			// Change workspace resources - need to modify both requests and limits
+			workspace.Spec.Resources.Requests[corev1.ResourceCPU] = resource.MustParse("200m")
+			workspace.Spec.Resources.Limits = corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("400m"),
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
+			}
+
+			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(needsUpdate).To(BeTrue())
+		})
+
+		It("should not detect update when nothing changed", func() {
+			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(needsUpdate).To(BeFalse())
+		})
+
+		It("should update deployment spec correctly", func() {
+			// Change workspace image
+			newImage := "jupyter/base-notebook:v2"
+			workspace.Spec.Image = newImage
+
+			err := deploymentBuilder.UpdateDeploymentSpec(ctx, existingDeployment, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify the deployment was updated
+			Expect(existingDeployment.Spec.Template.Spec.Containers[0].Image).To(Equal(newImage))
 		})
 	})
 })

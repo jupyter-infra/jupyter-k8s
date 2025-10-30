@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"testing"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
@@ -267,6 +268,65 @@ func TestPVCBuilder_BuildPVC(t *testing.T) {
 
 		if ownerRef.Name != workspace.Name {
 			t.Errorf("Expected owner name %s, got %s", workspace.Name, ownerRef.Name)
+		}
+	})
+
+	t.Run("PVC update detection", func(t *testing.T) {
+		ctx := context.Background()
+		scheme := runtime.NewScheme()
+		if err := workspacev1alpha1.AddToScheme(scheme); err != nil {
+			t.Fatal(err)
+		}
+
+		builder := NewPVCBuilder(scheme)
+
+		workspace := &workspacev1alpha1.Workspace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-workspace",
+				Namespace: "default",
+			},
+			Spec: workspacev1alpha1.WorkspaceSpec{
+				Storage: &workspacev1alpha1.StorageSpec{
+					Size: resource.MustParse("10Gi"),
+				},
+			},
+		}
+
+		// Create existing PVC
+		existingPVC, err := builder.BuildPVC(workspace, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Test no update needed
+		needsUpdate, err := builder.NeedsUpdate(ctx, existingPVC, workspace, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if needsUpdate {
+			t.Error("Expected no update needed, but got update needed")
+		}
+
+		// Test update needed when size changes
+		workspace.Spec.Storage.Size = resource.MustParse("20Gi")
+		needsUpdate, err = builder.NeedsUpdate(ctx, existingPVC, workspace, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !needsUpdate {
+			t.Error("Expected update needed, but got no update needed")
+		}
+
+		// Test update spec
+		err = builder.UpdatePVCSpec(ctx, existingPVC, workspace, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		expectedSize := resource.MustParse("20Gi")
+		actualSize := existingPVC.Spec.Resources.Requests[corev1.ResourceStorage]
+		if !actualSize.Equal(expectedSize) {
+			t.Errorf("Expected size %s, got %s", expectedSize.String(), actualSize.String())
 		}
 	})
 }
