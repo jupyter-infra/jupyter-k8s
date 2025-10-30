@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -72,7 +73,106 @@ func (r *WorkspaceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Manage finalizer based on workspace usage (lazy finalizer pattern)
 	// This follows Kubernetes best practice: only add finalizers when needed
-	return r.manageFinalizer(ctx, template)
+	result, err := r.manageFinalizer(ctx, template)
+	if err != nil {
+		return result, err
+	}
+
+	// Check compliance for all workspaces using this template
+	// This is informational only - does not block reconciliation
+	if err := r.checkWorkspaceCompliance(ctx, template); err != nil {
+		logger.Error(err, "Failed to check workspace compliance")
+		// Don't fail reconciliation - compliance checking is best-effort
+	}
+
+	return result, nil
+}
+
+// checkWorkspaceCompliance checks if all workspaces using this template are compliant
+// This is informational only - sets status conditions but does not enforce
+// Follows Kubernetes best practices: 1 LIST, 0 additional GETs, N UPDATEs
+func (r *WorkspaceTemplateReconciler) checkWorkspaceCompliance(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) error {
+	logger := logf.FromContext(ctx)
+
+	// Get all workspaces using this template (1 LIST operation)
+	workspaces, err := r.templateResolver.ListWorkspacesUsingTemplate(ctx, template.Name)
+	if err != nil {
+		return fmt.Errorf("failed to list workspaces using template: %w", err)
+	}
+
+	if len(workspaces) == 0 {
+		logger.V(1).Info("No workspaces using template, skipping compliance check")
+		return nil
+	}
+
+	logger.V(1).Info("Checking compliance for workspaces", "count", len(workspaces))
+
+	// Check each workspace for compliance (use workspaces from LIST, no additional GETs)
+	for i := range workspaces {
+		workspace := &workspaces[i] // Use from LIST directly
+
+		// Validate workspace against current template
+		result, err := r.templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+		if err != nil {
+			// System error (e.g., template not found) - log but continue
+			logger.Error(err, "Failed to validate workspace against template",
+				"workspace", fmt.Sprintf("%s/%s", workspace.Namespace, workspace.Name))
+			continue
+		}
+
+		// Update compliance status condition based on validation result
+		if err := r.updateComplianceStatus(ctx, workspace, result.Valid, result.Violations); err != nil {
+			// Log error but continue with other workspaces
+			logger.Error(err, "Failed to update compliance status",
+				"workspace", fmt.Sprintf("%s/%s", workspace.Namespace, workspace.Name))
+			continue
+		}
+	}
+
+	return nil
+}
+
+// updateComplianceStatus updates the TemplateCompliant status condition on a workspace
+func (r *WorkspaceTemplateReconciler) updateComplianceStatus(ctx context.Context, workspace *workspacev1alpha1.Workspace, isCompliant bool, violations []TemplateViolation) error {
+	logger := logf.FromContext(ctx)
+
+	// Build condition based on compliance
+	var condition metav1.Condition
+	if isCompliant {
+		condition = metav1.Condition{
+			Type:               workspacev1alpha1.ConditionTemplateCompliant,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: workspace.Generation,
+			LastTransitionTime: metav1.Now(),
+			Reason:             workspacev1alpha1.ReasonTemplateCompliant,
+			Message:            "Workspace configuration complies with current template",
+		}
+	} else {
+		// Format violations into a message
+		violationMsg := formatViolations(violations)
+		condition = metav1.Condition{
+			Type:               workspacev1alpha1.ConditionTemplateCompliant,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: workspace.Generation,
+			LastTransitionTime: metav1.Now(),
+			Reason:             workspacev1alpha1.ReasonTemplateNonCompliant,
+			Message:            fmt.Sprintf("Workspace configuration violates template: %s", violationMsg),
+		}
+	}
+
+	// Update condition in conditions list
+	setCondition(&workspace.Status.Conditions, condition)
+
+	// Update workspace status (handle conflicts with retry logic in reconcile loop)
+	if err := r.Status().Update(ctx, workspace); err != nil {
+		return fmt.Errorf("failed to update workspace status: %w", err)
+	}
+
+	logger.V(1).Info("Updated compliance status",
+		"workspace", fmt.Sprintf("%s/%s", workspace.Namespace, workspace.Name),
+		"compliant", isCompliant)
+
+	return nil
 }
 
 // manageFinalizer implements lazy finalizer management for WorkspaceTemplates
@@ -80,6 +180,8 @@ func (r *WorkspaceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // - Finalizers are only added when workspaces start using the template
 // - Finalizers are removed when all workspaces stop using the template
 // - This minimizes overhead and complexity compared to adding finalizers to all templates
+//
+//nolint:unparam // ctrl.Result signature maintained for consistency with controller-runtime patterns
 func (r *WorkspaceTemplateReconciler) manageFinalizer(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
@@ -213,19 +315,19 @@ func (r *WorkspaceTemplateReconciler) findTemplatesForWorkspace(ctx context.Cont
 		return nil
 	}
 
-	if workspace.Spec.TemplateRef == nil || *workspace.Spec.TemplateRef == "" {
+	if workspace.Spec.TemplateRef == nil || workspace.Spec.TemplateRef.Name == "" {
 		return nil
 	}
 
 	logger := logf.FromContext(ctx)
 	logger.V(1).Info("Workspace changed, enqueueing template reconciliation",
 		"workspace", fmt.Sprintf("%s/%s", workspace.Namespace, workspace.Name),
-		"template", *workspace.Spec.TemplateRef)
+		"template", workspace.Spec.TemplateRef.Name)
 
 	// Trigger reconciliation of the template when workspace changes
 	return []reconcile.Request{
 		{NamespacedName: types.NamespacedName{
-			Name: *workspace.Spec.TemplateRef,
+			Name: workspace.Spec.TemplateRef.Name,
 		}},
 	}
 }
@@ -249,4 +351,40 @@ func SetupWorkspaceTemplateController(mgr ctrl.Manager) error {
 
 	logger.Info("Calling SetupWithManager for WorkspaceTemplate controller")
 	return reconciler.SetupWithManager(mgr)
+}
+
+// formatViolations formats template violations into a human-readable message
+func formatViolations(violations []TemplateViolation) string {
+	if len(violations) == 0 {
+		return "no violations"
+	}
+
+	msg := ""
+	for i, v := range violations {
+		if i > 0 {
+			msg += "; "
+		}
+		msg += fmt.Sprintf("%s: %s (allowed: %s, actual: %s)", v.Field, v.Message, v.Allowed, v.Actual)
+	}
+	return msg
+}
+
+// setCondition updates or adds a condition to the conditions list
+// This follows the Kubernetes meta/v1 Condition pattern
+func setCondition(conditions *[]metav1.Condition, newCondition metav1.Condition) {
+	if conditions == nil {
+		return
+	}
+
+	// Find existing condition with same type
+	for i := range *conditions {
+		if (*conditions)[i].Type == newCondition.Type {
+			// Update existing condition
+			(*conditions)[i] = newCondition
+			return
+		}
+	}
+
+	// Condition not found, append new one
+	*conditions = append(*conditions, newCondition)
 }

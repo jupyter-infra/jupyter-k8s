@@ -55,7 +55,7 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		return nil
 	}
 
-	template, err := tv.fetchTemplate(ctx, *workspace.Spec.TemplateRef)
+	template, err := tv.fetchTemplate(ctx, workspace.Spec.TemplateRef.Name)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 	}
 
 	if len(violations) > 0 {
-		return fmt.Errorf("workspace violates template '%s' constraints: %s", *workspace.Spec.TemplateRef, formatViolations(violations))
+		return fmt.Errorf("workspace violates template '%s' constraints: %s", workspace.Spec.TemplateRef.Name, formatViolations(violations))
 	}
 
 	return nil
@@ -96,7 +96,7 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 		return nil
 	}
 
-	template, err := tv.fetchTemplate(ctx, *newWorkspace.Spec.TemplateRef)
+	template, err := tv.fetchTemplate(ctx, newWorkspace.Spec.TemplateRef.Name)
 	if err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 	}
 
 	if len(violations) > 0 {
-		return fmt.Errorf("workspace violates template '%s' constraints: %s", *newWorkspace.Spec.TemplateRef, formatViolations(violations))
+		return fmt.Errorf("workspace violates template '%s' constraints: %s", newWorkspace.Spec.TemplateRef.Name, formatViolations(violations))
 	}
 
 	return nil
@@ -138,7 +138,7 @@ func (tv *TemplateValidator) ApplyTemplateDefaults(ctx context.Context, workspac
 		return nil
 	}
 
-	template, err := tv.fetchTemplate(ctx, *workspace.Spec.TemplateRef)
+	template, err := tv.fetchTemplate(ctx, workspace.Spec.TemplateRef.Name)
 	if err != nil {
 		return err
 	}
@@ -206,7 +206,7 @@ func (tv *TemplateValidator) ApplyTemplateDefaults(ctx context.Context, workspac
 	if workspace.Labels == nil {
 		workspace.Labels = make(map[string]string)
 	}
-	workspace.Labels[controller.LabelWorkspaceTemplate] = *workspace.Spec.TemplateRef
+	workspace.Labels[controller.LabelWorkspaceTemplate] = workspace.Spec.TemplateRef.Name
 
 	return nil
 }

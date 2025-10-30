@@ -191,11 +191,19 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	logger := logf.FromContext(ctx)
 	logger.Info("Attempting to bring Workspace status to 'Running'")
 
+<<<<<<< HEAD
 	// Validate template BEFORE creating any resources
 	resolvedTemplate, shouldContinue, err := sm.handleTemplateValidation(ctx, workspace, snapshotStatus)
 	if !shouldContinue {
 		logger.Info("Template validation failed, stopping reconciliation", "error", err)
 		return ctrl.Result{}, nil
+=======
+	// Resolve template for defaults (validation already done by webhook)
+	resolvedTemplate, err := sm.resolveTemplate(ctx, workspace, snapshotStatus)
+	if err != nil {
+		// System error (template not found, etc.)
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+>>>>>>> 4aaaf7b (make templates mutable, remove template enforcement from controller logic, add unit and e2e tests)
 	}
 
 	// Ensure PVC exists first (if storage is configured)
@@ -285,31 +293,33 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
 }
 
-// handleTemplateValidation validates the workspace's template reference and handles all validation outcomes.
-// If validation fails or encounters a system error, it updates the workspace status and returns shouldContinue=false.
-// On success, it returns the resolved template with shouldContinue=true.
-func (sm *StateMachine) handleTemplateValidation(
+// resolveTemplate fetches and resolves the workspace's template reference.
+// This function does NOT validate - it trusts that webhooks already validated the workspace.
+// It only handles system errors (template not found, etc.)
+func (sm *StateMachine) resolveTemplate(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
-	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (template *ResolvedTemplate, shouldContinue bool, err error) {
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (template *ResolvedTemplate, err error) {
 	logger := logf.FromContext(ctx)
 
-	// No template reference - continue with default configuration
+	// No template reference - continue with workspace spec directly
 	if workspace.Spec.TemplateRef == nil {
-		return nil, true, nil
+		return nil, nil
 	}
 
-	validation, err := sm.templateResolver.ValidateAndResolveTemplate(ctx, workspace)
+	// Resolve template (no validation - webhook already validated)
+	resolved, err := sm.templateResolver.ResolveTemplate(ctx, workspace)
 	if err != nil {
-		// System error (couldn't fetch template, etc.)
-		logger.Error(err, "Failed to validate template")
+		// System error (template not found, etc.)
+		logger.Error(err, "Failed to resolve template")
 		if statusErr := sm.statusManager.UpdateErrorStatus(
 			ctx, workspace, ReasonDeploymentError, err.Error(), snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
-		return nil, false, err
+		return nil, err
 	}
 
+<<<<<<< HEAD
 	if !validation.Valid {
 		// Validation failed - policy enforced, stop reconciliation
 		logger.Info("Validation failed, rejecting workspace", "violations", len(validation.Violations))
@@ -340,6 +350,10 @@ func (sm *StateMachine) handleTemplateValidation(
 	sm.recorder.Event(workspace, corev1.EventTypeNormal, "Validated", message)
 
 	return validation.Template, true, nil
+=======
+	logger.V(1).Info("Template resolved", "template", workspace.Spec.TemplateRef.Name)
+	return resolved, nil
+>>>>>>> 4aaaf7b (make templates mutable, remove template enforcement from controller logic, add unit and e2e tests)
 }
 
 // handleIdleShutdownForRunningWorkspace handles idle shutdown logic for running workspaces

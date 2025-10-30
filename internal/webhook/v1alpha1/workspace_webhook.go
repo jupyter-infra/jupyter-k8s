@@ -69,13 +69,6 @@ func isAdminUser(groups []string) bool {
 	return false
 }
 
-func fetchTemplateRef(workspace *workspacev1alpha1.Workspace) string {
-	if workspace.Spec.TemplateRef != nil {
-		return *workspace.Spec.TemplateRef
-	}
-	return ""
-}
-
 // validateOwnershipPermission checks if the user has permission to modify/delete an OwnerOnly workspace
 func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
 	req, err := admission.RequestFromContext(ctx)
@@ -215,13 +208,6 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 	isAdmin := false
 	if req, err := admission.RequestFromContext(ctx); err == nil {
 		isAdmin = isAdminUser(req.UserInfo.Groups)
-	}
-
-	// Validate templateRef immutability
-	oldTemplateRef := fetchTemplateRef(oldWorkspace)
-	newTemplateRef := fetchTemplateRef(newWorkspace)
-	if oldTemplateRef != "" && oldTemplateRef != newTemplateRef && !isAdmin {
-		return nil, fmt.Errorf("templateRef is immutable and cannot be changed")
 	}
 
 	// Validate that ownership annotations are immutable (except for admins)

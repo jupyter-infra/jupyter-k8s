@@ -62,6 +62,108 @@ type ResolvedTemplate struct {
 	AllowIdleShutdownOverride bool
 }
 
+// ResolveTemplate fetches and resolves a template without validation.
+// This function trusts that webhooks already validated the workspace.
+// It only performs template fetch and merge - no bounds checking.
+func (tr *TemplateResolver) ResolveTemplate(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*ResolvedTemplate, error) {
+	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name, "namespace", workspace.Namespace)
+
+	if workspace.Spec.TemplateRef == nil {
+		return nil, nil // No template
+	}
+
+	// Fetch the template
+	templateName := workspace.Spec.TemplateRef.Name
+	template := &workspacev1alpha1.WorkspaceTemplate{}
+	templateKey := types.NamespacedName{Name: templateName}
+
+	if err := tr.client.Get(ctx, templateKey, template); err != nil {
+		return nil, fmt.Errorf("failed to get WorkspaceTemplate %s: %w", templateName, err)
+	}
+
+	logger.V(1).Info("Resolving template (no validation)", "template", template.Name)
+
+	// Build resolved template with defaults
+	defaultImage := template.Spec.DefaultImage
+	if defaultImage == "" {
+		return nil, fmt.Errorf("template %s does not define a DefaultImage", template.Name)
+	}
+
+	allowSecondaryStorages := true
+	if template.Spec.AllowSecondaryStorages != nil {
+		allowSecondaryStorages = *template.Spec.AllowSecondaryStorages
+	}
+
+	resolved := &ResolvedTemplate{
+		Image:                  defaultImage,
+		Resources:              corev1.ResourceRequirements{},
+		EnvironmentVariables:   template.Spec.EnvironmentVariables,
+		AllowSecondaryStorages: allowSecondaryStorages,
+		NodeSelector:           template.Spec.DefaultNodeSelector,
+		Affinity:               template.Spec.DefaultAffinity,
+		Tolerations:            template.Spec.DefaultTolerations,
+	}
+
+	if template.Spec.DefaultResources != nil {
+		resolved.Resources = *template.Spec.DefaultResources
+	}
+
+	if template.Spec.PrimaryStorage != nil {
+		resolved.StorageConfiguration = template.Spec.PrimaryStorage
+	}
+
+	if template.Spec.DefaultContainerConfig != nil {
+		resolved.ContainerConfig = template.Spec.DefaultContainerConfig
+	}
+
+	// Apply workspace overrides WITHOUT validation (webhook already validated)
+	tr.applyOverridesWithoutValidation(resolved, workspace)
+
+	logger.V(1).Info("Template resolved (no validation)", "finalImage", resolved.Image)
+	return resolved, nil
+}
+
+// applyOverridesWithoutValidation applies workspace overrides without validation.
+// Assumes webhook already validated everything.
+func (tr *TemplateResolver) applyOverridesWithoutValidation(resolved *ResolvedTemplate, workspace *workspacev1alpha1.Workspace) {
+	// Override image if specified
+	if workspace.Spec.Image != "" {
+		resolved.Image = workspace.Spec.Image
+	}
+
+	// Override resources if specified
+	if workspace.Spec.Resources != nil {
+		resolved.Resources = *workspace.Spec.Resources
+	}
+
+	// Override storage size if specified
+	if workspace.Spec.Storage != nil && !workspace.Spec.Storage.Size.IsZero() {
+		if resolved.StorageConfiguration != nil {
+			resolved.StorageConfiguration.DefaultSize = workspace.Spec.Storage.Size
+		}
+	}
+
+	// Override node selector if specified
+	if workspace.Spec.NodeSelector != nil {
+		resolved.NodeSelector = workspace.Spec.NodeSelector
+	}
+
+	// Override affinity if specified
+	if workspace.Spec.Affinity != nil {
+		resolved.Affinity = workspace.Spec.Affinity
+	}
+
+	// Override tolerations if specified
+	if workspace.Spec.Tolerations != nil {
+		resolved.Tolerations = workspace.Spec.Tolerations
+	}
+
+	// Override container config if specified
+	if workspace.Spec.ContainerConfig != nil {
+		resolved.ContainerConfig = workspace.Spec.ContainerConfig
+	}
+}
+
 // ValidateAndResolveTemplate resolves a WorkspaceTemplate reference, validates overrides, and returns validation result
 func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*TemplateValidationResult, error) {
 	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name, "namespace", workspace.Namespace)
@@ -84,7 +186,7 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 	}
 
 	// Fetch the WorkspaceTemplate (cluster-scoped resource)
-	templateName := *workspace.Spec.TemplateRef
+	templateName := workspace.Spec.TemplateRef.Name
 	template := &workspacev1alpha1.WorkspaceTemplate{}
 	templateKey := types.NamespacedName{
 		Name: templateName,
@@ -95,7 +197,7 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 	if err := tr.client.Get(ctx, templateKey, template); err != nil {
 		// Template not found is a system error (not a user validation error)
 		// Return error to trigger controller error handling and Degraded condition
-		return nil, fmt.Errorf("failed to get WorkspaceTemplate %s: %w", *workspace.Spec.TemplateRef, err)
+		return nil, fmt.Errorf("failed to get WorkspaceTemplate %s: %w", workspace.Spec.TemplateRef.Name, err)
 	}
 
 	logger.Info("Resolving template", "template", template.Name, "displayName", template.Spec.DisplayName)
@@ -462,12 +564,12 @@ func (tr *TemplateResolver) ListWorkspacesUsingTemplate(ctx context.Context, tem
 			continue
 		}
 
-		if *ws.Spec.TemplateRef != templateName {
-			// This should never happen due to CEL immutability - log if it occurs
+		if ws.Spec.TemplateRef.Name != templateName {
+			// This should never happen - log if it occurs
 			logger.Info("Workspace has template label but different templateRef",
 				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
 				"label", templateName,
-				"spec", *ws.Spec.TemplateRef)
+				"spec", ws.Spec.TemplateRef.Name)
 			continue
 		}
 

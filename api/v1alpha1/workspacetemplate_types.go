@@ -196,7 +196,7 @@ type IdleShutdownOverridePolicy struct {
 
 // WorkspaceTemplate is the Schema for the workspacetemplates API
 // Templates define reusable, secure-by-default configurations for workspaces.
-// The spec is immutable after creation - to update a template, create a new version.
+// Template spec can be updated; existing workspaces keep their configuration (lazy application).
 type WorkspaceTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
