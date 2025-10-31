@@ -1,11 +1,13 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -127,4 +129,39 @@ func (pb *PVCBuilder) buildPVCSpecWithSize(size resource.Quantity, storageClassN
 	}
 
 	return spec
+}
+
+// NeedsUpdate checks if the existing PVC needs to be updated based on workspace changes
+func (pb *PVCBuilder) NeedsUpdate(ctx context.Context, existingPVC *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (bool, error) {
+	// Build the desired PVC spec
+	desiredPVC, err := pb.BuildPVC(workspace, resolvedTemplate)
+	if err != nil {
+		return false, fmt.Errorf("failed to build desired PVC: %w", err)
+	}
+
+	if desiredPVC == nil {
+		// No storage requested, existing PVC should be deleted (handled elsewhere)
+		return false, nil
+	}
+
+	// Compare PVC specs using semantic equality
+	return !equality.Semantic.DeepEqual(existingPVC.Spec, desiredPVC.Spec), nil
+}
+
+// UpdatePVCSpec updates the existing PVC with the desired spec
+func (pb *PVCBuilder) UpdatePVCSpec(ctx context.Context, existingPVC *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) error {
+	// Build the desired PVC spec
+	desiredPVC, err := pb.BuildPVC(workspace, resolvedTemplate)
+	if err != nil {
+		return fmt.Errorf("failed to build desired PVC: %w", err)
+	}
+
+	if desiredPVC == nil {
+		return fmt.Errorf("cannot update PVC to nil spec")
+	}
+
+	// Update the PVC spec while preserving metadata like resourceVersion
+	existingPVC.Spec = desiredPVC.Spec
+
+	return nil
 }
