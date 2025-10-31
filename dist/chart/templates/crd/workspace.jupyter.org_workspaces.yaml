@@ -1423,10 +1423,10 @@ spec:
                     description: StorageClassName specifies the storage class to use
                       for persistent storage
                     type: string
+                    x-kubernetes-validations:
+                    - message: storage class name is immutable
+                      rule: self == oldSelf
                 type: object
-                x-kubernetes-validations:
-                - message: storage is immutable
-                  rule: self == oldSelf
               templateRef:
                 description: |-
                   TemplateRef references a WorkspaceTemplate to use as base configuration

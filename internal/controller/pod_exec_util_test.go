@@ -41,12 +41,14 @@ func TestNewPodExecUtil_Success(t *testing.T) {
 	}
 	if util == nil {
 		t.Fatal("Expected non-nil PodExecUtil")
+		return
 	}
 	if util.clientset == nil {
 		t.Error("Expected non-nil clientset")
 	}
 	if util.config == nil {
 		t.Error("Expected non-nil config")
+		return
 	}
 	if util.config.Host != "https://test-cluster" {
 		t.Errorf("Expected config host 'https://test-cluster', got: %s", util.config.Host)

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"testing"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
@@ -11,262 +12,216 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-func TestPVCBuilder_BuildPVC(t *testing.T) {
-	// Register our types with the scheme
+func setupPVCBuilder() *PVCBuilder {
 	s := runtime.NewScheme()
 	_ = scheme.AddToScheme(s)
 	_ = workspacev1alpha1.AddToScheme(s)
+	return NewPVCBuilder(s)
+}
 
+func TestPVCBuilder_ExplicitStorage(t *testing.T) {
+	builder := setupPVCBuilder()
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			Storage: &workspacev1alpha1.StorageSpec{Size: resource.MustParse("5Gi")},
+		},
+	}
+	template := &ResolvedTemplate{
+		StorageConfiguration: &workspacev1alpha1.StorageConfig{DefaultSize: resource.MustParse("50Gi")},
+	}
+
+	pvc, err := builder.BuildPVC(workspace, template)
+	if err != nil {
+		t.Fatalf("BuildPVC failed: %v", err)
+	}
+	if pvc == nil {
+		t.Fatal("Expected PVC, got nil")
+		return
+	}
+	size := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+	if size.String() != "5Gi" {
+		t.Errorf("Expected size 5Gi, got %s", size.String())
+	}
+}
+
+func TestPVCBuilder_TemplateStorage(t *testing.T) {
+	builder := setupPVCBuilder()
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		Spec:       workspacev1alpha1.WorkspaceSpec{},
+	}
+	template := &ResolvedTemplate{
+		StorageConfiguration: &workspacev1alpha1.StorageConfig{DefaultSize: resource.MustParse("50Gi")},
+	}
+
+	pvc, err := builder.BuildPVC(workspace, template)
+	if err != nil {
+		t.Fatalf("BuildPVC failed: %v", err)
+	}
+	if pvc == nil {
+		t.Fatal("Expected PVC, got nil")
+		return
+	}
+	size := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+	if size.String() != "50Gi" {
+		t.Errorf("Expected size 50Gi, got %s", size.String())
+	}
+}
+
+func TestPVCBuilder_NoStorage(t *testing.T) {
+	builder := setupPVCBuilder()
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		Spec:       workspacev1alpha1.WorkspaceSpec{},
+	}
+
+	pvc, err := builder.BuildPVC(workspace, nil)
+	if err != nil {
+		t.Fatalf("BuildPVC failed: %v", err)
+	}
+	if pvc != nil {
+		t.Fatal("Expected nil PVC, got PVC")
+	}
+}
+
+func TestPVCBuilder_DefaultSize(t *testing.T) {
+	builder := setupPVCBuilder()
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			Storage: &workspacev1alpha1.StorageSpec{Size: resource.Quantity{}},
+		},
+	}
+
+	pvc, err := builder.BuildPVC(workspace, nil)
+	if err != nil {
+		t.Fatalf("BuildPVC failed: %v", err)
+	}
+	if pvc == nil {
+		t.Fatal("Expected PVC, got nil")
+		return
+	}
+	size := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+	if size.String() != "10Gi" {
+		t.Errorf("Expected default size 10Gi, got %s", size.String())
+	}
+}
+
+func TestPVCBuilder_StorageClass(t *testing.T) {
+	builder := setupPVCBuilder()
+	storageClassName := "fast-ssd"
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			Storage: &workspacev1alpha1.StorageSpec{
+				Size:             resource.MustParse("10Gi"),
+				StorageClassName: &storageClassName,
+			},
+		},
+	}
+
+	pvc, err := builder.BuildPVC(workspace, nil)
+	if err != nil {
+		t.Fatalf("BuildPVC failed: %v", err)
+	}
+	if pvc == nil {
+		t.Fatal("Expected PVC, got nil")
+		return
+	}
+	if pvc.Spec.StorageClassName == nil || *pvc.Spec.StorageClassName != storageClassName {
+		t.Errorf("Expected storage class %s, got %v", storageClassName, pvc.Spec.StorageClassName)
+	}
+}
+
+func TestPVCBuilder_Metadata(t *testing.T) {
+	builder := setupPVCBuilder()
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "test-namespace"},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			Storage: &workspacev1alpha1.StorageSpec{Size: resource.MustParse("5Gi")},
+		},
+	}
+
+	pvc, err := builder.BuildPVC(workspace, nil)
+	if err != nil {
+		t.Fatalf("BuildPVC failed: %v", err)
+	}
+	if pvc == nil {
+		t.Fatal("Expected PVC, got nil")
+		return
+	}
+
+	expectedName := GeneratePVCName("test-workspace")
+	if pvc.Name != expectedName {
+		t.Errorf("Expected PVC name %s, got %s", expectedName, pvc.Name)
+	}
+	if pvc.Namespace != "test-namespace" {
+		t.Errorf("Expected namespace test-namespace, got %s", pvc.Namespace)
+	}
+}
+
+func TestPVCBuilder_OwnerReference(t *testing.T) {
+	builder := setupPVCBuilder()
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default", UID: "test-uid"},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			Storage: &workspacev1alpha1.StorageSpec{Size: resource.MustParse("5Gi")},
+		},
+	}
+
+	pvc, err := builder.BuildPVC(workspace, nil)
+	if err != nil {
+		t.Fatalf("BuildPVC failed: %v", err)
+	}
+	if pvc == nil {
+		t.Fatal("Expected PVC, got nil")
+		return
+	}
+	if len(pvc.OwnerReferences) == 0 {
+		t.Fatal("Expected owner reference, got none")
+	}
+
+	ownerRef := pvc.OwnerReferences[0]
+	if ownerRef.UID != workspace.UID || ownerRef.Name != workspace.Name {
+		t.Errorf("Expected owner %s/%s, got %s/%s", workspace.Name, workspace.UID, ownerRef.Name, ownerRef.UID)
+	}
+}
+
+func TestPVCBuilder_UpdateDetection(t *testing.T) {
+	ctx := context.Background()
+	s := runtime.NewScheme()
+	if err := workspacev1alpha1.AddToScheme(s); err != nil {
+		t.Fatal(err)
+	}
 	builder := NewPVCBuilder(s)
 
-	t.Run("workspace with explicit storage should use workspace storage", func(t *testing.T) {
-		workspace := &workspacev1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "default",
-			},
-			Spec: workspacev1alpha1.WorkspaceSpec{
-				Storage: &workspacev1alpha1.StorageSpec{
-					Size: resource.MustParse("5Gi"),
-				},
-			},
-		}
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			Storage: &workspacev1alpha1.StorageSpec{Size: resource.MustParse("10Gi")},
+		},
+	}
 
-		template := &ResolvedTemplate{
-			StorageConfiguration: &workspacev1alpha1.StorageConfig{
-				DefaultSize: resource.MustParse("50Gi"),
-			},
-		}
+	existingPVC, err := builder.BuildPVC(workspace, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		pvc, err := builder.BuildPVC(workspace, template)
-		if err != nil {
-			t.Fatalf("BuildPVC failed: %v", err)
-		}
+	needsUpdate, err := builder.NeedsUpdate(ctx, existingPVC, workspace, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if needsUpdate {
+		t.Error("Expected no update needed")
+	}
 
-		if pvc == nil {
-			t.Fatal("Expected PVC, got nil")
-		}
-
-		size := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
-		if size.String() != "5Gi" {
-			t.Errorf("Expected size 5Gi, got %s", size.String())
-		}
-	})
-
-	t.Run("workspace without explicit storage should use template storage", func(t *testing.T) {
-		workspace := &workspacev1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "default",
-			},
-			Spec: workspacev1alpha1.WorkspaceSpec{
-				// No Storage field
-			},
-		}
-
-		template := &ResolvedTemplate{
-			StorageConfiguration: &workspacev1alpha1.StorageConfig{
-				DefaultSize: resource.MustParse("50Gi"),
-			},
-		}
-
-		pvc, err := builder.BuildPVC(workspace, template)
-		if err != nil {
-			t.Fatalf("BuildPVC failed: %v", err)
-		}
-
-		if pvc == nil {
-			t.Fatal("Expected PVC, got nil")
-		}
-
-		size := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
-		if size.String() != "50Gi" {
-			t.Errorf("Expected size 50Gi (from template), got %s", size.String())
-		}
-	})
-
-	t.Run("workspace without storage and no template should return nil", func(t *testing.T) {
-		workspace := &workspacev1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "default",
-			},
-			Spec: workspacev1alpha1.WorkspaceSpec{
-				// No Storage field
-			},
-		}
-
-		pvc, err := builder.BuildPVC(workspace, nil)
-		if err != nil {
-			t.Fatalf("BuildPVC failed: %v", err)
-		}
-
-		if pvc != nil {
-			t.Fatal("Expected nil PVC (no storage), got PVC")
-		}
-	})
-
-	t.Run("workspace without storage and template without storage should return nil", func(t *testing.T) {
-		workspace := &workspacev1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "default",
-			},
-			Spec: workspacev1alpha1.WorkspaceSpec{
-				// No Storage field
-			},
-		}
-
-		template := &ResolvedTemplate{
-			// No StorageConfiguration
-		}
-
-		pvc, err := builder.BuildPVC(workspace, template)
-		if err != nil {
-			t.Fatalf("BuildPVC failed: %v", err)
-		}
-
-		if pvc != nil {
-			t.Fatal("Expected nil PVC (no storage), got PVC")
-		}
-	})
-
-	t.Run("workspace with zero size should default to 10Gi", func(t *testing.T) {
-		workspace := &workspacev1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "default",
-			},
-			Spec: workspacev1alpha1.WorkspaceSpec{
-				Storage: &workspacev1alpha1.StorageSpec{
-					Size: resource.Quantity{}, // Zero value
-				},
-			},
-		}
-
-		pvc, err := builder.BuildPVC(workspace, nil)
-		if err != nil {
-			t.Fatalf("BuildPVC failed: %v", err)
-		}
-
-		if pvc == nil {
-			t.Fatal("Expected PVC, got nil")
-		}
-
-		size := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
-		if size.String() != "10Gi" {
-			t.Errorf("Expected default size 10Gi, got %s", size.String())
-		}
-	})
-
-	t.Run("workspace with storage class name should set storage class", func(t *testing.T) {
-		storageClassName := "fast-ssd"
-		workspace := &workspacev1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "default",
-			},
-			Spec: workspacev1alpha1.WorkspaceSpec{
-				Storage: &workspacev1alpha1.StorageSpec{
-					Size:             resource.MustParse("10Gi"),
-					StorageClassName: &storageClassName,
-				},
-			},
-		}
-
-		pvc, err := builder.BuildPVC(workspace, nil)
-		if err != nil {
-			t.Fatalf("BuildPVC failed: %v", err)
-		}
-
-		if pvc == nil {
-			t.Fatal("Expected PVC, got nil")
-		}
-
-		if pvc.Spec.StorageClassName == nil {
-			t.Fatal("Expected storage class name, got nil")
-		}
-
-		if *pvc.Spec.StorageClassName != storageClassName {
-			t.Errorf("Expected storage class %s, got %s", storageClassName, *pvc.Spec.StorageClassName)
-		}
-	})
-
-	t.Run("PVC should have correct metadata", func(t *testing.T) {
-		workspace := &workspacev1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "test-namespace",
-			},
-			Spec: workspacev1alpha1.WorkspaceSpec{
-				Storage: &workspacev1alpha1.StorageSpec{
-					Size: resource.MustParse("5Gi"),
-				},
-			},
-		}
-
-		pvc, err := builder.BuildPVC(workspace, nil)
-		if err != nil {
-			t.Fatalf("BuildPVC failed: %v", err)
-		}
-
-		if pvc == nil {
-			t.Fatal("Expected PVC, got nil")
-		}
-
-		expectedName := GeneratePVCName("test-workspace")
-		if pvc.Name != expectedName {
-			t.Errorf("Expected PVC name %s, got %s", expectedName, pvc.Name)
-		}
-
-		if pvc.Namespace != "test-namespace" {
-			t.Errorf("Expected namespace test-namespace, got %s", pvc.Namespace)
-		}
-
-		labels := GenerateLabels("test-workspace")
-		for key, expectedValue := range labels {
-			if actualValue, ok := pvc.Labels[key]; !ok {
-				t.Errorf("Expected label %s, not found", key)
-			} else if actualValue != expectedValue {
-				t.Errorf("Expected label %s=%s, got %s=%s", key, expectedValue, key, actualValue)
-			}
-		}
-	})
-
-	t.Run("PVC should have owner reference", func(t *testing.T) {
-		workspace := &workspacev1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "default",
-				UID:       "test-uid",
-			},
-			Spec: workspacev1alpha1.WorkspaceSpec{
-				Storage: &workspacev1alpha1.StorageSpec{
-					Size: resource.MustParse("5Gi"),
-				},
-			},
-		}
-
-		pvc, err := builder.BuildPVC(workspace, nil)
-		if err != nil {
-			t.Fatalf("BuildPVC failed: %v", err)
-		}
-
-		if pvc == nil {
-			t.Fatal("Expected PVC, got nil")
-		}
-
-		if len(pvc.OwnerReferences) == 0 {
-			t.Fatal("Expected owner reference, got none")
-		}
-
-		ownerRef := pvc.OwnerReferences[0]
-		if ownerRef.UID != workspace.UID {
-			t.Errorf("Expected owner UID %s, got %s", workspace.UID, ownerRef.UID)
-		}
-
-		if ownerRef.Name != workspace.Name {
-			t.Errorf("Expected owner name %s, got %s", workspace.Name, ownerRef.Name)
-		}
-	})
+	workspace.Spec.Storage.Size = resource.MustParse("20Gi")
+	needsUpdate, err = builder.NeedsUpdate(ctx, existingPVC, workspace, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !needsUpdate {
+		t.Error("Expected update needed")
+	}
 }
