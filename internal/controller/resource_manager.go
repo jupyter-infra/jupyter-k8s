@@ -279,15 +279,6 @@ func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deploym
 func (rm *ResourceManager) updateDeployment(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
 	logger := logf.FromContext(ctx)
 
-	// Take status snapshot before update
-	snapshotStatus := workspace.Status.DeepCopy()
-
-	// Report that deployment is being updated
-	if err := rm.statusManager.UpdateDeploymentUpdatingStatus(ctx, workspace, snapshotStatus); err != nil {
-		logger.Error(err, "Failed to update deployment updating status")
-		// Continue with update even if status update fails
-	}
-
 	accessStrategy, err := rm.GetAccessStrategyForWorkspace(ctx, workspace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve access strategy for deployment: %w", err)
@@ -348,15 +339,6 @@ func (rm *ResourceManager) ensureServiceUpToDate(ctx context.Context, service *c
 // updateService updates an existing service with new spec
 func (rm *ResourceManager) updateService(ctx context.Context, service *corev1.Service, workspace *workspacev1alpha1.Workspace) (*corev1.Service, error) {
 	logger := logf.FromContext(ctx)
-
-	// Take status snapshot before update
-	snapshotStatus := workspace.Status.DeepCopy()
-
-	// Report that service is being updated
-	if err := rm.statusManager.UpdateServiceUpdatingStatus(ctx, workspace, snapshotStatus); err != nil {
-		logger.Error(err, "Failed to update service updating status")
-		// Continue with update even if status update fails
-	}
 
 	// Update the service spec using the builder
 	if err := rm.serviceBuilder.UpdateServiceSpec(ctx, service, workspace); err != nil {
@@ -449,15 +431,6 @@ func (rm *ResourceManager) ensurePVCUpToDate(ctx context.Context, pvc *corev1.Pe
 // updatePVC updates an existing PVC with new spec
 func (rm *ResourceManager) updatePVC(ctx context.Context, pvc *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
 	logger := logf.FromContext(ctx)
-
-	// Take status snapshot before update
-	snapshotStatus := workspace.Status.DeepCopy()
-
-	// Report that PVC is being updated
-	if err := rm.statusManager.UpdatePVCUpdatingStatus(ctx, workspace, snapshotStatus); err != nil {
-		logger.Error(err, "Failed to update PVC updating status")
-		// Continue with update even if status update fails
-	}
 
 	// Update the PVC spec using the builder
 	if err := rm.pvcBuilder.UpdatePVCSpec(ctx, pvc, workspace, resolvedTemplate); err != nil {
