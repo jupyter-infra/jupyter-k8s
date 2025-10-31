@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -20,11 +21,17 @@ var (
 	setupLog = log.Log.WithName("extension-api-server")
 )
 
+// JWTManager interface for JWT token operations
+type JWTManager interface {
+	GenerateToken(user string, groups []string, path string, domain string, tokenType string) (string, error)
+}
+
 // ExtensionServer represents the extension API HTTP server
 type ExtensionServer struct {
 	config     *ExtensionConfig
 	k8sClient  client.Client
 	sarClient  v1.SubjectAccessReviewInterface
+	jwtManager JWTManager
 	logger     *logr.Logger
 	httpServer interface {
 		ListenAndServe() error
@@ -40,16 +47,18 @@ func newExtensionServer(
 	config *ExtensionConfig,
 	logger *logr.Logger,
 	k8sClient client.Client,
-	sarClient v1.SubjectAccessReviewInterface) *ExtensionServer {
+	sarClient v1.SubjectAccessReviewInterface,
+	jwtManager JWTManager) *ExtensionServer {
 	mux := http.NewServeMux()
 
 	server := &ExtensionServer{
-		config:    config,
-		logger:    logger,
-		k8sClient: k8sClient,
-		sarClient: sarClient,
-		routes:    make(map[string]func(http.ResponseWriter, *http.Request)),
-		mux:       mux,
+		config:     config,
+		logger:     logger,
+		k8sClient:  k8sClient,
+		sarClient:  sarClient,
+		jwtManager: jwtManager,
+		routes:     make(map[string]func(http.ResponseWriter, *http.Request)),
+		mux:        mux,
 		httpServer: &http.Server{
 			Addr:         fmt.Sprintf(":%d", config.ServerPort),
 			Handler:      mux,
@@ -238,8 +247,23 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	}
 	sarClient := clientSet.AuthorizationV1().SubjectAccessReviews()
 
+	// Create KMS JWT manager
+	ctx := context.Background()
+	kmsClient, err := aws.NewKMSClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create KMS client: %w", err)
+	}
+
+	jwtManager := aws.NewKMSJWTManager(aws.KMSJWTConfig{
+		KMSClient:  kmsClient,
+		KeyId:      config.KMSKeyID,
+		Issuer:     "jupyter-k8s",
+		Audience:   "workspace-ui",
+		Expiration: time.Hour * 24, // 24 hour token expiration
+	})
+
 	// Create server with config
-	server := newExtensionServer(config, &logger, k8sClient, sarClient)
+	server := newExtensionServer(config, &logger, k8sClient, sarClient, jwtManager)
 	server.registerAllRoutes()
 
 	// Add the server as a runnable to the manager
