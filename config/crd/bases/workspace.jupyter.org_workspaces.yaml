@@ -27,6 +27,12 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - jsonPath: .metadata.annotations['workspace\.jupyter\.org/created-by']
+      name: CreatedBy
+      type: string
+    - jsonPath: .spec.ownershipType
+      name: OwnershipType
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
