@@ -15,6 +15,20 @@ func WriteError(w http.ResponseWriter, statusCode int, message string) {
 	_ = json.NewEncoder(w).Encode(errorResponse)
 }
 
+// WriteKubernetesError writes an error response in Kubernetes Status format
+func WriteKubernetesError(w http.ResponseWriter, statusCode int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	status := map[string]interface{}{
+		"kind":       "Status",
+		"apiVersion": "v1",
+		"status":     "Failure",
+		"message":    message,
+		"code":       statusCode,
+	}
+	_ = json.NewEncoder(w).Encode(status)
+}
+
 // GetNamespaceFromPath extracts the namespace from a URL path using regex
 // Path format expected: /apis/connection.workspace.jupyter.org/v1alpha1/namespaces/{namespace}/resource
 func GetNamespaceFromPath(path string) (string, error) {
