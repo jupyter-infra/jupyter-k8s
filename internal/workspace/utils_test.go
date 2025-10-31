@@ -18,7 +18,7 @@ func TestGetPodUIDFromWorkspaceName_Success(t *testing.T) {
 			Namespace: "default",
 			UID:       types.UID("test-pod-uid-123"),
 			Labels: map[string]string{
-				"workspace.workspaces.jupyter.org/name": "test-workspace",
+				"workspace.jupyter.org/workspaceName": "test-workspace",
 			},
 		},
 	}
