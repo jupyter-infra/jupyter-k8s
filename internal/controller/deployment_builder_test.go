@@ -612,17 +612,5 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(needsUpdate).To(BeFalse())
 		})
-
-		It("should update deployment spec correctly", func() {
-			// Change workspace image
-			newImage := "jupyter/base-notebook:v2"
-			workspace.Spec.Image = newImage
-
-			err := deploymentBuilder.UpdateDeploymentSpec(ctx, existingDeployment, workspace, nil)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Verify the deployment was updated
-			Expect(existingDeployment.Spec.Template.Spec.Containers[0].Image).To(Equal(newImage))
-		})
 	})
 })

@@ -296,22 +296,3 @@ func (db *DeploymentBuilder) NeedsUpdate(
 	// Compare pod template specs using semantic equality
 	return !equality.Semantic.DeepEqual(existingDeployment.Spec.Template.Spec, desiredDeployment.Spec.Template.Spec), nil
 }
-
-// UpdateDeploymentSpec updates the existing deployment with the desired spec
-func (db *DeploymentBuilder) UpdateDeploymentSpec(
-	ctx context.Context,
-	existingDeployment *appsv1.Deployment,
-	workspace *workspacev1alpha1.Workspace,
-	resolvedTemplate *ResolvedTemplate,
-) error {
-	// Build the desired deployment spec
-	desiredDeployment, err := db.BuildDeployment(ctx, workspace, resolvedTemplate)
-	if err != nil {
-		return fmt.Errorf("failed to build desired deployment: %w", err)
-	}
-
-	// Update the deployment spec while preserving metadata like resourceVersion
-	existingDeployment.Spec = desiredDeployment.Spec
-
-	return nil
-}
