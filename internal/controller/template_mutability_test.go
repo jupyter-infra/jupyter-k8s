@@ -29,8 +29,8 @@ import (
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
-var _ = Describe("Template Immutability", func() {
-	Context("Workspace templateRef CEL Immutability", func() {
+var _ = Describe("Template Mutability", func() {
+	Context("Workspace templateRef Mutability", func() {
 		var (
 			ctx       context.Context
 			template1 *workspacev1alpha1.WorkspaceTemplate
@@ -43,7 +43,7 @@ var _ = Describe("Template Immutability", func() {
 
 			template1 = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "immutable-template-1",
+					Name: "mutable-template-1",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Template 1",
@@ -54,7 +54,7 @@ var _ = Describe("Template Immutability", func() {
 
 			template2 = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "immutable-template-2",
+					Name: "mutable-template-2",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Template 2",
@@ -65,14 +65,14 @@ var _ = Describe("Template Immutability", func() {
 
 			workspace = &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "immutable-test-workspace",
+					Name:      "mutability-test-workspace",
 					Namespace: "default",
 					Labels: map[string]string{
 						"workspace.jupyter.org/template": template1.Name,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Immutable Test",
+					DisplayName: "Mutability Test",
 					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template1.Name},
 				},
 			}
