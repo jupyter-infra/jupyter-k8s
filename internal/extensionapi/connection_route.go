@@ -9,10 +9,12 @@ import (
 	"net/http"
 
 	connectionv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -78,7 +80,12 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 		"workspaceName", req.Spec.WorkspaceName,
 		"connectionType", req.Spec.WorkspaceConnectionType)
 
-	// TODO: Implement authorization check for private workspaces
+	// Check authorization for private workspaces
+	if err := s.checkWorkspaceAuthorization(r, req.Spec.WorkspaceName, namespace); err != nil {
+		logger.Error(err, "Authorization failed", "workspaceName", req.Spec.WorkspaceName)
+		WriteKubernetesError(w, http.StatusForbidden, err.Error())
+		return
+	}
 
 	// Generate response based on connection type
 	var responseType, responseURL string
@@ -184,4 +191,52 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 func (s *ExtensionServer) generateWebUIURL(r *http.Request, workspaceName, namespace string) (string, string, error) {
 	// TODO: Implement Web UI URL generation with JWT tokens
 	return connectionv1alpha1.ConnectionTypeWebUI, "https://placeholder-webui-url.com", nil
+}
+
+// checkWorkspaceAuthorization checks if the user is authorized to access the workspace
+func (s *ExtensionServer) checkWorkspaceAuthorization(r *http.Request, workspaceName, namespace string) error {
+	var ws workspacev1alpha1.Workspace
+	err := s.k8sClient.Get(context.TODO(), types.NamespacedName{
+		Name:      workspaceName,
+		Namespace: namespace,
+	}, &ws)
+	if err != nil {
+		return fmt.Errorf("failed to get workspace %s: %w", workspaceName, err)
+	}
+
+	// Check ownership type
+	ownershipType := ws.Spec.OwnershipType
+
+	// If workspace is public or ownership type not set, allow access
+	if ownershipType == "" || ownershipType == "Public" {
+		return nil
+	}
+
+	// For private workspaces (OwnerOnly), check if user matches owner
+	if ownershipType == "OwnerOnly" {
+		annotations := ws.GetAnnotations()
+		createdBy, exists := annotations["workspace.jupyter.org/created-by"]
+		if !exists {
+			return fmt.Errorf("workspace owner information not found")
+		}
+
+		requestUser := getUserFromHeaders(r)
+
+		if createdBy != requestUser {
+			return fmt.Errorf("access denied: user %s is not authorized to access workspace owned by %s", requestUser, createdBy)
+		}
+	}
+
+	return nil
+}
+
+// getUserFromHeaders extracts the user from request headers
+func getUserFromHeaders(r *http.Request) string {
+	if user := r.Header.Get("X-User"); user != "" {
+		return user
+	}
+	if user := r.Header.Get("X-Remote-User"); user != "" {
+		return user
+	}
+	return "unknown"
 }
