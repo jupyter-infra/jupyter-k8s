@@ -49,6 +49,7 @@ type ContainerConfig struct {
 // StorageSpec defines the storage configuration for Workspace
 type StorageSpec struct {
 	// StorageClassName specifies the storage class to use for persistent storage
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage class name is immutable"
 	StorageClassName *string `json:"storageClassName,omitempty"`
 
 	// Size specifies the size of the persistent volume
@@ -138,7 +139,6 @@ type WorkspaceSpec struct {
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
 	// Storage specifies the storage configuration
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage is immutable"
 	Storage *StorageSpec `json:"storage,omitempty"`
 
 	// Volumes specifies additional volumes to mount from existing PersistantVolumeClaims
@@ -247,6 +247,8 @@ type WorkspaceStatus struct {
 // +kubebuilder:printcolumn:name="Progressing",type="string",JSONPath=".status.conditions[?(@.type==\"Progressing\")].status"
 // +kubebuilder:printcolumn:name="Degraded",type="string",JSONPath=".status.conditions[?(@.type==\"Degraded\")].status"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:printcolumn:name="CreatedBy",type="string",JSONPath=`.metadata.annotations['workspace\.jupyter\.org/created-by']`
+// +kubebuilder:printcolumn:name="OwnershipType",type="string",JSONPath=".spec.ownershipType"
 
 // Workspace is the Schema for the workspaces API
 type Workspace struct {
