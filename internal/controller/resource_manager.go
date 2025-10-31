@@ -9,7 +9,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -252,20 +251,10 @@ func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, workspace
 	return rm.ensureDeploymentUpToDate(ctx, deployment, workspace, resolvedTemplate)
 }
 
-// isWorkspaceAvailable checks if the workspace is in Available=True state
-func (rm *ResourceManager) isWorkspaceAvailable(workspace *workspacev1alpha1.Workspace) bool {
-	for _, condition := range workspace.Status.Conditions {
-		if condition.Type == ConditionTypeAvailable {
-			return condition.Status == metav1.ConditionTrue
-		}
-	}
-	return false
-}
-
 // ensureDeploymentUpToDate checks if deployment needs update and updates it if necessary
 func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
 	// Only perform updates when workspace is available to avoid interfering with creation
-	if !rm.isWorkspaceAvailable(workspace) {
+	if !rm.statusManager.IsWorkspaceAvailable(workspace) {
 		return deployment, nil
 	}
 
@@ -340,7 +329,7 @@ func (rm *ResourceManager) EnsureServiceExists(ctx context.Context, workspace *w
 // ensureServiceUpToDate checks if service needs update and updates it if necessary
 func (rm *ResourceManager) ensureServiceUpToDate(ctx context.Context, service *corev1.Service, workspace *workspacev1alpha1.Workspace) (*corev1.Service, error) {
 	// Only perform updates when workspace is available to avoid interfering with creation
-	if !rm.isWorkspaceAvailable(workspace) {
+	if !rm.statusManager.IsWorkspaceAvailable(workspace) {
 		return service, nil
 	}
 
@@ -441,7 +430,7 @@ func (rm *ResourceManager) EnsurePVCExists(ctx context.Context, workspace *works
 // ensurePVCUpToDate checks if PVC needs update and updates it if necessary
 func (rm *ResourceManager) ensurePVCUpToDate(ctx context.Context, pvc *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
 	// Only perform updates when workspace is available to avoid interfering with creation
-	if !rm.isWorkspaceAvailable(workspace) {
+	if !rm.statusManager.IsWorkspaceAvailable(workspace) {
 		return pvc, nil
 	}
 

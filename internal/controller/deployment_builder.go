@@ -53,7 +53,12 @@ func (db *DeploymentBuilder) BuildDeployment(ctx context.Context, workspace *wor
 
 // BuildDeploymentWithAccessStrategy creates a Deployment resource with access strategy applied
 // This is a helper function that should be called from ResourceManager
-func (db *DeploymentBuilder) BuildDeploymentWithAccessStrategy(ctx context.Context, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*appsv1.Deployment, error) {
+func (db *DeploymentBuilder) BuildDeploymentWithAccessStrategy(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	resolvedTemplate *ResolvedTemplate,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
+) (*appsv1.Deployment, error) {
 	// Build the base deployment
 	deployment, err := db.BuildDeployment(ctx, workspace, resolvedTemplate)
 	if err != nil {
@@ -275,7 +280,13 @@ func (db *DeploymentBuilder) parseResourceRequirements(workspace *workspacev1alp
 }
 
 // NeedsUpdate checks if the existing deployment needs to be updated based on workspace changes
-func (db *DeploymentBuilder) NeedsUpdate(ctx context.Context, existingDeployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (bool, error) {
+func (db *DeploymentBuilder) NeedsUpdate(
+	ctx context.Context,
+	existingDeployment *appsv1.Deployment,
+	workspace *workspacev1alpha1.Workspace,
+	resolvedTemplate *ResolvedTemplate,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
+) (bool, error) {
 	// Build the desired deployment spec with access strategy applied
 	desiredDeployment, err := db.BuildDeploymentWithAccessStrategy(ctx, workspace, resolvedTemplate, accessStrategy)
 	if err != nil {
@@ -287,7 +298,12 @@ func (db *DeploymentBuilder) NeedsUpdate(ctx context.Context, existingDeployment
 }
 
 // UpdateDeploymentSpec updates the existing deployment with the desired spec
-func (db *DeploymentBuilder) UpdateDeploymentSpec(ctx context.Context, existingDeployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) error {
+func (db *DeploymentBuilder) UpdateDeploymentSpec(
+	ctx context.Context,
+	existingDeployment *appsv1.Deployment,
+	workspace *workspacev1alpha1.Workspace,
+	resolvedTemplate *ResolvedTemplate,
+) error {
 	// Build the desired deployment spec
 	desiredDeployment, err := db.BuildDeployment(ctx, workspace, resolvedTemplate)
 	if err != nil {
