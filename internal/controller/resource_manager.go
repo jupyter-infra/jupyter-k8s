@@ -90,22 +90,15 @@ func (rm *ResourceManager) getPVC(ctx context.Context, workspace *workspacev1alp
 func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
 	logger := logf.FromContext(ctx)
 
-	deployment, err := rm.deploymentBuilder.BuildDeployment(ctx, workspace, resolvedTemplate)
+	accessStrategy, err := rm.GetAccessStrategyForWorkspace(ctx, workspace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve access strategy for deployment: %w", err)
+	}
+
+	deployment, err := rm.deploymentBuilder.BuildDeploymentWithAccessStrategy(ctx, workspace, resolvedTemplate, accessStrategy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build deployment: %w", err)
 	}
-
-	// Modify deployment build per AccessStrategy
-	accessStrategy, getAccessStrategyErr := rm.GetAccessStrategyForWorkspace(ctx, workspace)
-	if getAccessStrategyErr != nil {
-		return nil, fmt.Errorf("failed to retrieve access strategy for deployment: %w", getAccessStrategyErr)
-	}
-	if accessStrategy != nil {
-		if err := rm.deploymentBuilder.ApplyAccessStrategyToDeployment(deployment, workspace, accessStrategy); err != nil {
-			return nil, fmt.Errorf("failed to apply access strategy to deployment: %w", getAccessStrategyErr)
-		}
-	}
-
 	// Apply the changes to deployment
 	logger.Info("Creating Deployment",
 		"deployment", deployment.Name,
@@ -191,6 +184,61 @@ func (rm *ResourceManager) deleteService(ctx context.Context, service *corev1.Se
 	return nil
 }
 
+// IsDeploymentAvailable checks if the Deployment is considered available
+// based on its status conditions
+func (rm *ResourceManager) IsDeploymentAvailable(deployment *appsv1.Deployment) bool {
+	// If deployment is nil, it's not available
+	if deployment == nil {
+		return false
+	}
+
+	// Check if the deployment has the Available condition set to True
+	for _, condition := range deployment.Status.Conditions {
+		if condition.Type == appsv1.DeploymentAvailable {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+
+	// Fallback: also check the replica counts to determine availability
+	// This is useful if the conditions aren't updated yet but replicas are running
+	return deployment.Status.AvailableReplicas > 0 &&
+		deployment.Status.ReadyReplicas >= *deployment.Spec.Replicas
+}
+
+// IsDeploymentMissingOrDeleting checks if the Deployment is either missing (nil)
+// or in the process of being deleted
+func (rm *ResourceManager) IsDeploymentMissingOrDeleting(deployment *appsv1.Deployment) bool {
+	// If deployment is nil, it's missing
+	if deployment == nil {
+		return true
+	}
+
+	// Check if the deployment has a deletion timestamp (is being deleted)
+	return !deployment.DeletionTimestamp.IsZero()
+}
+
+// IsServiceAvailable checks if the Service has acquired an IP address
+func (rm *ResourceManager) IsServiceAvailable(service *corev1.Service) bool {
+	// If service is nil, it's not available
+	if service == nil {
+		return false
+	}
+
+	if service.Spec.Type == corev1.ServiceTypeLoadBalancer {
+		return len(service.Status.LoadBalancer.Ingress) > 0
+	}
+
+	// For any other type of service, assume it is available as soon as it's created
+	return true
+}
+
+// IsServiceMissingOrDeleting checks if the Service is either missing (nil)
+// or in the process of being deleted
+func (rm *ResourceManager) IsServiceMissingOrDeleting(service *corev1.Service) bool {
+	return service == nil
+}
+
+// EnsureDeploymentExists creates a deployment if it doesn't exist, or updates it if the pod spec differs
 // EnsureDeploymentExists creates a deployment if it doesn't exist
 func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
 	deployment, err := rm.getDeployment(ctx, workspace)
@@ -200,10 +248,64 @@ func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, workspace
 		}
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
+
+	return rm.ensureDeploymentUpToDate(ctx, deployment, workspace, resolvedTemplate)
+}
+
+// ensureDeploymentUpToDate checks if deployment needs update and updates it if necessary
+func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
+	// Only perform updates when workspace is available to avoid interfering with creation
+	if !rm.statusManager.IsWorkspaceAvailable(workspace) {
+		return deployment, nil
+	}
+
+	accessStrategy, err := rm.GetAccessStrategyForWorkspace(ctx, workspace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve access strategy for comparison: %w", err)
+	}
+
+	needsUpdate, err := rm.deploymentBuilder.NeedsUpdate(ctx, deployment, workspace, resolvedTemplate, accessStrategy)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if deployment needs update: %w", err)
+	}
+
+	if needsUpdate {
+		return rm.updateDeployment(ctx, deployment, workspace, resolvedTemplate)
+	}
+
 	return deployment, nil
 }
 
-// EnsureServiceExists creates a service if it doesn't exist
+// updateDeployment updates an existing deployment with new pod spec
+func (rm *ResourceManager) updateDeployment(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
+	logger := logf.FromContext(ctx)
+
+	accessStrategy, err := rm.GetAccessStrategyForWorkspace(ctx, workspace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve access strategy for deployment: %w", err)
+	}
+
+	// Update the deployment spec using the builder with access strategy
+	updatedDeployment, err := rm.deploymentBuilder.BuildDeploymentWithAccessStrategy(ctx, workspace, resolvedTemplate, accessStrategy)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build updated deployment: %w", err)
+	}
+
+	// Update the existing deployment spec while preserving metadata like resourceVersion
+	deployment.Spec = updatedDeployment.Spec
+
+	logger.Info("Updating Deployment",
+		"deployment", deployment.Name,
+		"namespace", deployment.Namespace)
+
+	if err := rm.client.Update(ctx, deployment); err != nil {
+		return nil, fmt.Errorf("failed to update deployment: %w", err)
+	}
+
+	return deployment, nil
+}
+
+// EnsureServiceExists creates a service if it doesn't exist, or updates it if the spec differs
 func (rm *ResourceManager) EnsureServiceExists(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.Service, error) {
 	service, err := rm.getService(ctx, workspace)
 	if err != nil {
@@ -212,6 +314,46 @@ func (rm *ResourceManager) EnsureServiceExists(ctx context.Context, workspace *w
 		}
 		return nil, fmt.Errorf("failed to get service: %w", err)
 	}
+
+	return rm.ensureServiceUpToDate(ctx, service, workspace)
+}
+
+// ensureServiceUpToDate checks if service needs update and updates it if necessary
+func (rm *ResourceManager) ensureServiceUpToDate(ctx context.Context, service *corev1.Service, workspace *workspacev1alpha1.Workspace) (*corev1.Service, error) {
+	// Only perform updates when workspace is available to avoid interfering with creation
+	if !rm.statusManager.IsWorkspaceAvailable(workspace) {
+		return service, nil
+	}
+
+	needsUpdate, err := rm.serviceBuilder.NeedsUpdate(ctx, service, workspace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if service needs update: %w", err)
+	}
+
+	if needsUpdate {
+		return rm.updateService(ctx, service, workspace)
+	}
+
+	return service, nil
+}
+
+// updateService updates an existing service with new spec
+func (rm *ResourceManager) updateService(ctx context.Context, service *corev1.Service, workspace *workspacev1alpha1.Workspace) (*corev1.Service, error) {
+	logger := logf.FromContext(ctx)
+
+	// Update the service spec using the builder
+	if err := rm.serviceBuilder.UpdateServiceSpec(ctx, service, workspace); err != nil {
+		return nil, fmt.Errorf("failed to update service spec: %w", err)
+	}
+
+	logger.Info("Updating Service",
+		"service", service.Name,
+		"namespace", service.Namespace)
+
+	if err := rm.client.Update(ctx, service); err != nil {
+		return nil, fmt.Errorf("failed to update service: %w", err)
+	}
+
 	return service, nil
 }
 
@@ -283,6 +425,46 @@ func (rm *ResourceManager) EnsurePVCExists(ctx context.Context, workspace *works
 		}
 		return nil, fmt.Errorf("failed to get PVC: %w", err)
 	}
+
+	return rm.ensurePVCUpToDate(ctx, pvc, workspace, resolvedTemplate)
+}
+
+// ensurePVCUpToDate checks if PVC needs update and updates it if necessary
+func (rm *ResourceManager) ensurePVCUpToDate(ctx context.Context, pvc *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
+	// Only perform updates when workspace is available to avoid interfering with creation
+	if !rm.statusManager.IsWorkspaceAvailable(workspace) {
+		return pvc, nil
+	}
+
+	needsUpdate, err := rm.pvcBuilder.NeedsUpdate(ctx, pvc, workspace, resolvedTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if PVC needs update: %w", err)
+	}
+
+	if needsUpdate {
+		return rm.updatePVC(ctx, pvc, workspace, resolvedTemplate)
+	}
+
+	return pvc, nil
+}
+
+// updatePVC updates an existing PVC with new spec
+func (rm *ResourceManager) updatePVC(ctx context.Context, pvc *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
+	logger := logf.FromContext(ctx)
+
+	// Update the PVC spec using the builder
+	if err := rm.pvcBuilder.UpdatePVCSpec(ctx, pvc, workspace, resolvedTemplate); err != nil {
+		return nil, fmt.Errorf("failed to update PVC spec: %w", err)
+	}
+
+	logger.Info("Updating PVC",
+		"pvc", pvc.Name,
+		"namespace", pvc.Namespace)
+
+	if err := rm.client.Update(ctx, pvc); err != nil {
+		return nil, fmt.Errorf("failed to update PVC: %w", err)
+	}
+
 	return pvc, nil
 }
 

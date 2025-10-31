@@ -49,6 +49,16 @@ func (sm *StatusManager) updateStatus(
 	return nil
 }
 
+// IsWorkspaceAvailable checks if the workspace is in Available=True state
+func (sm *StatusManager) IsWorkspaceAvailable(workspace *workspacev1alpha1.Workspace) bool {
+	for _, condition := range workspace.Status.Conditions {
+		if condition.Type == ConditionTypeAvailable {
+			return condition.Status == metav1.ConditionTrue
+		}
+	}
+	return false
+}
+
 // WorkspaceRunningReadiness wraps the readiness flag of underlying components
 type WorkspaceRunningReadiness struct {
 	computeReady         bool
