@@ -11,6 +11,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -455,4 +456,38 @@ func (sm *StateMachine) isAtLeastOneWorkspacePodReady(ctx context.Context, works
 
 	logger.V(1).Info("No ready workspace pods found")
 	return false, nil
+}
+
+// ReconcileDeletion handles workspace deletion with finalizer management
+func (sm *StateMachine) ReconcileDeletion(ctx context.Context, workspace *workspacev1alpha1.Workspace) (ctrl.Result, error) {
+	logger := logf.FromContext(ctx)
+	logger.Info("Handling workspace deletion", "workspace", workspace.Name)
+
+	if !controllerutil.ContainsFinalizer(workspace, WorkspaceFinalizerName) {
+		logger.Info("No finalizer present, allowing deletion")
+		return ctrl.Result{}, nil
+	}
+
+	// Update status to Deleting
+	if err := sm.statusManager.UpdateDeletingStatus(ctx, workspace); err != nil {
+		logger.Error(err, "Failed to update deleting status")
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+	}
+
+	// Clean up all workspace resources via resource manager
+	if err := sm.resourceManager.CleanupAllResources(ctx, workspace); err != nil {
+		logger.Error(err, "Failed to cleanup workspace resources")
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+	}
+
+	// All resources cleaned up, remove finalizer to allow deletion
+	logger.Info("All resources cleaned up, removing finalizer")
+	controllerutil.RemoveFinalizer(workspace, WorkspaceFinalizerName)
+	if err := sm.resourceManager.client.Update(ctx, workspace); err != nil {
+		logger.Error(err, "Failed to remove finalizer")
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("Finalizer removed, workspace deletion will proceed")
+	return ctrl.Result{}, nil
 }
