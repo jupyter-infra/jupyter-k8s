@@ -9,12 +9,10 @@ import (
 	"net/http"
 
 	connectionv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
-	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -195,48 +193,19 @@ func (s *ExtensionServer) generateWebUIURL(r *http.Request, workspaceName, names
 
 // checkWorkspaceAuthorization checks if the user is authorized to access the workspace
 func (s *ExtensionServer) checkWorkspaceAuthorization(r *http.Request, workspaceName, namespace string) error {
-	var ws workspacev1alpha1.Workspace
-	err := s.k8sClient.Get(context.TODO(), types.NamespacedName{
-		Name:      workspaceName,
-		Namespace: namespace,
-	}, &ws)
+	user := GetUserFromHeaders(r)
+	if user == "" {
+		return fmt.Errorf("user not found in request headers")
+	}
+
+	result, err := s.CheckWorkspaceAccess(namespace, workspaceName, user, s.logger)
 	if err != nil {
-		return fmt.Errorf("failed to get workspace %s: %w", workspaceName, err)
+		return err
 	}
 
-	// Check ownership type
-	ownershipType := ws.Spec.OwnershipType
-
-	// If workspace is public or ownership type not set, allow access
-	if ownershipType == "" || ownershipType == OwnershipTypePublic {
-		return nil
-	}
-
-	// For private workspaces (OwnerOnly), check if user matches owner
-	if ownershipType == OwnershipTypeOwnerOnly {
-		annotations := ws.GetAnnotations()
-		createdBy, exists := annotations["workspace.jupyter.org/created-by"]
-		if !exists {
-			return fmt.Errorf("workspace owner information not found")
-		}
-
-		requestUser := getUserFromHeaders(r)
-
-		if createdBy != requestUser {
-			return fmt.Errorf("access denied: user %s is not authorized to access workspace owned by %s", requestUser, createdBy)
-		}
+	if result.NotFound || !result.Allowed {
+		return fmt.Errorf("%s", result.Reason)
 	}
 
 	return nil
-}
-
-// getUserFromHeaders extracts the user from request headers
-func getUserFromHeaders(r *http.Request) string {
-	if user := r.Header.Get("X-User"); user != "" {
-		return user
-	}
-	if user := r.Header.Get("X-Remote-User"); user != "" {
-		return user
-	}
-	return "unknown"
 }
