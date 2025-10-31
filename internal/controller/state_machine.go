@@ -191,15 +191,8 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	logger := logf.FromContext(ctx)
 	logger.Info("Attempting to bring Workspace status to 'Running'")
 
-	// Resolve template for defaults (validation already done by webhook)
-	resolvedTemplate, err := sm.resolveTemplate(ctx, workspace, snapshotStatus)
-	if err != nil {
-		// System error (template not found, etc.)
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
-	}
-
 	// Ensure PVC exists first (if storage is configured)
-	_, err = sm.resourceManager.EnsurePVCExists(ctx, workspace, resolvedTemplate)
+	_, err := sm.resourceManager.EnsurePVCExists(ctx, workspace, nil)
 	if err != nil {
 		pvcErr := fmt.Errorf("failed to ensure PVC exists: %w", err)
 		if statusErr := sm.statusManager.UpdateErrorStatus(
@@ -209,11 +202,8 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, pvcErr
 	}
 
-	// Ensure deployment exists (pass the resolved template)
-	// EnsureDeploymentExists internally fetches the deployment and returns it with current status
-	// On first reconciliation: creates deployment (status will be empty initially)
-	// On subsequent reconciliations: returns existing deployment with populated status
-	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace, resolvedTemplate)
+	// EnsureDeploymentExists creates deployment if missing, or returns existing deployment
+	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace, nil)
 	if err != nil {
 		deployErr := fmt.Errorf("failed to ensure deployment exists: %w", err)
 		// Update error condition
@@ -263,7 +253,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		}
 
 		// Handle idle shutdown for running workspaces
-		return sm.handleIdleShutdownForRunningWorkspace(ctx, workspace, resolvedTemplate)
+		return sm.handleIdleShutdownForRunningWorkspace(ctx, workspace)
 	}
 
 	// Resources are being created/started but not fully ready yet
@@ -285,52 +275,14 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
 }
 
-// resolveTemplate fetches and resolves the workspace's template reference.
-// This function does NOT validate - it trusts that webhooks already validated the workspace.
-// It only handles system errors (template not found, etc.)
-func (sm *StateMachine) resolveTemplate(
-	ctx context.Context,
-	workspace *workspacev1alpha1.Workspace,
-	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (template *ResolvedTemplate, err error) {
-	logger := logf.FromContext(ctx)
-
-	// No template reference - continue with workspace spec directly
-	if workspace.Spec.TemplateRef == nil {
-		return nil, nil
-	}
-
-	// Resolve template (no validation - webhook already validated)
-	resolved, err := sm.templateResolver.ResolveTemplate(ctx, workspace)
-	if err != nil {
-		// System error (template not found, etc.)
-		logger.Error(err, "Failed to resolve template")
-		if statusErr := sm.statusManager.UpdateErrorStatus(
-			ctx, workspace, ReasonDeploymentError, err.Error(), snapshotStatus); statusErr != nil {
-			logger.Error(statusErr, "Failed to update error status")
-		}
-		return nil, err
-	}
-
-	logger.V(1).Info("Template resolved", "template", workspace.Spec.TemplateRef.Name)
-	return resolved, nil
-}
-
 // handleIdleShutdownForRunningWorkspace handles idle shutdown logic for running workspaces
 func (sm *StateMachine) handleIdleShutdownForRunningWorkspace(
 	ctx context.Context,
-	workspace *workspacev1alpha1.Workspace,
-	resolvedTemplate *ResolvedTemplate) (ctrl.Result, error) {
+	workspace *workspacev1alpha1.Workspace) (ctrl.Result, error) {
 
 	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name, "resourceVersion", workspace.ResourceVersion)
 
-	// Resolve effective idle shutdown config
-	// TODO - After copying of resolved spec (template+requestSpec) to workspaceSpec is implemented, we will directly use workspace.Spec
-	var idleConfig *workspacev1alpha1.IdleShutdownSpec
-	if resolvedTemplate != nil && resolvedTemplate.IdleShutdown != nil {
-		idleConfig = resolvedTemplate.IdleShutdown // Template-based workspace (already merged)
-	} else {
-		idleConfig = workspace.Spec.IdleShutdown // Non-template workspace
-	}
+	idleConfig := workspace.Spec.IdleShutdown
 
 	// If idle shutdown is not enabled, no requeue needed
 	if idleConfig == nil || !idleConfig.Enabled {

@@ -133,8 +133,15 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 }
 
 // ApplyTemplateDefaults applies template defaults to workspace
+//
+//nolint:gocyclo // Complexity unavoidable - must apply defaults for all workspace fields
 func (tv *TemplateValidator) ApplyTemplateDefaults(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
-	if workspace.Spec.TemplateRef == nil {
+	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
+		// Continue to apply template defaults
+	} else {
+		if workspace.Labels != nil {
+			delete(workspace.Labels, controller.LabelWorkspaceTemplate)
+		}
 		return nil
 	}
 
@@ -202,11 +209,16 @@ func (tv *TemplateValidator) ApplyTemplateDefaults(ctx context.Context, workspac
 		workspace.Spec.OwnershipType = template.Spec.DefaultOwnershipType
 	}
 
-	// Add template tracking label
-	if workspace.Labels == nil {
-		workspace.Labels = make(map[string]string)
+	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
+		if workspace.Labels == nil {
+			workspace.Labels = make(map[string]string)
+		}
+		workspace.Labels[controller.LabelWorkspaceTemplate] = workspace.Spec.TemplateRef.Name
+	} else {
+		if workspace.Labels != nil {
+			delete(workspace.Labels, controller.LabelWorkspaceTemplate)
+		}
 	}
-	workspace.Labels[controller.LabelWorkspaceTemplate] = workspace.Spec.TemplateRef.Name
 
 	return nil
 }

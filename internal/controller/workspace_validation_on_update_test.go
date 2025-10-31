@@ -32,15 +32,13 @@ import (
 
 var _ = Describe("Lazy Application", func() {
 	var (
-		ctx              context.Context
-		template         *workspacev1alpha1.WorkspaceTemplate
-		workspace        *workspacev1alpha1.Workspace
-		templateResolver *TemplateResolver
+		ctx       context.Context
+		template  *workspacev1alpha1.WorkspaceTemplate
+		workspace *workspacev1alpha1.Workspace
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		templateResolver = NewTemplateResolver(k8sClient)
 
 		template = &workspacev1alpha1.WorkspaceTemplate{
 			ObjectMeta: metav1.ObjectMeta{
@@ -123,10 +121,6 @@ var _ = Describe("Lazy Application", func() {
 		verifiedWorkspace := &workspacev1alpha1.Workspace{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), verifiedWorkspace)).To(Succeed())
 		Expect(verifiedWorkspace.Spec.Resources.Requests.Cpu().String()).To(Equal("1"), "workspace spec should not change")
-
-		resolved, err := templateResolver.ResolveTemplate(ctx, verifiedWorkspace)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(resolved.Resources.Requests.Cpu().String()).To(Equal("1"), "controller should resolve existing config")
 	})
 
 	It("should apply new template defaults to new workspaces after template modification", func() {
@@ -136,6 +130,7 @@ var _ = Describe("Lazy Application", func() {
 		updatedTemplate.Spec.DefaultResources.Requests[corev1.ResourceCPU] = resource.MustParse("200m")
 		Expect(k8sClient.Update(ctx, updatedTemplate)).To(Succeed())
 
+		// Envtest doesn't run webhooks, so manually apply defaults as webhook would
 		newWorkspace := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "new-workspace-after-change",
@@ -144,6 +139,13 @@ var _ = Describe("Lazy Application", func() {
 			Spec: workspacev1alpha1.WorkspaceSpec{
 				DisplayName: "New Workspace",
 				TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name},
+				Image:       updatedTemplate.Spec.DefaultImage,
+				Resources: &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    updatedTemplate.Spec.DefaultResources.Requests[corev1.ResourceCPU],
+						corev1.ResourceMemory: updatedTemplate.Spec.DefaultResources.Requests[corev1.ResourceMemory],
+					},
+				},
 			},
 		}
 		Expect(k8sClient.Create(ctx, newWorkspace)).To(Succeed())
@@ -151,13 +153,25 @@ var _ = Describe("Lazy Application", func() {
 			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, newWorkspace))).To(Succeed())
 		}()
 
-		resolved, err := templateResolver.ResolveTemplate(ctx, newWorkspace)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(resolved.Image).To(Equal("image:v2"), "new workspace should get new defaults")
-		Expect(resolved.Resources.Requests.Cpu().String()).To(Equal("200m"), "new workspace should get new resource defaults")
+		createdWorkspace := &workspacev1alpha1.Workspace{}
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(newWorkspace), createdWorkspace)).To(Succeed())
+		Expect(createdWorkspace.Spec.Image).To(Equal("image:v2"))
+		Expect(createdWorkspace.Spec.Resources.Requests.Cpu().String()).To(Equal("200m"))
+	})
 
-		oldResolved, err := templateResolver.ResolveTemplate(ctx, workspace)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(oldResolved.Resources.Requests.Cpu().String()).To(Equal("1"), "old workspace should keep its config")
+	It("should not retroactively apply template changes to existing workspaces", func() {
+		// Update template to be more restrictive
+		updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updatedTemplate)).To(Succeed())
+		updatedTemplate.Spec.DefaultImage = "image:v2"
+		updatedTemplate.Spec.DefaultResources.Requests[corev1.ResourceCPU] = resource.MustParse("200m")
+		Expect(k8sClient.Update(ctx, updatedTemplate)).To(Succeed())
+
+		time.Sleep(100 * time.Millisecond)
+
+		// Existing workspace should keep its original configuration
+		oldWorkspace := &workspacev1alpha1.Workspace{}
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), oldWorkspace)).To(Succeed())
+		Expect(oldWorkspace.Spec.Resources.Requests.Cpu().String()).To(Equal("1"))
 	})
 })

@@ -111,25 +111,6 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	// Ensure template label is set if workspace uses a template
-	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
-		if workspace.Labels == nil {
-			workspace.Labels = make(map[string]string)
-		}
-		expectedLabel := "workspace.jupyter.org/template"
-		if workspace.Labels[expectedLabel] != workspace.Spec.TemplateRef.Name {
-			logger.Info("Adding template label to workspace", "template", workspace.Spec.TemplateRef.Name)
-			workspace.Labels[expectedLabel] = workspace.Spec.TemplateRef.Name
-			if err := r.Update(ctx, workspace); err != nil {
-				logger.Error(err, "Failed to update workspace with template label")
-				return ctrl.Result{}, err
-			}
-			logger.Info("Successfully added template label to workspace")
-			// Requeue to process with updated labels
-			return ctrl.Result{Requeue: true}, nil
-		}
-	}
-
 	// Delegate to state machine for business logic
 	result, err := r.stateMachine.ReconcileDesiredState(ctx, workspace)
 	if err != nil {
