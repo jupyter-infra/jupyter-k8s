@@ -36,9 +36,11 @@ func TestCheckWorkspaceAuthorization_PublicWorkspace(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/test", nil)
 	req.Header.Set("X-User", "test-user")
-	err := server.checkWorkspaceAuthorization(req, "public-workspace", "default")
+	result, err := server.checkWorkspaceAuthorization(req, "public-workspace", "default")
 
 	assert.NoError(t, err)
+	assert.True(t, result.Allowed)
+	assert.False(t, result.NotFound)
 }
 
 func TestCheckWorkspaceAuthorization_PrivateWorkspace_SameUser(t *testing.T) {
@@ -63,9 +65,11 @@ func TestCheckWorkspaceAuthorization_PrivateWorkspace_SameUser(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/test", nil)
 	req.Header.Set("X-User", "test-user")
 
-	err := server.checkWorkspaceAuthorization(req, "private-workspace", "default")
+	result, err := server.checkWorkspaceAuthorization(req, "private-workspace", "default")
 
 	assert.NoError(t, err)
+	assert.True(t, result.Allowed)
+	assert.False(t, result.NotFound)
 }
 
 func TestCheckWorkspaceAuthorization_PrivateWorkspace_DifferentUser(t *testing.T) {
@@ -90,10 +94,12 @@ func TestCheckWorkspaceAuthorization_PrivateWorkspace_DifferentUser(t *testing.T
 	req, _ := http.NewRequest("POST", "/test", nil)
 	req.Header.Set("X-User", "different-user")
 
-	err := server.checkWorkspaceAuthorization(req, "private-workspace", "default")
+	result, err := server.checkWorkspaceAuthorization(req, "private-workspace", "default")
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not the workspace owner")
+	assert.NoError(t, err)
+	assert.False(t, result.Allowed)
+	assert.False(t, result.NotFound)
+	assert.Contains(t, result.Reason, "not the workspace owner")
 }
 
 func TestCheckWorkspaceAuthorization_WorkspaceNotFound(t *testing.T) {
@@ -103,8 +109,10 @@ func TestCheckWorkspaceAuthorization_WorkspaceNotFound(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/test", nil)
 	req.Header.Set("X-User", "test-user")
-	err := server.checkWorkspaceAuthorization(req, "non-existent", "default")
+	result, err := server.checkWorkspaceAuthorization(req, "non-existent", "default")
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "Workspace not found")
+	assert.NoError(t, err)
+	assert.False(t, result.Allowed)
+	assert.True(t, result.NotFound)
+	assert.Contains(t, result.Reason, "Workspace not found")
 }

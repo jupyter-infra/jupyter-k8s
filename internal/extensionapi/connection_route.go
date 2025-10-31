@@ -79,9 +79,20 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 		"connectionType", req.Spec.WorkspaceConnectionType)
 
 	// Check authorization for private workspaces
-	if err := s.checkWorkspaceAuthorization(r, req.Spec.WorkspaceName, namespace); err != nil {
+	result, err := s.checkWorkspaceAuthorization(r, req.Spec.WorkspaceName, namespace)
+	if err != nil {
 		logger.Error(err, "Authorization failed", "workspaceName", req.Spec.WorkspaceName)
-		WriteKubernetesError(w, http.StatusForbidden, err.Error())
+		WriteKubernetesError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if result.NotFound {
+		WriteKubernetesError(w, http.StatusNotFound, result.Reason)
+		return
+	}
+
+	if !result.Allowed {
+		WriteKubernetesError(w, http.StatusForbidden, result.Reason)
 		return
 	}
 
@@ -192,20 +203,11 @@ func (s *ExtensionServer) generateWebUIURL(r *http.Request, workspaceName, names
 }
 
 // checkWorkspaceAuthorization checks if the user is authorized to access the workspace
-func (s *ExtensionServer) checkWorkspaceAuthorization(r *http.Request, workspaceName, namespace string) error {
+func (s *ExtensionServer) checkWorkspaceAuthorization(r *http.Request, workspaceName, namespace string) (*WorkspaceAdmissionResult, error) {
 	user := GetUserFromHeaders(r)
 	if user == "" {
-		return fmt.Errorf("user not found in request headers")
+		return nil, fmt.Errorf("user not found in request headers")
 	}
 
-	result, err := s.CheckWorkspaceAccess(namespace, workspaceName, user, s.logger)
-	if err != nil {
-		return err
-	}
-
-	if result.NotFound || !result.Allowed {
-		return fmt.Errorf("%s", result.Reason)
-	}
-
-	return nil
+	return s.CheckWorkspaceAccess(namespace, workspaceName, user, s.logger)
 }
