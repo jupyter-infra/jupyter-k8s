@@ -28,6 +28,8 @@ type ExtensionConfig struct {
 	AllowedOrigin       string
 	// AWS section
 	ClusterId string
+	KMSKeyID  string
+	Domain    string
 }
 
 // ConfigOption is a function that modifies an ExtensionConfig
@@ -93,6 +95,20 @@ func WithWriteTimeoutSeconds(timeoutSeconds int) ConfigOption {
 func WithAllowedOrigin(origin string) ConfigOption {
 	return func(c *ExtensionConfig) {
 		c.AllowedOrigin = origin
+	}
+}
+
+// WithKMSKeyID sets the KMS key ID for JWT token encryption
+func WithKMSKeyID(keyID string) ConfigOption {
+	return func(c *ExtensionConfig) {
+		c.KMSKeyID = keyID
+	}
+}
+
+// WithDomain sets the domain for Web UI URLs
+func WithDomain(domain string) ConfigOption {
+	return func(c *ExtensionConfig) {
+		c.Domain = domain
 	}
 }
 

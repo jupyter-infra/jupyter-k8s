@@ -39,3 +39,18 @@ func GetNamespaceFromPath(path string) (string, error) {
 	}
 	return "", fmt.Errorf("cannot find the namespace in URL")
 }
+
+// GetUserFromHeaders extracts user information from request headers
+func GetUserFromHeaders(r *http.Request) string {
+	// Try common user headers in order of preference
+	if user := r.Header.Get("X-Remote-User"); user != "" {
+		return user
+	}
+	if user := r.Header.Get("X-Forwarded-User"); user != "" {
+		return user
+	}
+	if user := r.Header.Get("Remote-User"); user != "" {
+		return user
+	}
+	return ""
+}
