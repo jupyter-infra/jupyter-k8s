@@ -208,12 +208,12 @@ func (s *ExtensionServer) checkWorkspaceAuthorization(r *http.Request, workspace
 	ownershipType := ws.Spec.OwnershipType
 
 	// If workspace is public or ownership type not set, allow access
-	if ownershipType == "" || ownershipType == "Public" {
+	if ownershipType == "" || ownershipType == OwnershipTypePublic {
 		return nil
 	}
 
 	// For private workspaces (OwnerOnly), check if user matches owner
-	if ownershipType == "OwnerOnly" {
+	if ownershipType == OwnershipTypeOwnerOnly {
 		annotations := ws.GetAnnotations()
 		createdBy, exists := annotations["workspace.jupyter.org/created-by"]
 		if !exists {
