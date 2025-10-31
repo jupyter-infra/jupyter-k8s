@@ -55,7 +55,7 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		return nil
 	}
 
-	template, err := tv.fetchTemplate(ctx, *workspace.Spec.TemplateRef)
+	template, err := tv.fetchTemplate(ctx, workspace.Spec.TemplateRef.Name)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 	}
 
 	if len(violations) > 0 {
-		return fmt.Errorf("workspace violates template '%s' constraints: %s", *workspace.Spec.TemplateRef, formatViolations(violations))
+		return fmt.Errorf("workspace violates template '%s' constraints: %s", workspace.Spec.TemplateRef.Name, formatViolations(violations))
 	}
 
 	return nil
@@ -96,7 +96,7 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 		return nil
 	}
 
-	template, err := tv.fetchTemplate(ctx, *newWorkspace.Spec.TemplateRef)
+	template, err := tv.fetchTemplate(ctx, newWorkspace.Spec.TemplateRef.Name)
 	if err != nil {
 		return err
 	}
@@ -126,19 +126,26 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 	}
 
 	if len(violations) > 0 {
-		return fmt.Errorf("workspace violates template '%s' constraints: %s", *newWorkspace.Spec.TemplateRef, formatViolations(violations))
+		return fmt.Errorf("workspace violates template '%s' constraints: %s", newWorkspace.Spec.TemplateRef.Name, formatViolations(violations))
 	}
 
 	return nil
 }
 
 // ApplyTemplateDefaults applies template defaults to workspace
+//
+//nolint:gocyclo // Complexity unavoidable - must apply defaults for all workspace fields
 func (tv *TemplateValidator) ApplyTemplateDefaults(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
-	if workspace.Spec.TemplateRef == nil {
+	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
+		// Continue to apply template defaults
+	} else {
+		if workspace.Labels != nil {
+			delete(workspace.Labels, controller.LabelWorkspaceTemplate)
+		}
 		return nil
 	}
 
-	template, err := tv.fetchTemplate(ctx, *workspace.Spec.TemplateRef)
+	template, err := tv.fetchTemplate(ctx, workspace.Spec.TemplateRef.Name)
 	if err != nil {
 		return err
 	}
@@ -202,11 +209,16 @@ func (tv *TemplateValidator) ApplyTemplateDefaults(ctx context.Context, workspac
 		workspace.Spec.OwnershipType = template.Spec.DefaultOwnershipType
 	}
 
-	// Add template tracking label
-	if workspace.Labels == nil {
-		workspace.Labels = make(map[string]string)
+	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
+		if workspace.Labels == nil {
+			workspace.Labels = make(map[string]string)
+		}
+		workspace.Labels[controller.LabelWorkspaceTemplate] = workspace.Spec.TemplateRef.Name
+	} else {
+		if workspace.Labels != nil {
+			delete(workspace.Labels, controller.LabelWorkspaceTemplate)
+		}
 	}
-	workspace.Labels[controller.LabelWorkspaceTemplate] = *workspace.Spec.TemplateRef
 
 	return nil
 }

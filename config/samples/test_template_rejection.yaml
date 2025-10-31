@@ -39,7 +39,8 @@ metadata:
 spec:
   displayName: "Test Rejected Workspace"
   desiredStatus: Running
-  templateRef: "restricted-template"
+  templateRef:
+    name: "restricted-template"
   image: "tensorflow/tensorflow:latest-gpu-jupyter"
   ownershipType: Public
   resources:
@@ -61,7 +62,8 @@ metadata:
 spec:
   displayName: "Test Valid Workspace"
   desiredStatus: Running
-  templateRef: "restricted-template"
+  templateRef:
+    name: "restricted-template"
   image: "quay.io/jupyter/minimal-notebook:latest"
   ownershipType: Public
   resources:

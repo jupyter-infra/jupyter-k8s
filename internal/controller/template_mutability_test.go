@@ -21,6 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -28,8 +29,8 @@ import (
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
-var _ = Describe("Template Immutability", func() {
-	Context("Workspace templateRef CEL Immutability", func() {
+var _ = Describe("Template Mutability", func() {
+	Context("Workspace templateRef Mutability", func() {
 		var (
 			ctx       context.Context
 			template1 *workspacev1alpha1.WorkspaceTemplate
@@ -42,7 +43,7 @@ var _ = Describe("Template Immutability", func() {
 
 			template1 = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "immutable-template-1",
+					Name: "mutable-template-1",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Template 1",
@@ -53,7 +54,7 @@ var _ = Describe("Template Immutability", func() {
 
 			template2 = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "immutable-template-2",
+					Name: "mutable-template-2",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Template 2",
@@ -64,15 +65,15 @@ var _ = Describe("Template Immutability", func() {
 
 			workspace = &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "immutable-test-workspace",
+					Name:      "mutability-test-workspace",
 					Namespace: "default",
 					Labels: map[string]string{
 						"workspace.jupyter.org/template": template1.Name,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Immutable Test",
-					TemplateRef: &template1.Name,
+					DisplayName: "Mutability Test",
+					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template1.Name},
 				},
 			}
 			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
@@ -93,18 +94,17 @@ var _ = Describe("Template Immutability", func() {
 		It("should allow creating workspace with templateRef", func() {
 			updatedWorkspace := &workspacev1alpha1.Workspace{}
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), updatedWorkspace)).To(Succeed())
-			Expect(*updatedWorkspace.Spec.TemplateRef).To(Equal(template1.Name))
+			Expect(updatedWorkspace.Spec.TemplateRef.Name).To(Equal(template1.Name))
 		})
 
-		It("should reject changing templateRef via CEL validation", func() {
+		It("should allow changing templateRef (no longer immutable)", func() {
 			updatedWorkspace := &workspacev1alpha1.Workspace{}
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), updatedWorkspace)).To(Succeed())
 
-			// Try to change templateRef to template2
-			updatedWorkspace.Spec.TemplateRef = &template2.Name
+			// Change templateRef to template2 (now allowed)
+			updatedWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{Name: template2.Name}
 			err := k8sClient.Update(ctx, updatedWorkspace)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("templateRef is immutable"))
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should allow updating other fields without changing templateRef", func() {
@@ -118,7 +118,7 @@ var _ = Describe("Template Immutability", func() {
 
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), updatedWorkspace)).To(Succeed())
 			Expect(updatedWorkspace.Spec.DisplayName).To(Equal("Updated Display Name"))
-			Expect(*updatedWorkspace.Spec.TemplateRef).To(Equal(template1.Name))
+			Expect(updatedWorkspace.Spec.TemplateRef.Name).To(Equal(template1.Name))
 		})
 	})
 
@@ -155,7 +155,7 @@ var _ = Describe("Template Immutability", func() {
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Protection Test",
-					TemplateRef: &template.Name,
+					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name},
 				},
 			}
 			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
@@ -227,4 +227,71 @@ var _ = Describe("Template Immutability", func() {
 		})
 	})
 
+	Context("Template Spec Mutability", func() {
+		It("should allow template spec modification (mutability)", func() {
+			ctx := context.Background()
+			template := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "mutable-template",
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Original Display Name",
+					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
+					ResourceBounds: &workspacev1alpha1.ResourceBounds{
+						CPU: &workspacev1alpha1.ResourceRange{
+							Min: resource.MustParse("100m"),
+							Max: resource.MustParse("2"),
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+			defer func() {
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, template))).To(Succeed())
+			}()
+
+			// Modify the template spec (should succeed - templates are now mutable)
+			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updatedTemplate)).To(Succeed())
+			updatedTemplate.Spec.DisplayName = "Modified Display Name"
+			err := k8sClient.Update(ctx, updatedTemplate)
+			Expect(err).NotTo(HaveOccurred(), "template spec should be mutable")
+
+			// Verify the change was persisted
+			verifiedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), verifiedTemplate)).To(Succeed())
+			Expect(verifiedTemplate.Spec.DisplayName).To(Equal("Modified Display Name"))
+		})
+
+		It("should allow metadata updates independently of spec", func() {
+			ctx := context.Background()
+			template := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "metadata-mutable-template",
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Metadata Test",
+					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+			defer func() {
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, template))).To(Succeed())
+			}()
+
+			// Metadata changes (labels, annotations) should be allowed
+			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updatedTemplate)).To(Succeed())
+			if updatedTemplate.Labels == nil {
+				updatedTemplate.Labels = make(map[string]string)
+			}
+			updatedTemplate.Labels["new-label"] = "test"
+			Expect(k8sClient.Update(ctx, updatedTemplate)).To(Succeed())
+
+			// Verify label was added
+			verifyTemplate := &workspacev1alpha1.WorkspaceTemplate{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), verifyTemplate)).To(Succeed())
+			Expect(verifyTemplate.Labels["new-label"]).To(Equal("test"))
+		})
+	})
 })

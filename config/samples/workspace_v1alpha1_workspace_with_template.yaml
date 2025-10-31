@@ -7,6 +7,7 @@ metadata:
   name: workspace-with-template
 spec:
   displayName: "Workspace Using Template"
-  templateRef: "production-notebook-template"
+  templateRef:
+    name: "production-notebook-template"
   desiredStatus: Running
   ownershipType: Public

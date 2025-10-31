@@ -1,0 +1,21 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: test-rejected-workspace
+  namespace: default
+spec:
+  displayName: "Test Rejected Workspace"
+  desiredStatus: Running
+  templateRef:
+    name: "restricted-template"
+  image: "tensorflow/tensorflow:latest-gpu-jupyter"
+  ownershipType: Public
+  resources:
+    requests:
+      cpu: "4"
+      memory: "8Gi"
+    limits:
+      cpu: "8"
+      memory: "16Gi"
+  storage:
+    size: "50Gi"

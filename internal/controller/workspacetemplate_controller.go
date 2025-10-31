@@ -72,7 +72,12 @@ func (r *WorkspaceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Manage finalizer based on workspace usage (lazy finalizer pattern)
 	// This follows Kubernetes best practice: only add finalizers when needed
-	return r.manageFinalizer(ctx, template)
+	result, err := r.manageFinalizer(ctx, template)
+	if err != nil {
+		return result, err
+	}
+
+	return result, nil
 }
 
 // manageFinalizer implements lazy finalizer management for WorkspaceTemplates
@@ -80,6 +85,8 @@ func (r *WorkspaceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // - Finalizers are only added when workspaces start using the template
 // - Finalizers are removed when all workspaces stop using the template
 // - This minimizes overhead and complexity compared to adding finalizers to all templates
+//
+//nolint:unparam // ctrl.Result signature maintained for consistency with controller-runtime patterns
 func (r *WorkspaceTemplateReconciler) manageFinalizer(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
@@ -213,19 +220,19 @@ func (r *WorkspaceTemplateReconciler) findTemplatesForWorkspace(ctx context.Cont
 		return nil
 	}
 
-	if workspace.Spec.TemplateRef == nil || *workspace.Spec.TemplateRef == "" {
+	if workspace.Spec.TemplateRef == nil || workspace.Spec.TemplateRef.Name == "" {
 		return nil
 	}
 
 	logger := logf.FromContext(ctx)
 	logger.V(1).Info("Workspace changed, enqueueing template reconciliation",
 		"workspace", fmt.Sprintf("%s/%s", workspace.Namespace, workspace.Name),
-		"template", *workspace.Spec.TemplateRef)
+		"template", workspace.Spec.TemplateRef.Name)
 
 	// Trigger reconciliation of the template when workspace changes
 	return []reconcile.Request{
 		{NamespacedName: types.NamespacedName{
-			Name: *workspace.Spec.TemplateRef,
+			Name: workspace.Spec.TemplateRef.Name,
 		}},
 	}
 }

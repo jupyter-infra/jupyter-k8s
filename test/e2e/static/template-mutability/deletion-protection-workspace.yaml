@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: deletion-protection-test
+spec:
+  displayName: "Deletion Protection Test"
+  ownershipType: Public
+  templateRef:
+    name: "production-notebook-template"
