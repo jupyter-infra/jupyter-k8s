@@ -10,6 +10,10 @@ import (
 
 // NewJWTHandler creates a jwt.Handler based on the configured signing type
 func NewJWTHandler(cfg *Config) (jwt.Handler, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config cannot be nil")
+	}
+
 	var signer jwt.JWTSigner
 
 	switch cfg.JWTSigningType {

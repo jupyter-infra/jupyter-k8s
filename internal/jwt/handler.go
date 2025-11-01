@@ -83,7 +83,7 @@ func (m *Manager) ShouldRefreshToken(claims *Claims) bool {
 		return false
 	}
 
-	if claims == nil || claims.ExpiresAt == nil || claims.SkipRefresh {
+	if claims == nil || claims.ExpiresAt == nil || claims.IssuedAt == nil || claims.SkipRefresh {
 		return false
 	}
 

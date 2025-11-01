@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	jwt5 "github.com/golang-jwt/jwt/v5"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/authmiddleware"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 )
 
 // MockKMSClient implements a mock KMS client for testing
@@ -95,7 +95,7 @@ func TestKMSJWTManager_EnvelopeEncryption(t *testing.T) {
 	tokenType := "access"
 
 	// Generate token
-	token, err := manager.GenerateToken(user, groups, path, domain, tokenType)
+	token, err := manager.GenerateToken(user, groups, "uid123", nil, path, domain, tokenType)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestKMSJWTManager_CacheMiss(t *testing.T) {
 	}
 
 	// Generate token
-	token, err := manager.GenerateToken("user", []string{"group"}, "/path", "domain", "type")
+	token, err := manager.GenerateToken("user", []string{"group"}, "uid123", nil, "/path", "domain", "type")
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
