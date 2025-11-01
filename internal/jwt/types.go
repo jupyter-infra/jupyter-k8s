@@ -1,6 +1,8 @@
-package authmiddleware
+package jwt
 
 import (
+	"errors"
+
 	jwt5 "github.com/golang-jwt/jwt/v5"
 )
 
@@ -11,6 +13,15 @@ const (
 	TokenTypeBootstrap = "bootstrap"
 	// TokenTypeSession represents a session token used for ongoing authenticated requests
 	TokenTypeSession = "session"
+)
+
+// Common errors
+var (
+	ErrInvalidToken     = errors.New("invalid token")
+	ErrTokenExpired     = errors.New("token expired")
+	ErrInvalidSignature = errors.New("invalid token signature")
+	ErrInvalidClaims    = errors.New("invalid token claims")
+	ErrDomainMismatch   = errors.New("token domain mismatch")
 )
 
 // Claims represents the JWT claims for our auth token
