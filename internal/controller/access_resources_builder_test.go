@@ -319,13 +319,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 				testAccessStrategy,
 			)
 
-			expectedSelector := fmt.Sprintf("%s=%s,%s=%s,%s=%s,%s=%s",
-				LabelWorkspaceName, testWorkspace.Name,
-				LabelWorkspaceNamespace, testWorkspace.Namespace,
-				LabelAccessStrategyName, testAccessStrategy.Name,
-				LabelAccessStrategyNamespace, testAccessStrategy.Namespace,
-			)
-
+			expectedSelector := fmt.Sprintf("%s=%s", LabelWorkspaceName, testWorkspace.Name)
 			Expect(selector).To(Equal(expectedSelector))
 		})
 	})

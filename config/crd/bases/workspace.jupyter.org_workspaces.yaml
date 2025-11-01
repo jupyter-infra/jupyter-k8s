@@ -27,6 +27,12 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - jsonPath: .metadata.annotations['workspace\.jupyter\.org/created-by']
+      name: CreatedBy
+      type: string
+    - jsonPath: .spec.ownershipType
+      name: OwnershipType
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -65,6 +71,15 @@ spec:
                 required:
                 - name
                 type: object
+              accessType:
+                description: |-
+                  AccessType specifies who can connect to the workspace.
+                  Public means anyone with RBAC permissions can connect to workspace.
+                  OwnerOnly means only the creator can connect to the workspace.
+                enum:
+                - Public
+                - OwnerOnly
+                type: string
               affinity:
                 description: Affinity specifies node affinity and anti-affinity rules
                   for the workspace pod
@@ -1005,6 +1020,75 @@ spec:
               displayName:
                 description: Display Name of the server
                 type: string
+              idleShutdown:
+                description: IdleShutdown specifies idle shutdown configuration
+                properties:
+                  detection:
+                    description: Detection specifies how to detect idle state
+                    properties:
+                      httpGet:
+                        description: HTTPGet specifies the HTTP request to perform
+                          for idle detection
+                        properties:
+                          host:
+                            description: |-
+                              Host name to connect to, defaults to the pod IP. You probably want to set
+                              "Host" in httpHeaders instead.
+                            type: string
+                          httpHeaders:
+                            description: Custom headers to set in the request. HTTP
+                              allows repeated headers.
+                            items:
+                              description: HTTPHeader describes a custom header to
+                                be used in HTTP probes
+                              properties:
+                                name:
+                                  description: |-
+                                    The header field name.
+                                    This will be canonicalized upon output, so case-variant names will be understood as the same header.
+                                  type: string
+                                value:
+                                  description: The header field value
+                                  type: string
+                              required:
+                              - name
+                              - value
+                              type: object
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          path:
+                            description: Path to access on the HTTP server.
+                            type: string
+                          port:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: |-
+                              Name or number of the port to access on the container.
+                              Number must be in the range 1 to 65535.
+                              Name must be an IANA_SVC_NAME.
+                            x-kubernetes-int-or-string: true
+                          scheme:
+                            description: |-
+                              Scheme to use for connecting to the host.
+                              Defaults to HTTP.
+                            type: string
+                        required:
+                        - port
+                        type: object
+                    type: object
+                  enabled:
+                    description: Enabled indicates if idle shutdown is enabled
+                    type: boolean
+                  timeoutMinutes:
+                    description: TimeoutMinutes specifies idle timeout in minutes
+                    minimum: 1
+                    type: integer
+                required:
+                - detection
+                - enabled
+                - timeoutMinutes
+                type: object
               image:
                 description: Image specifies the container image to use
                 type: string
@@ -1243,9 +1327,9 @@ spec:
                 type: object
               ownershipType:
                 description: |-
-                  OwnershipType specifies who can modify the space.
-                  Public means anyone with RBAC permissions can update/delete the space.
-                  OwnerOnly means only the creator can update/delete the space.
+                  OwnershipType specifies who can modify the workspace.
+                  Public means anyone with RBAC permissions can update/delete the workspace.
+                  OwnerOnly means only the creator can update/delete the workspace.
                 enum:
                 - Public
                 - OwnerOnly
@@ -1333,10 +1417,10 @@ spec:
                     description: StorageClassName specifies the storage class to use
                       for persistent storage
                     type: string
+                    x-kubernetes-validations:
+                    - message: storage class name is immutable
+                      rule: self == oldSelf
                 type: object
-                x-kubernetes-validations:
-                - message: storage is immutable
-                  rule: self == oldSelf
               templateRef:
                 description: |-
                   TemplateRef references a WorkspaceTemplate to use as base configuration

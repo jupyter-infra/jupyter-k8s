@@ -71,6 +71,15 @@ spec:
                 description: AppType specifies the application type for workspaces
                   using this template
                 type: string
+              defaultAccessType:
+                default: Public
+                description: |-
+                  DefaultAccessType specifies the default accessType for workspaces using this template
+                  AccessType controls which users may create connections to the workspace.
+                enum:
+                - Public
+                - OwnerOnly
+                type: string
               defaultAffinity:
                 description: DefaultAffinity specifies default node affinity and anti-affinity
                   rules
@@ -999,6 +1008,77 @@ spec:
                       type: string
                     type: array
                 type: object
+              defaultIdleShutdown:
+                description: |-
+                  DefaultIdleShutdown provides default idle shutdown configuration
+                  Includes timeout, detection endpoint, and enable/disable
+                properties:
+                  detection:
+                    description: Detection specifies how to detect idle state
+                    properties:
+                      httpGet:
+                        description: HTTPGet specifies the HTTP request to perform
+                          for idle detection
+                        properties:
+                          host:
+                            description: |-
+                              Host name to connect to, defaults to the pod IP. You probably want to set
+                              "Host" in httpHeaders instead.
+                            type: string
+                          httpHeaders:
+                            description: Custom headers to set in the request. HTTP
+                              allows repeated headers.
+                            items:
+                              description: HTTPHeader describes a custom header to
+                                be used in HTTP probes
+                              properties:
+                                name:
+                                  description: |-
+                                    The header field name.
+                                    This will be canonicalized upon output, so case-variant names will be understood as the same header.
+                                  type: string
+                                value:
+                                  description: The header field value
+                                  type: string
+                              required:
+                              - name
+                              - value
+                              type: object
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          path:
+                            description: Path to access on the HTTP server.
+                            type: string
+                          port:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: |-
+                              Name or number of the port to access on the container.
+                              Number must be in the range 1 to 65535.
+                              Name must be an IANA_SVC_NAME.
+                            x-kubernetes-int-or-string: true
+                          scheme:
+                            description: |-
+                              Scheme to use for connecting to the host.
+                              Defaults to HTTP.
+                            type: string
+                        required:
+                        - port
+                        type: object
+                    type: object
+                  enabled:
+                    description: Enabled indicates if idle shutdown is enabled
+                    type: boolean
+                  timeoutMinutes:
+                    description: TimeoutMinutes specifies idle timeout in minutes
+                    minimum: 1
+                    type: integer
+                required:
+                - detection
+                - enabled
+                - timeoutMinutes
+                type: object
               defaultImage:
                 description: DefaultImage is the default container image for workspaces
                   using this template
@@ -1239,8 +1319,9 @@ spec:
                 type: object
               defaultOwnershipType:
                 default: Public
-                description: DefaultOwnershipType specifies the default access type
-                  for workspaces using this template
+                description: |-
+                  DefaultOwnershipType specifies default ownershipType for workspaces using this template
+                  OwnershipType controls which users may edit/delete the workspace
                 enum:
                 - Public
                 - OwnerOnly
@@ -1511,6 +1592,22 @@ spec:
                   - name
                   type: object
                 type: array
+              idleShutdownOverrides:
+                description: IdleShutdownOverrides controls override behavior and
+                  bounds
+                properties:
+                  allow:
+                    default: true
+                    description: Allow controls whether workspaces can override idle
+                      shutdown
+                    type: boolean
+                  maxTimeoutMinutes:
+                    description: MaxTimeoutMinutes is the maximum allowed timeout
+                    type: integer
+                  minTimeoutMinutes:
+                    description: MinTimeoutMinutes is the minimum allowed timeout
+                    type: integer
+                type: object
               primaryStorage:
                 description: PrimaryStorage defines storage configuration
                 properties:
@@ -1619,9 +1716,6 @@ spec:
             - displayName
             type: object
         type: object
-        x-kubernetes-validations:
-        - message: template spec is immutable after creation
-          rule: self.spec == oldSelf.spec
     served: true
     storage: true
     subresources: {}

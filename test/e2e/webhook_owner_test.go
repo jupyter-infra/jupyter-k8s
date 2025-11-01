@@ -137,7 +137,7 @@ spec:
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			logs := string(output)
-			Expect(logs).To(ContainSubstring("workspace-resource"), "webhook should be logging")
+			Expect(logs).To(ContainSubstring("workspace-with-annotations"), "webhook should be logging")
 		})
 	})
 
