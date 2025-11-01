@@ -201,7 +201,7 @@ func TestKMSJWTManager_RejectsWrongSigningMethod(t *testing.T) {
 	}
 
 	// Create a token with HS256 (wrong algorithm)
-	claims := &authmiddleware.Claims{
+	claims := &jwt.Claims{
 		RegisteredClaims: jwt5.RegisteredClaims{
 			Subject:  "test-user",
 			Issuer:   "test-issuer",

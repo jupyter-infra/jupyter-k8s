@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 	v1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -163,7 +164,7 @@ func (s *Server) VerifyWorkspaceAccess(
 func (s *Server) VerifyWorkspaceAccessFromJwt(
 	ctx context.Context,
 	path string,
-	claims *Claims,
+	claims *jwt.Claims,
 ) (*v1alpha1.ConnectionAccessReviewStatus, *WorkspaceInfo, error) {
 	// Extract workspace info from path
 	workspaceInfo, err := s.ExtractWorkspaceInfo(path)
