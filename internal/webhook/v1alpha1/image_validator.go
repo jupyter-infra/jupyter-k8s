@@ -25,6 +25,11 @@ import (
 
 // validateImageAllowed checks if image is in template's allowed list
 func validateImageAllowed(image string, template *workspacev1alpha1.WorkspaceTemplate) *controller.TemplateViolation {
+	// Skip validation if custom images are allowed
+	if template.Spec.AllowCustomImages != nil && *template.Spec.AllowCustomImages {
+		return nil
+	}
+
 	effectiveAllowedImages := template.Spec.AllowedImages
 	if len(template.Spec.AllowedImages) == 0 {
 		effectiveAllowedImages = []string{template.Spec.DefaultImage}

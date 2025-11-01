@@ -48,6 +48,12 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	AllowedImages []string `json:"allowedImages,omitempty"`
 
+	// AllowCustomImages allows workspaces to use any container image, bypassing the AllowedImages restriction
+	// When true, workspaces can specify any image regardless of the AllowedImages list
+	// +kubebuilder:default=false
+	// +optional
+	AllowCustomImages *bool `json:"allowCustomImages,omitempty"`
+
 	// DefaultResources specifies the default resource requirements
 	// +optional
 	DefaultResources *corev1.ResourceRequirements `json:"defaultResources,omitempty"`

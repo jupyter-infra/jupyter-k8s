@@ -52,6 +52,12 @@ spec:
           spec:
             description: WorkspaceTemplateSpec defines the desired state of WorkspaceTemplate
             properties:
+              allowCustomImages:
+                default: false
+                description: |-
+                  AllowCustomImages allows workspaces to use any container image, bypassing the AllowedImages restriction
+                  When true, workspaces can specify any image regardless of the AllowedImages list
+                type: boolean
               allowSecondaryStorages:
                 default: true
                 description: |-
