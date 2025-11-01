@@ -8,9 +8,12 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 	jwt5 "github.com/golang-jwt/jwt/v5"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/authmiddleware"
 )
+
+const testKeyID = "test-key-id"
 
 // MockKMSClient implements a mock KMS client for testing
 type MockKMSClient struct {
@@ -31,7 +34,27 @@ func (m *MockKMSClient) Decrypt(ctx context.Context, params *kms.DecryptInput, o
 	m.decryptCalled = true
 	return &kms.DecryptOutput{
 		Plaintext: m.dataKey,
-		KeyId:     aws.String("test-key-id"),
+		KeyId:     aws.String(testKeyID),
+	}, nil
+}
+
+func (m *MockKMSClient) CreateKey(ctx context.Context, params *kms.CreateKeyInput, optFns ...func(*kms.Options)) (*kms.CreateKeyOutput, error) {
+	return &kms.CreateKeyOutput{
+		KeyMetadata: &types.KeyMetadata{
+			KeyId: aws.String(testKeyID),
+		},
+	}, nil
+}
+
+func (m *MockKMSClient) CreateAlias(ctx context.Context, params *kms.CreateAliasInput, optFns ...func(*kms.Options)) (*kms.CreateAliasOutput, error) {
+	return &kms.CreateAliasOutput{}, nil
+}
+
+func (m *MockKMSClient) DescribeKey(ctx context.Context, params *kms.DescribeKeyInput, optFns ...func(*kms.Options)) (*kms.DescribeKeyOutput, error) {
+	return &kms.DescribeKeyOutput{
+		KeyMetadata: &types.KeyMetadata{
+			KeyId: aws.String(testKeyID),
+		},
 	}, nil
 }
 
@@ -41,7 +64,7 @@ func TestNewKMSJWTManager(t *testing.T) {
 
 	config := KMSJWTConfig{
 		KMSClient:  kmsClient,
-		KeyId:      "test-key-id",
+		KeyId:      testKeyID,
 		Issuer:     "test-issuer",
 		Audience:   "test-audience",
 		Expiration: 30 * time.Minute,
@@ -49,8 +72,8 @@ func TestNewKMSJWTManager(t *testing.T) {
 
 	manager := NewKMSJWTManager(config)
 
-	if manager.keyId != "test-key-id" {
-		t.Errorf("Expected keyId %q, got %q", "test-key-id", manager.keyId)
+	if manager.keyId != testKeyID {
+		t.Errorf("Expected keyId %q, got %q", testKeyID, manager.keyId)
 	}
 
 	if manager.issuer != "test-issuer" {
@@ -80,7 +103,7 @@ func TestKMSJWTManager_EnvelopeEncryption(t *testing.T) {
 	// Create KMS JWT manager
 	manager := &KMSJWTManager{
 		kmsClient:  NewKMSWrapper(mockKMS, "us-east-1"),
-		keyId:      "test-key-id",
+		keyId:      testKeyID,
 		issuer:     "test-issuer",
 		audience:   "test-audience",
 		expiration: 30 * time.Minute,
@@ -156,7 +179,7 @@ func TestKMSJWTManager_CacheMiss(t *testing.T) {
 	// Create KMS JWT manager
 	manager := &KMSJWTManager{
 		kmsClient:  NewKMSWrapper(mockKMS, "us-east-1"),
-		keyId:      "test-key-id",
+		keyId:      testKeyID,
 		issuer:     "test-issuer",
 		audience:   "test-audience",
 		expiration: 30 * time.Minute,
@@ -193,7 +216,7 @@ func TestKMSJWTManager_RejectsWrongSigningMethod(t *testing.T) {
 
 	manager := &KMSJWTManager{
 		kmsClient:  NewKMSWrapper(mockKMS, "us-east-1"),
-		keyId:      "test-key-id",
+		keyId:      testKeyID,
 		issuer:     "test-issuer",
 		audience:   "test-audience",
 		expiration: 30 * time.Minute,

@@ -538,7 +538,7 @@ func TestGenerateVSCodeConnectionURL_Success(t *testing.T) {
 	url, err := strategy.GenerateVSCodeConnectionURL(context.Background(), "test-workspace", "default", "test-pod-uid", "arn:aws:eks:us-east-1:123456789012:cluster/test")
 
 	assert.NoError(t, err)
-	assert.Contains(t, url, "vscode://amazonwebservices.aws-toolkit-vscode/connect/sagemaker")
+	assert.Contains(t, url, "vscode://amazonwebservices.aws-toolkit-vscode/connect/workspace")
 	assert.Contains(t, url, "sessionId=sess-123")
 	assert.Contains(t, url, "sessionToken=token-456")
 	assert.Contains(t, url, "streamUrl=wss://stream-url")
