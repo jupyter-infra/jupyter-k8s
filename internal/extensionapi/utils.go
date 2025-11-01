@@ -1,11 +1,14 @@
 package extensionapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
 )
+
+type userInfoKey struct{}
 
 // WriteError writes an error response in JSON format
 func WriteError(w http.ResponseWriter, statusCode int, message string) {
@@ -49,4 +52,18 @@ func GetUserFromHeaders(r *http.Request) string {
 		return user
 	}
 	return ""
+}
+
+// AddUserInfoToContext returns a new Context with the given user info
+func AddUserInfoToContext(ctx context.Context, userInfo *UserInfo) context.Context {
+	return context.WithValue(ctx, userInfoKey{}, userInfo)
+}
+
+// GetUserInfoFromContext returns the UserInfo stored in context
+// Returns nil if none is found
+func GetUserInfoFromContext(ctx context.Context) *UserInfo {
+	if userInfo, ok := ctx.Value(userInfoKey{}).(*UserInfo); ok {
+		return userInfo
+	}
+	return nil
 }

@@ -26,6 +26,7 @@ type ExtensionServer struct {
 	k8sClient  client.Client
 	sarClient  v1.SubjectAccessReviewInterface
 	logger     *logr.Logger
+	authConfig *AuthConfig
 	httpServer interface {
 		ListenAndServe() error
 		ListenAndServeTLS(certFile, keyFile string) error
@@ -61,7 +62,42 @@ func newExtensionServer(
 	return server
 }
 
-// loggerMiddleware wraps an http.Handler and adds a logger to the request context
+const (
+	// HealthEndpoint bypasses authentication
+	HealthEndpoint = "/health"
+)
+
+// authMiddleware adds authentication to HTTP handlers
+func (s *ExtensionServer) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Skip auth for health check
+		if r.URL.Path == HealthEndpoint {
+			next(w, r)
+			return
+		}
+
+		// Skip auth if no config (development mode)
+		if s.authConfig == nil {
+			next(w, r)
+			return
+		}
+
+		// Authenticate request
+		userInfo, err := s.authConfig.AuthenticateRequest(r)
+		if err != nil {
+			logger := GetLoggerFromContext(r.Context())
+			logger.Error(err, "Authentication failed")
+			WriteError(w, http.StatusUnauthorized, "Authentication failed")
+			return
+		}
+
+		// Add user info to context
+		ctx := AddUserInfoToContext(r.Context(), userInfo)
+		next(w, r.WithContext(ctx))
+	}
+}
+
+// loggerMiddleware adds logger to request context
 func (s *ExtensionServer) loggerMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Create request-specific logger with path info
@@ -90,8 +126,8 @@ func (s *ExtensionServer) registerRoute(name string, handler func(http.ResponseW
 		path = "/" + path
 	}
 
-	// Wrap handler with the logger middleware
-	wrappedHandler := s.loggerMiddleware(handler)
+	// Wrap handler with auth and logger middleware
+	wrappedHandler := s.loggerMiddleware(s.authMiddleware(handler))
 
 	// Register the wrapped handler
 	s.mux.HandleFunc(path, wrappedHandler)
@@ -113,7 +149,7 @@ func (s *ExtensionServer) registerNamespacedRoutes(resourceHandlers map[string]f
 	}
 
 	// Create a single wrapped handler that will route to the appropriate resource handler
-	wrappedHandler := s.loggerMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	wrappedHandler := s.loggerMiddleware(s.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		// Extract namespace from path
 		namespace, err := GetNamespaceFromPath(r.URL.Path)
 		if err != nil {
@@ -142,7 +178,7 @@ func (s *ExtensionServer) registerNamespacedRoutes(resourceHandlers map[string]f
 		} else {
 			http.NotFound(w, r)
 		}
-	})
+	}))
 
 	// Register the single wrapped handler for the namespaced path prefix
 	s.mux.HandleFunc(namespacedPathPrefix, wrappedHandler)
@@ -167,6 +203,22 @@ func (s *ExtensionServer) registerAllRoutes() {
 // Start starts the extension API server and implements the controller-runtime's Runnable interface
 func (s *ExtensionServer) Start(ctx context.Context) error {
 	setupLog.Info("Starting extension API server", "port", s.config.ServerPort, "disableTLS", s.config.DisableTLS)
+
+	// Load authentication configuration now that the cache is started
+	if s.authConfig == nil {
+		authConfig, err := loadAuthConfigFromConfigMap(ctx, s.k8sClient)
+		if err != nil {
+			setupLog.Error(err, "Failed to load auth config, authentication will be disabled")
+		} else {
+			// Initialize standard Kubernetes authenticator
+			if err := authConfig.InitializeAuthenticator(); err != nil {
+				setupLog.Error(err, "Failed to initialize authenticator")
+			} else {
+				setupLog.Info("Authentication configuration loaded successfully")
+				s.authConfig = authConfig
+			}
+		}
+	}
 
 	// Error channel to capture server errors
 	errChan := make(chan error, 1)
@@ -238,7 +290,7 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	}
 	sarClient := clientSet.AuthorizationV1().SubjectAccessReviews()
 
-	// Create server with config
+	// Create server with config (auth config will be loaded when server starts)
 	server := newExtensionServer(config, &logger, k8sClient, sarClient)
 	server.registerAllRoutes()
 

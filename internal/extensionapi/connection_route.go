@@ -28,10 +28,16 @@ func (n *noOpPodExec) ExecInPod(ctx context.Context, pod *corev1.Pod, containerN
 func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.Request) {
 	logger := GetLoggerFromContext(r.Context())
 
-	if r.Method != "POST" {
+	if r.Method != http.MethodPost {
 		logger.Error(nil, "Invalid HTTP method", "method", r.Method)
 		WriteKubernetesError(w, http.StatusBadRequest, "Connection must use POST method")
 		return
+	}
+
+	// Log authenticated user info
+	userInfo := GetUserInfoFromContext(r.Context())
+	if userInfo != nil {
+		logger.Info("Authenticated user creating connection", "username", userInfo.Username, "groups", userInfo.Groups)
 	}
 
 	// Extract namespace from URL path
