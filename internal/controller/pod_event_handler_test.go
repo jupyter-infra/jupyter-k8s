@@ -45,6 +45,7 @@ func TestNewPodEventHandler_Success(t *testing.T) {
 
 	if handler == nil {
 		t.Fatal("Expected non-nil PodEventHandler")
+		return
 	}
 	if handler.client != fakeClient {
 		t.Error("Expected client to be set correctly")
@@ -88,6 +89,7 @@ func TestNewPodEventHandler_SSMStrategyFailure(t *testing.T) {
 	// Verify handler is still created (main test)
 	if handler == nil {
 		t.Fatal("Expected non-nil PodEventHandler even when SSM strategy fails")
+		return
 	}
 	if handler.client != fakeClient {
 		t.Error("Expected client to be set correctly")
