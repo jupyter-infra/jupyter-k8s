@@ -31,7 +31,7 @@ func TestKMSClient_GenerateDataKey(t *testing.T) {
 	client := NewKMSWrapper(mockKMS, "us-east-1")
 
 	// Test GenerateDataKey
-	plaintext, encrypted, err := client.GenerateDataKey(context.Background(), "test-key-id")
+	plaintext, encrypted, err := client.GenerateDataKey(context.Background(), testKeyID)
 	if err != nil {
 		t.Fatalf("GenerateDataKey failed: %v", err)
 	}
@@ -72,5 +72,37 @@ func TestKMSClient_GetRegion(t *testing.T) {
 	region := client.GetRegion()
 	if region != "us-west-2" {
 		t.Errorf("Expected region %q, got %q", "us-west-2", region)
+	}
+}
+
+func TestKMSClient_CreateJWTKMSKey_Success(t *testing.T) {
+	mockKMS := &MockKMSClient{}
+	client := NewKMSWrapper(mockKMS, "us-west-2")
+
+	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+
+	keyID, err := client.CreateJWTKMSKey(context.Background())
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if keyID != KMSJWTKeyAlias {
+		t.Errorf("Expected keyID %q, got %q", KMSJWTKeyAlias, keyID)
+	}
+}
+
+func TestKMSClient_CreateJWTKMSKey_KeyExists(t *testing.T) {
+	mockKMS := &MockKMSClient{}
+	client := NewKMSWrapper(mockKMS, "us-west-2")
+
+	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+
+	keyID, err := client.CreateJWTKMSKey(context.Background())
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if keyID != KMSJWTKeyAlias {
+		t.Errorf("Expected keyID %q, got %q", KMSJWTKeyAlias, keyID)
 	}
 }

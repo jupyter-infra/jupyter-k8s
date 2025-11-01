@@ -28,6 +28,7 @@ type SSMClientInterface interface {
 	CreateActivation(ctx context.Context, params *ssm.CreateActivationInput, optFns ...func(*ssm.Options)) (*ssm.CreateActivationOutput, error)
 	DescribeActivations(ctx context.Context, params *ssm.DescribeActivationsInput, optFns ...func(*ssm.Options)) (*ssm.DescribeActivationsOutput, error)
 	DeleteActivation(ctx context.Context, params *ssm.DeleteActivationInput, optFns ...func(*ssm.Options)) (*ssm.DeleteActivationOutput, error)
+	CreateDocument(ctx context.Context, params *ssm.CreateDocumentInput, optFns ...func(*ssm.Options)) (*ssm.CreateDocumentOutput, error)
 	DescribeInstanceInformation(ctx context.Context, params *ssm.DescribeInstanceInformationInput, optFns ...func(*ssm.Options)) (*ssm.DescribeInstanceInformationOutput, error)
 	DeregisterManagedInstance(ctx context.Context, params *ssm.DeregisterManagedInstanceInput, optFns ...func(*ssm.Options)) (*ssm.DeregisterManagedInstanceOutput, error)
 	StartSession(ctx context.Context, params *ssm.StartSessionInput, optFns ...func(*ssm.Options)) (*ssm.StartSessionOutput, error)
@@ -392,5 +393,46 @@ func (s *SSMClient) deleteActivation(ctx context.Context, activationId string) e
 	}
 
 	logger.Info("Successfully deleted SSM activation", "activationId", activationId)
+	return nil
+}
+
+// CreateSSHDocument creates the SSH session document if it doesn't exist
+func (s *SSMClient) CreateSSHDocument(ctx context.Context) error {
+	logger := log.FromContext(ctx).WithName("ssm-client")
+	clusterARN := os.Getenv(EKSClusterARNEnv)
+	if clusterARN == "" {
+		return fmt.Errorf("%s environment variable is required", EKSClusterARNEnv)
+	}
+
+	logger.Info("Creating SSH session document", "documentName", CustomSSHDocumentName)
+
+	input := &ssm.CreateDocumentInput{
+		Name:         aws.String(CustomSSHDocumentName),
+		DocumentType: types.DocumentTypeSession,
+		Content:      aws.String(SSHDocumentContent),
+		Tags: []types.Tag{
+			{
+				Key:   aws.String(SageMakerManagedByTagKey),
+				Value: aws.String(SageMakerManagedByTagValue),
+			},
+			{
+				Key:   aws.String(SageMakerEKSClusterTagKey),
+				Value: aws.String(clusterARN),
+			},
+		},
+	}
+
+	_, err := s.client.CreateDocument(ctx, input)
+	if err != nil {
+		var docAlreadyExists *types.DocumentAlreadyExists
+		if errors.As(err, &docAlreadyExists) {
+			logger.Info("SSH document already exists", "documentName", CustomSSHDocumentName)
+			return nil // Document already exists, that's fine
+		}
+		logger.Error(err, "Failed to create SSH document", "documentName", CustomSSHDocumentName)
+		return fmt.Errorf("failed to create SSH document: %w", err)
+	}
+
+	logger.Info("Successfully created SSH document", "documentName", CustomSSHDocumentName)
 	return nil
 }

@@ -48,6 +48,14 @@ func (m *MockSSMClient) DeleteActivation(ctx context.Context, params *ssm.Delete
 	return args.Get(0).(*ssm.DeleteActivationOutput), args.Error(1)
 }
 
+func (m *MockSSMClient) CreateDocument(ctx context.Context, params *ssm.CreateDocumentInput, optFns ...func(*ssm.Options)) (*ssm.CreateDocumentOutput, error) {
+	args := m.Called(ctx, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ssm.CreateDocumentOutput), args.Error(1)
+}
+
 func (m *MockSSMClient) DescribeInstanceInformation(ctx context.Context, params *ssm.DescribeInstanceInformationInput, optFns ...func(*ssm.Options)) (*ssm.DescribeInstanceInformationOutput, error) {
 	args := m.Called(ctx, params)
 	if args.Get(0) == nil {
@@ -451,5 +459,82 @@ func TestCleanupActivationsByPodUID_DeleteError(t *testing.T) {
 	// Assert
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to delete 1 out of 1 activations for pod")
+	mockClient.AssertExpectations(t)
+}
+
+func TestSSMClient_CreateSSHDocument_Success(t *testing.T) {
+	// Setup
+	ctx := context.Background()
+	mockClient := &MockSSMClient{}
+	client := NewSSMClientWithMock(mockClient, "us-west-2")
+
+	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+
+	expectedOutput := &ssm.CreateDocumentOutput{}
+	mockClient.On("CreateDocument", ctx, mock.MatchedBy(func(input *ssm.CreateDocumentInput) bool {
+		return *input.Name == CustomSSHDocumentName &&
+			input.DocumentType == types.DocumentTypeSession &&
+			*input.Content == SSHDocumentContent &&
+			len(input.Tags) == 2
+	})).Return(expectedOutput, nil)
+
+	// Execute
+	err := client.CreateSSHDocument(ctx)
+
+	// Assert
+	assert.NoError(t, err)
+	mockClient.AssertExpectations(t)
+}
+
+func TestSSMClient_CreateSSHDocument_DocumentAlreadyExists(t *testing.T) {
+	// Setup
+	ctx := context.Background()
+	mockClient := &MockSSMClient{}
+	client := NewSSMClientWithMock(mockClient, "us-west-2")
+
+	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+
+	docExistsError := &types.DocumentAlreadyExists{}
+	mockClient.On("CreateDocument", ctx, mock.AnythingOfType("*ssm.CreateDocumentInput")).Return(nil, docExistsError)
+
+	// Execute
+	err := client.CreateSSHDocument(ctx)
+
+	// Assert
+	assert.NoError(t, err) // Should not return error when document already exists
+	mockClient.AssertExpectations(t)
+}
+
+func TestSSMClient_CreateSSHDocument_MissingClusterARN(t *testing.T) {
+	// Setup
+	ctx := context.Background()
+	mockClient := &MockSSMClient{}
+	client := NewSSMClientWithMock(mockClient, "us-west-2")
+
+	// Execute (without setting EKSClusterARNEnv)
+	err := client.CreateSSHDocument(ctx)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "environment variable is required")
+}
+
+func TestSSMClient_CreateSSHDocument_CreateError(t *testing.T) {
+	// Setup
+	ctx := context.Background()
+	mockClient := &MockSSMClient{}
+	client := NewSSMClientWithMock(mockClient, "us-west-2")
+
+	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+
+	expectedError := errors.New("create document failed")
+	mockClient.On("CreateDocument", ctx, mock.AnythingOfType("*ssm.CreateDocumentInput")).Return(nil, expectedError)
+
+	// Execute
+	err := client.CreateSSHDocument(ctx)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create SSH document")
 	mockClient.AssertExpectations(t)
 }
