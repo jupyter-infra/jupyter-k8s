@@ -8,6 +8,9 @@ const (
 	// EKSClusterARNEnv is the environment variable key for EKS cluster ARN
 	EKSClusterARNEnv = "CLUSTER_ID"
 
+	// SSHDocumentContentEnv is the environment variable for SSH document content
+	SSHDocumentContentEnv = "SSH_DOCUMENT_CONTENT"
+
 	// WorkspacePodUIDTagKey is the tag key used to identify workspace pods in SSM
 	WorkspacePodUIDTagKey = "tag:workspace-pod-uid"
 
@@ -33,26 +36,4 @@ const (
 
 	// CustomSSHDocumentName is the name of the SSM document for SSH sessions
 	CustomSSHDocumentName = "SageMaker-SpaceSSHSessionDocument"
-
-	// SSHDocumentContent is the JSON content for the SSH session document
-	SSHDocumentContent = `{
-  "schemaVersion": "1.0",
-  "description": "Document to hold regional settings for Session Manager for SSH connections",
-  "sessionType": "Port",
-  "parameters": {
-    "portNumber": {
-      "type": "String",
-      "description": "(Optional) Port number of SSH server on the instance",
-      "allowedPattern": "^([1-9]|[1-9][0-9]{1,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$",
-      "default": "22"
-    }
-  },
-  "inputs": {
-    "idleSessionTimeout": 60,
-    "maxSessionDuration": 720
-  },
-  "properties": {
-    "portNumber": "{{ portNumber }}"
-  }
-}`
 )
