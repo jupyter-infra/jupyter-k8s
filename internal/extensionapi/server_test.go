@@ -1036,3 +1036,79 @@ var _ = Describe("ServerWithManager", func() {
 		})
 	})
 })
+
+var _ = Describe("Authentication Middleware", func() {
+	var (
+		server     *ExtensionServer
+		authConfig *AuthConfig
+		logger     logr.Logger
+	)
+
+	BeforeEach(func() {
+		logger = logr.Discard()
+		server = &ExtensionServer{
+			logger: &logger,
+		}
+		authConfig = &AuthConfig{
+			AllowedNames: []string{"front-proxy-client"},
+		}
+		_ = authConfig.InitializeAuthenticator()
+	})
+
+	Describe("authMiddleware", func() {
+		It("should bypass auth for health endpoint", func() {
+			req := httptest.NewRequest("GET", HealthEndpoint, nil)
+			w := httptest.NewRecorder()
+
+			middleware := server.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+
+			middleware(w, req)
+			Expect(w.Code).To(Equal(http.StatusOK))
+		})
+
+		It("should bypass auth when no auth config", func() {
+			req := httptest.NewRequest("GET", "/test", nil)
+			w := httptest.NewRecorder()
+
+			middleware := server.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+
+			middleware(w, req)
+			Expect(w.Code).To(Equal(http.StatusOK))
+		})
+
+		It("should authenticate request with valid headers", func() {
+			server.authConfig = authConfig
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.Header.Set("X-Remote-User", "test-user")
+			req.Header.Set("X-Remote-Group", "system:authenticated")
+			w := httptest.NewRecorder()
+
+			middleware := server.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+				userInfo := GetUserInfoFromContext(r.Context())
+				Expect(userInfo).ToNot(BeNil())
+				Expect(userInfo.Username).To(Equal("test-user"))
+				w.WriteHeader(http.StatusOK)
+			})
+
+			middleware(w, req)
+			Expect(w.Code).To(Equal(http.StatusOK))
+		})
+
+		It("should return 401 for missing auth headers", func() {
+			server.authConfig = authConfig
+			req := httptest.NewRequest("GET", "/test", nil)
+			w := httptest.NewRecorder()
+
+			middleware := server.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+
+			middleware(w, req)
+			Expect(w.Code).To(Equal(http.StatusUnauthorized))
+		})
+	})
+})
