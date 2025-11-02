@@ -277,6 +277,12 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Workspace")
 			os.Exit(1)
 		}
+
+		// Setup pod exec webhook for security validation
+		if err := webhookv1alpha1.SetupPodExecWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "PodExec")
+			os.Exit(1)
+		}
 	}
 
 	// nolint:goconst

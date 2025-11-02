@@ -61,6 +61,11 @@ const (
 
 	// Idle shutdown constants
 	IdleCheckInterval = 5 * time.Minute
+
+	// ControllerNamespace is the namespace where the controller runs
+	ControllerNamespace = "jupyter-k8s-system"
+	// ControllerServiceAccount is the full service account username for the controller
+	ControllerServiceAccount = "system:serviceaccount:" + ControllerNamespace + ":jupyter-k8s-controller-manager"
 )
 
 // GenerateDeploymentName creates a consistent deployment name
