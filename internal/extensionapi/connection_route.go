@@ -13,9 +13,11 @@ import (
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+// Function variable for SSM strategy creation (mockable in tests)
+var newSSMRemoteAccessStrategy = aws.NewSSMRemoteAccessStrategy
 
 // noOpPodExec is a no-op implementation of PodExecInterface for connection URL generation
 type noOpPodExec struct{}
@@ -165,14 +167,8 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 	// Get cluster ID from config (already validated earlier)
 	clusterId := s.config.ClusterId
 
-	// Get pod UID from workspace name
-	config := ctrl.GetConfigOrDie()
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return "", "", err
-	}
-
-	podUID, err := workspace.GetPodUIDFromWorkspaceName(clientset, workspaceName)
+	// Get pod UID from workspace name using existing k8sClient
+	podUID, err := workspace.GetPodUIDFromWorkspaceName(s.k8sClient, workspaceName)
 	if err != nil {
 		logger.Error(err, "Failed to get pod UID", "workspaceName", workspaceName)
 		return "", "", err
@@ -181,7 +177,7 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 	logger.Info("Found pod UID for workspace", "workspaceName", workspaceName, "podUID", podUID)
 
 	// Create SSM remote access strategy
-	ssmStrategy, err := aws.NewSSMRemoteAccessStrategy(nil, &noOpPodExec{})
+	ssmStrategy, err := newSSMRemoteAccessStrategy(nil, &noOpPodExec{})
 	if err != nil {
 		return "", "", err
 	}
