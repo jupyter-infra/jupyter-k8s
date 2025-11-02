@@ -8,7 +8,7 @@ import (
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // partialAccessResourceData provides values for template substitutions
@@ -122,87 +122,110 @@ func (db *DeploymentBuilder) ApplyAccessStrategyToDeployment(
 		return fmt.Errorf("failed to add environment variables to container: %w", err)
 	}
 
-	// Conditional sidecar logic based on access strategy name
-	if accessStrategy.Name == "aws-ssm-remote-access" {
-		if err := db.addSSMSidecarContainer(deployment, accessStrategy); err != nil {
-			return fmt.Errorf("failed to add SSM sidecar container: %w", err)
-		}
+	// Apply deployment spec modifications if defined
+	if err := db.applyDeploymentSpecModifications(deployment, accessStrategy); err != nil {
+		return fmt.Errorf("failed to apply deployment spec modifications: %w", err)
 	}
 
 	return nil
 }
 
-// addSSMSidecarContainer adds an SSM sidecar container to the deployment with shared volume
-func (db *DeploymentBuilder) addSSMSidecarContainer(
+// applyDeploymentSpecModifications applies deployment modifications from access strategy
+func (db *DeploymentBuilder) applyDeploymentSpecModifications(
 	deployment *appsv1.Deployment,
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 ) error {
-	// Create shared volume for communication between main container and sidecar
-	sharedVolume := corev1.Volume{
-		Name: "ssm-remote-access",
-		VolumeSource: corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{
-				SizeLimit: func() *resource.Quantity {
-					limit := resource.MustParse("1Gi")
-					return &limit
-				}(),
-			},
-		},
+	if deployment == nil {
+		return fmt.Errorf("deployment cannot be nil")
+	}
+	if accessStrategy.Spec.DeploymentSpecModifications == nil {
+		return nil // Nothing to do
 	}
 
-	// Create volume mount for shared directory
-	sharedVolumeMount := corev1.VolumeMount{
-		Name:      "ssm-remote-access",
-		MountPath: "/ssm-remote-access",
+	mods := accessStrategy.Spec.DeploymentSpecModifications
+
+	// Add volumes
+	if mods.PodSpec != nil && len(mods.PodSpec.Volumes) > 0 {
+		logf.Log.V(1).Info("Adding volumes from deployment spec modifications",
+			"accessStrategy", accessStrategy.Name,
+			"volumeCount", len(mods.PodSpec.Volumes))
+
+		deployment.Spec.Template.Spec.Volumes = append(
+			deployment.Spec.Template.Spec.Volumes,
+			mods.PodSpec.Volumes...,
+		)
+
+		for _, volume := range mods.PodSpec.Volumes {
+			logf.Log.V(1).Info("Added volume",
+				"accessStrategy", accessStrategy.Name,
+				"volumeName", volume.Name)
+		}
 	}
 
-	// Get sidecar image from access strategy controller configuration
-	var sidecarImage string
-	if accessStrategy.Spec.ControllerConfig != nil {
-		sidecarImage = accessStrategy.Spec.ControllerConfig["SSM_SIDECAR_IMAGE"]
+	// Add volume mounts to primary container
+	if mods.PrimaryContainer != nil && len(mods.PrimaryContainer.VolumeMounts) > 0 {
+		if len(deployment.Spec.Template.Spec.Containers) == 0 {
+			return fmt.Errorf("no containers found in deployment to add volume mounts")
+		}
+
+		logf.Log.V(1).Info("Adding volume mounts to primary container",
+			"accessStrategy", accessStrategy.Name,
+			"mountCount", len(mods.PrimaryContainer.VolumeMounts))
+
+		primaryContainer := &deployment.Spec.Template.Spec.Containers[0]
+		primaryContainer.VolumeMounts = append(
+			primaryContainer.VolumeMounts,
+			mods.PrimaryContainer.VolumeMounts...,
+		)
+
+		for _, mount := range mods.PrimaryContainer.VolumeMounts {
+			logf.Log.V(1).Info("Added volume mount to primary container",
+				"accessStrategy", accessStrategy.Name,
+				"volumeName", mount.Name,
+				"mountPath", mount.MountPath)
+		}
 	}
 
-	if sidecarImage == "" {
-		return fmt.Errorf("SSM_SIDECAR_IMAGE environment variable not found in access strategy %s", accessStrategy.Name)
+	// Add init containers
+	if mods.PodSpec != nil && len(mods.PodSpec.InitContainers) > 0 {
+		logf.Log.V(1).Info("Adding init containers",
+			"accessStrategy", accessStrategy.Name,
+			"containerCount", len(mods.PodSpec.InitContainers))
+
+		deployment.Spec.Template.Spec.InitContainers = append(
+			deployment.Spec.Template.Spec.InitContainers,
+			mods.PodSpec.InitContainers...,
+		)
+
+		for _, container := range mods.PodSpec.InitContainers {
+			logf.Log.V(1).Info("Added init container",
+				"accessStrategy", accessStrategy.Name,
+				"containerName", container.Name,
+				"image", container.Image)
+		}
 	}
 
-	ssmContainer := corev1.Container{
-		Name:    "ssm-agent-sidecar",
-		Image:   sidecarImage,
-		Command: []string{"/bin/sh"},
-		Args: []string{
-			"-c",
-			"cp /usr/local/bin/remote-access-server /ssm-remote-access/ || echo \"Failed to copy: $?\"; sleep infinity",
-		},
-		VolumeMounts: []corev1.VolumeMount{sharedVolumeMount},
-		ReadinessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"test", "-f", "/tmp/ssm-registered"},
-				},
-			},
-			InitialDelaySeconds: 2,
-			PeriodSeconds:       2,
-		},
+	// Add additional containers
+	if mods.PodSpec != nil && len(mods.PodSpec.AdditionalContainers) > 0 {
+		logf.Log.V(1).Info("Adding additional containers",
+			"accessStrategy", accessStrategy.Name,
+			"containerCount", len(mods.PodSpec.AdditionalContainers))
+
+		deployment.Spec.Template.Spec.Containers = append(
+			deployment.Spec.Template.Spec.Containers,
+			mods.PodSpec.AdditionalContainers...,
+		)
+
+		for _, container := range mods.PodSpec.AdditionalContainers {
+			logf.Log.V(1).Info("Added additional container",
+				"accessStrategy", accessStrategy.Name,
+				"containerName", container.Name,
+				"image", container.Image)
+		}
 	}
 
-	// Add the shared volume to the deployment
-	deployment.Spec.Template.Spec.Volumes = append(
-		deployment.Spec.Template.Spec.Volumes,
-		sharedVolume,
-	)
-
-	// Add volume mount to the main container (first container)
-	if len(deployment.Spec.Template.Spec.Containers) > 0 {
-		mainContainer := &deployment.Spec.Template.Spec.Containers[0]
-		mainContainer.VolumeMounts = append(mainContainer.VolumeMounts, sharedVolumeMount)
-	}
-
-	// Add the sidecar container to the deployment
-	deployment.Spec.Template.Spec.Containers = append(
-		deployment.Spec.Template.Spec.Containers,
-		ssmContainer,
-	)
+	logf.Log.Info("Successfully applied deployment spec modifications",
+		"accessStrategy", accessStrategy.Name)
 
 	return nil
 }
