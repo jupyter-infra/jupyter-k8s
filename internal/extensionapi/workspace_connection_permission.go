@@ -22,11 +22,12 @@ func (s *ExtensionServer) CheckWorkspaceConnectionPermission(
 	workspaceName string,
 	username string,
 	groups []string,
+	uid string,
 	extra map[string]authorizationv1.ExtraValue,
 	logger *rlog.Logger,
 ) (*PermissionCheckResult, error) {
 	// Step 1: Check RBAC permissions
-	rbacResult, err := s.CheckRBACPermission(namespace, username, groups, extra, logger)
+	rbacResult, err := s.CheckRBACPermission(namespace, username, groups, uid, extra, logger)
 	if err != nil {
 		logger.Error(err, "RBAC check failed with error")
 		return nil, err

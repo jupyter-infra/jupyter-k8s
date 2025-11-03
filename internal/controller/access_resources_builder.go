@@ -164,9 +164,5 @@ func (b *AccessResourcesBuilder) ResolveAccessResourceSelector(
 	}
 
 	// Format: key1=value1,key2=value2
-	return fmt.Sprintf("%s=%s,%s=%s,%s=%s,%s=%s",
-		LabelWorkspaceName, workspace.Name,
-		LabelWorkspaceNamespace, workspace.Namespace,
-		LabelAccessStrategyName, accessStrategy.Name,
-		LabelAccessStrategyNamespace, accessStrategy.Namespace)
+	return fmt.Sprintf("%s=%s", LabelWorkspaceName, workspace.Name)
 }

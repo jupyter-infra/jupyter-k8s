@@ -188,10 +188,35 @@ var _ = Describe("Server", func() {
 		server = newExtensionServer(config, &logger, k8sClient, sarClient)
 		server.registerAllRoutes()
 
-		// Register additional routes with mock handlers that can be easily tested
-		fakeRoutesServer = newExtensionServer(config, &logger, k8sClient, sarClient)
+		// Create a minimal fake routes server without automatic route registration
+		fakeConfig := NewConfig(
+			WithServerPort(8081),
+			WithDisableTLS(true),
+			WithReadTimeoutSeconds(30),
+			WithWriteTimeoutSeconds(60),
+		)
+		fakeConfig.ApiPath = "/apis/fake.test.org/v1alpha1"
+
+		// Create server manually without calling constructor to avoid automatic route registration
+		fakeMux := http.NewServeMux()
+		fakeRoutesServer = &ExtensionServer{
+			config:    fakeConfig,
+			logger:    &logger,
+			k8sClient: k8sClient,
+			sarClient: sarClient,
+			routes:    make(map[string]func(http.ResponseWriter, *http.Request)),
+			mux:       fakeMux,
+			httpServer: &http.Server{
+				Addr:         fmt.Sprintf(":%d", fakeConfig.ServerPort),
+				Handler:      fakeMux,
+				ReadTimeout:  time.Duration(fakeConfig.ReadTimeoutSeconds) * time.Second,
+				WriteTimeout: time.Duration(fakeConfig.WriteTimeoutSeconds) * time.Second,
+			},
+		}
+
+		// Register only the fake routes we need for testing
 		fakeRoutesServer.registerRoute("/base-route", mockBaseHandler)
-		fakeRoutesServer.registerRoute(fmt.Sprintf("%s/%s", server.config.ApiPath, "api-route"), mockApiBaseHandler)
+		fakeRoutesServer.registerRoute(fmt.Sprintf("%s/%s", fakeConfig.ApiPath, "api-route"), mockApiBaseHandler)
 		fakeRoutesServer.registerNamespacedRoutes(map[string]func(http.ResponseWriter, *http.Request){
 			"fake-resource1": mockFakeResource1Handler,
 			"fake-resource2": mockFakeResource2Handler,
@@ -229,9 +254,9 @@ var _ = Describe("Server", func() {
 			Expect(server.routes).To(HaveKey(config.ApiPath))
 		})
 
-		It("Should register /connection and /connectionaccessreview routes as namespaced", func() {
+		It("Should register /workspaceconnections and /connectionaccessreview routes as namespaced", func() {
 			namespacedPathPrefix := config.ApiPath + "/namespaces/*/"
-			Expect(server.routes).To(HaveKey(namespacedPathPrefix + "connection"))
+			Expect(server.routes).To(HaveKey(namespacedPathPrefix + "workspaceconnections"))
 			Expect(server.routes).To(HaveKey(namespacedPathPrefix + "connectionaccessreview"))
 		})
 	})
@@ -482,6 +507,24 @@ var _ = Describe("Server", func() {
 			}
 			Expect(routeCount).To(Equal(2))
 		})
+
+		It("Should return 404 for paths with insufficient parts", func() {
+			server := newExtensionServer(config, &logger, k8sClient, sarClient)
+
+			resourceHandlers := map[string]func(http.ResponseWriter, *http.Request){
+				"test": func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(http.StatusOK)
+				},
+			}
+			server.registerNamespacedRoutes(resourceHandlers)
+
+			req := httptest.NewRequest("GET", "/apis/namespaces/short", nil)
+			w := httptest.NewRecorder()
+
+			server.mux.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+		})
 	})
 
 	Context("Start", func() {
@@ -696,8 +739,8 @@ var _ = Describe("Server", func() {
 		})
 
 		It("Should respond to a well formed GET request to a /<api>/api-route route", func() {
-			// Create a test request to the API route
-			apiPath := fmt.Sprintf("%s/api-route", server.config.ApiPath)
+			// Create a test request to the API route on the fake server
+			apiPath := fmt.Sprintf("%s/api-route", fakeRoutesServer.config.ApiPath)
 			req := httptest.NewRequest("GET", apiPath, nil)
 			rr := httptest.NewRecorder()
 
@@ -716,7 +759,7 @@ var _ = Describe("Server", func() {
 
 		It("Should respond to a well formed namespaced POST request to <>/namespaces/<ns>/fake-resource1", func() {
 			// Create a test request to the namespaced resource 1
-			apiPath := fmt.Sprintf("%s/namespaces/default/fake-resource1", server.config.ApiPath)
+			apiPath := fmt.Sprintf("%s/namespaces/default/fake-resource1", fakeRoutesServer.config.ApiPath)
 			req := httptest.NewRequest("POST", apiPath, strings.NewReader("{}"))
 			rr := httptest.NewRecorder()
 
@@ -735,7 +778,7 @@ var _ = Describe("Server", func() {
 
 		It("Should respond to a well formed namespaced POST request to <>/namespaces/<ns>/fake-resource2", func() {
 			// Create a test request to the namespaced resource 2
-			apiPath := fmt.Sprintf("%s/namespaces/default/fake-resource2", server.config.ApiPath)
+			apiPath := fmt.Sprintf("%s/namespaces/default/fake-resource2", fakeRoutesServer.config.ApiPath)
 			req := httptest.NewRequest("POST", apiPath, strings.NewReader("{}"))
 			rr := httptest.NewRecorder()
 
@@ -955,7 +998,7 @@ var _ = Describe("ServerWithManager", func() {
 
 			// Check for namespaced routes
 			namespacedPathPrefix := server.config.ApiPath + "/namespaces/*/"
-			Expect(server.routes).To(HaveKey(namespacedPathPrefix + "connection"))
+			Expect(server.routes).To(HaveKey(namespacedPathPrefix + "workspaceconnections"))
 			Expect(server.routes).To(HaveKey(namespacedPathPrefix + "connectionaccessreview"))
 		})
 

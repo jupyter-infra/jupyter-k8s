@@ -305,6 +305,7 @@ func TestValidateToken(t *testing.T) {
 	}
 	if claims == nil {
 		t.Fatal("ValidateToken returned nil claims for valid token")
+		return
 	}
 
 	// Check that the claims match what we expect

@@ -49,15 +49,17 @@ func NewTemplateResolver(k8sClient client.Client) *TemplateResolver {
 
 // ResolvedTemplate contains the resolved template configuration
 type ResolvedTemplate struct {
-	Image                  string
-	Resources              corev1.ResourceRequirements
-	EnvironmentVariables   []corev1.EnvVar
-	StorageConfiguration   *workspacev1alpha1.StorageConfig
-	AllowSecondaryStorages bool
-	NodeSelector           map[string]string
-	Affinity               *corev1.Affinity
-	Tolerations            []corev1.Toleration
-	ContainerConfig        *workspacev1alpha1.ContainerConfig
+	Image                     string
+	Resources                 corev1.ResourceRequirements
+	EnvironmentVariables      []corev1.EnvVar
+	StorageConfiguration      *workspacev1alpha1.StorageConfig
+	AllowSecondaryStorages    bool
+	NodeSelector              map[string]string
+	Affinity                  *corev1.Affinity
+	Tolerations               []corev1.Toleration
+	ContainerConfig           *workspacev1alpha1.ContainerConfig
+	IdleShutdown              *workspacev1alpha1.IdleShutdownSpec
+	AllowIdleShutdownOverride bool
 }
 
 // ValidateAndResolveTemplate resolves a WorkspaceTemplate reference, validates overrides, and returns validation result
@@ -110,14 +112,21 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 		allowSecondaryStorages = *template.Spec.AllowSecondaryStorages
 	}
 
+	allowIdleShutdownOverride := true
+	if template.Spec.IdleShutdownOverrides != nil && template.Spec.IdleShutdownOverrides.Allow != nil {
+		allowIdleShutdownOverride = *template.Spec.IdleShutdownOverrides.Allow
+	}
+
 	resolved := &ResolvedTemplate{
-		Image:                  defaultImage,
-		Resources:              corev1.ResourceRequirements{}, // Default empty if not specified
-		EnvironmentVariables:   template.Spec.EnvironmentVariables,
-		AllowSecondaryStorages: allowSecondaryStorages,
-		NodeSelector:           template.Spec.DefaultNodeSelector,
-		Affinity:               template.Spec.DefaultAffinity,
-		Tolerations:            template.Spec.DefaultTolerations,
+		Image:                     defaultImage,
+		Resources:                 corev1.ResourceRequirements{}, // Default empty if not specified
+		EnvironmentVariables:      template.Spec.EnvironmentVariables,
+		AllowSecondaryStorages:    allowSecondaryStorages,
+		NodeSelector:              template.Spec.DefaultNodeSelector,
+		Affinity:                  template.Spec.DefaultAffinity,
+		Tolerations:               template.Spec.DefaultTolerations,
+		IdleShutdown:              template.Spec.DefaultIdleShutdown,
+		AllowIdleShutdownOverride: allowIdleShutdownOverride,
 	}
 
 	if template.Spec.DefaultResources != nil {
@@ -189,6 +198,16 @@ func (tr *TemplateResolver) validateAndApplyOverrides(ctx context.Context, resol
 		} else {
 			resolved.StorageConfiguration.DefaultSize = storageQuantity
 			logger.Info("Applied storage size override", "storageSize", storageQuantity.String())
+		}
+	}
+
+	// Override idle shutdown if workspace specifies one
+	if workspace.Spec.IdleShutdown != nil {
+		if idleViolations := tr.validateIdleShutdownOverride(workspace.Spec.IdleShutdown, template.Spec.IdleShutdownOverrides, resolved.AllowIdleShutdownOverride); len(idleViolations) > 0 {
+			violations = append(violations, idleViolations...)
+		} else {
+			resolved.IdleShutdown = workspace.Spec.IdleShutdown
+			logger.Info("Applied idle shutdown override")
 		}
 	}
 
@@ -367,6 +386,48 @@ func (tr *TemplateResolver) validateStorageSize(size resource.Quantity, storageC
 	}
 
 	return nil
+}
+
+// validateIdleShutdownOverride checks if idle shutdown override is allowed and within bounds
+// Returns a list of violations if validation fails
+func (tr *TemplateResolver) validateIdleShutdownOverride(idleShutdown *workspacev1alpha1.IdleShutdownSpec, bounds *workspacev1alpha1.IdleShutdownOverridePolicy, allowOverride bool) []TemplateViolation {
+	var violations []TemplateViolation
+
+	// Check if override is allowed at all
+	if !allowOverride {
+		return []TemplateViolation{{
+			Type:    ViolationTypeIdleShutdownOverrideNotAllowed,
+			Field:   "spec.idleShutdown",
+			Message: "Template does not allow idle shutdown overrides",
+			Allowed: "template configuration only",
+			Actual:  "workspace override attempted",
+		}}
+	}
+
+	// Check timeout bounds if specified
+	if bounds != nil {
+		if bounds.MinTimeoutMinutes != nil && idleShutdown.TimeoutMinutes < *bounds.MinTimeoutMinutes {
+			violations = append(violations, TemplateViolation{
+				Type:    ViolationTypeIdleShutdownTimeoutOutOfBounds,
+				Field:   "spec.idleShutdown.timeoutMinutes",
+				Message: "Timeout is below template minimum",
+				Allowed: fmt.Sprintf("min: %d minutes", *bounds.MinTimeoutMinutes),
+				Actual:  fmt.Sprintf("%d minutes", idleShutdown.TimeoutMinutes),
+			})
+		}
+
+		if bounds.MaxTimeoutMinutes != nil && idleShutdown.TimeoutMinutes > *bounds.MaxTimeoutMinutes {
+			violations = append(violations, TemplateViolation{
+				Type:    ViolationTypeIdleShutdownTimeoutOutOfBounds,
+				Field:   "spec.idleShutdown.timeoutMinutes",
+				Message: "Timeout exceeds template maximum",
+				Allowed: fmt.Sprintf("max: %d minutes", *bounds.MaxTimeoutMinutes),
+				Actual:  fmt.Sprintf("%d minutes", idleShutdown.TimeoutMinutes),
+			})
+		}
+	}
+
+	return violations
 }
 
 // ListWorkspacesUsingTemplate returns all workspaces that reference the specified template

@@ -49,6 +49,7 @@ type ContainerConfig struct {
 // StorageSpec defines the storage configuration for Workspace
 type StorageSpec struct {
 	// StorageClassName specifies the storage class to use for persistent storage
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage class name is immutable"
 	StorageClassName *string `json:"storageClassName,omitempty"`
 
 	// Size specifies the size of the persistent volume
@@ -73,6 +74,26 @@ type AccessStrategyRef struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
+// IdleShutdownSpec defines idle shutdown configuration
+type IdleShutdownSpec struct {
+	// Enabled indicates if idle shutdown is enabled
+	Enabled bool `json:"enabled"`
+
+	// TimeoutMinutes specifies idle timeout in minutes
+	// +kubebuilder:validation:Minimum=1
+	TimeoutMinutes int `json:"timeoutMinutes"`
+
+	// Detection specifies how to detect idle state
+	Detection IdleDetectionSpec `json:"detection"`
+}
+
+// IdleDetectionSpec defines idle detection methods
+type IdleDetectionSpec struct {
+	// HTTPGet specifies the HTTP request to perform for idle detection
+	// +optional
+	HTTPGet *corev1.HTTPGetAction `json:"httpGet,omitempty"`
+}
+
 // WorkspaceSpec defines the desired state of Workspace
 type WorkspaceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -90,18 +111,24 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:Enum=Running;Stopped
 	DesiredStatus string `json:"desiredStatus,omitempty"`
 
-	// OwnershipType specifies who can modify the space.
-	// Public means anyone with RBAC permissions can update/delete the space.
-	// OwnerOnly means only the creator can update/delete the space.
+	// OwnershipType specifies who can modify the workspace.
+	// Public means anyone with RBAC permissions can update/delete the workspace.
+	// OwnerOnly means only the creator can update/delete the workspace.
 	// +kubebuilder:validation:Enum=Public;OwnerOnly
 	// +optional
 	OwnershipType string `json:"ownershipType,omitempty"`
+
+	// AccessType specifies who can connect to the workspace.
+	// Public means anyone with RBAC permissions can connect to workspace.
+	// OwnerOnly means only the creator can connect to the workspace.
+	// +kubebuilder:validation:Enum=Public;OwnerOnly
+	// +optional
+	AccessType string `json:"accessType,omitempty"`
 
 	// Resources specifies the resource requirements
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
 	// Storage specifies the storage configuration
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage is immutable"
 	Storage *StorageSpec `json:"storage,omitempty"`
 
 	// Volumes specifies additional volumes to mount from existing PersistantVolumeClaims
@@ -133,6 +160,10 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="templateRef is immutable"
 	// +optional
 	TemplateRef *string `json:"templateRef,omitempty"`
+
+	// IdleShutdown specifies idle shutdown configuration
+	// +optional
+	IdleShutdown *IdleShutdownSpec `json:"idleShutdown,omitempty"`
 
 	// AppType specifies the application type for this workspace
 	// +optional
@@ -208,6 +239,8 @@ type WorkspaceStatus struct {
 // +kubebuilder:printcolumn:name="Progressing",type="string",JSONPath=".status.conditions[?(@.type==\"Progressing\")].status"
 // +kubebuilder:printcolumn:name="Degraded",type="string",JSONPath=".status.conditions[?(@.type==\"Degraded\")].status"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:printcolumn:name="CreatedBy",type="string",JSONPath=`.metadata.annotations['workspace\.jupyter\.org/created-by']`
+// +kubebuilder:printcolumn:name="OwnershipType",type="string",JSONPath=".spec.ownershipType"
 
 // Workspace is the Schema for the workspaces API
 type Workspace struct {
