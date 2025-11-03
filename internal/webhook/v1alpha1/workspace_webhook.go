@@ -102,7 +102,6 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 // SetupWorkspaceWebhookWithManager registers the webhook for Workspace in the manager.
 func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 	templateValidator := NewTemplateValidator(mgr.GetClient())
-	templateDefaulter := NewTemplateDefaulter(mgr.GetClient())
 	serviceAccountValidator := NewServiceAccountValidator(mgr.GetClient())
 	templateDefaulter := NewTemplateDefaulter(mgr.GetClient())
 
