@@ -17,7 +17,6 @@ spec:
               workspace.jupyter.org/workspaceName: "{{ .Workspace.Name }}"
           policyTypes:
           - Ingress
-          - Egress
           ingress:
           # Allow traffic from traefik pods in the router namespace
           - from:
@@ -38,19 +37,6 @@ spec:
                   kubernetes.io/metadata.name: jupyter-k8s-system
             ports:
             - port: 8888
-              protocol: TCP
-          egress:
-          # Allow DNS resolution
-          - ports:
-            - port: 53
-              protocol: UDP
-            - port: 53
-              protocol: TCP
-          # Allow HTTPS outbound connections
-          - ports:
-            - port: 443
-              protocol: TCP
-            - port: 80
               protocol: TCP
     # The authorized route - tries token verification on already authenticated requests
     - kind: IngressRoute

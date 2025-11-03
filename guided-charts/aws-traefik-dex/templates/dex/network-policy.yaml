@@ -21,20 +21,12 @@ spec:
         matchLabels:
           app: traefik
           component: router
-      # Ensure the traffic only comes from pods in the same namespace
       namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: {{ .Values.namespace }}
     ports:
     - port: 5556
       protocol: TCP
-  # Allow traffic for readiness and liveness probes
-  - ports:
-    - port: 5556
-      protocol: TCP
-    from:
-    - ipBlock:
-        cidr: 10.0.0.0/8  # Kubernetes internal network - adjust if needed
   egress:
   # Allow DNS resolution
   - ports:
