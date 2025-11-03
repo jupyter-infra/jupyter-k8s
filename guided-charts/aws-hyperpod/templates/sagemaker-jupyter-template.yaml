@@ -42,4 +42,4 @@ spec:
   allowSecondaryStorages: true
   
   # Application type
-  appType: "jupyter-lab"
+  appType: "jupyterlab"
