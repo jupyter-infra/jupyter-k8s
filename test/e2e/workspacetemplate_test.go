@@ -571,10 +571,12 @@ spec:
   defaultAccessType: "OwnerOnly"
   appType: "jupyter-lab"
   resourceBounds:
-    minCpu: "100m"
-    maxCpu: "2"
-    minMemory: "128Mi"
-    maxMemory: "4Gi"
+    cpu:
+      min: "100m"
+      max: "2"
+    memory:
+      min: "128Mi"
+      max: "4Gi"
 `
 			cmd := exec.Command("sh", "-c",
 				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
@@ -639,10 +641,12 @@ spec:
         path: "/api/status"
         port: 8888
   resourceBounds:
-    minCpu: "100m"
-    maxCpu: "2"
-    minMemory: "128Mi"
-    maxMemory: "4Gi"
+    cpu:
+      min: "100m"
+      max: "2"
+    memory:
+      min: "128Mi"
+      max: "4Gi"
 `
 			cmd := exec.Command("sh", "-c",
 				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
