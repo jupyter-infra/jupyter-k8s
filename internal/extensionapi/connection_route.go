@@ -13,9 +13,11 @@ import (
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+// Function variable for SSM strategy creation (mockable in tests)
+var newSSMRemoteAccessStrategy = aws.NewSSMRemoteAccessStrategy
 
 // noOpPodExec is a no-op implementation of PodExecInterface for connection URL generation
 type noOpPodExec struct{}
@@ -78,7 +80,23 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 		"workspaceName", req.Spec.WorkspaceName,
 		"connectionType", req.Spec.WorkspaceConnectionType)
 
-	// TODO: Implement authorization check for private workspaces
+	// Check authorization for private workspaces
+	result, err := s.checkWorkspaceAuthorization(r, req.Spec.WorkspaceName, namespace)
+	if err != nil {
+		logger.Error(err, "Authorization failed", "workspaceName", req.Spec.WorkspaceName)
+		WriteKubernetesError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if result.NotFound {
+		WriteKubernetesError(w, http.StatusNotFound, result.Reason)
+		return
+	}
+
+	if !result.Allowed {
+		WriteKubernetesError(w, http.StatusForbidden, result.Reason)
+		return
+	}
 
 	// Generate response based on connection type
 	var responseType, responseURL string
@@ -149,14 +167,8 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 	// Get cluster ID from config (already validated earlier)
 	clusterId := s.config.ClusterId
 
-	// Get pod UID from workspace name
-	config := ctrl.GetConfigOrDie()
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return "", "", err
-	}
-
-	podUID, err := workspace.GetPodUIDFromWorkspaceName(clientset, workspaceName)
+	// Get pod UID from workspace name using existing k8sClient
+	podUID, err := workspace.GetPodUIDFromWorkspaceName(s.k8sClient, workspaceName)
 	if err != nil {
 		logger.Error(err, "Failed to get pod UID", "workspaceName", workspaceName)
 		return "", "", err
@@ -165,7 +177,7 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 	logger.Info("Found pod UID for workspace", "workspaceName", workspaceName, "podUID", podUID)
 
 	// Create SSM remote access strategy
-	ssmStrategy, err := aws.NewSSMRemoteAccessStrategy(nil, &noOpPodExec{})
+	ssmStrategy, err := newSSMRemoteAccessStrategy(nil, &noOpPodExec{})
 	if err != nil {
 		return "", "", err
 	}
@@ -184,4 +196,14 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 func (s *ExtensionServer) generateWebUIURL(r *http.Request, workspaceName, namespace string) (string, string, error) {
 	// TODO: Implement Web UI URL generation with JWT tokens
 	return connectionv1alpha1.ConnectionTypeWebUI, "https://placeholder-webui-url.com", nil
+}
+
+// checkWorkspaceAuthorization checks if the user is authorized to access the workspace
+func (s *ExtensionServer) checkWorkspaceAuthorization(r *http.Request, workspaceName, namespace string) (*WorkspaceAdmissionResult, error) {
+	user := GetUserFromHeaders(r)
+	if user == "" {
+		return nil, fmt.Errorf("user not found in request headers")
+	}
+
+	return s.CheckWorkspaceAccess(namespace, workspaceName, user, s.logger)
 }
