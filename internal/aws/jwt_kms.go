@@ -11,13 +11,13 @@ import (
 	"time"
 
 	jwt5 "github.com/golang-jwt/jwt/v5"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/authmiddleware"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 )
 
 // Error definitions
 var (
-	ErrInvalidClaims = errors.New("invalid token claims")
-	ErrTokenExpired  = errors.New("token has expired")
+	ErrInvalidClaims = jwt.ErrInvalidClaims
+	ErrTokenExpired  = jwt.ErrTokenExpired
 )
 
 // KMSJWTManager handles JWT token creation and validation using AWS KMS envelope encryption
@@ -53,7 +53,15 @@ func NewKMSJWTManager(config KMSJWTConfig) *KMSJWTManager {
 }
 
 // GenerateToken creates a new JWT token using KMS envelope encryption
-func (m *KMSJWTManager) GenerateToken(user string, groups []string, path string, domain string, tokenType string) (string, error) {
+func (m *KMSJWTManager) GenerateToken(
+	user string,
+	groups []string,
+	uid string,
+	extra map[string][]string,
+	path string,
+	domain string,
+	tokenType string,
+) (string, error) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 
@@ -65,7 +73,7 @@ func (m *KMSJWTManager) GenerateToken(user string, groups []string, path string,
 	}
 
 	// Create claims
-	claims := &authmiddleware.Claims{
+	claims := &jwt.Claims{
 		RegisteredClaims: jwt5.RegisteredClaims{
 			ExpiresAt: jwt5.NewNumericDate(now.Add(m.expiration)),
 			IssuedAt:  jwt5.NewNumericDate(now),
@@ -76,6 +84,8 @@ func (m *KMSJWTManager) GenerateToken(user string, groups []string, path string,
 		},
 		User:      user,
 		Groups:    groups,
+		UID:       uid,
+		Extra:     extra,
 		Path:      path,
 		Domain:    domain,
 		TokenType: tokenType,
@@ -105,11 +115,11 @@ func (m *KMSJWTManager) GenerateToken(user string, groups []string, path string,
 }
 
 // ValidateToken validates token using envelope decryption
-func (m *KMSJWTManager) ValidateToken(tokenString string) (*authmiddleware.Claims, error) {
+func (m *KMSJWTManager) ValidateToken(tokenString string) (*jwt.Claims, error) {
 	ctx := context.Background()
 
 	// Parse token to extract header with encrypted data key
-	token, err := jwt5.ParseWithClaims(tokenString, &authmiddleware.Claims{}, func(token *jwt5.Token) (interface{}, error) {
+	token, err := jwt5.ParseWithClaims(tokenString, &jwt.Claims{}, func(token *jwt5.Token) (interface{}, error) {
 		// Verify signing method
 		if token.Method != jwt5.SigningMethodHS384 {
 			return nil, fmt.Errorf("unexpected signing method: %v, expected HS384", token.Header["alg"])
@@ -156,7 +166,7 @@ func (m *KMSJWTManager) ValidateToken(tokenString string) (*authmiddleware.Claim
 		return nil, err
 	}
 
-	claims, ok := token.Claims.(*authmiddleware.Claims)
+	claims, ok := token.Claims.(*jwt.Claims)
 	if !ok {
 		return nil, ErrInvalidClaims
 	}
