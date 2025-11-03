@@ -249,6 +249,7 @@ spec:
 		By("undeploying the controller-manager")
 		_, _ = fmt.Fprintf(GinkgoWriter, "Undeploying controller manager...\n")
 		cmd = exec.Command("make", "undeploy")
+		cmd.Args = append(cmd.Args, "--timeout=300s")
 		_, _ = utils.Run(cmd)
 
 		By("uninstalling CRDs")
