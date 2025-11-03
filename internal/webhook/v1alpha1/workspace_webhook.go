@@ -109,10 +109,11 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 // SetupWorkspaceWebhookWithManager registers the webhook for Workspace in the manager.
 func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 	templateValidator := NewTemplateValidator(mgr.GetClient())
+	templateDefaulter := NewTemplateDefaulter(mgr.GetClient())
 
 	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.Workspace{}).
 		WithValidator(&WorkspaceCustomValidator{templateValidator: templateValidator}).
-		WithDefaulter(&WorkspaceCustomDefaulter{templateValidator: templateValidator}).
+		WithDefaulter(&WorkspaceCustomDefaulter{templateDefaulter: templateDefaulter}).
 		Complete()
 }
 
@@ -124,7 +125,7 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as it is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceCustomDefaulter struct {
-	templateValidator *TemplateValidator
+	templateDefaulter *TemplateDefaulter
 }
 
 var _ webhook.CustomDefaulter = &WorkspaceCustomDefaulter{}
@@ -159,7 +160,7 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 	}
 
 	// Apply template defaults
-	if err := d.templateValidator.ApplyTemplateDefaults(ctx, workspace); err != nil {
+	if err := d.templateDefaulter.ApplyTemplateDefaults(ctx, workspace); err != nil {
 		workspacelog.Error(err, "Failed to apply template defaults", "workspace", workspace.GetName())
 		return fmt.Errorf("failed to apply template defaults: %w", err)
 	}
