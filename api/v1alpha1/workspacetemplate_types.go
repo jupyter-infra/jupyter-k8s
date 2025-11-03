@@ -108,6 +108,10 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultAccessType string `json:"defaultAccessType,omitempty"`
 
+	// DefaultAccessStrategy specifies the default access strategy for workspaces using this template
+	// +optional
+	DefaultAccessStrategy *AccessStrategyRef `json:"defaultAccessStrategy,omitempty"`
+
 	// DefaultLifecycle specifies default lifecycle hooks for workspaces using this template
 	// +optional
 	DefaultLifecycle *corev1.Lifecycle `json:"defaultLifecycle,omitempty"`

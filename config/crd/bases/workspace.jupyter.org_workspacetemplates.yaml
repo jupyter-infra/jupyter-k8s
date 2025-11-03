@@ -71,6 +71,19 @@ spec:
                 description: AppType specifies the application type for workspaces
                   using this template
                 type: string
+              defaultAccessStrategy:
+                description: DefaultAccessStrategy specifies the default access strategy
+                  for workspaces using this template
+                properties:
+                  name:
+                    description: Name of the WorkspaceAccessStrategy
+                    type: string
+                  namespace:
+                    description: Namespace where the WorkspaceAccessStrategy is located
+                    type: string
+                required:
+                - name
+                type: object
               defaultAccessType:
                 default: Public
                 description: |-
