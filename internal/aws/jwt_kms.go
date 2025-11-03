@@ -53,7 +53,15 @@ func NewKMSJWTManager(config KMSJWTConfig) *KMSJWTManager {
 }
 
 // GenerateToken creates a new JWT token using KMS envelope encryption
-func (m *KMSJWTManager) GenerateToken(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string) (string, error) {
+func (m *KMSJWTManager) GenerateToken(
+	user string,
+	groups []string,
+	uid string,
+	extra map[string][]string,
+	path string,
+	domain string,
+	tokenType string,
+) (string, error) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 

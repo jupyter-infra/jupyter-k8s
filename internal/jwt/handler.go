@@ -36,7 +36,15 @@ func NewManager(signer Signer, enableRefresh bool, refreshWindow time.Duration, 
 }
 
 // GenerateToken delegates to the signer
-func (m *Manager) GenerateToken(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string) (string, error) {
+func (m *Manager) GenerateToken(
+	user string,
+	groups []string,
+	uid string,
+	extra map[string][]string,
+	path string,
+	domain string,
+	tokenType string,
+) (string, error) {
 	return m.signer.GenerateToken(user, groups, uid, extra, path, domain, tokenType)
 }
 
