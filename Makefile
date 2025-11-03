@@ -475,6 +475,9 @@ load-images-aws-internal: manifests generate fmt vet ## Build and push container
 load-images-aws:
 	$(MAKE) load-images-aws-internal CLOUD_PROVIDER=aws
 
+# Optional traefik access resources parameter
+ENABLE_TRAEFIK_ACCESS_RESOURCES ?= true
+
 deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remote cluster
 	@echo "Deploying jupyter-k8s CRD and controller with Helm chart to remote AWS cluster..."
 	rm -rf /tmp/jk8s-helm-crd-only
@@ -488,6 +491,7 @@ deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remot
 		--set controllerManager.container.env.CLUSTER_ID="$(EKS_CONTEXT)" \
 		--set application.imagesPullPolicy=Always \
 		--set application.imagesRegistry=$(ECR_REGISTRY) \
+		$(if $(filter true,$(ENABLE_TRAEFIK_ACCESS_RESOURCES)),--set accessResources.traefik.enable=true) \
 		--set workspacePodWatching.enable=true \
 		--set extensionApi.enable=true
 	@echo "Helm chart jupyter-k8s deployed successfully to remote AWS cluster"

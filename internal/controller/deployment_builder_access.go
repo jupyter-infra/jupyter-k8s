@@ -224,7 +224,7 @@ func (db *DeploymentBuilder) applyDeploymentSpecModifications(
 		}
 	}
 
-	logf.Log.Info("Successfully applied deployment spec modifications",
+	logf.Log.V(1).Info("Successfully applied deployment spec modifications",
 		"accessStrategy", accessStrategy.Name)
 
 	return nil
