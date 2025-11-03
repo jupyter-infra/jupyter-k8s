@@ -29,40 +29,46 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	logger := GetLoggerFromContext(r.Context())
 
 	if r.Method != "POST" {
-		WriteError(w, http.StatusBadRequest, "Connection must use POST method")
+		logger.Error(nil, "Invalid HTTP method", "method", r.Method)
+		WriteKubernetesError(w, http.StatusBadRequest, "Connection must use POST method")
 		return
 	}
 
 	// Extract namespace from URL path
 	namespace, err := GetNamespaceFromPath(r.URL.Path)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid URL path")
+		logger.Error(err, "Failed to extract namespace from URL path", "path", r.URL.Path)
+		WriteKubernetesError(w, http.StatusBadRequest, "Invalid URL path")
 		return
 	}
 
 	// Parse request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, "Failed to read request body")
+		logger.Error(err, "Failed to read request body")
+		WriteKubernetesError(w, http.StatusBadRequest, "Failed to read request body")
 		return
 	}
 
 	var req connectionv1alpha1.WorkspaceConnectionRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		WriteError(w, http.StatusBadRequest, "Invalid JSON")
+		logger.Error(err, "Failed to parse JSON request body")
+		WriteKubernetesError(w, http.StatusBadRequest, "Invalid JSON")
 		return
 	}
 
 	// Validate request
 	if err := validateWorkspaceConnectionRequest(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, err.Error())
+		logger.Error(err, "Invalid workspace connection request")
+		WriteKubernetesError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Check if CLUSTER_ID is configured early for VSCode connections
 	if req.Spec.WorkspaceConnectionType == connectionv1alpha1.ConnectionTypeVSCodeRemote {
 		if s.config.ClusterId == "" {
-			WriteError(w, http.StatusInternalServerError, "CLUSTER_ID not configured. Please set controllerManager.container.env.CLUSTER_ID in helm values")
+			logger.Error(nil, "CLUSTER_ID environment variable not configured")
+			WriteKubernetesError(w, http.StatusBadRequest, "CLUSTER_ID not configured. Please set controllerManager.container.env.CLUSTER_ID in helm values")
 			return
 		}
 	}
@@ -72,7 +78,23 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 		"workspaceName", req.Spec.WorkspaceName,
 		"connectionType", req.Spec.WorkspaceConnectionType)
 
-	// TODO: Implement authorization check for private workspaces
+	// Check authorization for private workspaces
+	result, err := s.checkWorkspaceAuthorization(r, req.Spec.WorkspaceName, namespace)
+	if err != nil {
+		logger.Error(err, "Authorization failed", "workspaceName", req.Spec.WorkspaceName)
+		WriteKubernetesError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if result.NotFound {
+		WriteKubernetesError(w, http.StatusNotFound, result.Reason)
+		return
+	}
+
+	if !result.Allowed {
+		WriteKubernetesError(w, http.StatusForbidden, result.Reason)
+		return
+	}
 
 	// Generate response based on connection type
 	var responseType, responseURL string
@@ -82,13 +104,14 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	case connectionv1alpha1.ConnectionTypeWebUI:
 		responseType, responseURL, err = s.generateWebUIURL(r, req.Spec.WorkspaceName, namespace)
 	default:
-		WriteError(w, http.StatusBadRequest, "Invalid workspace connection type")
+		logger.Error(nil, "Invalid workspace connection type", "connectionType", req.Spec.WorkspaceConnectionType)
+		WriteKubernetesError(w, http.StatusBadRequest, "Invalid workspace connection type")
 		return
 	}
 
 	if err != nil {
 		logger.Error(err, "Failed to generate connection URL", "connectionType", req.Spec.WorkspaceConnectionType)
-		WriteError(w, http.StatusInternalServerError, "Failed to generate connection URL")
+		WriteKubernetesError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -177,4 +200,14 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 func (s *ExtensionServer) generateWebUIURL(r *http.Request, workspaceName, namespace string) (string, string, error) {
 	// TODO: Implement Web UI URL generation with JWT tokens
 	return connectionv1alpha1.ConnectionTypeWebUI, "https://placeholder-webui-url.com", nil
+}
+
+// checkWorkspaceAuthorization checks if the user is authorized to access the workspace
+func (s *ExtensionServer) checkWorkspaceAuthorization(r *http.Request, workspaceName, namespace string) (*WorkspaceAdmissionResult, error) {
+	user := GetUserFromHeaders(r)
+	if user == "" {
+		return nil, fmt.Errorf("user not found in request headers")
+	}
+
+	return s.CheckWorkspaceAccess(namespace, workspaceName, user, s.logger)
 }

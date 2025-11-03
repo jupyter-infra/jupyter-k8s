@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -13,7 +14,7 @@ import (
 func GetPodUIDFromWorkspaceName(clientset kubernetes.Interface, workspaceName string) (string, error) {
 	// Get pods with the workspace label
 	pods, err := clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{
-		LabelSelector: "workspace.workspaces.jupyter.org/name=" + workspaceName,
+		LabelSelector: controller.LabelWorkspaceName + "=" + workspaceName,
 	})
 	if err != nil {
 		return "", err
