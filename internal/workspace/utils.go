@@ -6,24 +6,25 @@ import (
 	"fmt"
 
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // GetPodUIDFromWorkspaceName gets the pod UID for a given workspace name
-func GetPodUIDFromWorkspaceName(clientset kubernetes.Interface, workspaceName string) (string, error) {
+func GetPodUIDFromWorkspaceName(k8sClient client.Client, workspaceName string) (string, error) {
 	// Get pods with the workspace label
-	pods, err := clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{
-		LabelSelector: controller.LabelWorkspaceName + "=" + workspaceName,
+	podList := &corev1.PodList{}
+	err := k8sClient.List(context.TODO(), podList, client.MatchingLabels{
+		controller.LabelWorkspaceName: workspaceName,
 	})
 	if err != nil {
 		return "", err
 	}
 
-	if len(pods.Items) == 0 {
+	if len(podList.Items) == 0 {
 		return "", fmt.Errorf("no pod found for workspace: %s", workspaceName)
 	}
 
 	// Return the UID of the first pod
-	return string(pods.Items[0].UID), nil
+	return string(podList.Items[0].UID), nil
 }
