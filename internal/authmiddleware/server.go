@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -16,7 +17,7 @@ import (
 // Server represents the HTTP server for authentication middleware
 type Server struct {
 	config        *Config
-	jwtManager    JWTHandler
+	jwtManager    jwt.Handler
 	cookieManager CookieHandler
 	logger        *slog.Logger
 	httpServer    *http.Server
@@ -24,7 +25,7 @@ type Server struct {
 }
 
 // NewServer creates a new server instance
-func NewServer(config *Config, jwtManager JWTHandler, cookieManager CookieHandler, logger *slog.Logger) *Server {
+func NewServer(config *Config, jwtManager jwt.Handler, cookieManager CookieHandler, logger *slog.Logger) *Server {
 	// Initialize Kubernetes client for in-cluster use
 	k8sConfig, err := rest.InClusterConfig()
 	var restClient rest.Interface
