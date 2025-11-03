@@ -40,7 +40,7 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 	}
 
 	getWorkspaceTemplateRef := func(workspaceName string) (string, error) {
-		cmd := exec.Command("kubectl", "get", "workspace", workspaceName, 
+		cmd := exec.Command("kubectl", "get", "workspace", workspaceName,
 			"-o", "jsonpath={.spec.templateRef}")
 		output, err := utils.Run(cmd)
 		if err != nil {
@@ -50,7 +50,7 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 	}
 
 	isWorkspaceBeingDeleted := func(workspaceName string) bool {
-		cmd := exec.Command("kubectl", "get", "workspace", workspaceName, 
+		cmd := exec.Command("kubectl", "get", "workspace", workspaceName,
 			"-o", "jsonpath={.metadata.deletionTimestamp}")
 		deletionTimestamp, err := utils.Run(cmd)
 		return err == nil && strings.TrimSpace(deletionTimestamp) != ""
@@ -62,23 +62,23 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 		if err != nil {
 			return nil, fmt.Errorf("failed to list workspaces: %w", err)
 		}
-		
+
 		var workspaces []string
 		workspaceNames := strings.Fields(output)
-		
+
 		for _, workspaceName := range workspaceNames {
 			name := extractWorkspaceName(workspaceName)
-			
+
 			templateRef, err := getWorkspaceTemplateRef(name)
 			if err != nil {
 				continue // Skip workspaces we can't query
 			}
-			
+
 			if templateRef == templateName {
 				workspaces = append(workspaces, name)
 			}
 		}
-		
+
 		return workspaces, nil
 	}
 
@@ -89,7 +89,7 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			if err != nil {
 				return // If we can't list workspaces, assume they're gone
 			}
-			
+
 			for _, workspaceName := range workspaces {
 				if !isWorkspaceBeingDeleted(workspaceName) {
 					g.Expect(false).To(BeTrue(), fmt.Sprintf("Workspace %s using template %s still exists and is not being deleted", workspaceName, templateName))
@@ -102,18 +102,18 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 	// deleteAllWorkspacesUsingTemplate deletes all workspaces that reference a specific template
 	deleteAllWorkspacesUsingTemplate := func(templateName string) {
 		By("deleting all workspaces using template: " + templateName)
-		
+
 		workspacesToDelete, err := findWorkspacesUsingTemplate(templateName)
 		if err != nil {
 			_, _ = fmt.Fprintf(GinkgoWriter, "Failed to find workspaces using template %s: %v\n", templateName, err)
 			return
 		}
-		
+
 		if len(workspacesToDelete) == 0 {
 			_, _ = fmt.Fprintf(GinkgoWriter, "No workspaces found using template %s\n", templateName)
 			return
 		}
-		
+
 		_, _ = fmt.Fprintf(GinkgoWriter, "Deleting %d workspace(s): %v\n", len(workspacesToDelete), workspacesToDelete)
 		cmd := exec.Command("kubectl", "delete", "workspace")
 		cmd.Args = append(cmd.Args, workspacesToDelete...)
@@ -223,12 +223,12 @@ spec:
 				// No workspaces exist, cleanup successful
 				return
 			}
-			
+
 			// Check if any remaining workspaces are not being deleted
 			workspaceNames := strings.Fields(output)
 			for _, workspaceName := range workspaceNames {
 				name := extractWorkspaceName(workspaceName)
-				
+
 				if !isWorkspaceBeingDeleted(name) {
 					g.Expect(false).To(BeTrue(), fmt.Sprintf("Workspace %s still exists and is not being deleted", name))
 					return
@@ -255,10 +255,9 @@ spec:
 		By("uninstalling CRDs")
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CRDs...\n")
 		cmd = exec.Command("make", "uninstall")
+		cmd.Args = append(cmd.Args, "--timeout=300s")
 		_, _ = utils.Run(cmd)
 	})
-
-
 
 	Context("Template Creation and Usage", func() {
 		It("should create WorkspaceTemplate successfully", func() {
@@ -580,7 +579,6 @@ spec:
 			cmd = exec.Command("kubectl", "delete", "workspace", "cel-immutability-test")
 			_, _ = utils.Run(cmd)
 		})
-
 
 	})
 
