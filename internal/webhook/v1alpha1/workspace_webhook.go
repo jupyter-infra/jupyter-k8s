@@ -193,7 +193,7 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, obj runti
 		return nil, err
 	}
 
-	// Admin users bypass user validation
+	// Admin users bypass validation
 	req, err := admission.RequestFromContext(ctx)
 	if err == nil && isAdminUser(req.UserInfo.Groups) {
 		return nil, nil
@@ -287,7 +287,7 @@ func (v *WorkspaceCustomValidator) ValidateDelete(ctx context.Context, obj runti
 	}
 	workspacelog.Info("Validation for Workspace upon deletion", "name", workspace.GetName(), "namespace", workspace.GetNamespace())
 
-	// Admin users bypass user validation
+	// Admin users bypass validation
 	req, err := admission.RequestFromContext(ctx)
 	if err == nil && isAdminUser(req.UserInfo.Groups) {
 		return nil, nil

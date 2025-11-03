@@ -184,7 +184,6 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 		podSpec.Tolerations = resolvedTemplate.Tolerations
 	}
 
-	// Set service account name if specified
 	if workspace.Spec.ServiceAccountName != "" {
 		podSpec.ServiceAccountName = workspace.Spec.ServiceAccountName
 	}

@@ -67,15 +67,6 @@ var _ = Describe("ServiceAccount Validator", func() {
 			Expect(sav.hasServiceAccountAccess(userInfo, sa)).To(BeTrue())
 		})
 
-		It("should allow access when username matches session name template", func() {
-			sa.Annotations = map[string]string{
-				controller.AnnotationServiceAccountUsers: "- arn:aws:iam::123456789012:role/MyRole/{{SessionName}}",
-			}
-			userInfo := authenticationv1.UserInfo{Username: "arn:aws:iam::123456789012:role/MyRole/user123"}
-			sav := NewServiceAccountValidator(nil)
-			Expect(sav.hasServiceAccountAccess(userInfo, sa)).To(BeTrue())
-		})
-
 		It("should deny access when user is not in either list", func() {
 			sa.Annotations = map[string]string{
 				controller.AnnotationServiceAccountUsers:  "- user1\n- user2",
@@ -84,6 +75,42 @@ var _ = Describe("ServiceAccount Validator", func() {
 			userInfo := authenticationv1.UserInfo{Username: "user3", Groups: []string{"group3"}}
 			sav := NewServiceAccountValidator(nil)
 			Expect(sav.hasServiceAccountAccess(userInfo, sa)).To(BeFalse())
+		})
+	})
+
+	Context("checkUsernamePatternAccess", func() {
+		var sa *corev1.ServiceAccount
+		var sav *ServiceAccountValidator
+
+		BeforeEach(func() {
+			sa = &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-sa",
+					Namespace: "default",
+				},
+			}
+			sav = NewServiceAccountValidator(nil)
+		})
+
+		It("should match username with asterisk wildcard", func() {
+			sa.Annotations = map[string]string{
+				controller.AnnotationServiceAccountUsersPattern: "- arn:aws:iam::123456789012:role/MyRole/*",
+			}
+			Expect(sav.checkUsernamePatternAccess("arn:aws:iam::123456789012:role/MyRole/user123", sa)).To(BeTrue())
+		})
+
+		It("should match username with question mark wildcard", func() {
+			sa.Annotations = map[string]string{
+				controller.AnnotationServiceAccountUsersPattern: "- user?",
+			}
+			Expect(sav.checkUsernamePatternAccess("user1", sa)).To(BeTrue())
+		})
+
+		It("should not match when pattern does not match", func() {
+			sa.Annotations = map[string]string{
+				controller.AnnotationServiceAccountUsersPattern: "- arn:aws:iam::123456789012:role/MyRole/*",
+			}
+			Expect(sav.checkUsernamePatternAccess("arn:aws:iam::123456789012:role/OtherRole/user123", sa)).To(BeFalse())
 		})
 	})
 

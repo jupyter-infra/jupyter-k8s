@@ -31,10 +31,11 @@ const (
 	AppLabelValue = "jupyter"
 
 	// Annotation keys
-	AnnotationCreatedBy            = "workspace.jupyter.org/created-by"
-	AnnotationLastUpdatedBy        = "workspace.jupyter.org/last-updated-by"
-	AnnotationServiceAccountUsers  = "workspace.jupyter.org/service-account-users"
-	AnnotationServiceAccountGroups = "workspace.jupyter.org/service-account-groups"
+	AnnotationCreatedBy                  = "workspace.jupyter.org/created-by"
+	AnnotationLastUpdatedBy              = "workspace.jupyter.org/last-updated-by"
+	AnnotationServiceAccountUsers        = "workspace.jupyter.org/service-account-users"
+	AnnotationServiceAccountUsersPattern = "workspace.jupyter.org/service-account-users-pattern"
+	AnnotationServiceAccountGroups       = "workspace.jupyter.org/service-account-groups"
 
 	// Status phases
 	PhaseCreating = "Creating"

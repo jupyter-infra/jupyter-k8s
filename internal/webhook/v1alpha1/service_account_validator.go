@@ -19,14 +19,14 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
-	"regexp"
-	"strings"
+	"path/filepath"
 
 	"gopkg.in/yaml.v2"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
@@ -45,53 +45,75 @@ func NewServiceAccountValidator(k8sClient client.Client) *ServiceAccountValidato
 	}
 }
 
+// checkUsernameAccess checks if username has access based on service-account-users annotation
+func (sav *ServiceAccountValidator) checkUsernameAccess(username string, sa *corev1.ServiceAccount) bool {
+	usersYaml, exists := sa.Annotations[controller.AnnotationServiceAccountUsers]
+	if !exists {
+		return false
+	}
+	var users []string
+	if err := yaml.Unmarshal([]byte(usersYaml), &users); err != nil {
+		return false
+	}
+	for _, user := range users {
+		if username == user {
+			logf.Log.Info("Service account access granted via exact username match", "username", username, "serviceAccount", sa.Name)
+			return true
+		}
+	}
+
+	return false
+}
+
+// checkUsernamePatternAccess checks if username matches wildcard patterns in service-account-users-pattern annotation
+func (sav *ServiceAccountValidator) checkUsernamePatternAccess(username string, sa *corev1.ServiceAccount) bool {
+	patternsYaml, exists := sa.Annotations[controller.AnnotationServiceAccountUsersPattern]
+	if !exists {
+		return false
+	}
+	var patterns []string
+	if err := yaml.Unmarshal([]byte(patternsYaml), &patterns); err != nil {
+		return false
+	}
+	for _, pattern := range patterns {
+		if matched, err := filepath.Match(pattern, username); err == nil && matched {
+			logf.Log.Info("Service account access granted via pattern match", "username", username, "pattern", pattern, "serviceAccount", sa.Name)
+			return true
+		}
+	}
+
+	return false
+}
+
+// checkGroupAccess checks if user groups have access based on service-account-groups annotation
+func (sav *ServiceAccountValidator) checkGroupAccess(userGroups []string, sa *corev1.ServiceAccount) bool {
+	groupsYaml, exists := sa.Annotations[controller.AnnotationServiceAccountGroups]
+	if !exists {
+		return false
+	}
+	var groups []string
+	if err := yaml.Unmarshal([]byte(groupsYaml), &groups); err != nil {
+		return false
+	}
+	for _, group := range groups {
+		for _, userGroup := range userGroups {
+			if group == userGroup {
+				logf.Log.Info("Service account access granted via group match", "group", group, "serviceAccount", sa.Name)
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // hasServiceAccountAccess checks if the user has access based on ServiceAccount annotations
 func (sav *ServiceAccountValidator) hasServiceAccountAccess(userInfo authenticationv1.UserInfo, sa *corev1.ServiceAccount) bool {
 	if sa.Annotations == nil {
 		return false
 	}
 
-	sessionNameRegex := regexp.MustCompile(`^[\w+=,.@-]{2,64}$`)
-
-	matchesTemplate := func(identity, template string) bool {
-		if !strings.Contains(template, "{{SessionName}}") {
-			return identity == template
-		}
-		rolePrefix := strings.Replace(template, "{{SessionName}}", "", 1)
-		if !strings.HasPrefix(identity, rolePrefix) {
-			return false
-		}
-		sessionName := identity[len(rolePrefix):]
-		return sessionNameRegex.MatchString(sessionName)
-	}
-
-	// Check service-account-users annotation
-	if usersYaml, exists := sa.Annotations[controller.AnnotationServiceAccountUsers]; exists {
-		var users []string
-		if err := yaml.Unmarshal([]byte(usersYaml), &users); err == nil {
-			for _, user := range users {
-				if matchesTemplate(userInfo.Username, user) {
-					return true
-				}
-			}
-		}
-	}
-
-	// Check service-account-groups annotation
-	if groupsYaml, exists := sa.Annotations[controller.AnnotationServiceAccountGroups]; exists {
-		var groups []string
-		if err := yaml.Unmarshal([]byte(groupsYaml), &groups); err == nil {
-			for _, group := range groups {
-				for _, userGroup := range userInfo.Groups {
-					if group == userGroup {
-						return true
-					}
-				}
-			}
-		}
-	}
-
-	return false
+	return sav.checkUsernameAccess(userInfo.Username, sa) || sav.checkUsernamePatternAccess(userInfo.Username, sa) || sav.checkGroupAccess(userInfo.Groups, sa)
 }
 
 // ValidateServiceAccountAccess checks if the user has access to the workspace's service account
