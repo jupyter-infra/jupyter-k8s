@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 	v1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

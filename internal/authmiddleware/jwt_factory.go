@@ -14,7 +14,7 @@ func NewJWTHandler(cfg *Config) (jwt.Handler, error) {
 		return nil, fmt.Errorf("config cannot be nil")
 	}
 
-	var signer jwt.JWTSigner
+	var signer jwt.Signer
 
 	switch cfg.JWTSigningType {
 	case JWTSigningTypeStandard:

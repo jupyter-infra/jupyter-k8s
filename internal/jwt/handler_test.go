@@ -7,7 +7,9 @@ import (
 	jwt5 "github.com/golang-jwt/jwt/v5"
 )
 
-// mockSigner implements JWTSigner for testing
+const mockTokenValue = "mock-token"
+
+// mockSigner implements Signer for testing
 type mockSigner struct {
 	generateFunc func(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string) (string, error)
 	validateFunc func(tokenString string) (*Claims, error)
@@ -17,7 +19,7 @@ func (m *mockSigner) GenerateToken(user string, groups []string, uid string, ext
 	if m.generateFunc != nil {
 		return m.generateFunc(user, groups, uid, extra, path, domain, tokenType)
 	}
-	return "mock-token", nil
+	return mockTokenValue, nil
 }
 
 func (m *mockSigner) ValidateToken(tokenString string) (*Claims, error) {
@@ -42,8 +44,8 @@ func TestManager_GenerateToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
-	if token != "mock-token" {
-		t.Fatalf("Expected 'mock-token', got %s", token)
+	if token != mockTokenValue {
+		t.Fatalf("Expected '%s', got %s", mockTokenValue, token)
 	}
 }
 
@@ -78,8 +80,8 @@ func TestManager_RefreshToken_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
-	if token != "mock-token" {
-		t.Fatalf("Expected 'mock-token', got %s", token)
+	if token != mockTokenValue {
+		t.Fatalf("Expected '%s', got %s", mockTokenValue, token)
 	}
 }
 
@@ -103,7 +105,7 @@ func TestManager_ShouldRefreshToken_WithinWindow(t *testing.T) {
 	now := time.Now().UTC()
 	claims := &Claims{
 		RegisteredClaims: jwt5.RegisteredClaims{
-			ExpiresAt: jwt5.NewNumericDate(now.Add(5 * time.Minute)), // Expires in 5 min, within 10 min window
+			ExpiresAt: jwt5.NewNumericDate(now.Add(5 * time.Minute)),   // Expires in 5 min, within 10 min window
 			IssuedAt:  jwt5.NewNumericDate(now.Add(-10 * time.Minute)), // Issued 10 min ago, within 1 hour horizon
 		},
 	}
@@ -183,8 +185,8 @@ func TestManager_UpdateSkipRefreshToken_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
-	if token != "mock-token" {
-		t.Fatalf("Expected 'mock-token', got %s", token)
+	if token != mockTokenValue {
+		t.Fatalf("Expected '%s', got %s", mockTokenValue, token)
 	}
 	if !claims.SkipRefresh {
 		t.Fatal("Expected SkipRefresh to be set to true")

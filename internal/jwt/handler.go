@@ -1,3 +1,6 @@
+// Package jwt provides JWT token management with pluggable signing strategies.
+// It supports both standard HMAC signing and AWS KMS-based signing through
+// a common Handler interface.
 package jwt
 
 import (
@@ -16,14 +19,14 @@ type Handler interface {
 
 // Manager implements Handler with an embedded signer
 type Manager struct {
-	signer         JWTSigner
+	signer         Signer
 	enableRefresh  bool
 	refreshWindow  time.Duration
 	refreshHorizon time.Duration
 }
 
 // NewManager creates a new Manager
-func NewManager(signer JWTSigner, enableRefresh bool, refreshWindow time.Duration, refreshHorizon time.Duration) *Manager {
+func NewManager(signer Signer, enableRefresh bool, refreshWindow time.Duration, refreshHorizon time.Duration) *Manager {
 	return &Manager{
 		signer:         signer,
 		enableRefresh:  enableRefresh,
