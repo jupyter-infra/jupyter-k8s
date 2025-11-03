@@ -415,26 +415,6 @@ func (rm *ResourceManager) updatePVC(ctx context.Context, pvc *corev1.Persistent
 	return pvc, nil
 }
 
-// updatePVC updates an existing PVC with new spec
-func (rm *ResourceManager) updatePVC(ctx context.Context, pvc *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
-	logger := logf.FromContext(ctx)
-
-	// Update the PVC spec using the builder
-	if err := rm.pvcBuilder.UpdatePVCSpec(ctx, pvc, workspace, resolvedTemplate); err != nil {
-		return nil, fmt.Errorf("failed to update PVC spec: %w", err)
-	}
-
-	logger.Info("Updating PVC",
-		"pvc", pvc.Name,
-		"namespace", pvc.Namespace)
-
-	if err := rm.client.Update(ctx, pvc); err != nil {
-		return nil, fmt.Errorf("failed to update PVC: %w", err)
-	}
-
-	return pvc, nil
-}
-
 // CleanupAllResources performs comprehensive cleanup of all workspace resources
 func (rm *ResourceManager) CleanupAllResources(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
 	logger := logf.FromContext(ctx)
