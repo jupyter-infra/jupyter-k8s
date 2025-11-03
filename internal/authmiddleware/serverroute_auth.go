@@ -3,6 +3,8 @@ package authmiddleware
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 )
 
 // handleAuth handles authentication requests
@@ -105,7 +107,7 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate JWT token with app path and domain for authorization scope
-	token, err := s.jwtManager.GenerateToken(k8sUsername, k8sGroups, k8sUID, nil, appPath, host, TokenTypeSession)
+	token, err := s.jwtManager.GenerateToken(k8sUsername, k8sGroups, k8sUID, nil, appPath, host, jwt.TokenTypeSession)
 	if err != nil {
 		s.logger.Error("Failed to generate token", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)

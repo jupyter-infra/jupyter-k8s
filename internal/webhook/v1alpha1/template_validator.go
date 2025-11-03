@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -128,85 +127,6 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 	if len(violations) > 0 {
 		return fmt.Errorf("workspace violates template '%s' constraints: %s", *newWorkspace.Spec.TemplateRef, formatViolations(violations))
 	}
-
-	return nil
-}
-
-// ApplyTemplateDefaults applies template defaults to workspace
-func (tv *TemplateValidator) ApplyTemplateDefaults(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
-	if workspace.Spec.TemplateRef == nil {
-		return nil
-	}
-
-	template, err := tv.fetchTemplate(ctx, *workspace.Spec.TemplateRef)
-	if err != nil {
-		return err
-	}
-
-	// Apply defaults
-	if workspace.Spec.Image == "" && template.Spec.DefaultImage != "" {
-		workspace.Spec.Image = template.Spec.DefaultImage
-	}
-
-	if workspace.Spec.Resources == nil && template.Spec.DefaultResources != nil {
-		workspace.Spec.Resources = template.Spec.DefaultResources.DeepCopy()
-	}
-
-	// Apply storage defaults
-	if template.Spec.PrimaryStorage != nil {
-		// Create storage if it doesn't exist and we have a default size
-		if workspace.Spec.Storage == nil && !template.Spec.PrimaryStorage.DefaultSize.IsZero() {
-			workspace.Spec.Storage = &workspacev1alpha1.StorageSpec{}
-		}
-
-		// Apply individual storage defaults if storage exists
-		if workspace.Spec.Storage != nil {
-			// Apply default size if not specified
-			if workspace.Spec.Storage.Size.IsZero() && !template.Spec.PrimaryStorage.DefaultSize.IsZero() {
-				workspace.Spec.Storage.Size = template.Spec.PrimaryStorage.DefaultSize
-			}
-
-			// Apply default storage class name if not specified
-			if workspace.Spec.Storage.StorageClassName == nil && template.Spec.PrimaryStorage.DefaultStorageClassName != nil {
-				workspace.Spec.Storage.StorageClassName = template.Spec.PrimaryStorage.DefaultStorageClassName
-			}
-
-			// Apply default mount path if not specified
-			if workspace.Spec.Storage.MountPath == "" && template.Spec.PrimaryStorage.DefaultMountPath != "" {
-				workspace.Spec.Storage.MountPath = template.Spec.PrimaryStorage.DefaultMountPath
-			}
-		}
-	}
-
-	if workspace.Spec.ContainerConfig == nil && template.Spec.DefaultContainerConfig != nil {
-		workspace.Spec.ContainerConfig = template.Spec.DefaultContainerConfig.DeepCopy()
-	}
-
-	if workspace.Spec.NodeSelector == nil && template.Spec.DefaultNodeSelector != nil {
-		workspace.Spec.NodeSelector = make(map[string]string)
-		for k, v := range template.Spec.DefaultNodeSelector {
-			workspace.Spec.NodeSelector[k] = v
-		}
-	}
-
-	if workspace.Spec.Affinity == nil && template.Spec.DefaultAffinity != nil {
-		workspace.Spec.Affinity = template.Spec.DefaultAffinity.DeepCopy()
-	}
-
-	if workspace.Spec.Tolerations == nil && template.Spec.DefaultTolerations != nil {
-		workspace.Spec.Tolerations = make([]corev1.Toleration, len(template.Spec.DefaultTolerations))
-		copy(workspace.Spec.Tolerations, template.Spec.DefaultTolerations)
-	}
-
-	if workspace.Spec.OwnershipType == "" && template.Spec.DefaultOwnershipType != "" {
-		workspace.Spec.OwnershipType = template.Spec.DefaultOwnershipType
-	}
-
-	// Add template tracking label
-	if workspace.Labels == nil {
-		workspace.Labels = make(map[string]string)
-	}
-	workspace.Labels[controller.LabelWorkspaceTemplate] = *workspace.Spec.TemplateRef
 
 	return nil
 }

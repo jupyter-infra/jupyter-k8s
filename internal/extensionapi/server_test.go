@@ -507,6 +507,24 @@ var _ = Describe("Server", func() {
 			}
 			Expect(routeCount).To(Equal(2))
 		})
+
+		It("Should return 404 for paths with insufficient parts", func() {
+			server := newExtensionServer(config, &logger, k8sClient, sarClient)
+
+			resourceHandlers := map[string]func(http.ResponseWriter, *http.Request){
+				"test": func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(http.StatusOK)
+				},
+			}
+			server.registerNamespacedRoutes(resourceHandlers)
+
+			req := httptest.NewRequest("GET", "/apis/namespaces/short", nil)
+			w := httptest.NewRecorder()
+
+			server.mux.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusNotFound))
+		})
 	})
 
 	Context("Start", func() {
