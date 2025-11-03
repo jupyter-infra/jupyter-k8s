@@ -6,12 +6,35 @@ namespace: jupyter-k8s-system # TODO consider if we need seperate namespace
 # Full domain for the application (required)
 domain: ""
 
+# AWS Certificate Manager ARN for SSL/TLS termination at load balancer
+# If provided, enables SSL termination at the NLB level
+awsCertificateArn: ""
+
+# External DNS configuration
+externalDns:
+  # Whether to enable external-dns annotations for automatic DNS record creation
+  enabled: true
+
 # Remote access configuration
 remoteAccess:
   enabled: false
   ssmManagedNodeRole: ""  # REQUIRED: IAM role for SSM managed instances - must be provided during installation
   ssmSidecarImage: ""  # REQURIED: SSM sidecar container image
   ssmDocumentName: "SageMaker-SpaceSSHSessionDocument"  # Custom SSM document name for SSH sessions
+
+# [TRAEFIK]: Configuration for Traefik (optional dependency)
+traefik:
+  # Whether to deploy Traefik as part of this chart
+  enabled: false
+  # Traefik configuration (only used when enabled: true)
+  # For full configuration options, see: https://github.com/traefik/traefik-helm-chart/blob/master/traefik/values.yaml
+  repository: public.ecr.aws/docker/library
+  imageName: traefik
+  imageTag: latest
+  replicas: 2
+  redirectHttp: true
+  debug: false
+  allowCrossNamespace: true
 
 # [STORAGE] StorageClasses for Workspaces
 storageClass:
@@ -25,6 +48,7 @@ storageClass:
     parameters:
       type: gp3
       fsType: ext4
+      encrypted: "true"
 
 # Authmiddleware configuration
 authmiddleware:

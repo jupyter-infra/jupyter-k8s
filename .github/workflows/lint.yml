@@ -25,7 +25,8 @@ jobs:
           export PATH=$PATH:$(go env GOPATH)/bin
 
       - name: Install Helm
-        run: sudo snap install helm --classic
+        run: |
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
       - name: Verify Helm installation
         run: helm version

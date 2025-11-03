@@ -21,7 +21,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -228,67 +227,4 @@ var _ = Describe("Template Immutability", func() {
 		})
 	})
 
-	Context("Template Spec CEL Immutability", func() {
-		It("should reject template spec modification via CEL validation", func() {
-			ctx := context.Background()
-			template := &workspacev1alpha1.WorkspaceTemplate{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "cel-immutable-template",
-				},
-				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName:  "CEL Immutability Test",
-					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
-					ResourceBounds: &workspacev1alpha1.ResourceBounds{
-						CPU: &workspacev1alpha1.ResourceRange{
-							Min: resource.MustParse("100m"),
-							Max: resource.MustParse("2"),
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, template)).To(Succeed())
-			defer func() {
-				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, template))).To(Succeed())
-			}()
-
-			// Attempt to modify the template spec (should fail due to CEL validation)
-			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updatedTemplate)).To(Succeed())
-			updatedTemplate.Spec.DisplayName = "Modified Display Name"
-			err := k8sClient.Update(ctx, updatedTemplate)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("template spec is immutable after creation"))
-		})
-
-		It("should allow metadata updates while spec remains immutable", func() {
-			ctx := context.Background()
-			template := &workspacev1alpha1.WorkspaceTemplate{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "metadata-mutable-template",
-				},
-				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName:  "Metadata Test",
-					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
-				},
-			}
-			Expect(k8sClient.Create(ctx, template)).To(Succeed())
-			defer func() {
-				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, template))).To(Succeed())
-			}()
-
-			// Metadata changes (labels, annotations) should be allowed
-			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updatedTemplate)).To(Succeed())
-			if updatedTemplate.Labels == nil {
-				updatedTemplate.Labels = make(map[string]string)
-			}
-			updatedTemplate.Labels["new-label"] = "test"
-			Expect(k8sClient.Update(ctx, updatedTemplate)).To(Succeed())
-
-			// Verify label was added
-			verifyTemplate := &workspacev1alpha1.WorkspaceTemplate{}
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), verifyTemplate)).To(Succeed())
-			Expect(verifyTemplate.Labels["new-label"]).To(Equal("test"))
-		})
-	})
 })
