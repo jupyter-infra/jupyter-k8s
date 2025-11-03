@@ -104,7 +104,6 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 	templateValidator := NewTemplateValidator(mgr.GetClient())
 	templateDefaulter := NewTemplateDefaulter(mgr.GetClient())
 	serviceAccountValidator := NewServiceAccountValidator(mgr.GetClient())
-	templateDefaulter := NewTemplateDefaulter(mgr.GetClient())
 
 	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.Workspace{}).
 		WithValidator(&WorkspaceCustomValidator{templateValidator: templateValidator, serviceAccountValidator: serviceAccountValidator}).
