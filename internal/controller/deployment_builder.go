@@ -184,6 +184,10 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 		podSpec.Tolerations = resolvedTemplate.Tolerations
 	}
 
+	if workspace.Spec.ServiceAccountName != "" {
+		podSpec.ServiceAccountName = workspace.Spec.ServiceAccountName
+	}
+
 	return podSpec
 }
 
