@@ -6,6 +6,30 @@ namespace: jupyter-k8s-system # TODO consider if we need seperate namespace
 # Full domain for the application (required)
 domain: ""
 
+# [CONTROLLER] Operator pod scheduling configuration
+controller:
+  # Node selector for operator pod placement
+  nodeSelector: {}
+  
+  # Tolerations for scheduling on tainted nodes
+  tolerations: []
+  
+  # Affinity rules for operator pod placement
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: kubernetes.io/arch
+              operator: In
+              values:
+                - amd64
+                - arm64
+            - key: kubernetes.io/os
+              operator: In
+              values:
+                - linux
+
 # AWS Certificate Manager ARN for SSL/TLS termination at load balancer
 # If provided, enables SSL termination at the NLB level
 awsCertificateArn: ""
