@@ -86,5 +86,39 @@ var _ = Describe("CoreDefaulter", func() {
 			applyCoreDefaults(workspace, template)
 			Expect(workspace.Spec.ContainerConfig.Command).To(Equal([]string{"/bin/sh"}))
 		})
+
+		It("should apply access type defaults", func() {
+			template.Spec.DefaultAccessType = "OwnerOnly"
+
+			applyCoreDefaults(workspace, template)
+
+			Expect(workspace.Spec.AccessType).To(Equal("OwnerOnly"))
+		})
+
+		It("should not override existing access type", func() {
+			workspace.Spec.AccessType = "Public"
+			template.Spec.DefaultAccessType = "OwnerOnly"
+
+			applyCoreDefaults(workspace, template)
+
+			Expect(workspace.Spec.AccessType).To(Equal("Public"))
+		})
+
+		It("should apply app type defaults", func() {
+			template.Spec.AppType = "jupyter-lab"
+
+			applyCoreDefaults(workspace, template)
+
+			Expect(workspace.Spec.AppType).To(Equal("jupyter-lab"))
+		})
+
+		It("should not override existing app type", func() {
+			workspace.Spec.AppType = "vscode"
+			template.Spec.AppType = "jupyter-lab"
+
+			applyCoreDefaults(workspace, template)
+
+			Expect(workspace.Spec.AppType).To(Equal("vscode"))
+		})
 	})
 })
