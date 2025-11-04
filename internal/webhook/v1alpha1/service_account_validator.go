@@ -19,7 +19,8 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
-	"path/filepath"
+	"regexp"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -43,6 +44,19 @@ func NewServiceAccountValidator(k8sClient client.Client) *ServiceAccountValidato
 	return &ServiceAccountValidator{
 		k8sClient: k8sClient,
 	}
+}
+
+// matchPattern matches a string against a pattern with * and ? wildcards
+func matchPattern(pattern, str string) bool {
+	// Escape special regex characters except * and ?
+	escaped := regexp.QuoteMeta(pattern)
+	// Replace escaped wildcards with regex equivalents
+	escaped = strings.ReplaceAll(escaped, "\\*", ".*")
+	escaped = strings.ReplaceAll(escaped, "\\?", ".")
+	// Anchor the pattern
+	regexPattern := "^" + escaped + "$"
+	matched, _ := regexp.MatchString(regexPattern, str)
+	return matched
 }
 
 // checkUsernameAccess checks if username has access based on service-account-users annotation
@@ -76,7 +90,7 @@ func (sav *ServiceAccountValidator) checkUsernamePatternAccess(username string, 
 		return false
 	}
 	for _, pattern := range patterns {
-		if matched, err := filepath.Match(pattern, username); err == nil && matched {
+		if matchPattern(pattern, username) {
 			logf.Log.Info("Service account access granted via pattern match", "username", username, "pattern", pattern, "serviceAccount", sa.Name)
 			return true
 		}
@@ -130,6 +144,12 @@ func (sav *ServiceAccountValidator) ValidateServiceAccountAccess(ctx context.Con
 	sa := &corev1.ServiceAccount{}
 	if err := sav.k8sClient.Get(ctx, types.NamespacedName{Name: workspace.Spec.ServiceAccountName, Namespace: workspace.GetNamespace()}, sa); err != nil {
 		return fmt.Errorf("failed to get service account %s: %w", workspace.Spec.ServiceAccountName, err)
+	}
+
+	// Allow access if service account is the default service account
+	defaultSA, err := GetDefaultServiceAccount(ctx, sav.k8sClient, workspace.GetNamespace())
+	if err == nil && workspace.Spec.ServiceAccountName == defaultSA {
+		return nil
 	}
 
 	if !sav.hasServiceAccountAccess(req.UserInfo, sa) {
