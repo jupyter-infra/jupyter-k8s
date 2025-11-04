@@ -510,6 +510,28 @@ var _ = Describe("Workspace Webhook", func() {
 				Expect(violation).NotTo(BeNil())
 				Expect(violation.Type).To(Equal(controller.ViolationTypeImageNotAllowed))
 			})
+
+			It("should allow any image when AllowCustomImages is true", func() {
+				allowCustomImages := true
+				template.Spec.AllowCustomImages = &allowCustomImages
+				violation := validateImageAllowed("any/custom:image", template)
+				Expect(violation).To(BeNil())
+			})
+
+			It("should still enforce restrictions when AllowCustomImages is false", func() {
+				allowCustomImages := false
+				template.Spec.AllowCustomImages = &allowCustomImages
+				violation := validateImageAllowed("malicious/image:latest", template)
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(controller.ViolationTypeImageNotAllowed))
+			})
+
+			It("should enforce restrictions when AllowCustomImages is nil (default)", func() {
+				template.Spec.AllowCustomImages = nil
+				violation := validateImageAllowed("malicious/image:latest", template)
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(controller.ViolationTypeImageNotAllowed))
+			})
 		})
 
 		Context("validateStorageSize", func() {

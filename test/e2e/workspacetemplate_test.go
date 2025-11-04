@@ -695,5 +695,93 @@ spec:
 			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "lifecycle-template", "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 		})
+
+		It("should reject custom images when allowCustomImages is false", func() {
+			By("creating template with allowCustomImages: false")
+			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: restricted-images-template
+spec:
+  displayName: "Restricted Images Template"
+  description: "Template that restricts custom images"
+  defaultImage: "jupyter/base-notebook:latest"
+  allowedImages:
+    - "jupyter/base-notebook:latest"
+    - "jupyter/scipy-notebook:latest"
+  allowCustomImages: false
+`
+			cmd := exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("attempting to create workspace with custom image")
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: custom-image-rejected-test
+spec:
+  displayName: "Custom Image Rejected Test"
+  templateRef: "restricted-images-template"
+  image: "custom/unauthorized:latest"
+`
+			cmd = exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			output, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "Expected webhook to reject custom image")
+			Expect(output).To(ContainSubstring("not allowed"))
+
+			By("cleaning up template")
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "restricted-images-template")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should allow any image when allowCustomImages is true", func() {
+			By("creating template with allowCustomImages: true")
+			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: custom-images-template
+spec:
+  displayName: "Custom Images Template"
+  description: "Template that allows custom images"
+  defaultImage: "jupyter/base-notebook:latest"
+  allowedImages:
+    - "jupyter/base-notebook:latest"
+  allowCustomImages: true
+`
+			cmd := exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating workspace with custom image")
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: custom-image-allowed-test
+spec:
+  displayName: "Custom Image Allowed Test"
+  templateRef: "custom-images-template"
+  image: "custom/authorized:latest"
+`
+			cmd = exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Expected webhook to allow custom image")
+
+			By("verifying workspace was created with custom image")
+			cmd = exec.Command("kubectl", "get", "workspace", "custom-image-allowed-test", "-o", "jsonpath={.spec.image}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("custom/authorized:latest"))
+
+			By("cleaning up workspace and template")
+			cmd = exec.Command("kubectl", "delete", "workspace", "custom-image-allowed-test")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "custom-images-template")
+			_, _ = utils.Run(cmd)
+		})
 	})
 })

@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -25,6 +27,7 @@ type ExtensionServer struct {
 	config     *ExtensionConfig
 	k8sClient  client.Client
 	sarClient  v1.SubjectAccessReviewInterface
+	jwtManager jwt.Signer
 	logger     *logr.Logger
 	httpServer interface {
 		ListenAndServe() error
@@ -40,16 +43,18 @@ func newExtensionServer(
 	config *ExtensionConfig,
 	logger *logr.Logger,
 	k8sClient client.Client,
-	sarClient v1.SubjectAccessReviewInterface) *ExtensionServer {
+	sarClient v1.SubjectAccessReviewInterface,
+	jwtManager jwt.Signer) *ExtensionServer {
 	mux := http.NewServeMux()
 
 	server := &ExtensionServer{
-		config:    config,
-		logger:    logger,
-		k8sClient: k8sClient,
-		sarClient: sarClient,
-		routes:    make(map[string]func(http.ResponseWriter, *http.Request)),
-		mux:       mux,
+		config:     config,
+		logger:     logger,
+		k8sClient:  k8sClient,
+		sarClient:  sarClient,
+		jwtManager: jwtManager,
+		routes:     make(map[string]func(http.ResponseWriter, *http.Request)),
+		mux:        mux,
 		httpServer: &http.Server{
 			Addr:         fmt.Sprintf(":%d", config.ServerPort),
 			Handler:      mux,
@@ -238,8 +243,23 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	}
 	sarClient := clientSet.AuthorizationV1().SubjectAccessReviews()
 
+	// Create KMS JWT manager
+	ctx := context.Background()
+	kmsClient, err := aws.NewKMSClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create KMS client: %w", err)
+	}
+
+	jwtManager := aws.NewKMSJWTManager(aws.KMSJWTConfig{
+		KMSClient:  kmsClient,
+		KeyId:      config.KMSKeyID,
+		Issuer:     "jupyter-k8s",
+		Audience:   "workspace-ui",
+		Expiration: time.Hour * 24, // 24 hour token expiration
+	})
+
 	// Create server with config
-	server := newExtensionServer(config, &logger, k8sClient, sarClient)
+	server := newExtensionServer(config, &logger, k8sClient, sarClient, jwtManager)
 	server.registerAllRoutes()
 
 	// Add the server as a runnable to the manager
