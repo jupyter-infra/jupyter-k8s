@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -21,17 +22,12 @@ var (
 	setupLog = log.Log.WithName("extension-api-server")
 )
 
-// JWTManager interface for JWT token operations
-type JWTManager interface {
-	GenerateToken(user string, groups []string, path string, domain string, tokenType string) (string, error)
-}
-
 // ExtensionServer represents the extension API HTTP server
 type ExtensionServer struct {
 	config     *ExtensionConfig
 	k8sClient  client.Client
 	sarClient  v1.SubjectAccessReviewInterface
-	jwtManager JWTManager
+	jwtManager jwt.Signer
 	logger     *logr.Logger
 	httpServer interface {
 		ListenAndServe() error
@@ -48,7 +44,7 @@ func newExtensionServer(
 	logger *logr.Logger,
 	k8sClient client.Client,
 	sarClient v1.SubjectAccessReviewInterface,
-	jwtManager JWTManager) *ExtensionServer {
+	jwtManager jwt.Signer) *ExtensionServer {
 	mux := http.NewServeMux()
 
 	server := &ExtensionServer{

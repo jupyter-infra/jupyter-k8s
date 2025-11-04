@@ -509,7 +509,8 @@ var _ = Describe("Server", func() {
 		})
 
 		It("Should return 404 for paths with insufficient parts", func() {
-			server := newExtensionServer(config, &logger, k8sClient, sarClient)
+			mockJWT := &mockJWTManager{token: "test-token"}
+			server := newExtensionServer(config, &logger, k8sClient, sarClient, mockJWT)
 
 			resourceHandlers := map[string]func(http.ResponseWriter, *http.Request){
 				"test": func(w http.ResponseWriter, _ *http.Request) {

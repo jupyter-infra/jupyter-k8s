@@ -12,6 +12,7 @@ import (
 	connectionv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -61,8 +62,12 @@ type mockJWTManager struct {
 	token string
 }
 
-func (m *mockJWTManager) GenerateToken(user string, groups []string, path string, domain string, tokenType string) (string, error) {
+func (m *mockJWTManager) GenerateToken(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string) (string, error) {
 	return m.token, nil
+}
+
+func (m *mockJWTManager) ValidateToken(tokenString string) (*jwt.Claims, error) {
+	return nil, nil
 }
 
 func TestValidateWorkspaceConnectionRequest(t *testing.T) {
@@ -506,9 +511,10 @@ func TestHandleConnectionCreateWithWorkspace(t *testing.T) {
 	logger := ctrl.Log.WithName("test")
 
 	server := &ExtensionServer{
-		config:    &ExtensionConfig{ClusterId: "test"},
-		k8sClient: client,
-		logger:    &logger,
+		config:     &ExtensionConfig{ClusterId: "test"},
+		k8sClient:  client,
+		logger:     &logger,
+		jwtManager: &mockJWTManager{token: "test-token"},
 	}
 
 	req := connectionv1alpha1.WorkspaceConnectionRequest{

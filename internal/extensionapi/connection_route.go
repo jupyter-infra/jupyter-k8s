@@ -35,7 +35,7 @@ func (s *ExtensionServer) generateWebUIBearerTokenURL(r *http.Request, workspace
 	}
 
 	// Generate JWT token for the user and workspace
-	token, err := s.jwtManager.GenerateToken(user, []string{}, workspaceName, namespace, "webui")
+	token, err := s.jwtManager.GenerateToken(user, []string{}, user, map[string][]string{}, workspaceName, namespace, "webui")
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate JWT token: %w", err)
 	}
