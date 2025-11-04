@@ -630,6 +630,11 @@ func (in *WorkspaceTemplateSpec) DeepCopyInto(out *WorkspaceTemplateSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.AllowCustomImages != nil {
+		in, out := &in.AllowCustomImages, &out.AllowCustomImages
+		*out = new(bool)
+		**out = **in
+	}
 	if in.DefaultResources != nil {
 		in, out := &in.DefaultResources, &out.DefaultResources
 		*out = new(v1.ResourceRequirements)
