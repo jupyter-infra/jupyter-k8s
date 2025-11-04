@@ -48,8 +48,8 @@ func (tv *TemplateValidator) fetchTemplate(ctx context.Context, templateName str
 	return template, nil
 }
 
-// ValidateCreateWorkspace validates workspace against template constraints
-func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
+// ValidateWorkspace validates workspace against template constraints
+func (tv *TemplateValidator) ValidateWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
 	if workspace.Spec.TemplateRef == nil {
 		return nil
 	}
@@ -75,7 +75,7 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		}
 	}
 
-	// Only validate storage if it changed
+	// Validate storage
 	if workspace.Spec.Storage != nil && !workspace.Spec.Storage.Size.IsZero() {
 		if violation := validateStorageSize(workspace.Spec.Storage.Size, template); violation != nil {
 			violations = append(violations, *violation)
@@ -84,48 +84,6 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 
 	if len(violations) > 0 {
 		return fmt.Errorf("workspace violates template '%s' constraints: %s", *workspace.Spec.TemplateRef, formatViolations(violations))
-	}
-
-	return nil
-}
-
-// ValidateUpdateWorkspace validates only changed fields in workspace against template constraints
-func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWorkspace, newWorkspace *workspacev1alpha1.Workspace) error {
-	if newWorkspace.Spec.TemplateRef == nil {
-		return nil
-	}
-
-	template, err := tv.fetchTemplate(ctx, *newWorkspace.Spec.TemplateRef)
-	if err != nil {
-		return err
-	}
-
-	var violations []controller.TemplateViolation
-
-	// Only validate image if it changed
-	if oldWorkspace.Spec.Image != newWorkspace.Spec.Image && newWorkspace.Spec.Image != "" {
-		if violation := validateImageAllowed(newWorkspace.Spec.Image, template); violation != nil {
-			violations = append(violations, *violation)
-		}
-	}
-
-	// Only validate resources if they changed
-	if !resourcesEqual(oldWorkspace.Spec.Resources, newWorkspace.Spec.Resources) && newWorkspace.Spec.Resources != nil {
-		if resourceViolations := validateResourceBounds(*newWorkspace.Spec.Resources, template); len(resourceViolations) > 0 {
-			violations = append(violations, resourceViolations...)
-		}
-	}
-
-	// Only validate storage if it changed
-	if !storageEqual(oldWorkspace.Spec.Storage, newWorkspace.Spec.Storage) &&
-		newWorkspace.Spec.Storage != nil && !newWorkspace.Spec.Storage.Size.IsZero() {
-		if violation := validateStorageSize(newWorkspace.Spec.Storage.Size, template); violation != nil {
-			violations = append(violations, *violation)
-		}
-	}
-
-	if len(violations) > 0 {
-		return fmt.Errorf("workspace violates template '%s' constraints: %s", *newWorkspace.Spec.TemplateRef, formatViolations(violations))
 	}
 
 	return nil
