@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -48,6 +49,39 @@ type AccessEnvTemplate struct {
 	ValueTemplate string `json:"valueTemplate"`
 }
 
+// DeploymentSpecModifications defines modifications to apply to deployment spec
+type DeploymentSpecModifications struct {
+	// PodSpec modifications to apply to the pod template
+	// +optional
+	PodSpec *PodSpecModifications `json:"podSpec,omitempty"`
+
+	// PrimaryContainer modifications to apply to the primary container
+	// +optional
+	PrimaryContainer *PrimaryContainerModifications `json:"primaryContainer,omitempty"`
+}
+
+// PodSpecModifications defines pod-level modifications
+type PodSpecModifications struct {
+	// AdditionalContainers to add to the pod (sidecars)
+	// +optional
+	AdditionalContainers []corev1.Container `json:"additionalContainers,omitempty"`
+
+	// Volumes to add to the pod
+	// +optional
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
+
+	// InitContainers to add to the pod
+	// +optional
+	InitContainers []corev1.Container `json:"initContainers,omitempty"`
+}
+
+// PrimaryContainerModifications defines modifications for the primary container
+type PrimaryContainerModifications struct {
+	// VolumeMounts to add to the primary container
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+}
+
 // WorkspaceAccessStrategySpec defines the desired state of WorkspaceAccessStrategy
 type WorkspaceAccessStrategySpec struct {
 	// DisplayName is a human-readable name for this access strategy
@@ -71,6 +105,10 @@ type WorkspaceAccessStrategySpec struct {
 	// ControllerConfig contains settings used by the controller for strategy-specific operations
 	// +optional
 	ControllerConfig map[string]string `json:"controllerConfig,omitempty"`
+
+	// DeploymentSpecModifications defines modifications to apply to workspace deployments
+	// +optional
+	DeploymentSpecModifications *DeploymentSpecModifications `json:"deploymentSpecModifications,omitempty"`
 }
 
 // WorkspaceAccessStrategyStatus defines the observed state of WorkspaceAccessStrategy

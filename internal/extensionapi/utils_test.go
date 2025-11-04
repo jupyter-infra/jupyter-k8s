@@ -129,4 +129,38 @@ var _ = Describe("Utils", func() {
 			}),
 		)
 	})
+
+	Context("GetUserFromHeaders", func() {
+		It("Should return user from X-User header", func() {
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.Header.Set("X-User", "test-user")
+
+			user := GetUserFromHeaders(req)
+			Expect(user).To(Equal("test-user"))
+		})
+
+		It("Should return user from X-Remote-User header when X-User is not present", func() {
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.Header.Set("X-Remote-User", "remote-user")
+
+			user := GetUserFromHeaders(req)
+			Expect(user).To(Equal("remote-user"))
+		})
+
+		It("Should prioritize X-User over X-Remote-User", func() {
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.Header.Set("X-User", "primary-user")
+			req.Header.Set("X-Remote-User", "secondary-user")
+
+			user := GetUserFromHeaders(req)
+			Expect(user).To(Equal("primary-user"))
+		})
+
+		It("Should return empty string when no user headers are present", func() {
+			req := httptest.NewRequest("GET", "/test", nil)
+
+			user := GetUserFromHeaders(req)
+			Expect(user).To(Equal(""))
+		})
+	})
 })

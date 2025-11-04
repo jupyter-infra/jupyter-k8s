@@ -22,8 +22,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create JWT manager
-	jwtManager := authmiddleware.NewJWTManager(cfg)
+	// Create JWT handler
+	jwtHandler, err := authmiddleware.NewJWTHandler(cfg)
+	if err != nil {
+		logger.Error("Failed to create JWT handler", "error", err)
+		os.Exit(1)
+	}
 
 	// Create cookie manager
 	cookieManager, err := authmiddleware.NewCookieManager(cfg)
@@ -33,7 +37,7 @@ func main() {
 	}
 
 	// Create and start server
-	server := authmiddleware.NewServer(cfg, jwtManager, cookieManager, logger)
+	server := authmiddleware.NewServer(cfg, jwtHandler, cookieManager, logger)
 	if err := server.Start(); err != nil {
 		logger.Error("Server failed", "error", err)
 		os.Exit(1)

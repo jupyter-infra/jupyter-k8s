@@ -70,8 +70,10 @@ spec:
             value: "{{ .Values.authmiddleware.writeTimeout }}"
           - name: SHUTDOWN_TIMEOUT
             value: "{{ .Values.authmiddleware.shutdownTimeout }}"
-          - name: JWT_VALIDATION_TYPE
-            value: "{{ .Values.authmiddleware.jwtValidationType }}"
+          - name: JWT_SIGNING_TYPE
+            value: "{{ .Values.authmiddleware.jwtSigningType }}"
+          - name: KMS_KEY_ID
+            value: "{{ .Values.authmiddleware.kmsKeyId }}"
           - name: JWT_ISSUER
             value: "{{ .Values.authmiddleware.jwtIssuer }}"
           - name: JWT_AUDIENCE
@@ -104,6 +106,8 @@ spec:
             value: "{{ .Values.authmiddleware.csrfCookieMaxAge }}"
           - name: CSRF_COOKIE_SECURE
             value: "{{ .Values.authmiddleware.csrfCookieSecure }}"
+          - name: CSRF_AUTH_KEY
+            value: "{{ .Values.authmiddleware.csrfAuthKey }}"
           - name: ENABLE_BEARER_URL_AUTH
             value: "{{ .Values.authmiddleware.enableBearerAuth }}"
         volumeMounts:

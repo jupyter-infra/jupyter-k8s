@@ -176,6 +176,10 @@ type WorkspaceSpec struct {
 	// AppType specifies the application type for this workspace
 	// +optional
 	AppType string `json:"appType,omitempty"`
+
+	// ServiceAccountName specifies the name of the ServiceAccount to use for the workspace pod
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 }
 
 // AccessResourceStatus defines the status of a resource created from a template

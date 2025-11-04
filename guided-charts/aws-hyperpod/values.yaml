@@ -40,7 +40,7 @@ traefik:
 storageClass:
   ebs:
     create: true
-    name: ebs-sc
+    name: sagemaker-spaces-default-storage-class
     isDefault: false
     provisioner: ebs.csi.aws.com
     reclaimPolicy: Delete
@@ -70,8 +70,10 @@ authmiddleware:
       cpu: 200m
       memory: 128Mi
   # JWT configuration
-  # JWT validation type: "hmac" or "kms"
-  jwtValidationType: "kms"
+  # JWT signing type: "standard" or "kms"
+  jwtSigningType: "kms"
+  # KMS Key ID/ARN for JWT signing (required when jwtValidationType is "kms")
+  kmsKeyId: ""
   jwtIssuer: "jupyter-k8s-auth"
   jwtAudience: "workspace-users"
   jwtExpiration: "1h"

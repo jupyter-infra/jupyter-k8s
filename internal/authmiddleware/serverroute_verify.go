@@ -3,6 +3,8 @@ package authmiddleware
 import (
 	"net/http"
 	"strings"
+
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 )
 
 // handleVerify handles token verification requests
@@ -41,8 +43,8 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate token type - verify should only accept session tokens
-	if claims.TokenType != TokenTypeSession {
-		s.logger.Info("Invalid token type for verify", "expected", TokenTypeSession, "actual", claims.TokenType)
+	if claims.TokenType != jwt.TokenTypeSession {
+		s.logger.Info("Invalid token type for verify", "expected", jwt.TokenTypeSession, "actual", claims.TokenType)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
