@@ -8,12 +8,47 @@ spec:
   
   # Controller-specific configuration (not injected into workspace containers)
   controllerConfig:
-    SSM_MANAGED_NODE_ROLE: "{{ .Values.remoteAccess.ssmManagedNodeRole }}"
-    SSM_SIDECAR_IMAGE: "{{ .Values.remoteAccess.ssmSidecarImage }}"
-    AWS_SSM_DOCUMENT_NAME: "{{ .Values.remoteAccess.ssmDocumentName }}"
+    SSM_MANAGED_NODE_ROLE: "sagemaker-space-ssm-managed-node-role"
+    AWS_SSM_DOCUMENT_NAME: "AWS-StartSSHSession"
   
   # Environment variables to merge into workspace containers (if any needed)
   mergeEnv: []
+
+  # Deployment modifications for SSM remote access
+  deploymentSpecModifications:
+    podSpec:
+      additionalContainers:
+        - name: "ssm-agent-sidecar"
+          image: "{{ .Values.remoteAccess.ssmSidecarImage }}"
+          command: ["/bin/sh"]
+          args: 
+            - "-c"
+            - "cp /usr/local/bin/remote-access-server /ssm-remote-access/ || echo \"Failed to copy: $?\"; sleep infinity"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          volumeMounts:
+            - name: "ssm-remote-access"
+              mountPath: "/ssm-remote-access"
+          readinessProbe:
+            exec:
+              command: ["test", "-f", "/tmp/ssm-registered"]
+            initialDelaySeconds: 2
+            periodSeconds: 2
+      
+      volumes:
+        - name: "ssm-remote-access"
+          emptyDir:
+            sizeLimit: "1Gi"
+    
+    primaryContainer:
+      volumeMounts:
+        - name: "ssm-remote-access"
+          mountPath: "/ssm-remote-access"
 
   # Optional: Define access resources if needed in the future
   accessResourceTemplates: []
