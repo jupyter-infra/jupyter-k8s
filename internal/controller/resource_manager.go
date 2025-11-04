@@ -416,7 +416,7 @@ func (rm *ResourceManager) updatePVC(ctx context.Context, pvc *corev1.Persistent
 }
 
 // CleanupAllResources performs comprehensive cleanup of all workspace resources
-func (rm *ResourceManager) CleanupAllResources(ctx context.Context, workspace *workspacev1alpha1.Workspace) bool {
+func (rm *ResourceManager) CleanupAllResources(ctx context.Context, workspace *workspacev1alpha1.Workspace) (bool, error) {
 	logger := logf.FromContext(ctx)
 
 	// Delete access strategy resources first
@@ -429,29 +429,29 @@ func (rm *ResourceManager) CleanupAllResources(ctx context.Context, workspace *w
 	// Delete deployment
 	_, err := rm.EnsureDeploymentDeleted(ctx, workspace)
 	if err != nil {
-		return false
+		return false, err
 	}
 
 	// Delete service
 	_, err = rm.EnsureServiceDeleted(ctx, workspace)
 	if err != nil {
-		return false
+		return false, err
 	}
 
 	// Delete PVC
 	_, err = rm.EnsurePVCDeleted(ctx, workspace)
 	if err != nil {
-		return false
+		return false, err
 	}
 
 	// Check if all resources are fully deleted using helper function
 	if rm.AreAllResourcesDeleted(ctx, workspace) {
 		logger.Info("All resources successfully deleted")
-		return true
+		return true, nil
 	}
 
 	// Resources still being deleted - requeue to check again
-	return false
+	return false, nil
 }
 
 // AreAllResourcesDeleted checks if all workspace resources are fully removed (not found)

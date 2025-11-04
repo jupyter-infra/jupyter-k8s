@@ -475,7 +475,12 @@ func (sm *StateMachine) ReconcileDeletion(ctx context.Context, workspace *worksp
 	}
 
 	// Clean up all workspace resources via resource manager
-	if !sm.resourceManager.CleanupAllResources(ctx, workspace) {
+	allDeleted, err := sm.resourceManager.CleanupAllResources(ctx, workspace)
+	if err != nil {
+		logger.Error(err, "Failed to cleanup workspace resources")
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+	}
+	if !allDeleted {
 		logger.Info("Resources still being deleted, will retry")
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
 	}
