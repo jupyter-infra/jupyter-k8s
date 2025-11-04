@@ -32,9 +32,9 @@ type TemplateGetter struct {
 }
 
 // NewTemplateGetter creates a new TemplateGetter instance
-func NewTemplateGetter(client client.Client) *TemplateGetter {
+func NewTemplateGetter(c client.Client) *TemplateGetter {
 	return &TemplateGetter{
-		client: client,
+		client: c,
 	}
 }
 
@@ -74,7 +74,7 @@ func (tg *TemplateGetter) ApplyTemplateName(ctx context.Context, workspace *work
 
 // getTemplateNames extracts template names from a list of templates
 func getTemplateNames(templates []workspacev1alpha1.WorkspaceTemplate) []string {
-	var names []string
+	names := make([]string, 0, len(templates))
 	for _, template := range templates {
 		names = append(names, template.Name)
 	}
