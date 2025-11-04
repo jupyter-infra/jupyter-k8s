@@ -529,6 +529,68 @@ spec:
 			_, _ = utils.Run(cmd)
 		})
 
+		It("should inherit default access strategy from template", func() {
+			By("creating a template with default access strategy")
+			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: access-strategy-template
+spec:
+  displayName: "Access Strategy Template"
+  defaultImage: "jupyter/base-notebook:latest"
+  defaultAccessStrategy:
+    name: "test-access-strategy"
+    namespace: "default"
+  resourceBounds:
+    cpu:
+      min: "100m"
+      max: "2"
+    memory:
+      min: "128Mi"
+      max: "4Gi"
+`
+			cmd := exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating workspace without access strategy")
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: access-strategy-inheritance-test
+spec:
+  displayName: "Access Strategy Inheritance Test"
+  templateRef: "access-strategy-template"
+`
+			cmd = exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying workspace inherited access strategy from template")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "access-strategy-inheritance-test",
+					"-o", "jsonpath={.spec.accessStrategy.name}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("test-access-strategy"))
+			}).WithTimeout(10 * time.Second).Should(Succeed())
+
+			By("verifying workspace inherited access strategy namespace")
+			cmd = exec.Command("kubectl", "get", "workspace", "access-strategy-inheritance-test",
+				"-o", "jsonpath={.spec.accessStrategy.namespace}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("default"))
+
+			By("cleaning up test resources")
+			cmd = exec.Command("kubectl", "delete", "workspace", "access-strategy-inheritance-test", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "access-strategy-template", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+
 		It("should reject workspace creation with multiple violations", func() {
 			By("attempting to create workspace with multiple template violations")
 			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
