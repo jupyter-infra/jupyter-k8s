@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacequery "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
 var _ = Describe("Template Mutability", func() {
@@ -124,15 +125,13 @@ var _ = Describe("Template Mutability", func() {
 
 	Context("Template Deletion Protection", func() {
 		var (
-			ctx              context.Context
-			templateResolver *TemplateResolver
-			template         *workspacev1alpha1.WorkspaceTemplate
-			workspace        *workspacev1alpha1.Workspace
+			ctx       context.Context
+			template  *workspacev1alpha1.WorkspaceTemplate
+			workspace *workspacev1alpha1.Workspace
 		)
 
 		BeforeEach(func() {
 			ctx = context.Background()
-			templateResolver = NewTemplateResolver(k8sClient)
 
 			template = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
@@ -176,14 +175,14 @@ var _ = Describe("Template Mutability", func() {
 		})
 
 		It("should list workspaces using a template", func() {
-			workspaces, err := templateResolver.ListWorkspacesUsingTemplate(ctx, template.Name)
+			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(HaveLen(1))
 			Expect(workspaces[0].Name).To(Equal(workspace.Name))
 		})
 
 		It("should return empty list when no workspaces use template", func() {
-			workspaces, err := templateResolver.ListWorkspacesUsingTemplate(ctx, "nonexistent-template")
+			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, "nonexistent-template", "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(BeEmpty())
 		})
@@ -194,7 +193,7 @@ var _ = Describe("Template Mutability", func() {
 			Expect(k8sClient.Update(ctx, template)).To(Succeed())
 
 			// Verify we can detect workspaces using the template
-			workspaces, err := templateResolver.ListWorkspacesUsingTemplate(ctx, template.Name)
+			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(HaveLen(1))
 
@@ -219,7 +218,7 @@ var _ = Describe("Template Mutability", func() {
 			}()
 
 			// Verify no workspaces use this template
-			workspaces, err := templateResolver.ListWorkspacesUsingTemplate(ctx, unusedTemplate.Name)
+			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, unusedTemplate.Name, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(BeEmpty())
 

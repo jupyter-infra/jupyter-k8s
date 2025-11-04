@@ -86,6 +86,19 @@ func (r *WorkspaceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // - Finalizers are removed when all workspaces stop using the template
 // - This minimizes overhead and complexity compared to adding finalizers to all templates
 //
+// ARCHITECTURAL NOTE: Dual Finalizer Protection Pattern
+// This controller works together with the workspace admission webhook for robust finalizer management:
+// 1. Webhook (Eager): Adds finalizers immediately during workspace CREATE/UPDATE admission
+//   - Provides fail-fast protection at the API boundary
+//   - Ensures finalizer exists before workspace is persisted
+//
+// 2. Controller (Lazy): Manages finalizers during reconciliation (this function)
+//   - Acts as safety net if webhook fails or is temporarily unavailable
+//   - Handles finalizer removal when all workspaces are deleted (webhooks can't do this)
+//   - Watches workspace changes and triggers template reconciliation
+//
+// This dual approach ensures no race conditions and graceful handling of edge cases.
+//
 //nolint:unparam // ctrl.Result signature maintained for consistency with controller-runtime patterns
 func (r *WorkspaceTemplateReconciler) manageFinalizer(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)

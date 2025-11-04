@@ -395,6 +395,15 @@ func (sm *StateMachine) isAtLeastOneWorkspacePodReady(ctx context.Context, works
 
 // checkComplianceIfNeeded checks if template compliance validation is needed and performs it
 // This is triggered when template constraints change and workspaces need re-validation
+//
+// ARCHITECTURAL NOTE: Compliance checking belongs in the controller (not webhook) because:
+//  1. Webhooks have strict timeouts (<10s) - validating all workspaces during template update would timeout
+//  2. Only controllers can update resource status - webhooks don't have status subresource access
+//  3. This implements an asynchronous pattern: template webhook marks workspaces with a label,
+//     then this controller validates marked workspaces during normal reconciliation
+//  4. This follows standard Kubernetes patterns for label-triggered reconciliation
+//
+// The flow is: Template updated → Webhook adds compliance label → Controller validates → Status updated
 func (sm *StateMachine) checkComplianceIfNeeded(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
