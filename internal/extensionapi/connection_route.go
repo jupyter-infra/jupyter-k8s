@@ -26,6 +26,26 @@ func (n *noOpPodExec) ExecInPod(ctx context.Context, pod *corev1.Pod, containerN
 	return "", fmt.Errorf("pod exec not supported in connection URL generation")
 }
 
+// generateWebUIBearerTokenURL generates a Web UI connection URL with JWT token
+// Returns (connectionType, connectionURL, error)
+func (s *ExtensionServer) generateWebUIBearerTokenURL(r *http.Request, workspaceName, namespace string) (string, string, error) {
+	user := GetUserFromHeaders(r)
+	if user == "" {
+		return "", "", fmt.Errorf("user information not found in request headers")
+	}
+
+	// Generate JWT token for the user and workspace
+	token, err := s.jwtManager.GenerateToken(user, []string{}, user, map[string][]string{}, workspaceName, namespace, "webui")
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate JWT token: %w", err)
+	}
+
+	// Construct the Web UI URL using the format: $DOMAIN/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/bearer-auth?token=<token>
+	webUIURL := fmt.Sprintf(WebUIURLFormat, s.config.Domain, namespace, workspaceName, token)
+
+	return connectionv1alpha1.ConnectionTypeWebUI, webUIURL, nil
+}
+
 // HandleConnectionCreate handles POST requests to create a connection
 func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.Request) {
 	logger := GetLoggerFromContext(r.Context())
@@ -104,7 +124,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	case connectionv1alpha1.ConnectionTypeVSCodeRemote:
 		responseType, responseURL, err = s.generateVSCodeURL(r, req.Spec.WorkspaceName, namespace)
 	case connectionv1alpha1.ConnectionTypeWebUI:
-		responseType, responseURL, err = s.generateWebUIURL(r, req.Spec.WorkspaceName, namespace)
+		responseType, responseURL, err = s.generateWebUIBearerTokenURL(r, req.Spec.WorkspaceName, namespace)
 	default:
 		logger.Error(nil, "Invalid workspace connection type", "connectionType", req.Spec.WorkspaceConnectionType)
 		WriteKubernetesError(w, http.StatusBadRequest, "Invalid workspace connection type")
@@ -153,7 +173,7 @@ func validateWorkspaceConnectionRequest(req *connectionv1alpha1.WorkspaceConnect
 	case connectionv1alpha1.ConnectionTypeVSCodeRemote, connectionv1alpha1.ConnectionTypeWebUI:
 		// Valid types
 	default:
-		return fmt.Errorf("invalid workspaceConnectionType: %s", req.Spec.WorkspaceConnectionType)
+		return fmt.Errorf("invalid workspaceConnectionType: '%s'. Valid types are: 'vscode-remote', 'web-ui'", req.Spec.WorkspaceConnectionType)
 	}
 
 	return nil
