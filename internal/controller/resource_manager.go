@@ -416,7 +416,7 @@ func (rm *ResourceManager) updatePVC(ctx context.Context, pvc *corev1.Persistent
 }
 
 // CleanupAllResources performs comprehensive cleanup of all workspace resources
-func (rm *ResourceManager) CleanupAllResources(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
+func (rm *ResourceManager) CleanupAllResources(ctx context.Context, workspace *workspacev1alpha1.Workspace) bool {
 	logger := logf.FromContext(ctx)
 
 	// Delete access strategy resources first
@@ -426,32 +426,32 @@ func (rm *ResourceManager) CleanupAllResources(ctx context.Context, workspace *w
 		// Continue with other deletions, don't block on access strategy
 	}
 
-	// Delete deployment (async operation)
+	// Delete deployment
 	_, err := rm.EnsureDeploymentDeleted(ctx, workspace)
 	if err != nil {
-		return fmt.Errorf("failed to delete deployment: %w", err)
+		return false
 	}
 
-	// Delete service (async operation)
+	// Delete service
 	_, err = rm.EnsureServiceDeleted(ctx, workspace)
 	if err != nil {
-		return fmt.Errorf("failed to delete service: %w", err)
+		return false
 	}
 
-	// Delete PVC (async operation - unlike stop, delete removes storage permanently)
+	// Delete PVC
 	_, err = rm.EnsurePVCDeleted(ctx, workspace)
 	if err != nil {
-		return fmt.Errorf("failed to delete PVC: %w", err)
+		return false
 	}
 
 	// Check if all resources are fully deleted using helper function
 	if rm.AreAllResourcesDeleted(ctx, workspace) {
 		logger.Info("All resources successfully deleted")
-		return nil
+		return true
 	}
 
 	// Resources still being deleted - requeue to check again
-	return fmt.Errorf("resources still being deleted, will retry")
+	return false
 }
 
 // AreAllResourcesDeleted checks if all workspace resources are fully removed (not found)
