@@ -46,7 +46,7 @@ const (
 	// File paths
 	SSMRegistrationMarkerFile = "/tmp/ssm-registered"
 	SSMRegistrationScript     = "/usr/local/bin/register-ssm.sh"
-	RemoteAccessServerPath    = "/ssm-remote-access/remote-access-server"
+	RemoteAccessServerPath    = "/opt/amazon/sagemaker/workspace/remote-access-server"
 )
 
 // SSMRemoteAccessStrategy handles SSM remote access strategy operations

@@ -35,7 +35,7 @@ spec:
   
   # Container configuration
   defaultContainerConfig:
-    command: ["entrypoint-jupyter-server"]
+    command: ["/opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-jupyterlab"]
   
   # Access configuration
   defaultOwnershipType: "Public"

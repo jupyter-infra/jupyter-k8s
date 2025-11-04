@@ -35,7 +35,7 @@ spec:
   
   # Container configuration
   defaultContainerConfig:
-    command: ["entrypoint-code-editor"]
+    command: ["/opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-code-editor"]
   
   # Access configuration
   defaultOwnershipType: "Public"
