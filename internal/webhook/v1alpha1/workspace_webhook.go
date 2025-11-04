@@ -270,9 +270,11 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 		}
 	}
 
-	// Validate template constraints for new workspace (all fields)
-	if err := v.templateValidator.ValidateWorkspace(ctx, newWorkspace); err != nil {
-		return nil, err
+	// Validate template constraints for workspace
+	if !isOnlyStoppingWorkspace(oldWorkspace, newWorkspace) {
+		if err := v.templateValidator.ValidateWorkspace(ctx, newWorkspace); err != nil {
+			return nil, err
+		}
 	}
 
 	return nil, nil
