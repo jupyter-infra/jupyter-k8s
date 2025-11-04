@@ -1,8 +1,0 @@
-apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: test-sagemaker-jupyter
-  namespace: jupyter-k8s-hyperpod
-spec:
-  displayName: "Test SageMaker Jupyter Lab"
-  templateRef: sagemaker-jupyter-template
