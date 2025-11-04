@@ -96,23 +96,17 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 		}
 	}
 
-	// Check if user is cluster admin
-	workspacelog.Info("Checking admin status", "groups", req.UserInfo.Groups)
-	if isAdminUser(req.UserInfo.Groups) {
-		workspacelog.Info("User is admin, allowing access")
-		return nil
-	}
-
-	return fmt.Errorf("access denied: only workspace owner or cluster admins can modify OwnerOnly workspaces")
+	return fmt.Errorf("access denied: only workspace owner can modify OwnerOnly workspaces")
 }
 
 // SetupWorkspaceWebhookWithManager registers the webhook for Workspace in the manager.
 func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 	templateValidator := NewTemplateValidator(mgr.GetClient())
 	templateDefaulter := NewTemplateDefaulter(mgr.GetClient())
+	serviceAccountValidator := NewServiceAccountValidator(mgr.GetClient())
 
 	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.Workspace{}).
-		WithValidator(&WorkspaceCustomValidator{templateValidator: templateValidator}).
+		WithValidator(&WorkspaceCustomValidator{templateValidator: templateValidator, serviceAccountValidator: serviceAccountValidator}).
 		WithDefaulter(&WorkspaceCustomDefaulter{templateDefaulter: templateDefaulter}).
 		Complete()
 }
@@ -179,7 +173,8 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceCustomValidator struct {
-	templateValidator *TemplateValidator
+	templateValidator       *TemplateValidator
+	serviceAccountValidator *ServiceAccountValidator
 }
 
 var _ webhook.CustomValidator = &WorkspaceCustomValidator{}
@@ -194,6 +189,17 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, obj runti
 
 	// Validate template constraints
 	if err := v.templateValidator.ValidateCreateWorkspace(ctx, workspace); err != nil {
+		return nil, err
+	}
+
+	// Admin users bypass validation
+	req, err := admission.RequestFromContext(ctx)
+	if err == nil && isAdminUser(req.UserInfo.Groups) {
+		return nil, nil
+	}
+
+	// Validate service account access
+	if err := v.serviceAccountValidator.ValidateServiceAccountAccess(ctx, workspace); err != nil {
 		return nil, err
 	}
 
@@ -220,7 +226,8 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 
 	// Check if user is admin
 	isAdmin := false
-	if req, err := admission.RequestFromContext(ctx); err == nil {
+	req, reqErr := admission.RequestFromContext(ctx)
+	if reqErr == nil {
 		isAdmin = isAdminUser(req.UserInfo.Groups)
 	}
 
@@ -231,19 +238,25 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 		return nil, fmt.Errorf("templateRef is immutable and cannot be changed")
 	}
 
-	// Validate that ownership annotations are immutable (except for admins)
+	// Admin users bypass user validation
+	if isAdmin {
+		return nil, nil
+	}
+
+	// Validate service account access for new workspace
+	if err := v.serviceAccountValidator.ValidateServiceAccountAccess(ctx, newWorkspace); err != nil {
+		return nil, err
+	}
+
+	// Validate that ownership annotations are immutable
 	if oldWorkspace.Annotations != nil && oldWorkspace.Annotations[controller.AnnotationCreatedBy] != "" {
 		oldCreatedBy := oldWorkspace.Annotations[controller.AnnotationCreatedBy]
 		// Check if annotations are being cleared
 		if newWorkspace.Annotations == nil {
-			if !isAdmin {
-				return nil, fmt.Errorf("created-by annotation cannot be removed")
-			}
+			return nil, fmt.Errorf("created-by annotation cannot be removed")
 		}
 		if newCreatedBy := newWorkspace.Annotations[controller.AnnotationCreatedBy]; newCreatedBy != oldCreatedBy {
-			if !isAdmin {
-				return nil, fmt.Errorf("created-by annotation is immutable")
-			}
+			return nil, fmt.Errorf("created-by annotation is immutable")
 		}
 	}
 
@@ -278,6 +291,12 @@ func (v *WorkspaceCustomValidator) ValidateDelete(ctx context.Context, obj runti
 		return nil, fmt.Errorf("expected a Workspace object but got %T", obj)
 	}
 	workspacelog.Info("Validation for Workspace upon deletion", "name", workspace.GetName(), "namespace", workspace.GetNamespace())
+
+	// Admin users bypass validation
+	req, err := admission.RequestFromContext(ctx)
+	if err == nil && isAdminUser(req.UserInfo.Groups) {
+		return nil, nil
+	}
 
 	// For OwnerOnly workspaces, check if user has permission
 	effectiveOwnershipType := getEffectiveOwnershipType(workspace.Spec.OwnershipType)

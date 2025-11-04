@@ -52,6 +52,12 @@ spec:
           spec:
             description: WorkspaceTemplateSpec defines the desired state of WorkspaceTemplate
             properties:
+              allowCustomImages:
+                default: false
+                description: |-
+                  AllowCustomImages allows workspaces to use any container image, bypassing the AllowedImages restriction
+                  When true, workspaces can specify any image regardless of the AllowedImages list
+                type: boolean
               allowSecondaryStorages:
                 default: true
                 description: |-
@@ -71,6 +77,19 @@ spec:
                 description: AppType specifies the application type for workspaces
                   using this template
                 type: string
+              defaultAccessStrategy:
+                description: DefaultAccessStrategy specifies the default access strategy
+                  for workspaces using this template
+                properties:
+                  name:
+                    description: Name of the WorkspaceAccessStrategy
+                    type: string
+                  namespace:
+                    description: Namespace where the WorkspaceAccessStrategy is located
+                    type: string
+                required:
+                - name
+                type: object
               defaultAccessType:
                 default: Public
                 description: |-

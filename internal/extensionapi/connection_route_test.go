@@ -12,6 +12,7 @@ import (
 	connectionv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -52,6 +53,21 @@ func TestGenerateWebUIURL(t *testing.T) {
 	if url != "https://placeholder-webui-url.com" {
 		t.Errorf("expected placeholder URL, got %s", url)
 	}
+}
+
+const testUser = "test-user"
+
+// mockJWTManager for testing
+type mockJWTManager struct {
+	token string
+}
+
+func (m *mockJWTManager) GenerateToken(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string) (string, error) {
+	return m.token, nil
+}
+
+func (m *mockJWTManager) ValidateToken(tokenString string) (*jwt.Claims, error) {
+	return nil, nil
 }
 
 func TestValidateWorkspaceConnectionRequest(t *testing.T) {
@@ -110,7 +126,7 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "invalid workspaceConnectionType: invalid-type",
+			errorMsg:    "invalid workspaceConnectionType: 'invalid-type'. Valid types are: 'vscode-remote', 'web-ui'",
 		},
 	}
 
@@ -495,9 +511,10 @@ func TestHandleConnectionCreateWithWorkspace(t *testing.T) {
 	logger := ctrl.Log.WithName("test")
 
 	server := &ExtensionServer{
-		config:    &ExtensionConfig{ClusterId: "test"},
-		k8sClient: client,
-		logger:    &logger,
+		config:     &ExtensionConfig{ClusterId: "test"},
+		k8sClient:  client,
+		logger:     &logger,
+		jwtManager: &mockJWTManager{token: "test-token"},
 	}
 
 	req := connectionv1alpha1.WorkspaceConnectionRequest{
@@ -514,4 +531,38 @@ func TestHandleConnectionCreateWithWorkspace(t *testing.T) {
 
 	server.HandleConnectionCreate(w, httpReq)
 	// Should pass authorization and reach URL generation
+}
+
+func TestGenerateWebUIBearerTokenURL(t *testing.T) {
+	config := &ExtensionConfig{Domain: "https://test.com"}
+	server := &ExtensionServer{
+		config:     config,
+		jwtManager: &mockJWTManager{token: "test-token"},
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	req.Header.Set("X-Remote-User", testUser)
+
+	connType, url, err := server.generateWebUIBearerTokenURL(req, "workspace1", "default")
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if connType != "web-ui" {
+		t.Errorf("expected web-ui, got %s", connType)
+	}
+	expected := "https://test.com/workspaces/default/workspace1/bearer-auth?token=test-token"
+	if url != expected {
+		t.Errorf("expected %s, got %s", expected, url)
+	}
+}
+
+func TestGetUserFromHeaders(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("X-Remote-User", testUser)
+
+	user := GetUserFromHeaders(req)
+	if user != testUser {
+		t.Errorf("expected %s, got %s", testUser, user)
+	}
 }

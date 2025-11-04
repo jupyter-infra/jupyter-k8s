@@ -620,6 +620,68 @@ spec:
 			_, _ = utils.Run(cmd)
 		})
 
+		It("should inherit default access strategy from template", func() {
+			By("creating a template with default access strategy")
+			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: access-strategy-template
+spec:
+  displayName: "Access Strategy Template"
+  defaultImage: "jupyter/base-notebook:latest"
+  defaultAccessStrategy:
+    name: "test-access-strategy"
+    namespace: "default"
+  resourceBounds:
+    cpu:
+      min: "100m"
+      max: "2"
+    memory:
+      min: "128Mi"
+      max: "4Gi"
+`
+			cmd := exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating workspace without access strategy")
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: access-strategy-inheritance-test
+spec:
+  displayName: "Access Strategy Inheritance Test"
+  templateRef: "access-strategy-template"
+`
+			cmd = exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying workspace inherited access strategy from template")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "access-strategy-inheritance-test",
+					"-o", "jsonpath={.spec.accessStrategy.name}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("test-access-strategy"))
+			}).WithTimeout(10 * time.Second).Should(Succeed())
+
+			By("verifying workspace inherited access strategy namespace")
+			cmd = exec.Command("kubectl", "get", "workspace", "access-strategy-inheritance-test",
+				"-o", "jsonpath={.spec.accessStrategy.namespace}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("default"))
+
+			By("cleaning up test resources")
+			cmd = exec.Command("kubectl", "delete", "workspace", "access-strategy-inheritance-test", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "access-strategy-template", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+
 		It("should reject workspace creation with multiple violations", func() {
 			By("attempting to create workspace with multiple template violations")
 			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
@@ -648,6 +710,231 @@ spec:
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(BeEmpty())
+		})
+
+		It("should inherit access type and app type from template", func() {
+			By("creating template with default access type and app type")
+			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: access-app-type-template
+spec:
+  displayName: "Access and App Type Template"
+  defaultImage: "jupyter/base-notebook:latest"
+  defaultAccessType: "OwnerOnly"
+  appType: "jupyter-lab"
+  resourceBounds:
+    cpu:
+      min: "100m"
+      max: "2"
+    memory:
+      min: "128Mi"
+      max: "4Gi"
+`
+			cmd := exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating workspace without access type or app type")
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: access-app-type-test
+spec:
+  displayName: "Access App Type Test"
+  templateRef: "access-app-type-template"
+`
+			cmd = exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying workspace inherited access type")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "access-app-type-test",
+					"-o", "jsonpath={.spec.accessType}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("OwnerOnly"))
+			}).WithTimeout(10 * time.Second).Should(Succeed())
+
+			By("verifying workspace inherited app type")
+			cmd = exec.Command("kubectl", "get", "workspace", "access-app-type-test",
+				"-o", "jsonpath={.spec.appType}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("jupyter-lab"))
+
+			By("cleaning up test resources")
+			cmd = exec.Command("kubectl", "delete", "workspace", "access-app-type-test", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "access-app-type-template", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should inherit lifecycle and idle shutdown from template", func() {
+			By("creating template with default lifecycle and idle shutdown")
+			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: lifecycle-template
+spec:
+  displayName: "Lifecycle Template"
+  defaultImage: "jupyter/base-notebook:latest"
+  defaultLifecycle:
+    postStart:
+      exec:
+        command: ["/bin/sh", "-c", "echo started"]
+  defaultIdleShutdown:
+    enabled: true
+    timeoutMinutes: 30
+    detection:
+      httpGet:
+        path: "/api/status"
+        port: 8888
+  resourceBounds:
+    cpu:
+      min: "100m"
+      max: "2"
+    memory:
+      min: "128Mi"
+      max: "4Gi"
+`
+			cmd := exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating workspace without lifecycle or idle shutdown")
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: lifecycle-test
+spec:
+  displayName: "Lifecycle Test"
+  templateRef: "lifecycle-template"
+`
+			cmd = exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying workspace inherited lifecycle")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "lifecycle-test",
+					"-o", "jsonpath={.spec.lifecycle.postStart.exec.command[0]}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("/bin/sh"))
+			}).WithTimeout(10 * time.Second).Should(Succeed())
+
+			By("verifying workspace inherited idle shutdown")
+			cmd = exec.Command("kubectl", "get", "workspace", "lifecycle-test",
+				"-o", "jsonpath={.spec.idleShutdown.enabled}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("true"))
+
+			cmd = exec.Command("kubectl", "get", "workspace", "lifecycle-test",
+				"-o", "jsonpath={.spec.idleShutdown.timeoutMinutes}")
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("30"))
+
+			By("cleaning up test resources")
+			cmd = exec.Command("kubectl", "delete", "workspace", "lifecycle-test", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "lifecycle-template", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should reject custom images when allowCustomImages is false", func() {
+			By("creating template with allowCustomImages: false")
+			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: restricted-images-template
+spec:
+  displayName: "Restricted Images Template"
+  description: "Template that restricts custom images"
+  defaultImage: "jupyter/base-notebook:latest"
+  allowedImages:
+    - "jupyter/base-notebook:latest"
+    - "jupyter/scipy-notebook:latest"
+  allowCustomImages: false
+`
+			cmd := exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("attempting to create workspace with custom image")
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: custom-image-rejected-test
+spec:
+  displayName: "Custom Image Rejected Test"
+  templateRef: "restricted-images-template"
+  image: "custom/unauthorized:latest"
+`
+			cmd = exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			output, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "Expected webhook to reject custom image")
+			Expect(output).To(ContainSubstring("not allowed"))
+
+			By("cleaning up template")
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "restricted-images-template")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should allow any image when allowCustomImages is true", func() {
+			By("creating template with allowCustomImages: true")
+			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: custom-images-template
+spec:
+  displayName: "Custom Images Template"
+  description: "Template that allows custom images"
+  defaultImage: "jupyter/base-notebook:latest"
+  allowedImages:
+    - "jupyter/base-notebook:latest"
+  allowCustomImages: true
+`
+			cmd := exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating workspace with custom image")
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: custom-image-allowed-test
+spec:
+  displayName: "Custom Image Allowed Test"
+  templateRef: "custom-images-template"
+  image: "custom/authorized:latest"
+`
+			cmd = exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Expected webhook to allow custom image")
+
+			By("verifying workspace was created with custom image")
+			cmd = exec.Command("kubectl", "get", "workspace", "custom-image-allowed-test", "-o", "jsonpath={.spec.image}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("custom/authorized:latest"))
+
+			By("cleaning up workspace and template")
+			cmd = exec.Command("kubectl", "delete", "workspace", "custom-image-allowed-test")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "custom-images-template")
+			_, _ = utils.Run(cmd)
 		})
 	})
 })

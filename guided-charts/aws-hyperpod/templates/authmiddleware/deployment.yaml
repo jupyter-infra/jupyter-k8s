@@ -71,7 +71,7 @@ spec:
           - name: SHUTDOWN_TIMEOUT
             value: "{{ .Values.authmiddleware.shutdownTimeout }}"
           - name: JWT_SIGNING_TYPE
-            value: "{{ .Values.authmiddleware.jwtValidationType }}"
+            value: "{{ .Values.authmiddleware.jwtSigningType }}"
           - name: KMS_KEY_ID
             value: "{{ .Values.authmiddleware.kmsKeyId }}"
           - name: JWT_ISSUER

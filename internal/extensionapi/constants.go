@@ -8,4 +8,7 @@ const (
 	HeaderUser = "X-User"
 	// HeaderRemoteUser is the X-Remote-User header
 	HeaderRemoteUser = "X-Remote-User"
+
+	// WebUIURLFormat is the URL format for WebUI bearer token authentication
+	WebUIURLFormat = "%s/workspaces/%s/%s/bearer-auth?token=%s"
 )

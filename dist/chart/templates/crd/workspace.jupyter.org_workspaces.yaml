@@ -1399,6 +1399,10 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              serviceAccountName:
+                description: ServiceAccountName specifies the name of the ServiceAccount
+                  to use for the workspace pod
+                type: string
               storage:
                 description: Storage specifies the storage configuration
                 properties:
