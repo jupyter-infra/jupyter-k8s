@@ -66,7 +66,9 @@ var _ = Describe("Workspace Webhook", func() {
 				OwnershipType: "Public",
 			},
 		}
-		defaulter = WorkspaceCustomDefaulter{}
+		defaulter = WorkspaceCustomDefaulter{
+			templateGetter: NewTemplateGetter(k8sClient),
+		}
 		validator = WorkspaceCustomValidator{}
 		ctx = context.Background()
 	})
