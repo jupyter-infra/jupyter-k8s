@@ -25,9 +25,12 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
@@ -461,36 +464,10 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(err.Error()).To(ContainSubstring("access denied"))
 		})
 
-		It("should allow cluster admin access", func() {
-			userInfo := &authenticationv1.UserInfo{
-				Username: "admin-user",
-				Groups:   []string{"system:masters"},
-			}
-			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
-			userCtx := admission.NewContextWithRequest(ctx, req)
-			Expect(os.Setenv("CLUSTER_ADMIN_GROUP", "system:masters")).To(Succeed())
-			defer func() { _ = os.Unsetenv("CLUSTER_ADMIN_GROUP") }()
-
-			err := validateOwnershipPermission(userCtx, ownerOnlyWorkspace)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
 		It("should deny access when no request context", func() {
 			err := validateOwnershipPermission(ctx, ownerOnlyWorkspace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unable to extract user information"))
-		})
-
-		It("should allow system:masters access", func() {
-			userInfo := &authenticationv1.UserInfo{
-				Username: "admin-user",
-				Groups:   []string{"system:masters"},
-			}
-			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
-			userCtx := admission.NewContextWithRequest(ctx, req)
-
-			err := validateOwnershipPermission(userCtx, ownerOnlyWorkspace)
-			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 
@@ -797,4 +774,88 @@ var _ = Describe("Workspace Webhook", func() {
 			})
 		})
 	})
+
+	Context("isAdminUser", func() {
+		It("should return true for system:masters group", func() {
+			groups := []string{"system:masters", "other-group"}
+			Expect(isAdminUser(groups)).To(BeTrue())
+		})
+
+		It("should return true for environment variable admin group", func() {
+			Expect(os.Setenv("CLUSTER_ADMIN_GROUP", "custom-admin-group")).To(Succeed())
+			defer func() { _ = os.Unsetenv("CLUSTER_ADMIN_GROUP") }()
+
+			groups := []string{"custom-admin-group", "other-group"}
+			Expect(isAdminUser(groups)).To(BeTrue())
+		})
+
+		It("should return false for non-admin groups", func() {
+			groups := []string{"regular-user", "data-scientists"}
+			Expect(isAdminUser(groups)).To(BeFalse())
+		})
+	})
 })
+
+// MockClient for testing
+type MockClient struct {
+	ServiceAccount *corev1.ServiceAccount
+	GetError       error
+}
+
+func (m *MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if m.GetError != nil {
+		return m.GetError
+	}
+	if sa, ok := obj.(*corev1.ServiceAccount); ok && m.ServiceAccount != nil {
+		*sa = *m.ServiceAccount
+	}
+	return nil
+}
+
+func (m *MockClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	return nil
+}
+
+func (m *MockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	return nil
+}
+
+func (m *MockClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	return nil
+}
+
+func (m *MockClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	return nil
+}
+
+func (m *MockClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	return nil
+}
+
+func (m *MockClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+	return nil
+}
+
+func (m *MockClient) Status() client.StatusWriter {
+	return nil
+}
+
+func (m *MockClient) Scheme() *runtime.Scheme {
+	return nil
+}
+
+func (m *MockClient) RESTMapper() meta.RESTMapper {
+	return nil
+}
+
+func (m *MockClient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+	return schema.GroupVersionKind{}, nil
+}
+
+func (m *MockClient) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+	return true, nil
+}
+
+func (m *MockClient) SubResource(subResource string) client.SubResourceClient {
+	return nil
+}
