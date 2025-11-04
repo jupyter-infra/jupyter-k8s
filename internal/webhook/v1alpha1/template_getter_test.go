@@ -75,7 +75,8 @@ var _ = Describe("TemplateGetter", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName: "Default Template",
+					DisplayName:  "Default Template",
+					DefaultImage: "jupyter/base-notebook:latest",
 				},
 			}
 			Expect(k8sClient.Create(ctx, template)).To(Succeed())
@@ -99,7 +100,8 @@ var _ = Describe("TemplateGetter", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName: "Default Template 1",
+					DisplayName:  "Default Template 1",
+					DefaultImage: "jupyter/base-notebook:latest",
 				},
 			}
 			template2 := &workspacev1alpha1.WorkspaceTemplate{
@@ -110,7 +112,8 @@ var _ = Describe("TemplateGetter", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName: "Default Template 2",
+					DisplayName:  "Default Template 2",
+					DefaultImage: "jupyter/base-notebook:latest",
 				},
 			}
 			Expect(k8sClient.Create(ctx, template1)).To(Succeed())
