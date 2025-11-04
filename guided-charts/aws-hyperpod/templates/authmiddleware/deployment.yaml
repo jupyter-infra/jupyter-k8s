@@ -28,7 +28,8 @@ spec:
       serviceAccountName: jupyter-k8s-authmiddleware
       terminationGracePeriodSeconds: 30
       containers:
-      - image: {{ .Values.authmiddleware.repository }}/{{ .Values.authmiddleware.imageName }}:{{ .Values.authmiddleware.imageTag }}
+      # Todo update this to match conainer registry 
+      - image: {{ .Values.authmiddleware.containerRegistry }}/{{ .Values.authmiddleware.repository }}:{{ .Values.authmiddleware.imageTag }}
         imagePullPolicy: {{ .Values.authmiddleware.imagePullPolicy }}
         name: authmiddleware
         resources:

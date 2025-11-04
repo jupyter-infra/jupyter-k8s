@@ -19,7 +19,11 @@ externalDns:
 remoteAccess:
   enabled: false
   ssmManagedNodeRole: ""  # REQUIRED: IAM role for SSM managed instances - must be provided during installation
-  ssmSidecarImage: ""  # REQURIED: SSM sidecar container image
+  ssmSidecarImage:  # REQURIED: SSM sidecar container image
+    containerRegistry: CONTAINER_REGISTRY
+    repository: sagemaker/space-sidecar
+    tag: 0.0.3
+    pullPolicy: Always
   ssmDocumentName: "SageMaker-SpaceSSHSessionDocument"  # Custom SSM document name for SSH sessions
 
 # [TRAEFIK]: Configuration for Traefik (optional dependency)
@@ -28,9 +32,9 @@ traefik:
   enabled: false
   # Traefik configuration (only used when enabled: true)
   # For full configuration options, see: https://github.com/traefik/traefik-helm-chart/blob/master/traefik/values.yaml
-  repository: public.ecr.aws/docker/library
-  imageName: traefik
-  imageTag: latest
+  containerRegistry: CONTAINER_REGISTRY
+  repository: sagemaker/space-traefik
+  imageTag: 0.0.1
   replicas: 2
   redirectHttp: true
   debug: false
@@ -58,9 +62,9 @@ authmiddleware:
   replicas: 1
   # Authmiddleware image settings
   imagePullPolicy: Always
-  repository: docker.io
-  imageName: jupyter-k8s-auth
-  imageTag: latest
+  containerRegistry: CONTAINER_REGISTRY
+  repository: sagemaker/space-auth-middleware
+  imageTag: 0.0.1
   # Resource limits and requests
   resources:
     limits:

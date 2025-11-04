@@ -19,7 +19,7 @@ spec:
     podSpec:
       additionalContainers:
         - name: "ssm-agent-sidecar"
-          image: "{{ .Values.remoteAccess.ssmSidecarImage }}"
+          image: {{ .Values.remoteAccess.ssmSidecarImage.containerRegistry }}/{{ .Values.remoteAccess.ssmSidecarImage.repository }}:{{ .Values.remoteAccess.ssmSidecarImage.tag }}
           command: ["/bin/sh"]
           args: 
             - "-c"
