@@ -144,19 +144,6 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 	return false
 }
 
-// stringSlicesEqual checks if two string slices have the same elements (order matters)
-func stringSlicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // resourceBoundsChanged checks if resource bounds changed
 func resourceBoundsChanged(oldBounds, newBounds *workspacev1alpha1.ResourceBounds) bool {
 	// If one is nil and the other isn't, they're different

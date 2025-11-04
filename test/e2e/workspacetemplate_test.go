@@ -862,5 +862,148 @@ spec:
 			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "constraint-violation-template")
 			_, _ = utils.Run(cmd)
 		})
+
+		It("should allow stopping workspace without template validation", func() {
+			By("creating a template with image constraints")
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/compliance-tracking/constraint-violation-template.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating a workspace with allowed image")
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/compliance-tracking/constraint-violation-workspace.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying workspace is initially valid")
+			verifyInitiallyValid := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyInitiallyValid).
+				WithPolling(1 * time.Second).
+				WithTimeout(15 * time.Second).
+				Should(Succeed())
+
+			By("updating template to remove workspace's image from allowed list")
+			patchCmd := `{"spec":{"allowedImages":["quay.io/jupyter/minimal-notebook:latest"]}}`
+			cmd = exec.Command("kubectl", "patch", "workspacetemplate", "constraint-violation-template",
+				"--type=merge", "-p", patchCmd)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for compliance check to fail")
+			verifyComplianceFailed := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("False"))
+			}
+			Eventually(verifyComplianceFailed).
+				WithPolling(1 * time.Second).
+				WithTimeout(20 * time.Second).
+				Should(Succeed())
+
+			By("stopping the workspace despite being non-compliant")
+			patchCmd = `{"spec":{"desiredStatus":"Stopped"}}`
+			cmd = exec.Command("kubectl", "patch", "workspace", "constraint-violation-test",
+				"--type=merge", "-p", patchCmd)
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Should allow stopping workspace without validation. Output: %s", output)
+
+			By("verifying workspace transitions to Stopped status")
+			verifyStatusStopped := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+					"-o", "jsonpath={.status.status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("Stopped"))
+			}
+			Eventually(verifyStatusStopped).
+				WithPolling(1 * time.Second).
+				WithTimeout(15 * time.Second).
+				Should(Succeed())
+
+			By("cleaning up")
+			cmd = exec.Command("kubectl", "delete", "workspace", "constraint-violation-test")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "constraint-violation-template")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should validate entire spec when any spec field changes", func() {
+			By("creating a template with resource and image constraints")
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/compliance-tracking/constraint-violation-template.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating a compliant workspace")
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/compliance-tracking/constraint-violation-workspace.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying workspace is initially valid")
+			verifyInitiallyValid := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyInitiallyValid).
+				WithPolling(1 * time.Second).
+				WithTimeout(15 * time.Second).
+				Should(Succeed())
+
+			By("updating template to remove workspace's image from allowed list")
+			patchCmd := `{"spec":{"allowedImages":["quay.io/jupyter/minimal-notebook:latest"]}}`
+			cmd = exec.Command("kubectl", "patch", "workspacetemplate", "constraint-violation-template",
+				"--type=merge", "-p", patchCmd)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for compliance check to fail")
+			verifyComplianceFailed := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("False"))
+			}
+			Eventually(verifyComplianceFailed).
+				WithPolling(1 * time.Second).
+				WithTimeout(20 * time.Second).
+				Should(Succeed())
+
+			By("attempting to change displayName (which should trigger full spec validation)")
+			patchCmd = `{"spec":{"displayName":"Updated Name"}}`
+			cmd = exec.Command("kubectl", "patch", "workspace", "constraint-violation-test",
+				"--type=merge", "-p", patchCmd)
+			output, err := utils.Run(cmd)
+
+			// Should fail because entire spec (including image) is validated
+			Expect(err).To(HaveOccurred(), "Should reject update because full spec validation detects non-compliant image")
+			Expect(output).To(ContainSubstring("workspace violates template"), "Error should mention template violation")
+
+			By("verifying workspace is still non-compliant and displayName unchanged")
+			cmd = exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+				"-o", "jsonpath={.spec.displayName}")
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("Constraint Violation Test"), "DisplayName should be unchanged")
+
+			By("cleaning up")
+			cmd = exec.Command("kubectl", "delete", "workspace", "constraint-violation-test")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "constraint-violation-template")
+			_, _ = utils.Run(cmd)
+		})
 	})
 })
