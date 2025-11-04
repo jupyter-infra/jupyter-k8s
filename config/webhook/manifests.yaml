@@ -53,3 +53,23 @@ webhooks:
     resources:
     - workspaces
   sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: jupyter-k8s-controller-manager
+      namespace: system
+      path: /validate-workspace-jupyter-org-v1alpha1-workspacetemplate
+      port: 9443
+  failurePolicy: Fail
+  name: vworkspacetemplate-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - workspace.jupyter.org
+    apiVersions:
+    - v1alpha1
+    operations:
+    - UPDATE
+    resources:
+    - workspacetemplates
+  sideEffects: None

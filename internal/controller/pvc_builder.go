@@ -33,58 +33,49 @@ type ResolvedStorageConfig struct {
 	MountPath        string
 }
 
-// resolveStorageSize returns the storage size from workspace or template, with fallback to default
-func resolveStorageSize(workspace *workspacev1alpha1.Workspace, template *ResolvedTemplate) resource.Quantity {
+// resolveStorageSize returns the storage size from workspace, with fallback to default
+func resolveStorageSize(workspace *workspacev1alpha1.Workspace) resource.Quantity {
 	if workspace.Spec.Storage != nil && !workspace.Spec.Storage.Size.IsZero() {
 		return workspace.Spec.Storage.Size
-	}
-	if template != nil && template.StorageConfiguration != nil && !template.StorageConfiguration.DefaultSize.IsZero() {
-		return template.StorageConfiguration.DefaultSize
 	}
 	return resource.MustParse("10Gi")
 }
 
-// resolveStorageClassName returns the storage class name from workspace or template
-func resolveStorageClassName(workspace *workspacev1alpha1.Workspace, template *ResolvedTemplate) *string {
+// resolveStorageClassName returns the storage class name from workspace
+func resolveStorageClassName(workspace *workspacev1alpha1.Workspace) *string {
 	if workspace.Spec.Storage != nil && workspace.Spec.Storage.StorageClassName != nil {
 		return workspace.Spec.Storage.StorageClassName
-	}
-	if template != nil && template.StorageConfiguration != nil {
-		return template.StorageConfiguration.DefaultStorageClassName
 	}
 	return nil
 }
 
-// resolveMountPath returns the mount path from workspace or template, with fallback to default
-func resolveMountPath(workspace *workspacev1alpha1.Workspace, template *ResolvedTemplate) string {
+// resolveMountPath returns the mount path from workspace, with fallback to default
+func resolveMountPath(workspace *workspacev1alpha1.Workspace) string {
 	if workspace.Spec.Storage != nil && workspace.Spec.Storage.MountPath != "" {
 		return workspace.Spec.Storage.MountPath
-	}
-	if template != nil && template.StorageConfiguration != nil && template.StorageConfiguration.DefaultMountPath != "" {
-		return template.StorageConfiguration.DefaultMountPath
 	}
 	return DefaultMountPath
 }
 
-// ResolveStorageConfig determines storage configuration from workspace or template
-// Returns nil if no storage is requested from either source
-func ResolveStorageConfig(workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) *ResolvedStorageConfig {
-	// Check if storage is requested from either source
-	if (workspace.Spec.Storage == nil) && (resolvedTemplate == nil || resolvedTemplate.StorageConfiguration == nil) {
+// ResolveStorageConfig determines storage configuration from workspace
+// Returns nil if no storage is requested
+func ResolveStorageConfig(workspace *workspacev1alpha1.Workspace) *ResolvedStorageConfig {
+	// Check if storage is requested
+	if workspace.Spec.Storage == nil {
 		return nil
 	}
 
 	return &ResolvedStorageConfig{
-		Size:             resolveStorageSize(workspace, resolvedTemplate),
-		StorageClassName: resolveStorageClassName(workspace, resolvedTemplate),
-		MountPath:        resolveMountPath(workspace, resolvedTemplate),
+		Size:             resolveStorageSize(workspace),
+		StorageClassName: resolveStorageClassName(workspace),
+		MountPath:        resolveMountPath(workspace),
 	}
 }
 
 // BuildPVC creates a PersistentVolumeClaim resource for the given Workspace
-// It uses workspace storage if specified, otherwise falls back to template storage configuration
-func (pb *PVCBuilder) BuildPVC(workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
-	storageConfig := ResolveStorageConfig(workspace, resolvedTemplate)
+// It uses workspace storage configuration
+func (pb *PVCBuilder) BuildPVC(workspace *workspacev1alpha1.Workspace) (*corev1.PersistentVolumeClaim, error) {
+	storageConfig := ResolveStorageConfig(workspace)
 	if storageConfig == nil {
 		return nil, nil // No storage requested
 	}
@@ -132,9 +123,9 @@ func (pb *PVCBuilder) buildPVCSpecWithSize(size resource.Quantity, storageClassN
 }
 
 // NeedsUpdate checks if the existing PVC needs to be updated based on workspace changes
-func (pb *PVCBuilder) NeedsUpdate(ctx context.Context, existingPVC *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (bool, error) {
+func (pb *PVCBuilder) NeedsUpdate(ctx context.Context, existingPVC *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace) (bool, error) {
 	// Build the desired PVC spec
-	desiredPVC, err := pb.BuildPVC(workspace, resolvedTemplate)
+	desiredPVC, err := pb.BuildPVC(workspace)
 	if err != nil {
 		return false, fmt.Errorf("failed to build desired PVC: %w", err)
 	}
@@ -149,9 +140,9 @@ func (pb *PVCBuilder) NeedsUpdate(ctx context.Context, existingPVC *corev1.Persi
 }
 
 // UpdatePVCSpec updates the existing PVC with the desired spec
-func (pb *PVCBuilder) UpdatePVCSpec(ctx context.Context, existingPVC *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) error {
+func (pb *PVCBuilder) UpdatePVCSpec(ctx context.Context, existingPVC *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace) error {
 	// Build the desired PVC spec
-	desiredPVC, err := pb.BuildPVC(workspace, resolvedTemplate)
+	desiredPVC, err := pb.BuildPVC(workspace)
 	if err != nil {
 		return fmt.Errorf("failed to build desired PVC: %w", err)
 	}

@@ -87,7 +87,7 @@ func (rm *ResourceManager) getPVC(ctx context.Context, workspace *workspacev1alp
 }
 
 // CreateDeployment creates a new deployment for the Workspace
-func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
+func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*appsv1.Deployment, error) {
 	logger := logf.FromContext(ctx)
 
 	accessStrategy, err := rm.GetAccessStrategyForWorkspace(ctx, workspace)
@@ -95,7 +95,7 @@ func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *work
 		return nil, fmt.Errorf("failed to retrieve access strategy for deployment: %w", err)
 	}
 
-	deployment, err := rm.deploymentBuilder.BuildDeploymentWithAccessStrategy(ctx, workspace, resolvedTemplate, accessStrategy)
+	deployment, err := rm.deploymentBuilder.BuildDeploymentWithAccessStrategy(ctx, workspace, accessStrategy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build deployment: %w", err)
 	}
@@ -131,10 +131,10 @@ func (rm *ResourceManager) createService(ctx context.Context, workspace *workspa
 }
 
 // createPVC creates a new PVC for the Workspace
-func (rm *ResourceManager) createPVC(ctx context.Context, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
+func (rm *ResourceManager) createPVC(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.PersistentVolumeClaim, error) {
 	logger := logf.FromContext(ctx)
 
-	pvc, err := rm.pvcBuilder.BuildPVC(workspace, resolvedTemplate)
+	pvc, err := rm.pvcBuilder.BuildPVC(workspace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build PVC: %w", err)
 	}
@@ -239,20 +239,20 @@ func (rm *ResourceManager) IsServiceMissingOrDeleting(service *corev1.Service) b
 }
 
 // EnsureDeploymentExists creates a deployment if it doesn't exist, or updates it if the pod spec differs
-func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
+func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*appsv1.Deployment, error) {
 	deployment, err := rm.getDeployment(ctx, workspace)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return rm.createDeployment(ctx, workspace, resolvedTemplate)
+			return rm.createDeployment(ctx, workspace)
 		}
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
 
-	return rm.ensureDeploymentUpToDate(ctx, deployment, workspace, resolvedTemplate)
+	return rm.ensureDeploymentUpToDate(ctx, deployment, workspace)
 }
 
 // ensureDeploymentUpToDate checks if deployment needs update and updates it if necessary
-func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
+func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace) (*appsv1.Deployment, error) {
 	// Only perform updates when workspace is available to avoid interfering with creation
 	if !rm.statusManager.IsWorkspaceAvailable(workspace) {
 		return deployment, nil
@@ -263,20 +263,20 @@ func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deploym
 		return nil, fmt.Errorf("failed to retrieve access strategy for comparison: %w", err)
 	}
 
-	needsUpdate, err := rm.deploymentBuilder.NeedsUpdate(ctx, deployment, workspace, resolvedTemplate, accessStrategy)
+	needsUpdate, err := rm.deploymentBuilder.NeedsUpdate(ctx, deployment, workspace, accessStrategy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check if deployment needs update: %w", err)
 	}
 
 	if needsUpdate {
-		return rm.updateDeployment(ctx, deployment, workspace, resolvedTemplate)
+		return rm.updateDeployment(ctx, deployment, workspace)
 	}
 
 	return deployment, nil
 }
 
 // updateDeployment updates an existing deployment with new pod spec
-func (rm *ResourceManager) updateDeployment(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*appsv1.Deployment, error) {
+func (rm *ResourceManager) updateDeployment(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace) (*appsv1.Deployment, error) {
 	logger := logf.FromContext(ctx)
 
 	accessStrategy, err := rm.GetAccessStrategyForWorkspace(ctx, workspace)
@@ -285,7 +285,7 @@ func (rm *ResourceManager) updateDeployment(ctx context.Context, deployment *app
 	}
 
 	// Update the deployment spec using the builder with access strategy
-	updatedDeployment, err := rm.deploymentBuilder.BuildDeploymentWithAccessStrategy(ctx, workspace, resolvedTemplate, accessStrategy)
+	updatedDeployment, err := rm.deploymentBuilder.BuildDeploymentWithAccessStrategy(ctx, workspace, accessStrategy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build updated deployment: %w", err)
 	}
@@ -388,52 +388,51 @@ func (rm *ResourceManager) EnsureServiceDeleted(ctx context.Context, workspace *
 }
 
 // EnsurePVCExists creates a PVC if it doesn't exist, or updates it if the spec differs
-// It uses workspace storage if specified, otherwise falls back to template storage configuration
-func (rm *ResourceManager) EnsurePVCExists(ctx context.Context, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
-	// Check if storage is needed from either workspace or template
-	hasStorage := workspace.Spec.Storage != nil ||
-		(resolvedTemplate != nil && resolvedTemplate.StorageConfiguration != nil)
+// It uses workspace storage if specified
+func (rm *ResourceManager) EnsurePVCExists(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.PersistentVolumeClaim, error) {
+	// Check if storage is needed from workspace
+	hasStorage := workspace.Spec.Storage != nil
 
 	if !hasStorage {
-		return nil, nil // No storage requested from either source
+		return nil, nil // No storage requested
 	}
 
 	pvc, err := rm.getPVC(ctx, workspace)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return rm.createPVC(ctx, workspace, resolvedTemplate)
+			return rm.createPVC(ctx, workspace)
 		}
 		return nil, fmt.Errorf("failed to get PVC: %w", err)
 	}
 
-	return rm.ensurePVCUpToDate(ctx, pvc, workspace, resolvedTemplate)
+	return rm.ensurePVCUpToDate(ctx, pvc, workspace)
 }
 
 // ensurePVCUpToDate checks if PVC needs update and updates it if necessary
-func (rm *ResourceManager) ensurePVCUpToDate(ctx context.Context, pvc *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
+func (rm *ResourceManager) ensurePVCUpToDate(ctx context.Context, pvc *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace) (*corev1.PersistentVolumeClaim, error) {
 	// Only perform updates when workspace is available to avoid interfering with creation
 	if !rm.statusManager.IsWorkspaceAvailable(workspace) {
 		return pvc, nil
 	}
 
-	needsUpdate, err := rm.pvcBuilder.NeedsUpdate(ctx, pvc, workspace, resolvedTemplate)
+	needsUpdate, err := rm.pvcBuilder.NeedsUpdate(ctx, pvc, workspace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check if PVC needs update: %w", err)
 	}
 
 	if needsUpdate {
-		return rm.updatePVC(ctx, pvc, workspace, resolvedTemplate)
+		return rm.updatePVC(ctx, pvc, workspace)
 	}
 
 	return pvc, nil
 }
 
 // updatePVC updates an existing PVC with new spec
-func (rm *ResourceManager) updatePVC(ctx context.Context, pvc *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace, resolvedTemplate *ResolvedTemplate) (*corev1.PersistentVolumeClaim, error) {
+func (rm *ResourceManager) updatePVC(ctx context.Context, pvc *corev1.PersistentVolumeClaim, workspace *workspacev1alpha1.Workspace) (*corev1.PersistentVolumeClaim, error) {
 	logger := logf.FromContext(ctx)
 
 	// Update the PVC spec using the builder
-	if err := rm.pvcBuilder.UpdatePVCSpec(ctx, pvc, workspace, resolvedTemplate); err != nil {
+	if err := rm.pvcBuilder.UpdatePVCSpec(ctx, pvc, workspace); err != nil {
 		return nil, fmt.Errorf("failed to update PVC spec: %w", err)
 	}
 

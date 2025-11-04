@@ -27,6 +27,9 @@ const (
 	LabelAccessStrategyNamespace = "workspace.jupyter.org/accessStrategyNamespace"
 	LabelWorkspaceTemplate       = "workspace.jupyter.org/template"
 
+	// Compliance tracking label keys
+	LabelComplianceCheckNeeded = "workspace.jupyter.org/compliance-check-needed"
+
 	// Label values
 	AppLabelValue = "jupyter"
 

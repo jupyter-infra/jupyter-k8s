@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
 const templateFinalizerName = "workspace.jupyter.org/template-protection"
@@ -39,9 +40,8 @@ const templateFinalizerName = "workspace.jupyter.org/template-protection"
 // WorkspaceTemplateReconciler reconciles a WorkspaceTemplate object
 type WorkspaceTemplateReconciler struct {
 	client.Client
-	Scheme           *runtime.Scheme
-	recorder         record.EventRecorder
-	templateResolver *TemplateResolver
+	Scheme   *runtime.Scheme
+	recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=workspace.jupyter.org,resources=workspacetemplates,verbs=get;list;watch;update;patch
@@ -91,7 +91,7 @@ func (r *WorkspaceTemplateReconciler) manageFinalizer(ctx context.Context, templ
 	logger := logf.FromContext(ctx)
 
 	// Check if any active workspaces are using this template
-	workspaces, err := r.templateResolver.ListWorkspacesUsingTemplate(ctx, template.Name)
+	workspaces, _, err := workspace.ListByTemplate(ctx, r.Client, template.Name, "", 0)
 	if err != nil {
 		logger.Error(err, "Failed to list workspaces using template")
 		return ctrl.Result{}, err
@@ -148,7 +148,7 @@ func (r *WorkspaceTemplateReconciler) handleDeletion(ctx context.Context, templa
 	}
 
 	// Check if any workspaces are using this template
-	workspaces, err := r.templateResolver.ListWorkspacesUsingTemplate(ctx, template.Name)
+	workspaces, _, err := workspace.ListByTemplate(ctx, r.Client, template.Name, "", 0)
 	if err != nil {
 		logger.Error(err, "Failed to list workspaces using template")
 		return ctrl.Result{}, err
@@ -215,24 +215,24 @@ func (r *WorkspaceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // findTemplatesForWorkspace maps a Workspace to the WorkspaceTemplate it references
 // This ensures the template is reconciled when a workspace using it is created/updated/deleted
 func (r *WorkspaceTemplateReconciler) findTemplatesForWorkspace(ctx context.Context, obj client.Object) []reconcile.Request {
-	workspace, ok := obj.(*workspacev1alpha1.Workspace)
+	ws, ok := obj.(*workspacev1alpha1.Workspace)
 	if !ok {
 		return nil
 	}
 
-	if workspace.Spec.TemplateRef == nil || workspace.Spec.TemplateRef.Name == "" {
+	if ws.Spec.TemplateRef == nil || ws.Spec.TemplateRef.Name == "" {
 		return nil
 	}
 
 	logger := logf.FromContext(ctx)
 	logger.V(1).Info("Workspace changed, enqueueing template reconciliation",
-		"workspace", fmt.Sprintf("%s/%s", workspace.Namespace, workspace.Name),
-		"template", workspace.Spec.TemplateRef.Name)
+		"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
+		"template", ws.Spec.TemplateRef.Name)
 
 	// Trigger reconciliation of the template when workspace changes
 	return []reconcile.Request{
 		{NamespacedName: types.NamespacedName{
-			Name: workspace.Spec.TemplateRef.Name,
+			Name: ws.Spec.TemplateRef.Name,
 		}},
 	}
 }
@@ -245,13 +245,11 @@ func SetupWorkspaceTemplateController(mgr ctrl.Manager) error {
 	k8sClient := mgr.GetClient()
 	scheme := mgr.GetScheme()
 	eventRecorder := mgr.GetEventRecorderFor("workspacetemplate-controller")
-	templateResolver := NewTemplateResolver(k8sClient)
 
 	reconciler := &WorkspaceTemplateReconciler{
-		Client:           k8sClient,
-		Scheme:           scheme,
-		recorder:         eventRecorder,
-		templateResolver: templateResolver,
+		Client:   k8sClient,
+		Scheme:   scheme,
+		recorder: eventRecorder,
 	}
 
 	logger.Info("Calling SetupWithManager for WorkspaceTemplate controller")

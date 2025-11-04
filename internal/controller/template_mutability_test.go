@@ -227,6 +227,12 @@ var _ = Describe("Template Mutability", func() {
 		})
 	})
 
+	// NOTE: Webhook Finalizer Management tests are part of E2E tests
+	// These tests require webhooks to be running, which is not supported in envtest
+	// The webhook adds finalizers during admission (CREATE/UPDATE operations)
+	// The controller adds finalizers as a safety net and removes them when no workspaces use the template
+	// See test/e2e for webhook behavior tests
+
 	Context("Template Spec Mutability", func() {
 		It("should allow template spec modification (mutability)", func() {
 			ctx := context.Background()

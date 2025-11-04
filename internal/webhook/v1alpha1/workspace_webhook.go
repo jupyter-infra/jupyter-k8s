@@ -23,7 +23,10 @@ import (
 	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -33,9 +36,41 @@ import (
 	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 )
 
+const templateFinalizerName = "workspace.jupyter.org/template-protection"
+
 // nolint:unused
 // log is for logging in this package.
 var workspacelog = logf.Log.WithName("workspace-resource")
+
+// ensureTemplateFinalizer ensures the template has a finalizer to prevent deletion while in use
+func ensureTemplateFinalizer(ctx context.Context, k8sClient client.Client, templateRef string) error {
+	if templateRef == "" {
+		return nil
+	}
+
+	// Fetch the template
+	template := &workspacev1alpha1.WorkspaceTemplate{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: templateRef}, template); err != nil {
+		// Don't fail webhook if template doesn't exist - let validation handle it
+		workspacelog.Info("Template not found during finalizer check", "template", templateRef, "error", err)
+		return nil
+	}
+
+	// Check if finalizer already exists
+	if controllerutil.ContainsFinalizer(template, templateFinalizerName) {
+		return nil
+	}
+
+	// Add finalizer
+	controllerutil.AddFinalizer(template, templateFinalizerName)
+	if err := k8sClient.Update(ctx, template); err != nil {
+		workspacelog.Error(err, "Failed to add finalizer to template", "template", templateRef)
+		return fmt.Errorf("failed to add finalizer to template %s: %w", templateRef, err)
+	}
+
+	workspacelog.Info("Added finalizer to template", "template", templateRef)
+	return nil
+}
 
 func sanitizeUsername(username string) string {
 	// Use Go's JSON marshaling to properly escape the string
@@ -93,6 +128,8 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 }
 
 // SetupWorkspaceWebhookWithManager registers the webhook for Workspace in the manager.
+// RBAC Note: This webhook requires WorkspaceTemplate access (get, update, finalizers/update)
+// which is provided by the workspacetemplate controller RBAC markers.
 func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 	templateValidator := NewTemplateValidator(mgr.GetClient())
 	templateDefaulter := NewTemplateDefaulter(mgr.GetClient())
@@ -100,7 +137,10 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.Workspace{}).
 		WithValidator(&WorkspaceCustomValidator{templateValidator: templateValidator, serviceAccountValidator: serviceAccountValidator}).
-		WithDefaulter(&WorkspaceCustomDefaulter{templateDefaulter: templateDefaulter}).
+		WithDefaulter(&WorkspaceCustomDefaulter{
+			templateDefaulter: templateDefaulter,
+			client:            mgr.GetClient(),
+		}).
 		Complete()
 }
 
@@ -113,6 +153,7 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 // as it is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceCustomDefaulter struct {
 	templateDefaulter *TemplateDefaulter
+	client            client.Client
 }
 
 var _ webhook.CustomDefaulter = &WorkspaceCustomDefaulter{}
@@ -150,6 +191,14 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 	if err := d.templateDefaulter.ApplyTemplateDefaults(ctx, workspace); err != nil {
 		workspacelog.Error(err, "Failed to apply template defaults", "workspace", workspace.GetName())
 		return fmt.Errorf("failed to apply template defaults: %w", err)
+	}
+
+	// Ensure template has finalizer to prevent deletion while in use
+	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
+		if err := ensureTemplateFinalizer(ctx, d.client, workspace.Spec.TemplateRef.Name); err != nil {
+			workspacelog.Error(err, "Failed to add finalizer to template", "workspace", workspace.GetName(), "template", workspace.Spec.TemplateRef.Name)
+			return fmt.Errorf("failed to add finalizer to template: %w", err)
+		}
 	}
 
 	return nil

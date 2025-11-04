@@ -215,10 +215,9 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	)
 
 	// Create state machine
-	templateResolver := NewTemplateResolver(k8sClient)
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
 	idleChecker := NewWorkspaceIdleChecker(k8sClient)
-	stateMachine := NewStateMachine(resourceManager, statusManager, templateResolver, eventRecorder, idleChecker)
+	stateMachine := NewStateMachine(resourceManager, statusManager, eventRecorder, idleChecker)
 
 	// Create pod event handler
 	podEventHandler := NewPodEventHandler(k8sClient, resourceManager)

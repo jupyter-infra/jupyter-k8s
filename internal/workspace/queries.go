@@ -1,0 +1,116 @@
+/*
+MIT License
+
+Copyright (c) 2025 jupyter-ai-contrib
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+*/
+
+package workspace
+
+import (
+	"context"
+	"fmt"
+
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+// LabelWorkspaceTemplate is the label key for tracking which template a workspace uses
+// This is defined here to avoid import cycles with the controller package
+const LabelWorkspaceTemplate = "workspace.jupyter.org/template"
+
+// ListByTemplate returns all active workspaces using the specified template
+// Supports pagination for large-scale deployments
+// Filters out workspaces being deleted (DeletionTimestamp set)
+// Validates templateRef matches label to guard against drift
+func ListByTemplate(ctx context.Context, k8sClient client.Client, templateName string, continueToken string, limit int64) ([]workspacev1alpha1.Workspace, string, error) {
+	logger := logf.FromContext(ctx)
+
+	workspaceList := &workspacev1alpha1.WorkspaceList{}
+	listOptions := []client.ListOption{
+		client.MatchingLabels{
+			LabelWorkspaceTemplate: templateName,
+		},
+	}
+
+	// Add pagination options if specified
+	if limit > 0 {
+		listOptions = append(listOptions, client.Limit(limit))
+	}
+	if continueToken != "" {
+		listOptions = append(listOptions, client.Continue(continueToken))
+	}
+
+	if err := k8sClient.List(ctx, workspaceList, listOptions...); err != nil {
+		return nil, "", fmt.Errorf("failed to list workspaces by template label: %w", err)
+	}
+
+	// Filter out workspaces being deleted and verify template reference
+	// This follows Kubernetes controller best practice: resources with deletionTimestamp
+	// are considered "gone" for dependency checking purposes
+	activeWorkspaces := []workspacev1alpha1.Workspace{}
+	for _, ws := range workspaceList.Items {
+		if !ws.DeletionTimestamp.IsZero() {
+			continue // Skip workspaces being deleted
+		}
+
+		// Verify templateRef matches label to guard against label/spec mismatch.
+		// This is somewhat redundant given CEL immutability validation but adds zero cost and adds a layer of verification.
+		if ws.Spec.TemplateRef == nil {
+			logger.V(1).Info("Workspace has template label but nil templateRef",
+				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
+				"label", templateName)
+			continue
+		}
+
+		if ws.Spec.TemplateRef.Name != templateName {
+			// This should never happen - log if it occurs
+			logger.Info("Workspace has template label but different templateRef",
+				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
+				"label", templateName,
+				"spec", ws.Spec.TemplateRef.Name)
+			continue
+		}
+
+		activeWorkspaces = append(activeWorkspaces, ws)
+	}
+
+	// Extract continuation token for next page
+	nextToken := workspaceList.Continue
+
+	return activeWorkspaces, nextToken, nil
+}
+
+// HasWorkspacesWithTemplate checks if any active workspace uses the specified template
+// More efficient than ListByTemplate when only existence check is needed
+// Returns true if at least one workspace uses the template
+func HasWorkspacesWithTemplate(ctx context.Context, k8sClient client.Client, templateName string) (bool, error) {
+	workspaceList := &workspacev1alpha1.WorkspaceList{}
+	if err := k8sClient.List(ctx, workspaceList,
+		client.MatchingLabels{
+			LabelWorkspaceTemplate: templateName,
+		},
+		client.Limit(1), // Only need to know if ANY exist
+	); err != nil {
+		return false, fmt.Errorf("failed to check workspaces by template label: %w", err)
+	}
+
+	// Check if any non-deleted workspace exists
+	for _, ws := range workspaceList.Items {
+		if ws.DeletionTimestamp.IsZero() && ws.Spec.TemplateRef != nil && ws.Spec.TemplateRef.Name == templateName {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}

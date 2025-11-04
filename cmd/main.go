@@ -277,6 +277,10 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Workspace")
 			os.Exit(1)
 		}
+		if err := webhookv1alpha1.SetupWorkspaceTemplateWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "WorkspaceTemplate")
+			os.Exit(1)
+		}
 	}
 
 	// nolint:goconst

@@ -16,27 +16,24 @@ import (
 
 // StateMachine handles the state transitions for Workspace
 type StateMachine struct {
-	resourceManager  *ResourceManager
-	statusManager    *StatusManager
-	templateResolver *TemplateResolver
-	recorder         record.EventRecorder
-	idleChecker      *WorkspaceIdleChecker
+	resourceManager *ResourceManager
+	statusManager   *StatusManager
+	recorder        record.EventRecorder
+	idleChecker     *WorkspaceIdleChecker
 }
 
 // NewStateMachine creates a new StateMachine
 func NewStateMachine(
 	resourceManager *ResourceManager,
 	statusManager *StatusManager,
-	templateResolver *TemplateResolver,
 	recorder record.EventRecorder,
 	idleChecker *WorkspaceIdleChecker,
 ) *StateMachine {
 	return &StateMachine{
-		resourceManager:  resourceManager,
-		statusManager:    statusManager,
-		templateResolver: templateResolver,
-		recorder:         recorder,
-		idleChecker:      idleChecker,
+		resourceManager: resourceManager,
+		statusManager:   statusManager,
+		recorder:        recorder,
+		idleChecker:     idleChecker,
 	}
 }
 
@@ -192,7 +189,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	logger.Info("Attempting to bring Workspace status to 'Running'")
 
 	// Ensure PVC exists first (if storage is configured)
-	_, err := sm.resourceManager.EnsurePVCExists(ctx, workspace, nil)
+	_, err := sm.resourceManager.EnsurePVCExists(ctx, workspace)
 	if err != nil {
 		pvcErr := fmt.Errorf("failed to ensure PVC exists: %w", err)
 		if statusErr := sm.statusManager.UpdateErrorStatus(
@@ -203,7 +200,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	}
 
 	// EnsureDeploymentExists creates deployment if missing, or returns existing deployment
-	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace, nil)
+	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace)
 	if err != nil {
 		deployErr := fmt.Errorf("failed to ensure deployment exists: %w", err)
 		// Update error condition
