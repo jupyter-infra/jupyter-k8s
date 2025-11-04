@@ -214,10 +214,14 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 		statusManager,
 	)
 
+	// Create template validator for compliance checking
+	// This is created here in the controller package to avoid circular dependency with webhook package
+	templateValidator := NewTemplateValidatorAdapter(k8sClient)
+
 	// Create state machine
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
 	idleChecker := NewWorkspaceIdleChecker(k8sClient)
-	stateMachine := NewStateMachine(resourceManager, statusManager, eventRecorder, idleChecker)
+	stateMachine := NewStateMachine(resourceManager, statusManager, eventRecorder, idleChecker, templateValidator)
 
 	// Create pod event handler
 	podEventHandler := NewPodEventHandler(k8sClient, resourceManager)

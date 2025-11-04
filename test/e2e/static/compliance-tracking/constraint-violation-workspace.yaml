@@ -1,0 +1,18 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: constraint-violation-test
+spec:
+  displayName: "Constraint Violation Test"
+  templateRef:
+    name: constraint-violation-template
+  image: "quay.io/jupyter/scipy-notebook:latest"
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  storage:
+    size: "1Gi"

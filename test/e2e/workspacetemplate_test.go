@@ -584,4 +584,283 @@ spec:
 			_, _ = utils.Run(cmd)
 		})
 	})
+
+	Context("Template Compliance Tracking", func() {
+		It("should mark workspaces for compliance check when template constraints change", func() {
+			By("creating compliance template")
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/compliance-tracking/constraint-violation-template.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating workspace using compliance template")
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/compliance-tracking/constraint-violation-workspace.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying workspace is initially valid")
+			verifyInitiallyValid := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyInitiallyValid).
+				WithPolling(1 * time.Second).
+				WithTimeout(15 * time.Second).
+				Should(Succeed())
+
+			By("updating template to change AllowedImages (remove scipy-notebook)")
+			// This should trigger compliance check since the workspace uses scipy-notebook
+			patchCmd := `{"spec":{"allowedImages":["quay.io/jupyter/minimal-notebook:latest"]}}`
+			cmd = exec.Command("kubectl", "patch", "workspacetemplate", "constraint-violation-template",
+				"--type=merge", "-p", patchCmd)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying compliance label was added to workspace")
+			verifyLabelAdded := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+					"-o", "jsonpath={.metadata.labels['workspace\\.jupyter\\.org/compliance-check-needed']}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("true"))
+			}
+			Eventually(verifyLabelAdded).
+				WithPolling(500 * time.Millisecond).
+				WithTimeout(10 * time.Second).
+				Should(Succeed())
+
+			By("waiting for controller to process compliance check")
+			// Controller should detect label, validate workspace, update status, and remove label
+			time.Sleep(3 * time.Second)
+
+			By("verifying compliance label was removed after check")
+			verifyLabelRemoved := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+					"-o", "jsonpath={.metadata.labels['workspace\\.jupyter\\.org/compliance-check-needed']}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(BeEmpty(), "compliance label should be removed after check")
+			}
+			Eventually(verifyLabelRemoved).
+				WithPolling(500 * time.Millisecond).
+				WithTimeout(15 * time.Second).
+				Should(Succeed())
+
+			By("verifying workspace status reflects compliance failure")
+			cmd = exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+				"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("False"), "workspace should be Invalid after failing compliance check")
+
+			By("verifying ComplianceCheckFailed event was recorded")
+			cmd = exec.Command("kubectl", "get", "events",
+				"--field-selector", "involvedObject.name=constraint-violation-test",
+				"-o", "jsonpath={.items[*].reason}")
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(ContainSubstring("ComplianceCheckFailed"))
+
+			By("cleaning up workspace and template")
+			cmd = exec.Command("kubectl", "delete", "workspace", "constraint-violation-test")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "constraint-violation-template")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should pass compliance check when workspace still complies after constraint changes", func() {
+			By("creating compliance template")
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/compliance-tracking/constraint-violation-template.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating workspace using default image from template")
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: compliance-pass-test
+spec:
+  displayName: "Compliance Pass Test"
+  templateRef:
+    name: constraint-violation-template
+  image: "quay.io/jupyter/minimal-notebook:latest"
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+  storage:
+    size: "1Gi"`
+			cmd = exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying workspace is initially valid")
+			verifyInitiallyValid := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "compliance-pass-test",
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyInitiallyValid).
+				WithPolling(1 * time.Second).
+				WithTimeout(15 * time.Second).
+				Should(Succeed())
+
+			By("updating template with tighter CPU constraints (workspace still complies)")
+			// Workspace has cpu: 200m, change min from 100m to 150m and max from 2 to 1
+			patchCmd := `{"spec":{"resourceBounds":{"cpu":{"min":"150m","max":"1"}}}}`
+			cmd = exec.Command("kubectl", "patch", "workspacetemplate", "constraint-violation-template",
+				"--type=merge", "-p", patchCmd)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying compliance label was added")
+			verifyLabelAdded := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "compliance-pass-test",
+					"-o", "jsonpath={.metadata.labels['workspace\\.jupyter\\.org/compliance-check-needed']}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("true"))
+			}
+			Eventually(verifyLabelAdded).
+				WithPolling(500 * time.Millisecond).
+				WithTimeout(10 * time.Second).
+				Should(Succeed())
+
+			By("waiting for controller to process compliance check")
+			time.Sleep(3 * time.Second)
+
+			By("verifying compliance label was removed after check")
+			verifyLabelRemoved := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "compliance-pass-test",
+					"-o", "jsonpath={.metadata.labels['workspace\\.jupyter\\.org/compliance-check-needed']}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(BeEmpty())
+			}
+			Eventually(verifyLabelRemoved).
+				WithPolling(500 * time.Millisecond).
+				WithTimeout(15 * time.Second).
+				Should(Succeed())
+
+			By("verifying workspace status remains valid")
+			cmd = exec.Command("kubectl", "get", "workspace", "compliance-pass-test",
+				"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("True"), "workspace should remain Valid after passing compliance check")
+
+			By("verifying ComplianceCheckPassed event was recorded")
+			cmd = exec.Command("kubectl", "get", "events",
+				"--field-selector", "involvedObject.name=compliance-pass-test",
+				"-o", "jsonpath={.items[*].reason}")
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(ContainSubstring("ComplianceCheckPassed"))
+
+			By("cleaning up workspace and template")
+			cmd = exec.Command("kubectl", "delete", "workspace", "compliance-pass-test")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "constraint-violation-template")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should handle multiple workspaces with pagination when marking for compliance", func() {
+			By("creating compliance template")
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/compliance-tracking/constraint-violation-template.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating multiple workspaces using the template")
+			workspaceNames := []string{}
+			for i := 1; i <= 3; i++ {
+				workspaceName := fmt.Sprintf("compliance-multi-test-%d", i)
+				workspaceNames = append(workspaceNames, workspaceName)
+				workspaceYaml := fmt.Sprintf(`apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: %s
+spec:
+  displayName: "Compliance Multi Test %d"
+  templateRef:
+    name: constraint-violation-template
+  image: "quay.io/jupyter/minimal-notebook:latest"`, workspaceName, i)
+				cmd = exec.Command("sh", "-c",
+					fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			By("waiting for all workspaces to become valid")
+			for _, wsName := range workspaceNames {
+				verifyValid := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "workspace", wsName,
+						"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("True"))
+				}
+				Eventually(verifyValid).
+					WithPolling(1 * time.Second).
+					WithTimeout(15 * time.Second).
+					Should(Succeed())
+			}
+
+			By("updating template to trigger compliance check for all workspaces")
+			patchCmd := `{"spec":{"description":"Changed to trigger compliance check"}}`
+			cmd = exec.Command("kubectl", "patch", "workspacetemplate", "constraint-violation-template",
+				"--type=merge", "-p", patchCmd)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying all workspaces received compliance label")
+			for _, wsName := range workspaceNames {
+				verifyLabelAdded := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "workspace", wsName,
+						"-o", "jsonpath={.metadata.labels['workspace\\.jupyter\\.org/compliance-check-needed']}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal("true"))
+				}
+				Eventually(verifyLabelAdded).
+					WithPolling(500 * time.Millisecond).
+					WithTimeout(10 * time.Second).
+					Should(Succeed())
+			}
+
+			By("waiting for controller to process all compliance checks")
+			time.Sleep(5 * time.Second)
+
+			By("verifying all compliance labels were removed")
+			for _, wsName := range workspaceNames {
+				verifyLabelRemoved := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "workspace", wsName,
+						"-o", "jsonpath={.metadata.labels['workspace\\.jupyter\\.org/compliance-check-needed']}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(BeEmpty())
+				}
+				Eventually(verifyLabelRemoved).
+					WithPolling(500 * time.Millisecond).
+					WithTimeout(20 * time.Second).
+					Should(Succeed())
+			}
+
+			By("cleaning up all workspaces and template")
+			for _, wsName := range workspaceNames {
+				cmd = exec.Command("kubectl", "delete", "workspace", wsName)
+				_, _ = utils.Run(cmd)
+			}
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "constraint-violation-template")
+			_, _ = utils.Run(cmd)
+		})
+	})
 })
