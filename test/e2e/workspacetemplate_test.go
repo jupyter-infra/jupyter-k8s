@@ -936,6 +936,151 @@ spec:
 			_, _ = utils.Run(cmd)
 		})
 
+		It("should allow templateRef deletion without validation", func() {
+			By("creating a template with image constraints")
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/compliance-tracking/constraint-violation-template.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating a workspace with template")
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/compliance-tracking/constraint-violation-workspace.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying workspace is initially valid")
+			verifyInitiallyValid := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyInitiallyValid).
+				WithPolling(1 * time.Second).
+				WithTimeout(15 * time.Second).
+				Should(Succeed())
+
+			By("updating template to make workspace's image non-compliant")
+			patchCmd := `{"spec":{"allowedImages":["quay.io/jupyter/minimal-notebook:latest"]}}`
+			cmd = exec.Command("kubectl", "patch", "workspacetemplate", "constraint-violation-template",
+				"--type=merge", "-p", patchCmd)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for compliance check to fail")
+			verifyComplianceFailed := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("False"))
+			}
+			Eventually(verifyComplianceFailed).
+				WithPolling(1 * time.Second).
+				WithTimeout(20 * time.Second).
+				Should(Succeed())
+
+			By("deleting templateRef to transition workspace to standalone")
+			patchCmd = `{"spec":{"templateRef":null}}`
+			cmd = exec.Command("kubectl", "patch", "workspace", "constraint-violation-test",
+				"--type=merge", "-p", patchCmd)
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Should allow templateRef deletion without validation. Output: %s", output)
+
+			By("verifying templateRef was removed")
+			cmd = exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+				"-o", "jsonpath={.spec.templateRef}")
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(BeEmpty(), "TemplateRef should be empty")
+
+			By("cleaning up")
+			cmd = exec.Command("kubectl", "delete", "workspace", "constraint-violation-test")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "constraint-violation-template")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should validate against new template when templateRef changes", func() {
+			By("creating two templates with different image constraints")
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/compliance-tracking/constraint-violation-template.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/compliance-tracking/constraint-violation-template-b.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating workspace using template A with scipy-notebook image")
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/compliance-tracking/constraint-violation-workspace.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying workspace is initially valid")
+			verifyInitiallyValid := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyInitiallyValid).
+				WithPolling(1 * time.Second).
+				WithTimeout(15 * time.Second).
+				Should(Succeed())
+
+			By("attempting to change templateRef to template B (scipy-notebook not allowed)")
+			patchCmd := `{"spec":{"templateRef":{"name":"constraint-violation-template-b"}}}`
+			cmd = exec.Command("kubectl", "patch", "workspace", "constraint-violation-test",
+				"--type=merge", "-p", patchCmd)
+			output, err := utils.Run(cmd)
+
+			// Should fail because workspace uses scipy-notebook which is not in template B's allowedImages
+			Expect(err).To(HaveOccurred(), "Should reject templateRef change when spec violates new template")
+			Expect(output).To(ContainSubstring("workspace violates template"), "Error should mention template violation")
+
+			By("verifying templateRef is still pointing to original template")
+			cmd = exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+				"-o", "jsonpath={.spec.templateRef.name}")
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("constraint-violation-template"), "TemplateRef should be unchanged")
+
+			By("updating workspace to use image compatible with template B")
+			patchCmd = `{"spec":{"image":"quay.io/jupyter/datascience-notebook:latest"}}`
+			cmd = exec.Command("kubectl", "patch", "workspace", "constraint-violation-test",
+				"--type=merge", "-p", patchCmd)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Should allow image update to compatible image")
+
+			By("now changing templateRef to template B should succeed")
+			patchCmd = `{"spec":{"templateRef":{"name":"constraint-violation-template-b"}}}`
+			cmd = exec.Command("kubectl", "patch", "workspace", "constraint-violation-test",
+				"--type=merge", "-p", patchCmd)
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Should allow templateRef change when spec is compatible. Output: %s", output)
+
+			By("verifying templateRef changed to template B")
+			cmd = exec.Command("kubectl", "get", "workspace", "constraint-violation-test",
+				"-o", "jsonpath={.spec.templateRef.name}")
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("constraint-violation-template-b"), "TemplateRef should be updated")
+
+			By("cleaning up")
+			cmd = exec.Command("kubectl", "delete", "workspace", "constraint-violation-test")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "constraint-violation-template")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "constraint-violation-template-b")
+			_, _ = utils.Run(cmd)
+		})
+
 		It("should validate entire spec when any spec field changes", func() {
 			By("creating a template with resource and image constraints")
 			cmd := exec.Command("kubectl", "apply", "-f",

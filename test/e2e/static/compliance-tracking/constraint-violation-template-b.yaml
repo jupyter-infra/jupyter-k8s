@@ -1,0 +1,23 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: constraint-violation-template-b
+spec:
+  displayName: "Constraint Violation Test Template B"
+  description: "Second template for testing templateRef changes"
+  defaultImage: "quay.io/jupyter/datascience-notebook:latest"
+  allowedImages:
+    - "quay.io/jupyter/datascience-notebook:latest"
+    - "quay.io/jupyter/tensorflow-notebook:latest"
+  allowCustomImages: false
+  resourceBounds:
+    cpu:
+      min: "200m"
+      max: "4"
+    memory:
+      min: "256Mi"
+      max: "8Gi"
+  primaryStorage:
+    defaultSize: "2Gi"
+    minSize: "1Gi"
+    maxSize: "20Gi"
