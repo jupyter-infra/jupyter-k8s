@@ -105,7 +105,6 @@ type WorkspaceAccessStrategySpec struct {
 	// BearerAuthURLTemplate is a template string for constructing the bearer auth URL
 	// Template variables include .Workspace and .AccessStrategy objects
 	// Used by the extension API to generate initial authentication URLs
-	// Example: "https://{{.Workspace.Name}}-{{.Workspace.Namespace | b32encode}}.workspaces.example.com/bearer-auth"
 	// +optional
 	BearerAuthURLTemplate string `json:"bearerAuthURLTemplate,omitempty"`
 
