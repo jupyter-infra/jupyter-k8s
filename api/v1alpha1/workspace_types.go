@@ -172,6 +172,11 @@ type WorkspaceSpec struct {
 	// ServiceAccountName specifies the name of the ServiceAccount to use for the workspace pod
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
+	// PodSecurityContext specifies pod-level security context
+	// Overrides template defaults when specified
+	// +optional
+	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 }
 
 // AccessResourceStatus defines the status of a resource created from a template
