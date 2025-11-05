@@ -79,9 +79,9 @@ func (sav *ServiceAccountValidator) checkUsernameAccess(username string, sa *cor
 	return false
 }
 
-// checkUsernamePatternAccess checks if username matches wildcard patterns in service-account-users-pattern annotation
+// checkUsernamePatternAccess checks if username matches wildcard patterns in service-account-user-patterns annotation
 func (sav *ServiceAccountValidator) checkUsernamePatternAccess(username string, sa *corev1.ServiceAccount) bool {
-	patternsYaml, exists := sa.Annotations[controller.AnnotationServiceAccountUsersPattern]
+	patternsYaml, exists := sa.Annotations[controller.AnnotationServiceAccountUserPatterns]
 	if !exists {
 		return false
 	}
