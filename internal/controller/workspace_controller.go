@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -134,10 +135,9 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if workspace.Labels == nil {
 			workspace.Labels = make(map[string]string)
 		}
-		expectedLabel := "workspace.jupyter.org/template"
-		if workspace.Labels[expectedLabel] != workspace.Spec.TemplateRef.Name {
+		if workspace.Labels[workspaceutil.LabelWorkspaceTemplate] != workspace.Spec.TemplateRef.Name {
 			logger.Info("Adding template label to workspace", "template", workspace.Spec.TemplateRef.Name)
-			workspace.Labels[expectedLabel] = workspace.Spec.TemplateRef.Name
+			workspace.Labels[workspaceutil.LabelWorkspaceTemplate] = workspace.Spec.TemplateRef.Name
 			if err := r.Update(ctx, workspace); err != nil {
 				logger.Error(err, "Failed to update workspace with template label")
 				return ctrl.Result{}, err

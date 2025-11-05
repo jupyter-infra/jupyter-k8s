@@ -170,6 +170,14 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 	}
 	workspacelog.Info("Defaulting for Workspace", "name", workspace.GetName(), "namespace", workspace.GetNamespace())
 
+	// Skip template defaulting if workspace is being deleted
+	// During deletion, only finalizer removal happens and we don't need to apply defaults
+	// This prevents webhook failures when template is already deleted
+	if !workspace.DeletionTimestamp.IsZero() {
+		workspacelog.Info("Skipping defaulting for workspace being deleted", "name", workspace.GetName())
+		return nil
+	}
+
 	// Add ownership tracking annotations
 	if workspace.Annotations == nil {
 		workspace.Annotations = make(map[string]string)

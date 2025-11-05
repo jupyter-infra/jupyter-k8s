@@ -182,7 +182,9 @@ func (r *WorkspaceTemplateReconciler) handleDeletion(ctx context.Context, templa
 	if len(workspaces) > 0 {
 		msg := fmt.Sprintf("Cannot delete template: in use by %d workspace(s)", len(workspaces))
 		logger.Info(msg, "workspaces", len(workspaces))
-		r.recorder.Event(template, "Warning", "TemplateInUse", msg)
+		if r.recorder != nil {
+			r.recorder.Event(template, "Warning", "TemplateInUse", msg)
+		}
 
 		// Don't remove finalizer - block deletion
 		// Return nil (not error) - we successfully determined template is in use
@@ -191,14 +193,18 @@ func (r *WorkspaceTemplateReconciler) handleDeletion(ctx context.Context, templa
 	}
 
 	// No workspaces using template - safe to delete
-	logger.Info("No workspaces using template, removing finalizer", "templateName", template.Name)
+	logger.Info("No workspaces using template, removing finalizer",
+		"templateName", template.Name,
+		"workspaceCount", len(workspaces))
 	controllerutil.RemoveFinalizer(template, templateFinalizerName)
 	if err := r.Update(ctx, template); err != nil {
-		logger.Error(err, "Failed to remove finalizer from template")
+		logger.Error(err, "Failed to remove finalizer from template",
+			"templateName", template.Name)
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Template finalizer removed - deletion allowed", "templateName", template.Name)
+	logger.Info("Template finalizer removed successfully - deletion allowed",
+		"templateName", template.Name)
 	return ctrl.Result{}, nil
 }
 
@@ -235,18 +241,24 @@ func (r *WorkspaceTemplateReconciler) findTemplatesForWorkspace(ctx context.Cont
 		return nil
 	}
 
+	logger := logf.FromContext(ctx)
+
 	// Use label instead of spec.templateRef because labels persist during deletion
 	// When workspace is deleted, spec fields are cleared but labels remain
 	// This ensures template reconciliation is triggered even during workspace deletion
-	templateName := ws.Labels["workspace.jupyter.org/template"]
+	templateName := ws.Labels[workspace.LabelWorkspaceTemplate]
 	if templateName == "" {
+		logger.V(1).Info("Workspace has no template label, skipping template reconciliation",
+			"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
+			"deletionTimestamp", ws.DeletionTimestamp)
 		return nil
 	}
 
-	logger := logf.FromContext(ctx)
-	logger.V(1).Info("Workspace changed, enqueueing template reconciliation",
+	logger.Info("Workspace changed, enqueueing template reconciliation",
 		"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
-		"template", templateName)
+		"template", templateName,
+		"deletionTimestamp", ws.DeletionTimestamp,
+		"hasLabel", true)
 
 	// Trigger reconciliation of the template when workspace changes
 	return []reconcile.Request{
