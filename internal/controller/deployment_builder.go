@@ -220,8 +220,11 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 		// TODO: Add probes
 	}
 
+	// Add standard workspace environment variables first (lowest precedence)
+	db.addStandardWorkspaceEnvVars(&container, workspace)
+
 	if resolvedTemplate != nil && len(resolvedTemplate.EnvironmentVariables) > 0 {
-		container.Env = resolvedTemplate.EnvironmentVariables
+		container.Env = append(container.Env, resolvedTemplate.EnvironmentVariables...)
 	}
 
 	storageConfig := ResolveStorageConfig(workspace, resolvedTemplate)
