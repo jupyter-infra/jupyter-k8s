@@ -235,19 +235,23 @@ func (r *WorkspaceTemplateReconciler) findTemplatesForWorkspace(ctx context.Cont
 		return nil
 	}
 
-	if ws.Spec.TemplateRef == nil || ws.Spec.TemplateRef.Name == "" {
+	// Use label instead of spec.templateRef because labels persist during deletion
+	// When workspace is deleted, spec fields are cleared but labels remain
+	// This ensures template reconciliation is triggered even during workspace deletion
+	templateName := ws.Labels["workspace.jupyter.org/template"]
+	if templateName == "" {
 		return nil
 	}
 
 	logger := logf.FromContext(ctx)
 	logger.V(1).Info("Workspace changed, enqueueing template reconciliation",
 		"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
-		"template", ws.Spec.TemplateRef.Name)
+		"template", templateName)
 
 	// Trigger reconciliation of the template when workspace changes
 	return []reconcile.Request{
 		{NamespacedName: types.NamespacedName{
-			Name: ws.Spec.TemplateRef.Name,
+			Name: templateName,
 		}},
 	}
 }
