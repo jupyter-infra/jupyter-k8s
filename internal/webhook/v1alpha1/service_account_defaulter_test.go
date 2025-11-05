@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 )
 
 var _ = Describe("ServiceAccountDefaulter", func() {
@@ -93,7 +93,7 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 					Name:      "custom-default-sa",
 					Namespace: "default",
 					Labels: map[string]string{
-						controller.LabelDefaultServiceAccount: "true",
+						webhookconst.DefaultServiceAccountLabel: "true",
 					},
 				},
 			}
@@ -134,7 +134,7 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 					Name:      "custom-sa",
 					Namespace: "default",
 					Labels: map[string]string{
-						controller.LabelDefaultServiceAccount: "true",
+						webhookconst.DefaultServiceAccountLabel: "true",
 					},
 				},
 			}
@@ -158,7 +158,7 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 					Name:      "sa1",
 					Namespace: "default",
 					Labels: map[string]string{
-						controller.LabelDefaultServiceAccount: "true",
+						webhookconst.DefaultServiceAccountLabel: "true",
 					},
 				},
 			}
@@ -168,7 +168,7 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 					Name:      "sa2",
 					Namespace: "default",
 					Labels: map[string]string{
-						controller.LabelDefaultServiceAccount: "true",
+						webhookconst.DefaultServiceAccountLabel: "true",
 					},
 				},
 			}

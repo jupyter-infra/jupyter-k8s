@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 )
 
 // ServiceAccountDefaulter handles finding default service accounts
@@ -43,7 +43,7 @@ func NewServiceAccountDefaulter(k8sClient client.Client) *ServiceAccountDefaulte
 func GetDefaultServiceAccount(ctx context.Context, k8sClient client.Client, namespace string) (string, error) {
 	serviceAccounts := &corev1.ServiceAccountList{}
 	if err := k8sClient.List(ctx, serviceAccounts, client.InNamespace(namespace), client.MatchingLabels{
-		controller.LabelDefaultServiceAccount: "true",
+		webhookconst.DefaultServiceAccountLabel: "true",
 	}); err != nil {
 		return "", fmt.Errorf("failed to list service accounts: %w", err)
 	}
