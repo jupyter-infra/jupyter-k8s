@@ -104,7 +104,8 @@ func (r *WorkspaceTemplateReconciler) manageFinalizer(ctx context.Context, templ
 	logger := logf.FromContext(ctx)
 
 	// Check if any active workspaces are using this template
-	workspaces, _, err := workspace.ListByTemplate(ctx, r.Client, template.Name, "", 0)
+	// Use empty namespace to match all workspaces (backwards compatible)
+	workspaces, _, err := workspace.ListByTemplate(ctx, r.Client, template.Name, "", "", 0)
 	if err != nil {
 		logger.Error(err, "Failed to list workspaces using template")
 		return ctrl.Result{}, err
@@ -161,7 +162,8 @@ func (r *WorkspaceTemplateReconciler) handleDeletion(ctx context.Context, templa
 	}
 
 	// Check if any workspaces are using this template
-	workspaces, _, err := workspace.ListByTemplate(ctx, r.Client, template.Name, "", 0)
+	// Use empty namespace to match all workspaces (backwards compatible)
+	workspaces, _, err := workspace.ListByTemplate(ctx, r.Client, template.Name, "", "", 0)
 	if err != nil {
 		logger.Error(err, "Failed to list workspaces using template")
 		return ctrl.Result{}, err

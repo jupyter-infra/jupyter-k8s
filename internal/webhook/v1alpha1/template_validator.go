@@ -131,11 +131,6 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 	}
 
 	// Case 5: TemplateRef unchanged - check other conditions
-	// Special case: Always allow stopping workspace without validation
-	if newWorkspace.Spec.DesiredStatus == "Stopped" && oldWorkspace.Spec.DesiredStatus != "Stopped" {
-		workspacelog.Info("Allowing workspace stop without template validation", "workspace", newWorkspace.Name)
-		return nil
-	}
 
 	// Check if any spec field changed
 	if !specChanged(&oldWorkspace.Spec, &newWorkspace.Spec) {
@@ -143,8 +138,19 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 		return nil
 	}
 
+	// Special case: If ONLY DesiredStatus changed to Stopped, allow without validation
+	// This enables users to stop workspaces without validation (emergency shutdown, cost savings)
+	// However, if other spec fields also changed, those changes must be validated
+	if newWorkspace.Spec.DesiredStatus == controller.PhaseStopped &&
+		oldWorkspace.Spec.DesiredStatus != controller.PhaseStopped &&
+		onlyDesiredStatusChanged(&oldWorkspace.Spec, &newWorkspace.Spec) {
+		workspacelog.Info("Allowing workspace stop without template validation (status-only change)", "workspace", newWorkspace.Name)
+		return nil
+	}
+
 	// Spec changed with same template - validate ENTIRE spec against template
 	// This follows Kubernetes best practices: admission webhooks validate desired state, not deltas
+	// This includes cases where stopping + other changes occur simultaneously
 	workspacelog.Info("Spec changed, validating entire workspace against template", "workspace", newWorkspace.Name)
 	return tv.ValidateCreateWorkspace(ctx, newWorkspace)
 }

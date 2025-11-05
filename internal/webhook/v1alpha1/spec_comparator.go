@@ -214,3 +214,84 @@ func accessStrategyEqual(old, new *workspacev1alpha1.AccessStrategyRef) bool {
 func idleShutdownEqual(old, new *workspacev1alpha1.IdleShutdownSpec) bool {
 	return reflect.DeepEqual(old, new)
 }
+
+// onlyDesiredStatusChanged checks if DesiredStatus is the ONLY spec field that changed
+// Used to determine if stopping a workspace should bypass validation
+// Returns true only when DesiredStatus changed and all other fields remain unchanged
+func onlyDesiredStatusChanged(oldSpec, newSpec *workspacev1alpha1.WorkspaceSpec) bool {
+	// DesiredStatus must have changed
+	if oldSpec.DesiredStatus == newSpec.DesiredStatus {
+		return false
+	}
+
+	// All other fields must be unchanged
+	if oldSpec.DisplayName != newSpec.DisplayName {
+		return false
+	}
+
+	if oldSpec.Image != newSpec.Image {
+		return false
+	}
+
+	if oldSpec.OwnershipType != newSpec.OwnershipType {
+		return false
+	}
+
+	if oldSpec.AccessType != newSpec.AccessType {
+		return false
+	}
+
+	if !resourcesEqual(oldSpec.Resources, newSpec.Resources) {
+		return false
+	}
+
+	if !storageEqual(oldSpec.Storage, newSpec.Storage) {
+		return false
+	}
+
+	if !volumesEqual(oldSpec.Volumes, newSpec.Volumes) {
+		return false
+	}
+
+	if !containerConfigEqual(oldSpec.ContainerConfig, newSpec.ContainerConfig) {
+		return false
+	}
+
+	if !nodeSelectorEqual(oldSpec.NodeSelector, newSpec.NodeSelector) {
+		return false
+	}
+
+	if !affinityEqual(oldSpec.Affinity, newSpec.Affinity) {
+		return false
+	}
+
+	if !tolerationsEqual(oldSpec.Tolerations, newSpec.Tolerations) {
+		return false
+	}
+
+	if !lifecycleEqual(oldSpec.Lifecycle, newSpec.Lifecycle) {
+		return false
+	}
+
+	if !accessStrategyEqual(oldSpec.AccessStrategy, newSpec.AccessStrategy) {
+		return false
+	}
+
+	if !templateRefEqual(oldSpec.TemplateRef, newSpec.TemplateRef) {
+		return false
+	}
+
+	if !idleShutdownEqual(oldSpec.IdleShutdown, newSpec.IdleShutdown) {
+		return false
+	}
+
+	if oldSpec.AppType != newSpec.AppType {
+		return false
+	}
+
+	if oldSpec.ServiceAccountName != newSpec.ServiceAccountName {
+		return false
+	}
+
+	return true
+}

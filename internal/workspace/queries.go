@@ -26,21 +26,33 @@ import (
 )
 
 // LabelWorkspaceTemplate is the label key for tracking which template a workspace uses
-// This is defined here to avoid import cycles with the controller package
-const LabelWorkspaceTemplate = "workspace.jupyter.org/template"
+// LabelWorkspaceTemplateNamespace is the label key for tracking which namespace the template reference uses
+// These are defined here to avoid import cycles with the controller package
+const (
+	LabelWorkspaceTemplate          = "workspace.jupyter.org/template"
+	LabelWorkspaceTemplateNamespace = "workspace.jupyter.org/template-namespace"
+)
 
 // ListByTemplate returns all active workspaces using the specified template
 // Supports pagination for large-scale deployments
 // Filters out workspaces being deleted (DeletionTimestamp set)
 // Validates templateRef matches label to guard against drift
-func ListByTemplate(ctx context.Context, k8sClient client.Client, templateName string, continueToken string, limit int64) ([]workspacev1alpha1.Workspace, string, error) {
+// If templateNamespace is empty, it acts as a wildcard (backwards compatible)
+func ListByTemplate(ctx context.Context, k8sClient client.Client, templateName string, templateNamespace string, continueToken string, limit int64) ([]workspacev1alpha1.Workspace, string, error) {
 	logger := logf.FromContext(ctx)
 
 	workspaceList := &workspacev1alpha1.WorkspaceList{}
+
+	// Build label selector - namespace is optional for backwards compatibility
+	labels := map[string]string{
+		LabelWorkspaceTemplate: templateName,
+	}
+	if templateNamespace != "" {
+		labels[LabelWorkspaceTemplateNamespace] = templateNamespace
+	}
+
 	listOptions := []client.ListOption{
-		client.MatchingLabels{
-			LabelWorkspaceTemplate: templateName,
-		},
+		client.MatchingLabels(labels),
 	}
 
 	// Add pagination options if specified
@@ -75,11 +87,27 @@ func ListByTemplate(ctx context.Context, k8sClient client.Client, templateName s
 
 		if ws.Spec.TemplateRef.Name != templateName {
 			// This should never happen - log if it occurs
-			logger.Info("Workspace has template label but different templateRef",
+			logger.Info("Workspace has template label but different templateRef name",
 				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
 				"label", templateName,
 				"spec", ws.Spec.TemplateRef.Name)
 			continue
+		}
+
+		// Verify namespace if filtering by namespace
+		if templateNamespace != "" {
+			// Determine the actual namespace the workspace is using for template ref
+			actualNamespace := ws.Spec.TemplateRef.Namespace
+			if actualNamespace == "" {
+				actualNamespace = ws.Namespace // Default to workspace namespace
+			}
+			if actualNamespace != templateNamespace {
+				logger.V(1).Info("Workspace has template label but different namespace",
+					"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
+					"labelNamespace", templateNamespace,
+					"specNamespace", actualNamespace)
+				continue
+			}
 		}
 
 		activeWorkspaces = append(activeWorkspaces, ws)

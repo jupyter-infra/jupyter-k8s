@@ -38,6 +38,12 @@ import (
 	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 )
 
+// Test constants
+const (
+	testInvalidImage      = "malicious/hacked:latest"
+	testValidBaseNotebook = "jupyter/base-notebook:latest"
+)
+
 // createUserContext creates a context with user information for testing
 func createUserContext(baseCtx context.Context, operation, username string, groups ...string) context.Context {
 	userInfo := &authenticationv1.UserInfo{Username: username, Groups: groups}
@@ -623,6 +629,10 @@ var _ = Describe("Workspace Webhook", func() {
 						Min: resource.MustParse("128Mi"),
 						Max: resource.MustParse("4Gi"),
 					},
+					GPU: &workspacev1alpha1.ResourceRange{
+						Min: resource.MustParse("0"),
+						Max: resource.MustParse("4"),
+					},
 				}
 			})
 
@@ -726,6 +736,73 @@ var _ = Describe("Workspace Webhook", func() {
 				violations := validateResourceBounds(resources, template)
 				Expect(violations).To(BeEmpty())
 			})
+
+			Context("GPU bounds validation (GAP-6)", func() {
+				It("should allow GPU within bounds", func() {
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("2"),
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(BeEmpty())
+				})
+
+				It("should reject GPU below minimum", func() {
+					template.Spec.ResourceBounds.GPU = &workspacev1alpha1.ResourceRange{
+						Min: resource.MustParse("1"),
+						Max: resource.MustParse("4"),
+					}
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("0"),
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(HaveLen(1))
+					Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+					Expect(violations[0].Message).To(ContainSubstring("below minimum"))
+					Expect(violations[0].Message).To(ContainSubstring("test-template"))
+				})
+
+				It("should reject GPU above maximum", func() {
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("8"),
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(HaveLen(1))
+					Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+					Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
+					Expect(violations[0].Message).To(ContainSubstring("test-template"))
+				})
+
+				It("should allow GPU when no GPU bounds specified", func() {
+					template.Spec.ResourceBounds.GPU = nil
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("100"),
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(BeEmpty())
+				})
+
+				It("should validate GPU bounds independently of CPU/Memory", func() {
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:                    resource.MustParse("500m"), // Valid
+							corev1.ResourceMemory:                 resource.MustParse("1Gi"),  // Valid
+							corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("10"),   // Invalid - exceeds max
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(HaveLen(1))
+					Expect(violations[0].Field).To(Equal("spec.resources.requests.nvidia.com/gpu"))
+					Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
+				})
+			})
 		})
 
 		Context("resourcesEqual", func() {
@@ -792,6 +869,263 @@ var _ = Describe("Workspace Webhook", func() {
 		It("should return false for non-admin groups", func() {
 			groups := []string{"regular-user", "data-scientists"}
 			Expect(isAdminUser(groups)).To(BeFalse())
+		})
+	})
+
+	Context("Metadata-Only Updates (GAP-7)", func() {
+		It("should skip validation for metadata-only updates (labels)", func() {
+			userCtx := createUserContext(ctx, "UPDATE", "test-user")
+
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Labels = map[string]string{"env": "prod"}
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Labels = map[string]string{"env": "prod", "team": "data-science"}
+
+			// Both workspaces have identical spec - only labels changed
+			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("should skip validation for metadata-only updates (annotations)", func() {
+			userCtx := createUserContext(ctx, "UPDATE", "test-user")
+
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "test-user",
+			}
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy: "test-user",
+				"custom-annotation":            "custom-value",
+			}
+
+			// Both workspaces have identical spec - only annotations changed
+			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("should validate spec when both metadata and spec change", func() {
+			userCtx := createUserContext(ctx, "UPDATE", "test-user")
+
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Labels = map[string]string{"env": "dev"}
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Labels = map[string]string{"env": "prod"}
+			newWorkspace.Spec.Image = "jupyter/scipy-notebook:latest" // Spec changed
+
+			// Should validate because spec changed (not just metadata)
+			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
+			// Validation should occur - if there's no template, it won't fail
+			// but the validation path was exercised
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+	})
+
+	Context("Stopping Workspace Always Allowed", func() {
+		var template *workspacev1alpha1.WorkspaceTemplate
+		var validatorWithTemplate *WorkspaceCustomValidator
+
+		BeforeEach(func() {
+			// Create template with strict constraints
+			minSize := resource.MustParse("1Gi")
+			maxSize := resource.MustParse("100Gi")
+			template = &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "strict-template",
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:   "Strict Template",
+					DefaultImage:  testValidBaseNotebook,
+					AllowedImages: []string{testValidBaseNotebook},
+					ResourceBounds: &workspacev1alpha1.ResourceBounds{
+						CPU: &workspacev1alpha1.ResourceRange{
+							Min: resource.MustParse("100m"),
+							Max: resource.MustParse("1"),
+						},
+					},
+					PrimaryStorage: &workspacev1alpha1.StorageConfig{
+						MinSize: &minSize,
+						MaxSize: &maxSize,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+
+			// Create validator with template validator initialized
+			validatorWithTemplate = &WorkspaceCustomValidator{
+				templateValidator: &TemplateValidator{
+					client: k8sClient,
+				},
+			}
+		})
+
+		AfterEach(func() {
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, template))).To(Succeed())
+		})
+
+		It("should reject stopping workspace when image also changes to invalid value", func() {
+			userCtx := createUserContext(ctx, "UPDATE", "test-user")
+
+			// Old workspace with valid image and Running status
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Spec.Image = testValidBaseNotebook // Valid
+			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+				Name: template.Name,
+			}
+
+			// New workspace with invalid image AND stopping
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Spec.Image = testInvalidImage                // Invalid - violates template
+			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping
+			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+				Name: template.Name,
+			}
+
+			// Should reject because image changed to invalid value (not just stopping)
+			_, err := validatorWithTemplate.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
+			Expect(err).To(HaveOccurred(), "stopping with invalid image change should be rejected")
+			Expect(err.Error()).To(ContainSubstring("not allowed by template"))
+		})
+
+		It("should reject stopping workspace when resources also change to invalid value", func() {
+			userCtx := createUserContext(ctx, "UPDATE", "test-user")
+
+			// Old workspace with valid resources and Running status
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Spec.Resources = &corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU: resource.MustParse("500m"), // Valid
+				},
+			}
+			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+				Name: template.Name,
+			}
+
+			// New workspace with invalid resources AND stopping
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Spec.Resources = &corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU: resource.MustParse("10"), // Invalid - exceeds max
+				},
+			}
+			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping
+			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+				Name: template.Name,
+			}
+
+			// Should reject because resources changed to invalid value (not just stopping)
+			_, err := validatorWithTemplate.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
+			Expect(err).To(HaveOccurred(), "stopping with invalid resource change should be rejected")
+			Expect(err.Error()).To(ContainSubstring("exceeds maximum"))
+		})
+
+		It("should allow stopping workspace when only status changes (compliant workspace)", func() {
+			userCtx := createUserContext(ctx, "UPDATE", "test-user")
+
+			// Old workspace with valid configuration and Running status
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Spec.Image = testValidBaseNotebook // Valid
+			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+				Name: template.Name,
+			}
+
+			// New workspace - ONLY changing status to Stopped
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Spec.Image = testValidBaseNotebook           // Same valid image
+			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping (only change)
+			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+				Name: template.Name,
+			}
+
+			// Should allow stop without validation when only status changes
+			warnings, err := validatorWithTemplate.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
+			Expect(err).NotTo(HaveOccurred(), "stopping with status-only change should be allowed")
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("should allow stopping workspace that is already non-compliant (status-only change)", func() {
+			userCtx := createUserContext(ctx, "UPDATE", "test-user")
+
+			// Old workspace is already non-compliant (e.g., template was updated after workspace creation)
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Spec.Image = testInvalidImage // Invalid
+			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+				Name: template.Name,
+			}
+
+			// New workspace - ONLY changing status to Stopped, keeping same invalid image
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Spec.Image = testInvalidImage                // Still invalid (unchanged)
+			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping (only change)
+			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+				Name: template.Name,
+			}
+
+			// Should allow stop because ONLY DesiredStatus changed (image stayed the same)
+			warnings, err := validatorWithTemplate.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
+			Expect(err).NotTo(HaveOccurred(), "stopping non-compliant workspace should be allowed when only status changes")
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("should reject stopping workspace when storage also changes to invalid value", func() {
+			userCtx := createUserContext(ctx, "UPDATE", "test-user")
+
+			// Old workspace with valid storage and Running status
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Spec.Storage = &workspacev1alpha1.StorageSpec{
+				Size: resource.MustParse("10Gi"), // Valid (within 1Gi-100Gi bounds)
+			}
+			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+				Name: template.Name,
+			}
+
+			// New workspace with invalid storage AND stopping
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Spec.Storage = &workspacev1alpha1.StorageSpec{
+				Size: resource.MustParse("500Gi"), // Invalid - exceeds max (100Gi)
+			}
+			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping
+			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+				Name: template.Name,
+			}
+
+			// Should reject because storage changed to invalid value (not just stopping)
+			_, err := validatorWithTemplate.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
+			Expect(err).To(HaveOccurred(), "stopping with invalid storage change should be rejected")
+			Expect(err.Error()).To(ContainSubstring("exceeds maximum"))
+		})
+
+		It("should reject non-stop updates with invalid image", func() {
+			userCtx := createUserContext(ctx, "UPDATE", "test-user")
+
+			// Old workspace with valid image
+			oldWorkspace := workspace.DeepCopy()
+			oldWorkspace.Spec.Image = testValidBaseNotebook // Valid
+			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+				Name: template.Name,
+			}
+
+			// New workspace with invalid image and NOT stopping
+			newWorkspace := workspace.DeepCopy()
+			newWorkspace.Spec.Image = testInvalidImage                // Invalid
+			newWorkspace.Spec.DesiredStatus = controller.PhaseRunning // Still Running
+			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+				Name: template.Name,
+			}
+
+			// Should reject because not stopping
+			_, err := validatorWithTemplate.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
+			Expect(err).To(HaveOccurred(), "non-stop update with invalid image should be rejected")
+			Expect(err.Error()).To(ContainSubstring("not allowed by template"))
 		})
 	})
 })

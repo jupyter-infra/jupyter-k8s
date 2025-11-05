@@ -412,7 +412,7 @@ func (sm *StateMachine) checkComplianceIfNeeded(
 	logger := logf.FromContext(ctx)
 
 	// Check if compliance check is needed
-	if workspace.Labels == nil || workspace.Labels[LabelComplianceCheckNeeded] != "true" {
+	if workspace.Labels == nil || workspace.Labels[LabelComplianceCheckNeeded] != LabelValueComplianceNeeded {
 		return ctrl.Result{}, nil
 	}
 

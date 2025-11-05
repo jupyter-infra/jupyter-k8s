@@ -28,4 +28,14 @@ func applyMetadataDefaults(workspace *workspacev1alpha1.Workspace, template *wor
 		workspace.Labels = make(map[string]string)
 	}
 	workspace.Labels[controller.LabelWorkspaceTemplate] = template.Name
+
+	// Set template namespace label - use workspace namespace if templateRef.namespace is empty
+	// This follows Kubernetes convention (e.g., ConfigMapRef, SecretRef default to same namespace)
+	templateNamespace := ""
+	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Namespace != "" {
+		templateNamespace = workspace.Spec.TemplateRef.Namespace
+	} else {
+		templateNamespace = workspace.Namespace
+	}
+	workspace.Labels[controller.LabelWorkspaceTemplateNamespace] = templateNamespace
 }

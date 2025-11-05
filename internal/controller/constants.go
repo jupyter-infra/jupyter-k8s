@@ -21,17 +21,19 @@ const (
 	AppLabel = "app"
 
 	// Access strategy label keys
-	LabelWorkspaceName           = "workspace.jupyter.org/workspaceName"
-	LabelWorkspaceNamespace      = "workspace.jupyter.org/workspaceNamespace"
-	LabelAccessStrategyName      = "workspace.jupyter.org/accessStrategyName"
-	LabelAccessStrategyNamespace = "workspace.jupyter.org/accessStrategyNamespace"
-	LabelWorkspaceTemplate       = "workspace.jupyter.org/template"
+	LabelWorkspaceName              = "workspace.jupyter.org/workspaceName"
+	LabelWorkspaceNamespace         = "workspace.jupyter.org/workspaceNamespace"
+	LabelAccessStrategyName         = "workspace.jupyter.org/accessStrategyName"
+	LabelAccessStrategyNamespace    = "workspace.jupyter.org/accessStrategyNamespace"
+	LabelWorkspaceTemplate          = "workspace.jupyter.org/template"
+	LabelWorkspaceTemplateNamespace = "workspace.jupyter.org/template-namespace"
 
 	// Compliance tracking label keys
 	LabelComplianceCheckNeeded = "workspace.jupyter.org/compliance-check-needed"
 
 	// Label values
-	AppLabelValue = "jupyter"
+	AppLabelValue              = "jupyter"
+	LabelValueComplianceNeeded = "true"
 
 	// Annotation keys
 	AnnotationCreatedBy                  = "workspace.jupyter.org/created-by"

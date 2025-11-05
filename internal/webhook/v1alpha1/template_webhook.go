@@ -287,7 +287,8 @@ func (v *WorkspaceTemplateCustomValidator) markWorkspacesForComplianceCheck(ctx 
 	totalMarked := 0
 
 	for {
-		workspaces, nextToken, err := workspace.ListByTemplate(ctx, v.client, templateName, continueToken, pageSize)
+		// Use empty namespace to match all workspaces (backwards compatible)
+		workspaces, nextToken, err := workspace.ListByTemplate(ctx, v.client, templateName, "", continueToken, pageSize)
 		if err != nil {
 			return fmt.Errorf("failed to list workspaces for template %s: %w", templateName, err)
 		}

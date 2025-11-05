@@ -175,14 +175,14 @@ var _ = Describe("Template Mutability", func() {
 		})
 
 		It("should list workspaces using a template", func() {
-			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "", 0)
+			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "", "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(HaveLen(1))
 			Expect(workspaces[0].Name).To(Equal(workspace.Name))
 		})
 
 		It("should return empty list when no workspaces use template", func() {
-			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, "nonexistent-template", "", 0)
+			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, "nonexistent-template", "", "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(BeEmpty())
 		})
@@ -193,7 +193,7 @@ var _ = Describe("Template Mutability", func() {
 			Expect(k8sClient.Update(ctx, template)).To(Succeed())
 
 			// Verify we can detect workspaces using the template
-			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "", 0)
+			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "", "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(HaveLen(1))
 
@@ -218,7 +218,7 @@ var _ = Describe("Template Mutability", func() {
 			}()
 
 			// Verify no workspaces use this template
-			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, unusedTemplate.Name, "", 0)
+			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, unusedTemplate.Name, "", "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(BeEmpty())
 
@@ -231,6 +231,113 @@ var _ = Describe("Template Mutability", func() {
 	// The webhook adds finalizers during admission (CREATE/UPDATE operations)
 	// The controller adds finalizers as a safety net and removes them when no workspaces use the template
 	// See test/e2e for webhook behavior tests
+
+	Context("Cross-Namespace Template References", func() {
+		It("should handle workspace referencing template with explicit namespace", func() {
+			ctx := context.Background()
+
+			// Create template (cluster-scoped, no namespace in metadata)
+			template := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cross-ns-template",
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Cross-NS Template",
+					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+			defer func() {
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, template))).To(Succeed())
+			}()
+
+			// Create workspace with explicit namespace in templateRef
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cross-ns-workspace",
+					Namespace: "default",
+					Labels: map[string]string{
+						LabelWorkspaceTemplate:          template.Name,
+						LabelWorkspaceTemplateNamespace: "other-namespace",
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					DisplayName: "Cross-NS Test",
+					TemplateRef: &workspacev1alpha1.TemplateRef{
+						Name:      template.Name,
+						Namespace: "other-namespace",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
+			defer func() {
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, workspace))).To(Succeed())
+			}()
+
+			// Query with namespace filter - should find workspace
+			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "other-namespace", "", 0)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspaces).To(HaveLen(1))
+			Expect(workspaces[0].Name).To(Equal("cross-ns-workspace"))
+
+			// Query with different namespace - should not find workspace
+			workspaces, _, err = workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "default", "", 0)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspaces).To(BeEmpty())
+
+			// Query without namespace filter - should find workspace (wildcard)
+			workspaces, _, err = workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "", "", 0)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspaces).To(HaveLen(1))
+		})
+
+		It("should use workspace namespace as default when templateRef.namespace is empty", func() {
+			ctx := context.Background()
+
+			template := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default-ns-template",
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Default NS Template",
+					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+			defer func() {
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, template))).To(Succeed())
+			}()
+
+			// Create workspace without namespace in templateRef
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "default-ns-workspace",
+					Namespace: "default",
+					Labels: map[string]string{
+						LabelWorkspaceTemplate:          template.Name,
+						LabelWorkspaceTemplateNamespace: "default", // Should be set to workspace namespace
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					DisplayName: "Default NS Test",
+					TemplateRef: &workspacev1alpha1.TemplateRef{
+						Name: template.Name,
+						// Namespace omitted - should default to workspace namespace
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
+			defer func() {
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, workspace))).To(Succeed())
+			}()
+
+			// Query with workspace namespace - should find it
+			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "default", "", 0)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspaces).To(HaveLen(1))
+			Expect(workspaces[0].Labels[LabelWorkspaceTemplateNamespace]).To(Equal("default"))
+		})
+	})
 
 	Context("Template Spec Mutability", func() {
 		It("should allow template spec modification (mutability)", func() {
