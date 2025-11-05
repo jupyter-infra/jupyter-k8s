@@ -110,4 +110,78 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 			Expect(workspace.Spec.ServiceAccountName).To(Equal("custom-default-sa"))
 		})
 	})
+
+	Context("GetDefaultServiceAccount", func() {
+		It("should return 'default' when no service accounts have the label", func() {
+			scheme := runtime.NewScheme()
+			_ = corev1.AddToScheme(scheme)
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				Build()
+
+			result, err := GetDefaultServiceAccount(ctx, fakeClient, "default")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal("default"))
+		})
+
+		It("should return the service account name when exactly one has the label", func() {
+			scheme := runtime.NewScheme()
+			_ = corev1.AddToScheme(scheme)
+
+			sa := &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "custom-sa",
+					Namespace: "default",
+					Labels: map[string]string{
+						controller.LabelDefaultServiceAccount: "true",
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(sa).
+				Build()
+
+			result, err := GetDefaultServiceAccount(ctx, fakeClient, "default")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal("custom-sa"))
+		})
+
+		It("should return error when multiple service accounts have the label", func() {
+			scheme := runtime.NewScheme()
+			_ = corev1.AddToScheme(scheme)
+
+			sa1 := &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "sa1",
+					Namespace: "default",
+					Labels: map[string]string{
+						controller.LabelDefaultServiceAccount: "true",
+					},
+				},
+			}
+
+			sa2 := &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "sa2",
+					Namespace: "default",
+					Labels: map[string]string{
+						controller.LabelDefaultServiceAccount: "true",
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(sa1, sa2).
+				Build()
+
+			result, err := GetDefaultServiceAccount(ctx, fakeClient, "default")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("multiple service accounts found"))
+			Expect(result).To(BeEmpty())
+		})
+	})
 })
