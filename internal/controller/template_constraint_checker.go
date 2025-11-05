@@ -1,103 +1,24 @@
 /*
-Copyright 2025.
+MIT License
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+Copyright (c) 2025 jupyter-ai-contrib
 
-    http://www.apache.org/licenses/LICENSE-2.0
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 */
 
-package v1alpha1
+package controller
 
 import (
-	"context"
-	"fmt"
-
-	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
-
-// nolint:unused
-// log is for logging in this package.
-var templatelog = logf.Log.WithName("workspacetemplate-resource")
-
-// SetupWorkspaceTemplateWebhookWithManager registers the webhook for WorkspaceTemplate in the manager.
-func SetupWorkspaceTemplateWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.WorkspaceTemplate{}).
-		WithValidator(&WorkspaceTemplateCustomValidator{}).
-		Complete()
-}
-
-// +kubebuilder:webhook:path=/validate-workspace-jupyter-org-v1alpha1-workspacetemplate,mutating=false,failurePolicy=fail,sideEffects=None,groups=workspace.jupyter.org,resources=workspacetemplates,verbs=update,versions=v1alpha1,name=vworkspacetemplate-v1alpha1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
-
-// WorkspaceTemplateCustomValidator struct is responsible for validating the WorkspaceTemplate resource
-// when it is updated. It checks if constraint fields changed and returns warnings.
-// The WorkspaceTemplate controller is responsible for marking affected workspaces for compliance checking.
-//
-// NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
-// as this struct is used only for temporary operations and does not need to be deeply copied.
-type WorkspaceTemplateCustomValidator struct {
-}
-
-var _ webhook.CustomValidator = &WorkspaceTemplateCustomValidator{}
-
-// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type WorkspaceTemplate.
-func (v *WorkspaceTemplateCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	template, ok := obj.(*workspacev1alpha1.WorkspaceTemplate)
-	if !ok {
-		return nil, fmt.Errorf("expected a WorkspaceTemplate object but got %T", obj)
-	}
-	templatelog.Info("Validation for WorkspaceTemplate upon creation", "name", template.GetName())
-
-	// No special validation needed on create
-	return nil, nil
-}
-
-// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type WorkspaceTemplate.
-func (v *WorkspaceTemplateCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	oldTemplate, ok := oldObj.(*workspacev1alpha1.WorkspaceTemplate)
-	if !ok {
-		return nil, fmt.Errorf("expected a WorkspaceTemplate object for the oldObj but got %T", oldObj)
-	}
-	newTemplate, ok := newObj.(*workspacev1alpha1.WorkspaceTemplate)
-	if !ok {
-		return nil, fmt.Errorf("expected a WorkspaceTemplate object for the newObj but got %T", newObj)
-	}
-	templatelog.Info("Validation for WorkspaceTemplate upon update", "name", newTemplate.GetName())
-
-	// Check if constraint fields changed
-	if constraintsChanged(oldTemplate, newTemplate) {
-		templatelog.Info("Template constraints changed, controller will mark workspaces for compliance check", "template", newTemplate.GetName())
-		// Return a warning to inform the user that workspaces will be validated
-		return admission.Warnings{"Template constraints changed. Affected workspaces will be marked for compliance validation by the controller."}, nil
-	}
-
-	return nil, nil
-}
-
-// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type WorkspaceTemplate.
-func (v *WorkspaceTemplateCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	template, ok := obj.(*workspacev1alpha1.WorkspaceTemplate)
-	if !ok {
-		return nil, fmt.Errorf("expected a WorkspaceTemplate object but got %T", obj)
-	}
-	templatelog.Info("Validation for WorkspaceTemplate upon deletion", "name", template.GetName())
-
-	// Deletion is handled by finalizers in the controller
-	return nil, nil
-}
 
 // constraintsChanged checks if any constraint fields changed between old and new templates
 // Constraint fields are those that affect workspace validation (resource bounds, allowed images, etc.)
@@ -108,6 +29,16 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 	// Check AllowedImages changes
 	if !stringSlicesEqual(oldSpec.AllowedImages, newSpec.AllowedImages) {
 		return true
+	}
+
+	// Check AllowCustomImages changes
+	if (oldSpec.AllowCustomImages == nil) != (newSpec.AllowCustomImages == nil) {
+		return true
+	}
+	if oldSpec.AllowCustomImages != nil && newSpec.AllowCustomImages != nil {
+		if *oldSpec.AllowCustomImages != *newSpec.AllowCustomImages {
+			return true
+		}
 	}
 
 	// Check ResourceBounds changes
@@ -265,4 +196,17 @@ func idleShutdownTimeoutBoundsChanged(oldOverrides, newOverrides *workspacev1alp
 	}
 
 	return false
+}
+
+// stringSlicesEqual compares two string slices for equality
+func stringSlicesEqual(old, new []string) bool {
+	if len(old) != len(new) {
+		return false
+	}
+	for i := range old {
+		if old[i] != new[i] {
+			return false
+		}
+	}
+	return true
 }

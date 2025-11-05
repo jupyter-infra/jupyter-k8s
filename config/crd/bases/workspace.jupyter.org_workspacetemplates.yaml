@@ -1734,7 +1734,21 @@ spec:
             - defaultImage
             - displayName
             type: object
+          status:
+            description: |-
+              WorkspaceTemplateStatus defines the observed state of WorkspaceTemplate
+              Follows Kubernetes API conventions for status reporting
+            properties:
+              observedGeneration:
+                description: |-
+                  ObservedGeneration reflects the generation of the most recently observed WorkspaceTemplate spec.
+                  This field is used by controllers to determine if they need to reconcile the template.
+                  When metadata.generation != status.observedGeneration, the controller has not yet processed the latest spec.
+                format: int64
+                type: integer
+            type: object
         type: object
     served: true
     storage: true
-    subresources: {}
+    subresources:
+      status: {}
