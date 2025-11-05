@@ -2,24 +2,17 @@ package controller
 
 import (
 	"bytes"
-	"encoding/base32"
 	"fmt"
 	"strings"
 	"text/template"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/yaml"
 )
-
-// TODO: Remove this duplicate function once import cycle is resolved
-// This is a copy of workspace.EncodeNamespaceB32 to avoid import cycle
-func encodeNamespaceB32(namespace string) string {
-	encoded := base32.StdEncoding.EncodeToString([]byte(namespace))
-	return strings.ToLower(strings.TrimRight(encoded, "="))
-}
 
 // AccessResourcesBuilder builds resources for WorkspaceAccessStrategy
 type AccessResourcesBuilder struct {
@@ -50,7 +43,7 @@ func (b *AccessResourcesBuilder) BuildUnstructuredResource(
 
 	// Process resource template
 	resourceTmpl, err := template.New("resource").Funcs(template.FuncMap{
-		"b32encode": encodeNamespaceB32,
+		"b32encode": workspaceutil.EncodeNamespaceB32,
 	}).Parse(accessResourceTemplate.Template)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse resource template: %w", err)
@@ -116,7 +109,7 @@ func (b *AccessResourcesBuilder) BuildUnstructuredResource(
 	if accessStrategyNamespace == "" {
 		accessStrategyNamespace = workspace.Namespace
 	}
-	labels[LabelWorkspaceName] = workspace.Name
+	labels[workspaceutil.LabelWorkspaceName] = workspace.Name
 	labels[LabelWorkspaceNamespace] = workspace.Namespace
 	labels[LabelAccessStrategyName] = accessStrategy.Name
 	labels[LabelAccessStrategyNamespace] = accessStrategyNamespace
@@ -140,7 +133,7 @@ func (b *AccessResourcesBuilder) ResolveAccessURL(
 
 	// Resolve the AccessURLTemplate using the template engine
 	tmpl, err := template.New("accessURL").Funcs(template.FuncMap{
-		"b32encode": encodeNamespaceB32,
+		"b32encode": workspaceutil.EncodeNamespaceB32,
 	}).Parse(accessUrlTemplate)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse AccessURLTemplate: %w", err)
@@ -176,5 +169,5 @@ func (b *AccessResourcesBuilder) ResolveAccessResourceSelector(
 	}
 
 	// Format: key1=value1,key2=value2
-	return fmt.Sprintf("%s=%s", LabelWorkspaceName, workspace.Name)
+	return fmt.Sprintf("%s=%s", workspaceutil.LabelWorkspaceName, workspace.Name)
 }

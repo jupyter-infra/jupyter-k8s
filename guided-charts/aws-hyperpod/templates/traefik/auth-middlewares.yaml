@@ -87,11 +87,12 @@ metadata:
     app: authmiddleware
     component: auth
 spec:
-  replacePathRegex:
+  redirectRegex:
+    permanent: false
 {{- if eq .Values.authmiddleware.routingMode "subdomain" }}
-    regex: "^/bearer-auth$"
-    replacement: "/"
+    regex: "^(https?://[^/]+)/bearer-auth.*$"
+    replacement: "${1}/"
 {{- else }}
-    regex: "^(/workspaces/[^/]+/[^/]+)/bearer-auth$"
-    replacement: "$1/"
+    regex: "^(https?://[^/]+/workspaces/[^/]+/[^/]+)/bearer-auth.*$"
+    replacement: "${1}/"
 {{- end }}

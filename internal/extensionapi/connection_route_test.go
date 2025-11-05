@@ -38,10 +38,46 @@ func TestNoOpPodExec(t *testing.T) {
 }
 
 func TestGenerateWebUIURL(t *testing.T) {
-	server := &ExtensionServer{}
-	req := httptest.NewRequest("POST", "/test", nil)
+	// Create test workspace with AccessStrategy
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workspace",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
+				Name: "test-strategy",
+			},
+		},
+	}
 
-	connType, url, err := server.generateWebUIURL(req, "test-workspace", "default")
+	// Create test AccessStrategy
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-strategy",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			BearerAuthURLTemplate: "https://test.com/workspaces/{{.Workspace.Namespace}}/{{.Workspace.Name}}/bearer-auth",
+		},
+	}
+
+	// Create fake client with test objects
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace, accessStrategy).Build()
+
+	config := &ExtensionConfig{Domain: "https://test.com"}
+	server := &ExtensionServer{
+		config:     config,
+		jwtManager: &mockJWTManager{token: "test-token"},
+		k8sClient:  fakeClient,
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	req.Header.Set("X-Remote-User", testUser)
+
+	connType, url, err := server.generateWebUIBearerTokenURL(req, "test-workspace", "default")
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -51,8 +87,9 @@ func TestGenerateWebUIURL(t *testing.T) {
 		t.Errorf("expected connection type %s, got %s", connectionv1alpha1.ConnectionTypeWebUI, connType)
 	}
 
-	if url != "https://placeholder-webui-url.com" {
-		t.Errorf("expected placeholder URL, got %s", url)
+	expected := "https://test.com/workspaces/default/test-workspace/bearer-auth?token=test-token"
+	if url != expected {
+		t.Errorf("expected %s, got %s", expected, url)
 	}
 }
 

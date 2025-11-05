@@ -18,9 +18,7 @@ import (
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Function variable for SSM strategy creation (mockable in tests)
@@ -41,30 +39,10 @@ func (s *ExtensionServer) generateWebUIBearerTokenURL(r *http.Request, workspace
 		return "", "", fmt.Errorf("user information not found in request headers")
 	}
 
-	// Fetch workspace to get AccessStrategy reference
-	workspace, err := s.getWorkspace(namespace, workspaceName)
+	// Generate webUI URL
+	webUIURL, err := s.generateBearerAuthWebUIURL(workspaceName, namespace)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to get workspace: %w", err)
-	}
-
-	// Fetch AccessStrategy
-	accessStrategy, err := s.getAccessStrategy(workspace)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to get access strategy: %w", err)
-	}
-
-	// Require AccessStrategy with BearerAuthURLTemplate
-	if accessStrategy == nil {
-		return "", "", fmt.Errorf("no AccessStrategy configured for workspace")
-	}
-	if accessStrategy.Spec.BearerAuthURLTemplate == "" {
-		return "", "", fmt.Errorf("BearerAuthURLTemplate not configured in AccessStrategy")
-	}
-
-	// Generate URL from template
-	webUIURL, err := s.renderBearerAuthURL(accessStrategy.Spec.BearerAuthURLTemplate, workspace, accessStrategy)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to render bearer auth URL: %w", err)
+		return "", "", err
 	}
 
 	// Parse URL to extract domain and path for JWT claims
@@ -253,19 +231,12 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 	}
 
 	// Generate VSCode connection URL using SSM strategy
-	url, err := ssmStrategy.GenerateVSCodeConnectionURL(r.Context(), workspaceName, namespace, podUID, clusterId)
+	connectionURL, err := ssmStrategy.GenerateVSCodeConnectionURL(r.Context(), workspaceName, namespace, podUID, clusterId)
 	if err != nil {
 		return "", "", err
 	}
 
-	return connectionv1alpha1.ConnectionTypeVSCodeRemote, url, nil
-}
-
-// generateWebUIURL generates a Web UI connection URL
-// Returns (connectionType, connectionURL, error)
-func (s *ExtensionServer) generateWebUIURL(r *http.Request, workspaceName, namespace string) (string, string, error) {
-	// TODO: Implement Web UI URL generation with JWT tokens
-	return connectionv1alpha1.ConnectionTypeWebUI, "https://placeholder-webui-url.com", nil
+	return connectionv1alpha1.ConnectionTypeVSCodeRemote, connectionURL, nil
 }
 
 // checkWorkspaceAuthorization checks if the user is authorized to access the workspace
@@ -276,42 +247,6 @@ func (s *ExtensionServer) checkWorkspaceAuthorization(r *http.Request, workspace
 	}
 
 	return s.CheckWorkspaceAccess(namespace, workspaceName, user, s.logger)
-}
-
-// getWorkspace fetches the workspace resource
-func (s *ExtensionServer) getWorkspace(namespace, workspaceName string) (*workspacev1alpha1.Workspace, error) {
-	var workspace workspacev1alpha1.Workspace
-	err := s.k8sClient.Get(context.Background(),
-		client.ObjectKey{Namespace: namespace, Name: workspaceName},
-		&workspace)
-	if err != nil {
-		return nil, err
-	}
-	return &workspace, nil
-}
-
-// getAccessStrategy fetches the AccessStrategy for the workspace
-func (s *ExtensionServer) getAccessStrategy(workspace *workspacev1alpha1.Workspace) (*workspacev1alpha1.WorkspaceAccessStrategy, error) {
-	if workspace.Spec.AccessStrategy == nil {
-		return nil, nil // No AccessStrategy configured
-	}
-
-	// Determine namespace for the AccessStrategy (same logic as controller)
-	accessStrategyNamespace := workspace.Namespace
-	if workspace.Spec.AccessStrategy.Namespace != "" {
-		accessStrategyNamespace = workspace.Spec.AccessStrategy.Namespace
-	}
-
-	var accessStrategy workspacev1alpha1.WorkspaceAccessStrategy
-	err := s.k8sClient.Get(context.Background(),
-		types.NamespacedName{
-			Name:      workspace.Spec.AccessStrategy.Name,
-			Namespace: accessStrategyNamespace,
-		}, &accessStrategy)
-	if err != nil {
-		return nil, err
-	}
-	return &accessStrategy, nil
 }
 
 // renderBearerAuthURL renders the BearerAuthURLTemplate with workspace variables
@@ -334,4 +269,35 @@ func (s *ExtensionServer) renderBearerAuthURL(templateStr string, ws *workspacev
 	}
 
 	return result.String(), nil
+}
+
+// generateBearerAuthWebUIURL fetches workspace and access strategy, then generates the bearer auth URL
+func (s *ExtensionServer) generateBearerAuthWebUIURL(workspaceName, namespace string) (string, error) {
+	// Fetch workspace to get AccessStrategy reference
+	ws, err := s.getWorkspace(namespace, workspaceName)
+	if err != nil {
+		return "", fmt.Errorf("failed to get workspace: %w", err)
+	}
+
+	// Fetch AccessStrategy
+	accessStrategy, err := s.getAccessStrategy(ws)
+	if err != nil {
+		return "", fmt.Errorf("failed to get access strategy: %w", err)
+	}
+
+	// Require AccessStrategy with BearerAuthURLTemplate
+	if accessStrategy == nil {
+		return "", fmt.Errorf("no AccessStrategy configured for workspace")
+	}
+	if accessStrategy.Spec.BearerAuthURLTemplate == "" {
+		return "", fmt.Errorf("BearerAuthURLTemplate not configured in AccessStrategy")
+	}
+
+	// Generate URL from template
+	webUIURL, err := s.renderBearerAuthURL(accessStrategy.Spec.BearerAuthURLTemplate, ws, accessStrategy)
+	if err != nil {
+		return "", fmt.Errorf("failed to render bearer auth URL: %w", err)
+	}
+
+	return webUIURL, nil
 }

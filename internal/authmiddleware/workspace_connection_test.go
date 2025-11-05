@@ -16,6 +16,8 @@ import (
 const (
 	// TestDefaultNamespace is the default namespace used in tests
 	TestDefaultNamespace = "default"
+	// TestWorkspaceName is the default workspace name used in tests
+	TestWorkspaceName = "myworkspace"
 	// Test paths
 	testWorkspacePath = "/workspaces/default/myworkspace/lab"
 	// ExpectApiGroup
@@ -356,8 +358,8 @@ func TestVerifyWorkspaceAccess_ReturnsResultInfoAndNoError_WhenAccessReviewSucce
 	username := testUserValue
 	groups := []string{"group1", "group2"}
 	uid := "test-uid4"
-	namespace := "default"
-	workspaceName := "myworkspace"
+	namespace := TestDefaultNamespace
+	workspaceName := TestWorkspaceName
 
 	// Mock response
 	reason := "Workspace not found"
@@ -414,10 +416,10 @@ func TestVerifyWorkspaceAccess_ReturnsResultInfoAndNoError_WhenAccessReviewSucce
 	assert.False(t, response.Allowed)
 	assert.True(t, response.NotFound)
 	assert.Equal(t, reason, response.Reason)
-	assert.Equal(t, "myworkspace", workspaceInfo.Name, "Expected workspace name to be 'myworkspace'")
+	assert.Equal(t, TestWorkspaceName, workspaceInfo.Name, "Expected workspace name to be 'myworkspace'")
 	assert.NotNil(t, workspaceInfo, "Expected workspace info to be returned")
-	assert.Equal(t, "default", workspaceInfo.Namespace, "Expected namespace to be 'default'")
-	assert.Equal(t, "myworkspace", workspaceInfo.Name, "Expected workspace name to be 'myworkspace'")
+	assert.Equal(t, TestDefaultNamespace, workspaceInfo.Namespace, "Expected namespace to be 'default'")
+	assert.Equal(t, TestWorkspaceName, workspaceInfo.Name, "Expected workspace name to be 'myworkspace'")
 
 	// Verify the request was made to the correct URL
 	expectedPath := fmt.Sprintf("/apis/%s/namespaces/%s/connectionaccessreview",
@@ -521,8 +523,8 @@ func TestVerifyWorkspaceAccess_ReturnsNoResponseAndNoError_WhenAccessReviewFails
 	assert.Error(t, err, "Expected error when create ConnectionAccessReview fails")
 	assert.Nil(t, response, "Expected ConnectionAccessReview response to be nil")
 	assert.NotNil(t, workspaceInfo, "Expected workspace info to be returned")
-	assert.Equal(t, "default", workspaceInfo.Namespace, "Expected namespace to be 'default'")
-	assert.Equal(t, "myworkspace", workspaceInfo.Name, "Expected workspace name to be 'myworkspace'")
+	assert.Equal(t, TestDefaultNamespace, workspaceInfo.Namespace, "Expected namespace to be 'default'")
+	assert.Equal(t, TestWorkspaceName, workspaceInfo.Name, "Expected workspace name to be 'myworkspace'")
 }
 
 func TestExtractWorkspaceInfo_SubdomainMode(t *testing.T) {
@@ -542,10 +544,10 @@ func TestExtractWorkspaceInfo_SubdomainMode(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if workspaceInfo.Name != "myworkspace" {
+	if workspaceInfo.Name != TestWorkspaceName {
 		t.Errorf("expected workspace name 'myworkspace', got '%s'", workspaceInfo.Name)
 	}
-	if workspaceInfo.Namespace != "default" {
+	if workspaceInfo.Namespace != TestDefaultNamespace {
 		t.Errorf("expected namespace 'default', got '%s'", workspaceInfo.Namespace)
 	}
 }
@@ -567,10 +569,10 @@ func TestExtractWorkspaceInfo_PathMode(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if workspaceInfo.Name != "myworkspace" {
+	if workspaceInfo.Name != TestWorkspaceName {
 		t.Errorf("expected workspace name 'myworkspace', got '%s'", workspaceInfo.Name)
 	}
-	if workspaceInfo.Namespace != "default" {
+	if workspaceInfo.Namespace != TestDefaultNamespace {
 		t.Errorf("expected namespace 'default', got '%s'", workspaceInfo.Namespace)
 	}
 }
