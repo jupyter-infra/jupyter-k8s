@@ -105,10 +105,11 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 	templateDefaulter := NewTemplateDefaulter(mgr.GetClient())
 	templateGetter := NewTemplateGetter(mgr.GetClient())
 	serviceAccountValidator := NewServiceAccountValidator(mgr.GetClient())
+	serviceAccountDefaulter := NewServiceAccountDefaulter(mgr.GetClient())
 
 	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.Workspace{}).
 		WithValidator(&WorkspaceCustomValidator{templateValidator: templateValidator, serviceAccountValidator: serviceAccountValidator}).
-		WithDefaulter(&WorkspaceCustomDefaulter{templateDefaulter: templateDefaulter, templateGetter: templateGetter}).
+		WithDefaulter(&WorkspaceCustomDefaulter{templateDefaulter: templateDefaulter, serviceAccountDefaulter: serviceAccountDefaulter, templateGetter: templateGetter}).
 		Complete()
 }
 
@@ -120,8 +121,9 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as it is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceCustomDefaulter struct {
-	templateDefaulter *TemplateDefaulter
-	templateGetter    *TemplateGetter
+	templateDefaulter       *TemplateDefaulter
+	serviceAccountDefaulter *ServiceAccountDefaulter
+  templateGetter          *TemplateGetter
 }
 
 var _ webhook.CustomDefaulter = &WorkspaceCustomDefaulter{}
@@ -165,6 +167,12 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 	if err := d.templateDefaulter.ApplyTemplateDefaults(ctx, workspace); err != nil {
 		workspacelog.Error(err, "Failed to apply template defaults", "workspace", workspace.GetName())
 		return fmt.Errorf("failed to apply template defaults: %w", err)
+	}
+
+	// Apply service account defaults
+	if err := d.serviceAccountDefaulter.ApplyServiceAccountDefaults(ctx, workspace); err != nil {
+		workspacelog.Error(err, "Failed to apply service account defaults", "workspace", workspace.GetName())
+		return fmt.Errorf("failed to apply service account defaults: %w", err)
 	}
 
 	return nil
@@ -225,6 +233,12 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 		return nil, fmt.Errorf("expected a Workspace object for the newObj but got %T", newObj)
 	}
 	workspacelog.Info("Validation for Workspace upon update", "name", newWorkspace.GetName(), "namespace", newWorkspace.GetNamespace())
+
+	// Skip validation if workspace is being deleted (has deletionTimestamp)
+	// This allows finalizer removal even if template is already deleted
+	if !newWorkspace.DeletionTimestamp.IsZero() {
+		return nil, nil
+	}
 
 	// Check if user is admin
 	isAdmin := false
