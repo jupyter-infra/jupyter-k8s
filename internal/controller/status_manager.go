@@ -7,6 +7,7 @@ import (
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -441,4 +442,18 @@ func (sm *StatusManager) UpdateStoppedStatus(
 	workspace.Status.DeploymentName = ""
 	workspace.Status.ServiceName = ""
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
+}
+
+// UpdateDeletingStatus sets the workspace status to indicate deletion in progress
+func (sm *StatusManager) UpdateDeletingStatus(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
+	condition := metav1.Condition{
+		Type:               "Deleting",
+		Status:             metav1.ConditionTrue,
+		Reason:             "DeletionInProgress",
+		Message:            "Workspace resources are being deleted",
+		LastTransitionTime: metav1.Now(),
+	}
+
+	meta.SetStatusCondition(&workspace.Status.Conditions, condition)
+	return sm.client.Status().Update(ctx, workspace)
 }
