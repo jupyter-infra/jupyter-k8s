@@ -184,60 +184,6 @@ func (rm *ResourceManager) deleteService(ctx context.Context, service *corev1.Se
 	return nil
 }
 
-// IsDeploymentAvailable checks if the Deployment is considered available
-// based on its status conditions
-func (rm *ResourceManager) IsDeploymentAvailable(deployment *appsv1.Deployment) bool {
-	// If deployment is nil, it's not available
-	if deployment == nil {
-		return false
-	}
-
-	// Check if the deployment has the Available condition set to True
-	for _, condition := range deployment.Status.Conditions {
-		if condition.Type == appsv1.DeploymentAvailable {
-			return condition.Status == corev1.ConditionTrue
-		}
-	}
-
-	// Fallback: also check the replica counts to determine availability
-	// This is useful if the conditions aren't updated yet but replicas are running
-	return deployment.Status.AvailableReplicas > 0 &&
-		deployment.Status.ReadyReplicas >= *deployment.Spec.Replicas
-}
-
-// IsDeploymentMissingOrDeleting checks if the Deployment is either missing (nil)
-// or in the process of being deleted
-func (rm *ResourceManager) IsDeploymentMissingOrDeleting(deployment *appsv1.Deployment) bool {
-	// If deployment is nil, it's missing
-	if deployment == nil {
-		return true
-	}
-
-	// Check if the deployment has a deletion timestamp (is being deleted)
-	return !deployment.DeletionTimestamp.IsZero()
-}
-
-// IsServiceAvailable checks if the Service has acquired an IP address
-func (rm *ResourceManager) IsServiceAvailable(service *corev1.Service) bool {
-	// If service is nil, it's not available
-	if service == nil {
-		return false
-	}
-
-	if service.Spec.Type == corev1.ServiceTypeLoadBalancer {
-		return len(service.Status.LoadBalancer.Ingress) > 0
-	}
-
-	// For any other type of service, assume it is available as soon as it's created
-	return true
-}
-
-// IsServiceMissingOrDeleting checks if the Service is either missing (nil)
-// or in the process of being deleted
-func (rm *ResourceManager) IsServiceMissingOrDeleting(service *corev1.Service) bool {
-	return service == nil
-}
-
 // EnsureDeploymentExists creates a deployment if it doesn't exist, or updates it if the pod spec differs
 func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*appsv1.Deployment, error) {
 	deployment, err := rm.getDeployment(ctx, workspace)
@@ -387,6 +333,25 @@ func (rm *ResourceManager) EnsureServiceDeleted(ctx context.Context, workspace *
 	return service, nil
 }
 
+// EnsurePVCDeleted initiates PVC deletion (used during workspace deletion, not stop)
+func (rm *ResourceManager) EnsurePVCDeleted(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.PersistentVolumeClaim, error) {
+	pvc, err := rm.getPVC(ctx, workspace)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil // Already deleted
+		}
+		return nil, fmt.Errorf("failed to get PVC: %w", err)
+	}
+
+	if pvc != nil && pvc.DeletionTimestamp.IsZero() {
+		logger := logf.FromContext(ctx)
+		logger.Info("Deleting PVC", "pvc", pvc.Name, "namespace", pvc.Namespace)
+		return pvc, rm.client.Delete(ctx, pvc)
+	}
+
+	return pvc, nil
+}
+
 // EnsurePVCExists creates a PVC if it doesn't exist, or updates it if the spec differs
 // It uses workspace storage if specified
 func (rm *ResourceManager) EnsurePVCExists(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.PersistentVolumeClaim, error) {
@@ -445,4 +410,71 @@ func (rm *ResourceManager) updatePVC(ctx context.Context, pvc *corev1.Persistent
 	}
 
 	return pvc, nil
+}
+
+// CleanupAllResources performs comprehensive cleanup of all workspace resources
+func (rm *ResourceManager) CleanupAllResources(ctx context.Context, workspace *workspacev1alpha1.Workspace) (bool, error) {
+	logger := logf.FromContext(ctx)
+
+	// Delete access strategy resources first
+	accessError := rm.EnsureAccessResourcesDeleted(ctx, workspace)
+	if accessError != nil {
+		logger.Error(accessError, "Failed to delete access strategy resources")
+		// Continue with other deletions, don't block on access strategy
+	}
+
+	// Delete deployment
+	_, err := rm.EnsureDeploymentDeleted(ctx, workspace)
+	if err != nil {
+		return false, err
+	}
+
+	// Delete service
+	_, err = rm.EnsureServiceDeleted(ctx, workspace)
+	if err != nil {
+		return false, err
+	}
+
+	// Delete PVC
+	_, err = rm.EnsurePVCDeleted(ctx, workspace)
+	if err != nil {
+		return false, err
+	}
+
+	// Check if all resources are fully deleted using helper function
+	if rm.AreAllResourcesDeleted(ctx, workspace) {
+		logger.Info("All resources successfully deleted")
+		return true, nil
+	}
+
+	// Resources still being deleted - requeue to check again
+	return false, nil
+}
+
+// AreAllResourcesDeleted checks if all workspace resources are fully removed (not found)
+func (rm *ResourceManager) AreAllResourcesDeleted(ctx context.Context, workspace *workspacev1alpha1.Workspace) bool {
+	// Check deployment - must be NotFound (fully deleted)
+	_, err := rm.getDeployment(ctx, workspace)
+	if err == nil || !errors.IsNotFound(err) {
+		return false // Still exists or other error
+	}
+
+	// Check service - must be NotFound (fully deleted)
+	_, err = rm.getService(ctx, workspace)
+	if err == nil || !errors.IsNotFound(err) {
+		return false // Still exists or other error
+	}
+
+	// Check PVC - must be NotFound (fully deleted)
+	_, err = rm.getPVC(ctx, workspace)
+	if err == nil || !errors.IsNotFound(err) {
+		return false // Still exists or other error
+	}
+
+	// Check access resources are deleted
+	if !rm.AreAccessResourcesDeleted(workspace) {
+		return false
+	}
+
+	return true
 }

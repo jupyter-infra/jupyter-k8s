@@ -36,4 +36,14 @@ func applyCoreDefaults(workspace *workspacev1alpha1.Workspace, template *workspa
 	if workspace.Spec.ContainerConfig == nil && template.Spec.DefaultContainerConfig != nil {
 		workspace.Spec.ContainerConfig = template.Spec.DefaultContainerConfig.DeepCopy()
 	}
+
+	// Apply access type defaults
+	if workspace.Spec.AccessType == "" && template.Spec.DefaultAccessType != "" {
+		workspace.Spec.AccessType = template.Spec.DefaultAccessType
+	}
+
+	// Apply app type defaults
+	if workspace.Spec.AppType == "" && template.Spec.AppType != "" {
+		workspace.Spec.AppType = template.Spec.AppType
+	}
 }

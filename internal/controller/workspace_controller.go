@@ -29,6 +29,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	builderPkg "sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	mngr "sigs.k8s.io/controller-runtime/pkg/manager"
@@ -77,6 +78,7 @@ func (r *WorkspaceReconciler) SetStateMachine(sm *StateMachine) {
 }
 
 // +kubebuilder:rbac:groups=workspace.jupyter.org,resources=*,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=workspace.jupyter.org,resources=workspaces/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods;serviceaccounts,verbs=get;list;watch
@@ -109,6 +111,41 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		logger.Error(err, "Failed to get Workspace")
 		return ctrl.Result{}, err
+	}
+
+	// Handle deletion if DeletionTimestamp is set
+	if !workspace.DeletionTimestamp.IsZero() {
+		return r.stateMachine.ReconcileDeletion(ctx, workspace)
+	}
+
+	// Add finalizer if missing (for new workspaces)
+	if !controllerutil.ContainsFinalizer(workspace, WorkspaceFinalizerName) {
+		logger.Info("Adding finalizer to workspace")
+		controllerutil.AddFinalizer(workspace, WorkspaceFinalizerName)
+		if err := r.Update(ctx, workspace); err != nil {
+			logger.Error(err, "Failed to add finalizer")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Ensure template label is set if workspace uses a template
+	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
+		if workspace.Labels == nil {
+			workspace.Labels = make(map[string]string)
+		}
+		expectedLabel := "workspace.jupyter.org/template"
+		if workspace.Labels[expectedLabel] != workspace.Spec.TemplateRef.Name {
+			logger.Info("Adding template label to workspace", "template", workspace.Spec.TemplateRef.Name)
+			workspace.Labels[expectedLabel] = workspace.Spec.TemplateRef.Name
+			if err := r.Update(ctx, workspace); err != nil {
+				logger.Error(err, "Failed to update workspace with template label")
+				return ctrl.Result{}, err
+			}
+			logger.Info("Successfully added template label to workspace")
+			// Requeue to process with updated labels
+			return ctrl.Result{Requeue: true}, nil
+		}
 	}
 
 	// Delegate to state machine for business logic

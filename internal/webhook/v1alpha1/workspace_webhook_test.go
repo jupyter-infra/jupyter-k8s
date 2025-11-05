@@ -72,8 +72,15 @@ var _ = Describe("Workspace Webhook", func() {
 				OwnershipType: "Public",
 			},
 		}
-		defaulter = WorkspaceCustomDefaulter{}
-		validator = WorkspaceCustomValidator{}
+		mockClient := &MockClient{}
+		defaulter = WorkspaceCustomDefaulter{
+			templateDefaulter:       NewTemplateDefaulter(mockClient),
+			serviceAccountDefaulter: NewServiceAccountDefaulter(mockClient),
+		}
+		validator = WorkspaceCustomValidator{
+			templateValidator:       NewTemplateValidator(mockClient),
+			serviceAccountValidator: NewServiceAccountValidator(mockClient),
+		}
 		ctx = context.Background()
 	})
 

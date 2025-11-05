@@ -799,6 +799,11 @@ func (in *WorkspaceTemplateSpec) DeepCopyInto(out *WorkspaceTemplateSpec) {
 		*out = new(IdleShutdownOverridePolicy)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.DefaultAccessStrategy != nil {
+		in, out := &in.DefaultAccessStrategy, &out.DefaultAccessStrategy
+		*out = new(AccessStrategyRef)
+		**out = **in
+	}
 	if in.DefaultLifecycle != nil {
 		in, out := &in.DefaultLifecycle, &out.DefaultLifecycle
 		*out = new(v1.Lifecycle)

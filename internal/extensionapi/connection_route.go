@@ -10,6 +10,7 @@ import (
 
 	connectionv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,7 +36,8 @@ func (s *ExtensionServer) generateWebUIBearerTokenURL(r *http.Request, workspace
 	}
 
 	// Generate JWT token for the user and workspace
-	token, err := s.jwtManager.GenerateToken(user, []string{}, user, map[string][]string{}, workspaceName, namespace, "webui")
+	workspacePath := fmt.Sprintf("/workspaces/%s/%s", namespace, workspaceName)
+	token, err := s.jwtManager.GenerateToken(user, []string{}, user, map[string][]string{}, workspacePath, namespace, jwt.TokenTypeBootstrap)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate JWT token: %w", err)
 	}

@@ -48,6 +48,8 @@ var defaultApplicators = []DefaultApplicator{
 	applyStorageDefaults,
 	applySchedulingDefaults,
 	applyMetadataDefaults,
+	applyAccessStrategyDefaults,
+	applyLifecycleDefaults,
 }
 
 // ApplyTemplateDefaults applies template defaults to workspace

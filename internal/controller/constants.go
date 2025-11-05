@@ -31,6 +31,9 @@ const (
 	// Compliance tracking label keys
 	LabelComplianceCheckNeeded = "workspace.jupyter.org/compliance-check-needed"
 
+	// Default labels
+	LabelDefaultServiceAccount = "workspace.jupyter.org/default-service-account"
+
 	// Label values
 	AppLabelValue              = "jupyter"
 	LabelValueComplianceNeeded = "true"
@@ -39,7 +42,7 @@ const (
 	AnnotationCreatedBy                  = "workspace.jupyter.org/created-by"
 	AnnotationLastUpdatedBy              = "workspace.jupyter.org/last-updated-by"
 	AnnotationServiceAccountUsers        = "workspace.jupyter.org/service-account-users"
-	AnnotationServiceAccountUsersPattern = "workspace.jupyter.org/service-account-users-pattern"
+	AnnotationServiceAccountUserPatterns = "workspace.jupyter.org/service-account-user-patterns"
 	AnnotationServiceAccountGroups       = "workspace.jupyter.org/service-account-groups"
 
 	// Status phases
@@ -69,6 +72,9 @@ const (
 
 	// Idle shutdown constants
 	IdleCheckInterval = 5 * time.Minute
+
+	// Finalizer for workspace cleanup protection
+	WorkspaceFinalizerName = "workspace.jupyter.org/cleanup-protection"
 )
 
 // GenerateDeploymentName creates a consistent deployment name
