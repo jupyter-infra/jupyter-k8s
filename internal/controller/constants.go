@@ -37,7 +37,7 @@ const (
 	AnnotationCreatedBy                  = "workspace.jupyter.org/created-by"
 	AnnotationLastUpdatedBy              = "workspace.jupyter.org/last-updated-by"
 	AnnotationServiceAccountUsers        = "workspace.jupyter.org/service-account-users"
-	AnnotationServiceAccountUsersPattern = "workspace.jupyter.org/service-account-users-pattern"
+	AnnotationServiceAccountUserPatterns = "workspace.jupyter.org/service-account-user-patterns"
 	AnnotationServiceAccountGroups       = "workspace.jupyter.org/service-account-groups"
 
 	// Status phases
