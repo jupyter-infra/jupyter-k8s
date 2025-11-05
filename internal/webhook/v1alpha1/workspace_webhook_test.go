@@ -71,12 +71,11 @@ var _ = Describe("Workspace Webhook", func() {
 		defaulter = WorkspaceCustomDefaulter{
 			templateDefaulter:       NewTemplateDefaulter(mockClient),
 			serviceAccountDefaulter: NewServiceAccountDefaulter(mockClient),
-      templateGetter:          NewTemplateGetter(mockClient),
+			templateGetter:          NewTemplateGetter(mockClient),
 		}
 		validator = WorkspaceCustomValidator{
 			templateValidator:       NewTemplateValidator(mockClient),
 			serviceAccountValidator: NewServiceAccountValidator(mockClient),
-      templateGetter:          NewTemplateGetter(mockClient),
 		}
 		ctx = context.Background()
 	})

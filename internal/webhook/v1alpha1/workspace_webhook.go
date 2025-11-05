@@ -123,7 +123,7 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 type WorkspaceCustomDefaulter struct {
 	templateDefaulter       *TemplateDefaulter
 	serviceAccountDefaulter *ServiceAccountDefaulter
-  templateGetter          *TemplateGetter
+	templateGetter          *TemplateGetter
 }
 
 var _ webhook.CustomDefaulter = &WorkspaceCustomDefaulter{}
