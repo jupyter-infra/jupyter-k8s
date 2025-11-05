@@ -25,18 +25,6 @@ spec:
         {{- end }}
         {{- end }}
     spec:
-      {{- with .Values.controllerManager.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.controllerManager.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.controllerManager.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       containers:
         - name: manager
           args:
@@ -99,6 +87,18 @@ spec:
               readOnly: true
             {{- end }}
           {{- end }}
+      {{- with .Values.controllerManager.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controllerManager.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controllerManager.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.controllerManager.securityContext | nindent 8 }}
       serviceAccountName: {{ .Values.controllerManager.serviceAccountName }}

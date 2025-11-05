@@ -149,6 +149,40 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
     # Append the entire patch file content to values.yaml
     echo "Appending patch content to values.yaml"
     cat "${PATCHES_DIR}/values.yaml.patch" >> "${CHART_DIR}/values.yaml"
+    
+    # Add scheduling configuration to existing controllerManager section
+    echo "Adding scheduling configuration to controllerManager section"
+    if ! grep -q "nodeSelector:" "${CHART_DIR}/values.yaml"; then
+        # Find the controllerManager section and add scheduling fields
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS sed - add after the replicas line
+            sed -i '' '/^controllerManager:/,/^[^ ]/ {
+                /replicas: 1/a\
+  # Pod scheduling configuration\
+  nodeSelector: {}\
+  tolerations: []\
+  affinity:\
+    nodeAffinity:\
+      requiredDuringSchedulingIgnoredDuringExecution:\
+        nodeSelectorTerms:\
+          - matchExpressions:\
+            - key: kubernetes.io/arch\
+              operator: In\
+              values:\
+                - amd64\
+                - arm64\
+            - key: kubernetes.io/os\
+              operator: In\
+              values:\
+                - linux
+            }' "${CHART_DIR}/values.yaml"
+        else
+            # Linux sed
+            sed -i '/^controllerManager:/,/^[^ ]/ {
+                /replicas: 1/a\  # Pod scheduling configuration\n  nodeSelector: {}\n  tolerations: []\n  affinity:\n    nodeAffinity:\n      requiredDuringSchedulingIgnoredDuringExecution:\n        nodeSelectorTerms:\n          - matchExpressions:\n            - key: kubernetes.io/arch\n              operator: In\n              values:\n                - amd64\n                - arm64\n            - key: kubernetes.io/os\n              operator: In\n              values:\n                - linux
+            }' "${CHART_DIR}/values.yaml"
+        fi
+    fi
     echo "Successfully applied values.yaml.patch"
 fi
 
@@ -211,6 +245,32 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
 
                 # Clean up temp file
                 rm -f "${TMP_PATCH}"
+                
+                # Add scheduling configuration to pod spec
+                echo "Adding scheduling configuration to manager.yaml..."
+                if ! grep -q "nodeSelector:" "${MANAGER_YAML}"; then
+                    # Add scheduling fields before pod-level securityContext (not container securityContext)
+                    # Look for the pattern that indicates pod-level securityContext
+                    if [[ "$OSTYPE" == "darwin"* ]]; then
+                        # macOS sed - target the pod-level securityContext (indented with 6 spaces)
+                        sed -i '' '/^      securityContext:/i\
+      {{- with .Values.controllerManager.nodeSelector }}\
+      nodeSelector:\
+        {{- toYaml . | nindent 8 }}\
+      {{- end }}\
+      {{- with .Values.controllerManager.tolerations }}\
+      tolerations:\
+        {{- toYaml . | nindent 8 }}\
+      {{- end }}\
+      {{- with .Values.controllerManager.affinity }}\
+      affinity:\
+        {{- toYaml . | nindent 8 }}\
+      {{- end }}' "${MANAGER_YAML}"
+                    else
+                        # Linux sed - target the pod-level securityContext (indented with 6 spaces)
+                        sed -i '/^      securityContext:/i\      {{- with .Values.controllerManager.nodeSelector }}\n      nodeSelector:\n        {{- toYaml . | nindent 8 }}\n      {{- end }}\n      {{- with .Values.controllerManager.tolerations }}\n      tolerations:\n        {{- toYaml . | nindent 8 }}\n      {{- end }}\n      {{- with .Values.controllerManager.affinity }}\n      affinity:\n        {{- toYaml . | nindent 8 }}\n      {{- end }}' "${MANAGER_YAML}"
+                    fi
+                fi
             else
                 echo "Args section already has application-images-registry, skipping patch"
             fi
