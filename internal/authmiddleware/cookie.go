@@ -26,9 +26,9 @@ var (
 
 // CookieHandler exposes CookieManager interface to facilitate unit-testing
 type CookieHandler interface {
-	SetCookie(w http.ResponseWriter, token string, path string)
+	SetCookie(w http.ResponseWriter, token string, path string, domain string)
 	GetCookie(r *http.Request, path string) (string, error)
-	ClearCookie(w http.ResponseWriter, path string)
+	ClearCookie(w http.ResponseWriter, path string, domain string)
 	CSRFProtect() func(http.Handler) http.Handler
 }
 
@@ -117,7 +117,8 @@ func NewCookieManager(cfg *Config) (*CookieManager, error) {
 }
 
 // SetCookie sets an auth cookie with the given token
-func (m *CookieManager) SetCookie(w http.ResponseWriter, token string, path string) {
+func (m *CookieManager) SetCookie(w http.ResponseWriter, token string, path string, domain string) {
+	// TODO: Add domain validation to ensure domain is either configured domain or valid subdomain
 	cookieName := m.cookieName
 	cookiePath := m.cookiePath
 
@@ -145,8 +146,9 @@ func (m *CookieManager) SetCookie(w http.ResponseWriter, token string, path stri
 		SameSite: m.cookieSameSiteHttp,
 	}
 
-	if m.cookieDomain != "" {
-		cookie.Domain = m.cookieDomain
+	// Use provided domain if not empty
+	if domain != "" {
+		cookie.Domain = domain
 	}
 
 	http.SetCookie(w, cookie)
@@ -168,7 +170,8 @@ func (m *CookieManager) GetCookie(r *http.Request, path string) (string, error) 
 }
 
 // ClearCookie removes the auth cookie
-func (m *CookieManager) ClearCookie(w http.ResponseWriter, path string) {
+func (m *CookieManager) ClearCookie(w http.ResponseWriter, path string, domain string) {
+	// TODO: Add domain validation to ensure domain is either configured domain or valid subdomain
 	cookieName := m.cookieName
 	cookiePath := m.cookiePath
 
@@ -196,8 +199,9 @@ func (m *CookieManager) ClearCookie(w http.ResponseWriter, path string) {
 		SameSite: m.cookieSameSiteHttp,
 	}
 
-	if m.cookieDomain != "" {
-		cookie.Domain = m.cookieDomain
+	// Use provided domain if not empty
+	if domain != "" {
+		cookie.Domain = domain
 	}
 
 	http.SetCookie(w, cookie)

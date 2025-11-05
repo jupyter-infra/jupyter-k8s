@@ -69,8 +69,13 @@ metadata:
     component: auth
 spec:
   redirectRegex:
+{{- if eq .Values.authmiddleware.routingMode "subdomain" }}
+    regex: "^(https?://[^/]+)/?$"
+    replacement: "${1}/bearer-auth"
+{{- else }}
     regex: "^(https?://[^/]+/workspaces/[^/]+/[^/]+)/?$"
     replacement: "${1}/bearer-auth"
+{{- end }}
     permanent: false
 ---
 apiVersion: traefik.io/v1alpha1
@@ -83,5 +88,10 @@ metadata:
     component: auth
 spec:
   replacePathRegex:
+{{- if eq .Values.authmiddleware.routingMode "subdomain" }}
+    regex: "^/bearer-auth$"
+    replacement: "/"
+{{- else }}
     regex: "^(/workspaces/[^/]+/[^/]+)/bearer-auth$"
     replacement: "$1/"
+{{- end }}

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"encoding/base32"
 	"fmt"
 	"strings"
 	"text/template"
@@ -12,6 +13,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/yaml"
 )
+
+// TODO: Remove this duplicate function once import cycle is resolved
+// This is a copy of workspace.EncodeNamespaceB32 to avoid import cycle
+func encodeNamespaceB32(namespace string) string {
+	encoded := base32.StdEncoding.EncodeToString([]byte(namespace))
+	return strings.ToLower(strings.TrimRight(encoded, "="))
+}
 
 // AccessResourcesBuilder builds resources for WorkspaceAccessStrategy
 type AccessResourcesBuilder struct {
@@ -41,7 +49,9 @@ func (b *AccessResourcesBuilder) BuildUnstructuredResource(
 	name := fmt.Sprintf("%s-%s", accessResourceTemplate.NamePrefix, workspace.Name)
 
 	// Process resource template
-	resourceTmpl, err := template.New("resource").Parse(accessResourceTemplate.Template)
+	resourceTmpl, err := template.New("resource").Funcs(template.FuncMap{
+		"b32encode": encodeNamespaceB32,
+	}).Parse(accessResourceTemplate.Template)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse resource template: %w", err)
 	}
@@ -129,7 +139,9 @@ func (b *AccessResourcesBuilder) ResolveAccessURL(
 	}
 
 	// Resolve the AccessURLTemplate using the template engine
-	tmpl, err := template.New("accessURL").Parse(accessUrlTemplate)
+	tmpl, err := template.New("accessURL").Funcs(template.FuncMap{
+		"b32encode": encodeNamespaceB32,
+	}).Parse(accessUrlTemplate)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse AccessURLTemplate: %w", err)
 	}

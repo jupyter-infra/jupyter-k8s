@@ -32,6 +32,7 @@ type Claims struct {
 	UID         string              `json:"uid,omitempty"`
 	Extra       map[string][]string `json:"extra,omitempty"`
 	Path        string              `json:"path,omitempty"`
+	Subdomain   string              `json:"subdomain,omitempty"`
 	Domain      string              `json:"domain,omitempty"`
 	TokenType   string              `json:"token_type,omitempty"`
 	SkipRefresh bool                `json:"skipRefresh,omitempty"`

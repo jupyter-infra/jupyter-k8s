@@ -4,7 +4,7 @@ metadata:
   name: hyperpod-access-strategy
   namespace: {{ .Release.Namespace }}
 spec:
-  displayName: HyperPod Bearer Auth Strategy
+  displayName: HyperPod Subdomain Bearer Auth Strategy
   accessResourceNamespace: {{ .Release.Namespace }}
   accessResourceTemplates:
     # The authorized route - tries token verification on already authenticated requests
@@ -16,7 +16,7 @@ spec:
           entryPoints:
             - web
           routes:
-            - match: "Host(`{{ .Values.domain }}`) && PathPrefix(`/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}`)"
+            - match: "Host(`{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.domain }}`)"
               kind: Rule
               priority: 100
               middlewares:
@@ -38,7 +38,7 @@ spec:
           entryPoints:
             - web
           routes:
-            - match: "Host(`{{ .Values.domain }}`) && PathPrefix(`/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth`)"
+            - match: "Host(`{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.domain }}`) && PathPrefix(`/bearer-auth`)"
               kind: Rule
               priority: 110  # Higher priority specifically for bearer-auth paths
               middlewares:
@@ -52,7 +52,5 @@ spec:
                 - name: "{{`{{ .Service.Name }}`}}"
                   namespace: "{{`{{ .Service.Namespace }}`}}"
                   port: 8888
-  mergeEnv:
-    - name: JUPYTER_BASE_URL
-      valueTemplate: "/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/"
-  accessURLTemplate: "https://{{ .Values.domain }}/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth"
+  accessURLTemplate: "https://{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.domain }}/"
+  bearerAuthURLTemplate: "https://{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.domain }}/bearer-auth"

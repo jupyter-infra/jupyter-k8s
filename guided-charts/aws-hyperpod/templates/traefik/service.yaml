@@ -17,8 +17,7 @@ metadata:
     service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
     {{- end }}
     {{- if .Values.externalDns.enabled }}
-    # External DNS annotation
-    external-dns.alpha.kubernetes.io/hostname: {{ .Values.domain | quote }}
+    external-dns.alpha.kubernetes.io/hostname: "{{ .Values.domain }},*.{{ .Values.domain }}"
     {{- end }}
     # Configure NLB attributes according to AWS docs using the consolidated attributes approach
     # refer to https://docs.aws.amazon.com/elasticloadbalancing/latest/APIReference/API_LoadBalancerAttribute.html

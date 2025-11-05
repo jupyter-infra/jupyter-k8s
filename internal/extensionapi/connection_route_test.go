@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	connectionv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
@@ -534,10 +535,40 @@ func TestHandleConnectionCreateWithWorkspace(t *testing.T) {
 }
 
 func TestGenerateWebUIBearerTokenURL(t *testing.T) {
+	// Create test workspace with AccessStrategy
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "workspace1",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
+				Name: "test-strategy",
+			},
+		},
+	}
+
+	// Create test AccessStrategy
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-strategy",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			BearerAuthURLTemplate: "https://test.com/workspaces/{{.Workspace.Namespace}}/{{.Workspace.Name}}/bearer-auth",
+		},
+	}
+
+	// Create fake client with test objects
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace, accessStrategy).Build()
+
 	config := &ExtensionConfig{Domain: "https://test.com"}
 	server := &ExtensionServer{
 		config:     config,
 		jwtManager: &mockJWTManager{token: "test-token"},
+		k8sClient:  fakeClient,
 	}
 
 	req := httptest.NewRequest("POST", "/test", nil)
@@ -554,6 +585,147 @@ func TestGenerateWebUIBearerTokenURL(t *testing.T) {
 	expected := "https://test.com/workspaces/default/workspace1/bearer-auth?token=test-token"
 	if url != expected {
 		t.Errorf("expected %s, got %s", expected, url)
+	}
+}
+
+func TestGenerateWebUIBearerTokenURL_SubdomainRouting(t *testing.T) {
+	// Create test workspace with AccessStrategy
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "myworkspace",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
+				Name: "subdomain-strategy",
+			},
+		},
+	}
+
+	// Create AccessStrategy with subdomain template
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "subdomain-strategy",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			BearerAuthURLTemplate: "https://{{.Workspace.Name}}-{{b32encode .Workspace.Namespace}}.example.com/bearer-auth",
+		},
+	}
+
+	// Create fake client with test objects
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace, accessStrategy).Build()
+
+	config := &ExtensionConfig{Domain: "https://example.com"}
+	server := &ExtensionServer{
+		config:     config,
+		jwtManager: &mockJWTManager{token: "test-token"},
+		k8sClient:  fakeClient,
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	req.Header.Set("X-Remote-User", testUser)
+
+	connType, url, err := server.generateWebUIBearerTokenURL(req, "myworkspace", "default")
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if connType != "web-ui" {
+		t.Errorf("expected web-ui, got %s", connType)
+	}
+	expected := "https://myworkspace-mrswmylvnr2a.example.com/bearer-auth?token=test-token"
+	if url != expected {
+		t.Errorf("expected %s, got %s", expected, url)
+	}
+}
+
+func TestGenerateWebUIBearerTokenURL_NoAccessStrategy(t *testing.T) {
+	// Create workspace without AccessStrategy
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "workspace1",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			AccessStrategy: nil,
+		},
+	}
+
+	// Create fake client with test objects
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace).Build()
+
+	config := &ExtensionConfig{Domain: "https://example.com"}
+	server := &ExtensionServer{
+		config:     config,
+		jwtManager: &mockJWTManager{token: "test-token"},
+		k8sClient:  fakeClient,
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	req.Header.Set("X-Remote-User", testUser)
+
+	_, _, err := server.generateWebUIBearerTokenURL(req, "workspace1", "default")
+
+	if err == nil {
+		t.Error("expected error for missing AccessStrategy, got nil")
+	}
+	if !strings.Contains(err.Error(), "no AccessStrategy configured") {
+		t.Errorf("expected AccessStrategy error, got: %v", err)
+	}
+}
+
+func TestGenerateWebUIBearerTokenURL_MissingTemplate(t *testing.T) {
+	// Create workspace with AccessStrategy
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "workspace1",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
+				Name: "empty-strategy",
+			},
+		},
+	}
+
+	// Create AccessStrategy without BearerAuthURLTemplate
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "empty-strategy",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			BearerAuthURLTemplate: "",
+		},
+	}
+
+	// Create fake client with test objects
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace, accessStrategy).Build()
+
+	config := &ExtensionConfig{Domain: "https://example.com"}
+	server := &ExtensionServer{
+		config:     config,
+		jwtManager: &mockJWTManager{token: "test-token"},
+		k8sClient:  fakeClient,
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	req.Header.Set("X-Remote-User", testUser)
+
+	_, _, err := server.generateWebUIBearerTokenURL(req, "workspace1", "default")
+
+	if err == nil {
+		t.Error("expected error for missing BearerAuthURLTemplate, got nil")
+	}
+	if !strings.Contains(err.Error(), "BearerAuthURLTemplate not configured") {
+		t.Errorf("expected template error, got: %v", err)
 	}
 }
 

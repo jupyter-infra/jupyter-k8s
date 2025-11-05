@@ -30,6 +30,11 @@ const (
 	EnvEnableBearerAuth  = "ENABLE_BEARER_URL_AUTH"
 	EnvKMSKeyId          = "KMS_KEY_ID"
 
+	// Routing configuration
+	EnvRoutingMode                      = "ROUTING_MODE"
+	EnvWorkspaceNamespaceSubdomainRegex = "WORKSPACE_NAMESPACE_SUBDOMAIN_REGEX"
+	EnvWorkspaceNameSubdomainRegex      = "WORKSPACE_NAME_SUBDOMAIN_REGEX"
+
 	// Cookie configuration
 	EnvCookieName     = "COOKIE_NAME"
 	EnvCookieSecure   = "COOKIE_SECURE"
@@ -97,6 +102,11 @@ const (
 	DefaultWorkspaceNamespacePathRegex = `^/workspaces/([^/]+)/[^/]+`
 	DefaultWorkspaceNamePathRegex      = `^/workspaces/[^/]+/([^/]+)`
 
+	// Routing defaults
+	DefaultRoutingMode                      = "path"
+	DefaultWorkspaceNamespaceSubdomainRegex = `^([^-]+)-.*`
+	DefaultWorkspaceNameSubdomainRegex      = `^[^-]+-(.*)$`
+
 	// CSRF defaults
 	DefaultCsrfCookieName = "workspace_csrf"
 	// Note: CSRF cookies use the same CookiePath and CookieDomain as auth cookies
@@ -145,6 +155,11 @@ type Config struct {
 	PathRegexPattern            string // Regex pattern to extract app path from full path
 	WorkspaceNamespacePathRegex string // Regex pattern to extract workspace namespace from path
 	WorkspaceNamePathRegex      string // Regex pattern to extract workspace name from path
+
+	// Routing configuration
+	RoutingMode                      string // Routing mode: "path" or "subdomain"
+	WorkspaceNamespaceSubdomainRegex string // Regex pattern to extract workspace namespace from subdomain
+	WorkspaceNameSubdomainRegex      string // Regex pattern to extract workspace name from subdomain
 
 	// CSRF configuration
 	CSRFAuthKey    string
@@ -227,6 +242,11 @@ func createDefaultConfig() *Config {
 		// These regex patterns extract workspace namespace and name from the path
 		WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
 		WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+
+		// Routing defaults
+		RoutingMode:                      DefaultRoutingMode,
+		WorkspaceNamespaceSubdomainRegex: DefaultWorkspaceNamespaceSubdomainRegex,
+		WorkspaceNameSubdomainRegex:      DefaultWorkspaceNameSubdomainRegex,
 
 		// CSRF defaults
 		CSRFCookieName:   DefaultCsrfCookieName,
@@ -342,6 +362,19 @@ func applyJWTConfig(config *Config) error {
 			return fmt.Errorf("invalid %s: %w", EnvEnableBearerAuth, err)
 		}
 		config.EnableBearerAuth = enable
+	}
+
+	// Routing configuration
+	if routingMode := os.Getenv(EnvRoutingMode); routingMode != "" {
+		config.RoutingMode = routingMode
+	}
+
+	if namespaceSubdomainRegex := os.Getenv(EnvWorkspaceNamespaceSubdomainRegex); namespaceSubdomainRegex != "" {
+		config.WorkspaceNamespaceSubdomainRegex = namespaceSubdomainRegex
+	}
+
+	if nameSubdomainRegex := os.Getenv(EnvWorkspaceNameSubdomainRegex); nameSubdomainRegex != "" {
+		config.WorkspaceNameSubdomainRegex = nameSubdomainRegex
 	}
 
 	if kmsKeyId := os.Getenv(EnvKMSKeyId); kmsKeyId != "" {
