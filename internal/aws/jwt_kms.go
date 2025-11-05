@@ -22,15 +22,15 @@ var (
 
 // KMSJWTManager handles JWT token creation and validation using AWS KMS envelope encryption
 type KMSJWTManager struct {
-	kmsClient  *KMSClient
-	keyId      string
-	issuer     string
-	audience   string
-	expiration time.Duration
-	keyCache     map[string][]byte     // encrypted_key_hash -> plaintext_key
-	cacheExpiry  map[string]time.Time  // encrypted_key_hash -> expiry_time
-	lastCleanup  time.Time
-	cacheMutex   sync.RWMutex
+	kmsClient   *KMSClient
+	keyId       string
+	issuer      string
+	audience    string
+	expiration  time.Duration
+	keyCache    map[string][]byte    // encrypted_key_hash -> plaintext_key
+	cacheExpiry map[string]time.Time // encrypted_key_hash -> expiry_time
+	lastCleanup time.Time
+	cacheMutex  sync.RWMutex
 }
 
 // KMSJWTConfig contains configuration for KMS JWT manager
@@ -45,14 +45,14 @@ type KMSJWTConfig struct {
 // NewKMSJWTManager creates a new KMSJWTManager
 func NewKMSJWTManager(config KMSJWTConfig) *KMSJWTManager {
 	return &KMSJWTManager{
-		kmsClient:  config.KMSClient,
-		keyId:      config.KeyId,
-		issuer:     config.Issuer,
-		audience:   config.Audience,
-		expiration: config.Expiration,
-		keyCache:     make(map[string][]byte),
-		cacheExpiry:  make(map[string]time.Time),
-		lastCleanup:  time.Now(),
+		kmsClient:   config.KMSClient,
+		keyId:       config.KeyId,
+		issuer:      config.Issuer,
+		audience:    config.Audience,
+		expiration:  config.Expiration,
+		keyCache:    make(map[string][]byte),
+		cacheExpiry: make(map[string]time.Time),
+		lastCleanup: time.Now(),
 	}
 }
 

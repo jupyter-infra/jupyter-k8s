@@ -200,7 +200,7 @@ func TestKMSJWTManager_CacheExpiry(t *testing.T) {
 
 	// Manually add an entry that will expire
 	manager.setCachedKey("test-hash", []byte("test-key"))
-	
+
 	// Verify key is cached
 	if len(manager.keyCache) != 1 {
 		t.Errorf("Expected 1 cached key, got %d", len(manager.keyCache))
@@ -219,10 +219,10 @@ func TestKMSJWTManager_CacheExpiry(t *testing.T) {
 
 func TestKMSJWTManager_CleanupTiming(t *testing.T) {
 	manager := &KMSJWTManager{
-		keyCache:     make(map[string][]byte),
-		cacheExpiry:  make(map[string]time.Time),
-		lastCleanup:  time.Now(),
-		expiration:   30 * time.Minute,
+		keyCache:    make(map[string][]byte),
+		cacheExpiry: make(map[string]time.Time),
+		lastCleanup: time.Now(),
+		expiration:  30 * time.Minute,
 	}
 
 	// Add some expired entries
@@ -238,7 +238,7 @@ func TestKMSJWTManager_CleanupTiming(t *testing.T) {
 	// Force cleanup by setting old lastCleanup
 	manager.lastCleanup = time.Now().Add(-20 * time.Minute)
 	manager.cleanupExpiredKeys()
-	
+
 	if len(manager.keyCache) != 0 {
 		t.Error("Cleanup should have removed expired entries")
 	}
