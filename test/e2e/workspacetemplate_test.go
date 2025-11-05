@@ -246,7 +246,7 @@ spec:
 			"production-notebook-template", "restricted-template",
 			"mutability-test-template", "restricted-template-mutability",
 			"lazy-application-template", "compliance-template",
-			"immutability-test-template",  // From main
+			"immutability-test-template",
 			"--ignore-not-found", "--wait=false")
 		_, _ = utils.Run(cmd)
 
