@@ -67,12 +67,6 @@ const (
 
 	// Finalizer for workspace cleanup protection
 	WorkspaceFinalizerName = "workspace.jupyter.org/cleanup-protection"
-
-	// Environment variable keys for workspace containers
-	EnvWorkspaceNamespace = "WORKSPACE_NAMESPACE"
-	EnvWorkspaceName      = "WORKSPACE_NAME"
-	EnvAccessType         = "ACCESS_TYPE"
-	EnvAppType            = "APP_TYPE"
 )
 
 // GenerateDeploymentName creates a consistent deployment name

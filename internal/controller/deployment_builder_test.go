@@ -71,8 +71,8 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
 			container := deployment.Spec.Template.Spec.Containers[0]
 
-			// Verify all environment variables are passed to the container (2 standard + 3 template)
-			Expect(container.Env).To(HaveLen(5))
+			// Verify all environment variables are passed to the container
+			Expect(container.Env).To(HaveLen(3))
 
 			// Check each environment variable
 			envMap := make(map[string]string)
@@ -111,17 +111,9 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deployment).NotTo(BeNil())
 
-			// Verify only standard environment variables are added to container (2 standard)
+			// Verify no environment variables are added to container
 			container := deployment.Spec.Template.Spec.Containers[0]
-			Expect(container.Env).To(HaveLen(2))
-
-			// Check standard env vars are present
-			envMap := make(map[string]string)
-			for _, env := range container.Env {
-				envMap[env.Name] = env.Value
-			}
-			Expect(envMap["WORKSPACE_NAMESPACE"]).To(Equal("default"))
-			Expect(envMap["WORKSPACE_NAME"]).To(Equal("test-workspace-no-env"))
+			Expect(container.Env).To(BeEmpty())
 		})
 
 		It("should handle nil resolved template gracefully", func() {
@@ -145,17 +137,9 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deployment).NotTo(BeNil())
 
-			// Verify container has only standard environment variables (2 standard)
+			// Verify container has no environment variables
 			container := deployment.Spec.Template.Spec.Containers[0]
-			Expect(container.Env).To(HaveLen(2))
-
-			// Check standard env vars are present
-			envMap := make(map[string]string)
-			for _, env := range container.Env {
-				envMap[env.Name] = env.Value
-			}
-			Expect(envMap["WORKSPACE_NAMESPACE"]).To(Equal("default"))
-			Expect(envMap["WORKSPACE_NAME"]).To(Equal("test-workspace-nil-template"))
+			Expect(container.Env).To(BeEmpty())
 		})
 	})
 
