@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -39,8 +38,7 @@ import (
 )
 
 const (
-	templateFinalizerName           = "workspace.jupyter.org/template-protection"
-	AnnotationLastCheckedGeneration = "workspace.jupyter.org/last-checked-generation"
+	templateFinalizerName = "workspace.jupyter.org/template-protection"
 	// ComplianceMarkingRateLimit is the rate limit for marking workspaces (workspaces per second)
 	// This prevents API server overload when marking large numbers of workspaces
 	ComplianceMarkingRateLimit = 10
@@ -305,47 +303,36 @@ func SetupWorkspaceTemplateController(mgr ctrl.Manager) error {
 }
 
 // handleSpecChanges detects template spec changes using Generation field and marks workspaces for compliance
-// Uses Generation-based change detection following Kubernetes best practices:
-// - Generation is auto-incremented by K8s when spec changes
-// - Track last processed generation via annotation
+// Uses Generation-based change detection following Kubernetes API conventions:
+// - metadata.generation is auto-incremented by kube-apiserver when spec changes
+// - status.observedGeneration tracks the last generation processed by this controller
 // - Only process each generation once (idempotent)
+// This pattern is standard across all Kubernetes resources (Deployments, StatefulSets, etc.)
 func (r *WorkspaceTemplateReconciler) handleSpecChanges(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) error {
 	logger := logf.FromContext(ctx)
 	currentGeneration := template.Generation
-
-	// Get last checked generation from annotation
-	lastCheckedGenStr := template.Annotations[AnnotationLastCheckedGeneration]
-	lastCheckedGen := int64(0)
-	if lastCheckedGenStr != "" {
-		parsed, err := strconv.ParseInt(lastCheckedGenStr, 10, 64)
-		if err != nil {
-			logger.Error(err, "Failed to parse last checked generation annotation, treating as 0",
-				"annotation", lastCheckedGenStr)
-		} else {
-			lastCheckedGen = parsed
-		}
-	}
+	observedGeneration := template.Status.ObservedGeneration
 
 	logger.V(1).Info("Checking template generation",
 		"currentGeneration", currentGeneration,
-		"lastCheckedGeneration", lastCheckedGen)
+		"observedGeneration", observedGeneration)
 
 	// Already processed this generation
-	if lastCheckedGen >= currentGeneration {
+	if observedGeneration >= currentGeneration {
 		logger.V(1).Info("Generation already processed, skipping")
 		return nil
 	}
 
-	// First creation (generation=1, never checked before)
-	if currentGeneration == 1 && lastCheckedGen == 0 {
-		logger.Info("Template created, marking generation as checked without compliance labeling")
-		return r.updateLastCheckedGeneration(ctx, template, 1)
+	// First creation (generation=1, never processed before)
+	if currentGeneration == 1 && observedGeneration == 0 {
+		logger.Info("Template created, marking generation as observed without compliance labeling")
+		return r.updateStatusObservedGeneration(ctx, template, 1)
 	}
 
 	// Spec was updated - mark workspaces for compliance check
 	logger.Info("Template spec changed, marking workspaces for compliance check",
 		"templateName", template.Name,
-		"oldGeneration", lastCheckedGen,
+		"oldGeneration", observedGeneration,
 		"newGeneration", currentGeneration)
 
 	if err := r.markWorkspacesForCompliance(ctx, template.Name); err != nil {
@@ -353,18 +340,17 @@ func (r *WorkspaceTemplateReconciler) handleSpecChanges(ctx context.Context, tem
 		return err
 	}
 
-	// Update last checked generation
-	return r.updateLastCheckedGeneration(ctx, template, currentGeneration)
+	// Update observed generation in status
+	return r.updateStatusObservedGeneration(ctx, template, currentGeneration)
 }
 
 // markWorkspacesForCompliance labels all workspaces using the template with compliance-check-needed=true
-// Batch processes workspaces to handle large numbers efficiently
-// Rate-limits updates to prevent API server overload
+// Uses controller-runtime's cached client which serves lists from memory (no pagination needed)
+// Rate-limits updates to prevent API server overload when marking large numbers of workspaces
 // Continues on individual failures to maximize workspaces marked
 func (r *WorkspaceTemplateReconciler) markWorkspacesForCompliance(ctx context.Context, templateName string) error {
 	logger := logf.FromContext(ctx)
 	startTime := time.Now()
-	pageSize := int64(100)
 	marked := 0
 	failed := 0
 
@@ -376,61 +362,52 @@ func (r *WorkspaceTemplateReconciler) markWorkspacesForCompliance(ctx context.Co
 		"rateLimit", ComplianceMarkingRateLimit,
 		"timestamp", startTime)
 
-	// List all workspaces using this template (empty namespace = all namespaces)
-	workspaces, continueToken, err := workspace.ListByTemplate(ctx, r.Client, templateName, "", "", pageSize)
+	// List all workspaces using this template from cache (no pagination)
+	// Controllers use cached clients, so all workspaces are already in memory
+	workspaces, _, err := workspace.ListByTemplate(ctx, r.Client, templateName, "", "", 0)
 	if err != nil {
 		return fmt.Errorf("failed to list workspaces using template %s: %w", templateName, err)
 	}
 
-	for {
-		// Mark current batch
-		for i := range workspaces {
-			ws := &workspaces[i]
-			if ws.Labels == nil {
-				ws.Labels = make(map[string]string)
-			}
+	logger.V(1).Info("Listed workspaces from cache",
+		"templateName", templateName,
+		"workspaceCount", len(workspaces))
 
-			// Check if already marked
-			if ws.Labels[workspace.LabelComplianceCheckNeeded] == "true" {
-				logger.V(1).Info("Workspace already marked for compliance check",
-					"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name))
-				marked++
-				continue
-			}
+	// Mark all workspaces
+	for i := range workspaces {
+		ws := &workspaces[i]
+		if ws.Labels == nil {
+			ws.Labels = make(map[string]string)
+		}
 
-			// Wait for rate limiter before updating
-			if err := rateLimiter.Wait(ctx); err != nil {
-				logger.Error(err, "Rate limiter context cancelled")
-				// Context cancelled - stop processing but don't fail entire operation
-				break
-			}
-
-			// Add label
-			ws.Labels[workspace.LabelComplianceCheckNeeded] = "true"
-			if err := r.Update(ctx, ws); err != nil {
-				logger.Error(err, "Failed to mark workspace for compliance check",
-					"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name))
-				failed++
-				continue
-			}
-
-			logger.Info("Marked workspace for compliance check",
-				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
-				"timestamp", time.Now())
+		// Check if already marked
+		if ws.Labels[workspace.LabelComplianceCheckNeeded] == "true" {
+			logger.V(1).Info("Workspace already marked for compliance check",
+				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name))
 			marked++
+			continue
 		}
 
-		// Check if more pages exist
-		if continueToken == "" {
+		// Wait for rate limiter before updating
+		if err := rateLimiter.Wait(ctx); err != nil {
+			logger.Error(err, "Rate limiter context cancelled")
+			// Context cancelled - stop processing but don't fail entire operation
 			break
 		}
 
-		// Fetch next page
-		workspaces, continueToken, err = workspace.ListByTemplate(ctx, r.Client, templateName, "", continueToken, pageSize)
-		if err != nil {
-			logger.Error(err, "Failed to list next page of workspaces", "continueToken", continueToken)
-			break
+		// Add label
+		ws.Labels[workspace.LabelComplianceCheckNeeded] = "true"
+		if err := r.Update(ctx, ws); err != nil {
+			logger.Error(err, "Failed to mark workspace for compliance check",
+				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name))
+			failed++
+			continue
 		}
+
+		logger.Info("Marked workspace for compliance check",
+			"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
+			"timestamp", time.Now())
+		marked++
 	}
 
 	duration := time.Since(startTime)
@@ -445,31 +422,6 @@ func (r *WorkspaceTemplateReconciler) markWorkspacesForCompliance(ctx context.Co
 	}
 
 	return nil
-}
-
-// updateLastCheckedGeneration updates the template's last-checked-generation annotation
-func (r *WorkspaceTemplateReconciler) updateLastCheckedGeneration(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate, generation int64) error {
-	logger := logf.FromContext(ctx)
-
-	if template.Annotations == nil {
-		template.Annotations = make(map[string]string)
-	}
-
-	template.Annotations[AnnotationLastCheckedGeneration] = strconv.FormatInt(generation, 10)
-
-	if err := r.Update(ctx, template); err != nil {
-		logger.Error(err, "Failed to update last checked generation annotation",
-			"templateName", template.Name,
-			"generation", generation)
-		return err
-	}
-
-	logger.V(1).Info("Updated last checked generation annotation",
-		"templateName", template.Name,
-		"generation", generation)
-
-	// Also update status.observedGeneration (K8s best practice)
-	return r.updateStatusObservedGeneration(ctx, template, generation)
 }
 
 // updateStatusObservedGeneration updates the template's status.observedGeneration field
