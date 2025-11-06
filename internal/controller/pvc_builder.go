@@ -3,11 +3,11 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -135,8 +135,26 @@ func (pb *PVCBuilder) NeedsUpdate(ctx context.Context, existingPVC *corev1.Persi
 		return false, nil
 	}
 
-	// Compare PVC specs using semantic equality
-	return !equality.Semantic.DeepEqual(existingPVC.Spec, desiredPVC.Spec), nil
+	// Compare only the fields we control (ignore Kubernetes-managed fields)
+
+	// 1. Check AccessModes
+	if !reflect.DeepEqual(existingPVC.Spec.AccessModes, desiredPVC.Spec.AccessModes) {
+		return true, nil
+	}
+
+	// 2. Check Storage Size
+	existingStorage := existingPVC.Spec.Resources.Requests[corev1.ResourceStorage]
+	desiredStorage := desiredPVC.Spec.Resources.Requests[corev1.ResourceStorage]
+	if !existingStorage.Equal(desiredStorage) {
+		return true, nil
+	}
+
+	// 3. Check StorageClassName (handle nil cases)
+	if !reflect.DeepEqual(existingPVC.Spec.StorageClassName, desiredPVC.Spec.StorageClassName) {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // UpdatePVCSpec updates the existing PVC with the desired spec
@@ -151,8 +169,10 @@ func (pb *PVCBuilder) UpdatePVCSpec(ctx context.Context, existingPVC *corev1.Per
 		return fmt.Errorf("cannot update PVC to nil spec")
 	}
 
-	// Update the PVC spec while preserving metadata like resourceVersion
-	existingPVC.Spec = desiredPVC.Spec
+	// Update only the fields we control (preserve Kubernetes-managed fields)
+	existingPVC.Spec.AccessModes = desiredPVC.Spec.AccessModes
+	existingPVC.Spec.Resources = desiredPVC.Spec.Resources
+	existingPVC.Spec.StorageClassName = desiredPVC.Spec.StorageClassName
 
 	return nil
 }

@@ -31,9 +31,6 @@ const (
 	// Compliance tracking label keys
 	LabelComplianceCheckNeeded = "workspace.jupyter.org/compliance-check-needed"
 
-	// Default labels
-	LabelDefaultServiceAccount = "workspace.jupyter.org/default-service-account"
-
 	// Label values
 	AppLabelValue              = "jupyter"
 	LabelValueComplianceNeeded = "true"
