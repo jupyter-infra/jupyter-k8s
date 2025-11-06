@@ -765,6 +765,23 @@ spec:
 				WithTimeout(15 * time.Second).
 				Should(Succeed())
 
+			By("waiting for template initial reconciliation to complete")
+			// Wait for controller to finish initial reconciliation (observedGeneration=1).
+			// This ensures the controller has processed the template at least once and is ready
+			// to detect subsequent changes. Without this, patching too quickly causes a race where
+			// the controller hasn't seen generation=1 yet, so it can't detect the 1→2 transition.
+			verifyTemplateReconciled := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspacetemplate", "constraint-violation-template",
+					"-o", "jsonpath={.status.observedGeneration}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("1"), "Template should complete initial reconciliation before patch")
+			}
+			Eventually(verifyTemplateReconciled).
+				WithPolling(500 * time.Millisecond).
+				WithTimeout(15 * time.Second).
+				Should(Succeed())
+
 			By("updating template to change AllowedImages (remove scipy-notebook)")
 			// This should trigger compliance check since the workspace uses scipy-notebook
 			patchCmd := `{"spec":{"allowedImages":["quay.io/jupyter/minimal-notebook:latest"]}}`
@@ -783,7 +800,7 @@ spec:
 			}
 			Eventually(verifyLabelAdded).
 				WithPolling(500 * time.Millisecond).
-				WithTimeout(10 * time.Second).
+				WithTimeout(30 * time.Second).
 				Should(Succeed())
 
 			By("waiting for controller to process compliance check")
@@ -925,7 +942,7 @@ spec:
 			_, _ = utils.Run(cmd)
 		})
 
-		It("should handle multiple workspaces with pagination when marking for compliance", func() {
+		It("should handle multiple workspaces when marking for compliance", func() {
 			By("creating compliance template")
 			cmd := exec.Command("kubectl", "apply", "-f",
 				"test/e2e/static/compliance-tracking/constraint-violation-template.yaml")

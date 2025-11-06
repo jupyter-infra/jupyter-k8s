@@ -80,7 +80,8 @@ func (r *WorkspaceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// Handle spec changes and mark workspaces for compliance check if constraints changed
-	if err := r.handleSpecChanges(ctx, template); err != nil {
+	shouldUpdateStatus, newGeneration, err := r.handleSpecChanges(ctx, template)
+	if err != nil {
 		logger.Error(err, "Failed to handle spec changes")
 		return ctrl.Result{}, err
 	}
@@ -92,27 +93,23 @@ func (r *WorkspaceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return result, err
 	}
 
+	// Update status.observedGeneration AFTER all reconciliation work completes
+	// This follows Kubernetes semantics: observedGeneration reflects fully-processed state
+	if shouldUpdateStatus {
+		if err := r.updateStatusObservedGeneration(ctx, template, newGeneration); err != nil {
+			logger.Error(err, "Failed to update status.observedGeneration")
+			return ctrl.Result{}, err
+		}
+	}
+
 	return result, nil
 }
 
-// manageFinalizer implements lazy finalizer management for WorkspaceTemplates
-// Following Kubernetes best practices:
-// - Finalizers are only added when workspaces start using the template
-// - Finalizers are removed when all workspaces stop using the template
-// - This minimizes overhead and complexity compared to adding finalizers to all templates
+// manageFinalizer implements lazy finalizer management for WorkspaceTemplates.
+// Finalizers are only added when workspaces use the template, and removed when all workspaces stop using it.
 //
-// ARCHITECTURAL NOTE: Dual Finalizer Protection Pattern
-// This controller works together with the workspace admission webhook for robust finalizer management:
-// 1. Webhook (Eager): Adds finalizers immediately during workspace CREATE/UPDATE admission
-//   - Provides fail-fast protection at the API boundary
-//   - Ensures finalizer exists before workspace is persisted
-//
-// 2. Controller (Lazy): Manages finalizers during reconciliation (this function)
-//   - Acts as safety net if webhook fails or is temporarily unavailable
-//   - Handles finalizer removal when all workspaces are deleted (webhooks can't do this)
-//   - Watches workspace changes and triggers template reconciliation
-//
-// This dual approach ensures no race conditions and graceful handling of edge cases.
+// Dual protection: workspace webhook adds finalizers eagerly (fail-fast at admission), while this controller
+// adds them lazily as a safety net and handles removal (webhooks cannot detect when all workspaces are gone).
 //
 //nolint:unparam // ctrl.Result signature maintained for consistency with controller-runtime patterns
 func (r *WorkspaceTemplateReconciler) manageFinalizer(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) (ctrl.Result, error) {
@@ -308,7 +305,12 @@ func SetupWorkspaceTemplateController(mgr ctrl.Manager) error {
 // - status.observedGeneration tracks the last generation processed by this controller
 // - Only process each generation once (idempotent)
 // This pattern is standard across all Kubernetes resources (Deployments, StatefulSets, etc.)
-func (r *WorkspaceTemplateReconciler) handleSpecChanges(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) error {
+//
+// Returns: (shouldUpdateStatus bool, newGeneration int64, error)
+// The caller should update status.observedGeneration to newGeneration if shouldUpdateStatus is true.
+// This ensures status.observedGeneration is updated AFTER all reconciliation work completes,
+// following Kubernetes semantics where observedGeneration reflects fully-processed state.
+func (r *WorkspaceTemplateReconciler) handleSpecChanges(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) (bool, int64, error) {
 	logger := logf.FromContext(ctx)
 	currentGeneration := template.Generation
 	observedGeneration := template.Status.ObservedGeneration
@@ -320,13 +322,13 @@ func (r *WorkspaceTemplateReconciler) handleSpecChanges(ctx context.Context, tem
 	// Already processed this generation
 	if observedGeneration >= currentGeneration {
 		logger.V(1).Info("Generation already processed, skipping")
-		return nil
+		return false, 0, nil
 	}
 
 	// First creation (generation=1, never processed before)
 	if currentGeneration == 1 && observedGeneration == 0 {
 		logger.Info("Template created, marking generation as observed without compliance labeling")
-		return r.updateStatusObservedGeneration(ctx, template, 1)
+		return true, 1, nil
 	}
 
 	// Spec was updated - mark workspaces for compliance check
@@ -337,11 +339,11 @@ func (r *WorkspaceTemplateReconciler) handleSpecChanges(ctx context.Context, tem
 
 	if err := r.markWorkspacesForCompliance(ctx, template.Name); err != nil {
 		logger.Error(err, "Failed to mark workspaces for compliance")
-		return err
+		return false, 0, err
 	}
 
-	// Update observed generation in status
-	return r.updateStatusObservedGeneration(ctx, template, currentGeneration)
+	// Return true to indicate status should be updated after all reconciliation completes
+	return true, currentGeneration, nil
 }
 
 // markWorkspacesForCompliance labels all workspaces using the template with compliance-check-needed=true
@@ -381,7 +383,7 @@ func (r *WorkspaceTemplateReconciler) markWorkspacesForCompliance(ctx context.Co
 		}
 
 		// Check if already marked
-		if ws.Labels[workspace.LabelComplianceCheckNeeded] == "true" {
+		if ws.Labels[workspace.LabelComplianceCheckNeeded] == LabelValueComplianceNeeded {
 			logger.V(1).Info("Workspace already marked for compliance check",
 				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name))
 			marked++
@@ -396,7 +398,7 @@ func (r *WorkspaceTemplateReconciler) markWorkspacesForCompliance(ctx context.Co
 		}
 
 		// Add label
-		ws.Labels[workspace.LabelComplianceCheckNeeded] = "true"
+		ws.Labels[workspace.LabelComplianceCheckNeeded] = LabelValueComplianceNeeded
 		if err := r.Update(ctx, ws); err != nil {
 			logger.Error(err, "Failed to mark workspace for compliance check",
 				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name))

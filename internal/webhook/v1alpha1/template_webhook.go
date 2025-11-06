@@ -29,7 +29,6 @@ import (
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
-// nolint:unused
 // log is for logging in this package.
 var templatelog = logf.Log.WithName("workspacetemplate-resource")
 
