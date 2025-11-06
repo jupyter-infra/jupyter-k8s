@@ -41,7 +41,7 @@ func NewTemplateGetter(c client.Client) *TemplateGetter {
 // ApplyTemplateName retrieves template and mutates workspace accordingly
 func (tg *TemplateGetter) ApplyTemplateName(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
 	// Skip if workspace already has a template reference
-	if workspace.Spec.TemplateRef != nil && *workspace.Spec.TemplateRef != "" {
+	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
 		return nil
 	}
 
@@ -67,7 +67,9 @@ func (tg *TemplateGetter) ApplyTemplateName(ctx context.Context, workspace *work
 
 	// Set the template reference
 	defaultTemplate := templateList.Items[0]
-	workspace.Spec.TemplateRef = &defaultTemplate.Name
+	workspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+		Name: defaultTemplate.Name,
+	}
 
 	return nil
 }
