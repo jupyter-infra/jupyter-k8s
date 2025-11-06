@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 )
 
@@ -73,4 +75,104 @@ func TestKMSClient_GetRegion(t *testing.T) {
 	if region != "us-west-2" {
 		t.Errorf("Expected region %q, got %q", "us-west-2", region)
 	}
+}
+
+func TestKMSClient_CreateJWTKMSKey_Success(t *testing.T) {
+	mockKMS := &MockKMSClient{}
+	client := NewKMSWrapper(mockKMS, "us-west-2")
+
+	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+
+	keyID, err := client.CreateJWTKMSKey(context.Background())
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	expectedKeyAlias := "alias/sagemaker-devspace-key-arn:aws:eks:us-west-2:123456789012:cluster/test-cluster"
+	if keyID != expectedKeyAlias {
+		t.Errorf("Expected keyID %q, got %q", expectedKeyAlias, keyID)
+	}
+}
+
+func TestKMSClient_CreateJWTKMSKey_KeyExists(t *testing.T) {
+	mockKMS := &MockKMSClient{}
+	client := NewKMSWrapper(mockKMS, "us-west-2")
+
+	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+
+	keyID, err := client.CreateJWTKMSKey(context.Background())
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	expectedKeyAlias := "alias/sagemaker-devspace-key-arn:aws:eks:us-west-2:123456789012:cluster/test-cluster"
+	if keyID != expectedKeyAlias {
+		t.Errorf("Expected keyID %q, got %q", expectedKeyAlias, keyID)
+	}
+}
+
+func TestKMSClient_createAliasWithConflictResolution_Success(t *testing.T) {
+	mockKMS := &MockKMSClient{}
+	client := NewKMSWrapper(mockKMS, "us-west-2")
+
+	keyID, err := client.createAliasWithConflictResolution(context.Background(), "alias/test-alias", "new-key-id")
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if keyID != "new-key-id" {
+		t.Errorf("Expected keyID %q, got %q", "new-key-id", keyID)
+	}
+}
+
+func TestKMSClient_createAliasWithConflictResolution_AlreadyExists(t *testing.T) {
+	// Mock that returns AlreadyExistsException on CreateAlias
+	mockKMS := &MockKMSClientWithAliasConflict{
+		existingKeyID: "existing-key-id",
+	}
+	client := NewKMSWrapper(mockKMS, "us-west-2")
+
+	keyID, err := client.createAliasWithConflictResolution(context.Background(), "alias/test-alias", "new-key-id")
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if keyID != "existing-key-id" {
+		t.Errorf("Expected existing keyID %q, got %q", "existing-key-id", keyID)
+	}
+}
+
+// MockKMSClientWithAliasConflict simulates alias already exists scenario
+type MockKMSClientWithAliasConflict struct {
+	existingKeyID string
+}
+
+func (m *MockKMSClientWithAliasConflict) GenerateDataKey(ctx context.Context, params *kms.GenerateDataKeyInput, optFns ...func(*kms.Options)) (*kms.GenerateDataKeyOutput, error) {
+	return &kms.GenerateDataKeyOutput{}, nil
+}
+
+func (m *MockKMSClientWithAliasConflict) Decrypt(ctx context.Context, params *kms.DecryptInput, optFns ...func(*kms.Options)) (*kms.DecryptOutput, error) {
+	return &kms.DecryptOutput{}, nil
+}
+
+func (m *MockKMSClientWithAliasConflict) CreateKey(ctx context.Context, params *kms.CreateKeyInput, optFns ...func(*kms.Options)) (*kms.CreateKeyOutput, error) {
+	return &kms.CreateKeyOutput{}, nil
+}
+
+func (m *MockKMSClientWithAliasConflict) CreateAlias(ctx context.Context, params *kms.CreateAliasInput, optFns ...func(*kms.Options)) (*kms.CreateAliasOutput, error) {
+	return nil, &types.AlreadyExistsException{
+		Message: aws.String("An alias with the name already exists"),
+	}
+}
+
+func (m *MockKMSClientWithAliasConflict) DescribeKey(ctx context.Context, params *kms.DescribeKeyInput, optFns ...func(*kms.Options)) (*kms.DescribeKeyOutput, error) {
+	return &kms.DescribeKeyOutput{
+		KeyMetadata: &types.KeyMetadata{
+			KeyId: aws.String(m.existingKeyID),
+		},
+	}, nil
+}
+
+func (m *MockKMSClientWithAliasConflict) ScheduleKeyDeletion(ctx context.Context, params *kms.ScheduleKeyDeletionInput, optFns ...func(*kms.Options)) (*kms.ScheduleKeyDeletionOutput, error) {
+	return &kms.ScheduleKeyDeletionOutput{}, nil
 }

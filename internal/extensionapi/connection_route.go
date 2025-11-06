@@ -88,11 +88,11 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Check if CLUSTER_ID is configured early for VSCode connections
+	// Check if CLUSTER_ARN is configured early for VSCode connections
 	if req.Spec.WorkspaceConnectionType == connectionv1alpha1.ConnectionTypeVSCodeRemote {
 		if s.config.ClusterId == "" {
-			logger.Error(nil, "CLUSTER_ID environment variable not configured")
-			WriteKubernetesError(w, http.StatusBadRequest, "CLUSTER_ID not configured. Please set controllerManager.container.env.CLUSTER_ID in helm values")
+			logger.Error(nil, "CLUSTER_ARN environment variable not configured")
+			WriteKubernetesError(w, http.StatusBadRequest, "CLUSTER_ARN not configured. Please set controllerManager.container.env.CLUSTER_ARN in helm values")
 			return
 		}
 	}
