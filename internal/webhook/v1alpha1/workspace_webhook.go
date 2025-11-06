@@ -104,11 +104,12 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 	templateValidator := NewTemplateValidator(mgr.GetClient())
 	templateDefaulter := NewTemplateDefaulter(mgr.GetClient())
 	templateGetter := NewTemplateGetter(mgr.GetClient())
+	accessStrategyValidator := NewAccessStrategyValidator(mgr.GetClient())
 	serviceAccountValidator := NewServiceAccountValidator(mgr.GetClient())
 	serviceAccountDefaulter := NewServiceAccountDefaulter(mgr.GetClient())
 
 	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.Workspace{}).
-		WithValidator(&WorkspaceCustomValidator{templateValidator: templateValidator, serviceAccountValidator: serviceAccountValidator}).
+		WithValidator(&WorkspaceCustomValidator{templateValidator: templateValidator, accessStrategyValidator: accessStrategyValidator, serviceAccountValidator: serviceAccountValidator}).
 		WithDefaulter(&WorkspaceCustomDefaulter{templateDefaulter: templateDefaulter, serviceAccountDefaulter: serviceAccountDefaulter, templateGetter: templateGetter}).
 		Complete()
 }
@@ -190,6 +191,7 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceCustomValidator struct {
 	templateValidator       *TemplateValidator
+	accessStrategyValidator *AccessStrategyValidator
 	serviceAccountValidator *ServiceAccountValidator
 }
 
@@ -205,6 +207,11 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, obj runti
 
 	// Validate template constraints
 	if err := v.templateValidator.ValidateCreateWorkspace(ctx, workspace); err != nil {
+		return nil, err
+	}
+
+	// Validate access strategy constraints
+	if err := v.accessStrategyValidator.ValidateAccessStrategyResources(ctx, workspace); err != nil {
 		return nil, err
 	}
 
@@ -294,6 +301,11 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 
 	// Validate template constraints for new workspace (only changed fields)
 	if err := v.templateValidator.ValidateUpdateWorkspace(ctx, oldWorkspace, newWorkspace); err != nil {
+		return nil, err
+	}
+
+	// Validate access strategy constraints for new workspace
+	if err := v.accessStrategyValidator.ValidateAccessStrategyResources(ctx, newWorkspace); err != nil {
 		return nil, err
 	}
 

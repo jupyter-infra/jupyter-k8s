@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -642,7 +643,7 @@ var _ = Describe("Workspace Webhook", func() {
 						corev1.ResourceMemory: resource.MustParse("1Gi"),
 					},
 				}
-				violations := validateResourceBounds(resources, template)
+				violations := validateResourceBounds(resources, template.Spec.ResourceBounds, fmt.Sprintf("template '%s'", template.Name))
 				Expect(violations).To(BeEmpty())
 			})
 
@@ -652,7 +653,7 @@ var _ = Describe("Workspace Webhook", func() {
 						corev1.ResourceCPU: resource.MustParse("50m"),
 					},
 				}
-				violations := validateResourceBounds(resources, template)
+				violations := validateResourceBounds(resources, template.Spec.ResourceBounds, fmt.Sprintf("template '%s'", template.Name))
 				Expect(violations).To(HaveLen(1))
 				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
 				Expect(violations[0].Message).To(ContainSubstring("below minimum"))
@@ -665,7 +666,7 @@ var _ = Describe("Workspace Webhook", func() {
 						corev1.ResourceCPU: resource.MustParse("4"),
 					},
 				}
-				violations := validateResourceBounds(resources, template)
+				violations := validateResourceBounds(resources, template.Spec.ResourceBounds, fmt.Sprintf("template '%s'", template.Name))
 				Expect(violations).To(HaveLen(1))
 				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
 				Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
@@ -678,7 +679,7 @@ var _ = Describe("Workspace Webhook", func() {
 						corev1.ResourceMemory: resource.MustParse("64Mi"),
 					},
 				}
-				violations := validateResourceBounds(resources, template)
+				violations := validateResourceBounds(resources, template.Spec.ResourceBounds, fmt.Sprintf("template '%s'", template.Name))
 				Expect(violations).To(HaveLen(1))
 				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
 				Expect(violations[0].Message).To(ContainSubstring("below minimum"))
@@ -690,7 +691,7 @@ var _ = Describe("Workspace Webhook", func() {
 						corev1.ResourceMemory: resource.MustParse("8Gi"),
 					},
 				}
-				violations := validateResourceBounds(resources, template)
+				violations := validateResourceBounds(resources, template.Spec.ResourceBounds, fmt.Sprintf("template '%s'", template.Name))
 				Expect(violations).To(HaveLen(1))
 				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
 				Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
@@ -705,7 +706,7 @@ var _ = Describe("Workspace Webhook", func() {
 						corev1.ResourceCPU: resource.MustParse("500m"),
 					},
 				}
-				violations := validateResourceBounds(resources, template)
+				violations := validateResourceBounds(resources, template.Spec.ResourceBounds, fmt.Sprintf("template '%s'", template.Name))
 				Expect(violations).To(HaveLen(1))
 				Expect(violations[0].Message).To(ContainSubstring("CPU limit must be greater than or equal to CPU request"))
 			})
@@ -719,7 +720,7 @@ var _ = Describe("Workspace Webhook", func() {
 						corev1.ResourceMemory: resource.MustParse("1Gi"),
 					},
 				}
-				violations := validateResourceBounds(resources, template)
+				violations := validateResourceBounds(resources, template.Spec.ResourceBounds, fmt.Sprintf("template '%s'", template.Name))
 				Expect(violations).To(HaveLen(1))
 				Expect(violations[0].Message).To(ContainSubstring("Memory limit must be greater than or equal to memory request"))
 			})
@@ -732,7 +733,7 @@ var _ = Describe("Workspace Webhook", func() {
 						corev1.ResourceMemory: resource.MustParse("100Gi"),
 					},
 				}
-				violations := validateResourceBounds(resources, template)
+				violations := validateResourceBounds(resources, template.Spec.ResourceBounds, fmt.Sprintf("template '%s'", template.Name))
 				Expect(violations).To(BeEmpty())
 			})
 		})

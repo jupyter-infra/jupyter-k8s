@@ -25,8 +25,8 @@ import (
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 )
 
-// validateResourceBounds checks if resources are within template bounds
-func validateResourceBounds(resources corev1.ResourceRequirements, template *workspacev1alpha1.WorkspaceTemplate) []controller.TemplateViolation {
+// validateResourceBounds checks if resources are within the given resource bounds
+func validateResourceBounds(resources corev1.ResourceRequirements, bounds *workspacev1alpha1.ResourceBounds, contextName string) []controller.TemplateViolation {
 	var violations []controller.TemplateViolation
 
 	// Validate limits >= requests
@@ -59,7 +59,6 @@ func validateResourceBounds(resources corev1.ResourceRequirements, template *wor
 		}
 	}
 
-	bounds := template.Spec.ResourceBounds
 	if bounds == nil {
 		return violations
 	}
@@ -71,7 +70,7 @@ func validateResourceBounds(resources corev1.ResourceRequirements, template *wor
 				violations = append(violations, controller.TemplateViolation{
 					Type:    controller.ViolationTypeResourceExceeded,
 					Field:   "spec.resources.requests.cpu",
-					Message: fmt.Sprintf("CPU request %s is below minimum %s required by template '%s'", cpuRequest.String(), bounds.CPU.Min.String(), template.Name),
+					Message: fmt.Sprintf("CPU request %s is below minimum %s required by %s", cpuRequest.String(), bounds.CPU.Min.String(), contextName),
 					Allowed: fmt.Sprintf("min: %s", bounds.CPU.Min.String()),
 					Actual:  cpuRequest.String(),
 				})
@@ -80,7 +79,7 @@ func validateResourceBounds(resources corev1.ResourceRequirements, template *wor
 				violations = append(violations, controller.TemplateViolation{
 					Type:    controller.ViolationTypeResourceExceeded,
 					Field:   "spec.resources.requests.cpu",
-					Message: fmt.Sprintf("CPU request %s exceeds maximum %s allowed by template '%s'", cpuRequest.String(), bounds.CPU.Max.String(), template.Name),
+					Message: fmt.Sprintf("CPU request %s exceeds maximum %s allowed by %s", cpuRequest.String(), bounds.CPU.Max.String(), contextName),
 					Allowed: fmt.Sprintf("max: %s", bounds.CPU.Max.String()),
 					Actual:  cpuRequest.String(),
 				})
@@ -95,7 +94,7 @@ func validateResourceBounds(resources corev1.ResourceRequirements, template *wor
 				violations = append(violations, controller.TemplateViolation{
 					Type:    controller.ViolationTypeResourceExceeded,
 					Field:   "spec.resources.requests.memory",
-					Message: fmt.Sprintf("Memory request %s is below minimum %s required by template '%s'", memRequest.String(), bounds.Memory.Min.String(), template.Name),
+					Message: fmt.Sprintf("Memory request %s is below minimum %s required by %s", memRequest.String(), bounds.Memory.Min.String(), contextName),
 					Allowed: fmt.Sprintf("min: %s", bounds.Memory.Min.String()),
 					Actual:  memRequest.String(),
 				})
@@ -104,9 +103,34 @@ func validateResourceBounds(resources corev1.ResourceRequirements, template *wor
 				violations = append(violations, controller.TemplateViolation{
 					Type:    controller.ViolationTypeResourceExceeded,
 					Field:   "spec.resources.requests.memory",
-					Message: fmt.Sprintf("Memory request %s exceeds maximum %s allowed by template '%s'", memRequest.String(), bounds.Memory.Max.String(), template.Name),
+					Message: fmt.Sprintf("Memory request %s exceeds maximum %s allowed by %s", memRequest.String(), bounds.Memory.Max.String(), contextName),
 					Allowed: fmt.Sprintf("max: %s", bounds.Memory.Max.String()),
 					Actual:  memRequest.String(),
+				})
+			}
+		}
+	}
+
+	// Validate GPU bounds
+	if bounds.GPU != nil && resources.Requests != nil {
+		gpuResourceName := corev1.ResourceName("nvidia.com/gpu")
+		if gpuRequest, exists := resources.Requests[gpuResourceName]; exists {
+			if gpuRequest.Cmp(bounds.GPU.Min) < 0 {
+				violations = append(violations, controller.TemplateViolation{
+					Type:    controller.ViolationTypeResourceExceeded,
+					Field:   "spec.resources.requests['nvidia.com/gpu']",
+					Message: fmt.Sprintf("GPU request %s is below minimum %s required by %s", gpuRequest.String(), bounds.GPU.Min.String(), contextName),
+					Allowed: fmt.Sprintf("min: %s", bounds.GPU.Min.String()),
+					Actual:  gpuRequest.String(),
+				})
+			}
+			if gpuRequest.Cmp(bounds.GPU.Max) > 0 {
+				violations = append(violations, controller.TemplateViolation{
+					Type:    controller.ViolationTypeResourceExceeded,
+					Field:   "spec.resources.requests['nvidia.com/gpu']",
+					Message: fmt.Sprintf("GPU request %s exceeds maximum %s allowed by %s", gpuRequest.String(), bounds.GPU.Max.String(), contextName),
+					Allowed: fmt.Sprintf("max: %s", bounds.GPU.Max.String()),
+					Actual:  gpuRequest.String(),
 				})
 			}
 		}

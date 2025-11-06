@@ -70,7 +70,8 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 
 	// Validate resources
 	if workspace.Spec.Resources != nil {
-		if resourceViolations := validateResourceBounds(*workspace.Spec.Resources, template); len(resourceViolations) > 0 {
+		contextName := fmt.Sprintf("template '%s'", template.Name)
+		if resourceViolations := validateResourceBounds(*workspace.Spec.Resources, template.Spec.ResourceBounds, contextName); len(resourceViolations) > 0 {
 			violations = append(violations, resourceViolations...)
 		}
 	}
@@ -111,7 +112,8 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 
 	// Only validate resources if they changed
 	if !resourcesEqual(oldWorkspace.Spec.Resources, newWorkspace.Spec.Resources) && newWorkspace.Spec.Resources != nil {
-		if resourceViolations := validateResourceBounds(*newWorkspace.Spec.Resources, template); len(resourceViolations) > 0 {
+		contextName := fmt.Sprintf("template '%s'", template.Name)
+		if resourceViolations := validateResourceBounds(*newWorkspace.Spec.Resources, template.Spec.ResourceBounds, contextName); len(resourceViolations) > 0 {
 			violations = append(violations, resourceViolations...)
 		}
 	}
