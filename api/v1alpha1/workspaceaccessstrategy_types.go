@@ -109,6 +109,11 @@ type WorkspaceAccessStrategySpec struct {
 	// DeploymentSpecModifications defines modifications to apply to workspace deployments
 	// +optional
 	DeploymentSpecModifications *DeploymentSpecModifications `json:"deploymentSpecModifications,omitempty"`
+
+	// ResourceBounds defines the min/max boundaries for resource overrides
+	// These bounds apply to workspaces using this access strategy
+	// +optional
+	ResourceBounds *ResourceBounds `json:"resourceBounds,omitempty"`
 }
 
 // WorkspaceAccessStrategyStatus defines the observed state of WorkspaceAccessStrategy
