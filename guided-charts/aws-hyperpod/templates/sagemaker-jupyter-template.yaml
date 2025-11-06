@@ -6,6 +6,7 @@ metadata:
     app.kubernetes.io/name: jupyter-k8s-aws-hyperpod
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
+    workspace.jupyter.org/default-cluster-template: "true"
 spec:
   displayName: "SageMaker Jupyter Lab"
   description: "Jupyter Lab environment using SageMaker Distribution with pre-installed ML libraries and tools"
@@ -39,6 +40,9 @@ spec:
   
   # Access configuration
   defaultOwnershipType: "Public"
+  defaultAccessStrategy:
+    name: "hyperpod-access-strategy"
+    namespace: {{ .Release.Namespace }}
   allowSecondaryStorages: true
   
   # Application type

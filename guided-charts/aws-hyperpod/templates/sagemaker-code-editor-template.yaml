@@ -39,6 +39,9 @@ spec:
   
   # Access configuration
   defaultOwnershipType: "Public"
+  defaultAccessStrategy:
+    name: "hyperpod-access-strategy"
+    namespace: {{ .Release.Namespace }}
   allowSecondaryStorages: true
   
   # Application type
