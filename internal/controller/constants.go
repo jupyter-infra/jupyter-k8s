@@ -27,9 +27,6 @@ const (
 	LabelAccessStrategyNamespace = "workspace.jupyter.org/accessStrategyNamespace"
 	LabelWorkspaceTemplate       = "workspace.jupyter.org/template"
 
-	// Default labels
-	LabelDefaultServiceAccount = "workspace.jupyter.org/default-service-account"
-
 	// Label values
 	AppLabelValue = "jupyter"
 
