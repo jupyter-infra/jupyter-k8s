@@ -94,23 +94,47 @@ var _ = Describe("ServiceAccount Validator", func() {
 
 		It("should match username with asterisk wildcard", func() {
 			sa.Annotations = map[string]string{
-				controller.AnnotationServiceAccountUsersPattern: "- arn:aws:iam::123456789012:role/MyRole/*",
+				controller.AnnotationServiceAccountUserPatterns: "- arn:aws:iam::123456789012:role/MyRole/*",
 			}
 			Expect(sav.checkUsernamePatternAccess("arn:aws:iam::123456789012:role/MyRole/user123", sa)).To(BeTrue())
 		})
 
 		It("should match username with question mark wildcard", func() {
 			sa.Annotations = map[string]string{
-				controller.AnnotationServiceAccountUsersPattern: "- user?",
+				controller.AnnotationServiceAccountUserPatterns: "- user?",
 			}
 			Expect(sav.checkUsernamePatternAccess("user1", sa)).To(BeTrue())
 		})
 
 		It("should not match when pattern does not match", func() {
 			sa.Annotations = map[string]string{
-				controller.AnnotationServiceAccountUsersPattern: "- arn:aws:iam::123456789012:role/MyRole/*",
+				controller.AnnotationServiceAccountUserPatterns: "- arn:aws:iam::123456789012:role/MyRole/*",
 			}
 			Expect(sav.checkUsernamePatternAccess("arn:aws:iam::123456789012:role/OtherRole/user123", sa)).To(BeFalse())
+		})
+
+		It("should match asterisk across path separators", func() {
+			Expect(matchPattern("test*", "testdir/file")).To(BeTrue())
+		})
+
+		It("should match question mark for single character", func() {
+			Expect(matchPattern("user?", "userA")).To(BeTrue())
+			Expect(matchPattern("user?", "user12")).To(BeFalse())
+		})
+
+		It("should require exact match when no wildcards", func() {
+			Expect(matchPattern("exactuser", "exactuser")).To(BeTrue())
+			Expect(matchPattern("exactuser", "exactuser123")).To(BeFalse())
+		})
+
+		It("should not match regex patterns", func() {
+			Expect(matchPattern("user[0-9]+", "user123")).To(BeFalse())
+			Expect(matchPattern("user[0-9]+", "user[0-9]+")).To(BeTrue())
+		})
+
+		It("should escape special regex characters", func() {
+			Expect(matchPattern("user.test", "user.test")).To(BeTrue())
+			Expect(matchPattern("user.test", "userXtest")).To(BeFalse())
 		})
 	})
 
