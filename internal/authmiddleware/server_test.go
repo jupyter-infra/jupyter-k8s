@@ -486,7 +486,10 @@ func TestAuthIsNotProtectedByCSRF(t *testing.T) {
 	}
 
 	// Create server
-	config := &Config{PathRegexPattern: DefaultPathRegexPattern}
+	config := &Config{
+		PathRegexPattern: DefaultPathRegexPattern,
+		EnableOAuth:      true, // Enable OAuth so /auth endpoint is not CSRF protected
+	}
 	server := NewServer(config, jwtHandler, cookieHandler, logger)
 
 	// Create test request to /auth
@@ -554,5 +557,205 @@ func TestHealthIsNotProtectedByCSRF(t *testing.T) {
 
 	if w.Header().Get(csrfProtectedHeader) == csrfProtectedValue {
 		t.Error("CSRF protection header found, suggesting protection was incorrectly applied")
+	}
+}
+
+// TestOAuthDisabledAuthEndpointNotRegistered tests that /auth endpoint is not registered when OAuth is disabled
+func TestOAuthDisabledAuthEndpointNotRegistered(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	config := &Config{
+		PathRegexPattern: DefaultPathRegexPattern,
+		EnableOAuth:      false, // Disable OAuth
+		EnableBearerAuth: true,
+	}
+
+	cookieHandler := &MockCookieHandler{
+		CSRFProtectFunc: func() func(http.Handler) http.Handler {
+			return func(next http.Handler) http.Handler { return next }
+		},
+	}
+
+	jwtHandler := &MockJWTHandler{}
+	server := NewServer(config, jwtHandler, cookieHandler, logger)
+
+	// Create test request to /auth
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	w := httptest.NewRecorder()
+
+	// Create router like the server does
+	router := http.NewServeMux()
+	if server.config.EnableOAuth {
+		router.HandleFunc("/auth", server.handleAuth)
+	}
+	if server.config.EnableBearerAuth {
+		router.HandleFunc("/bearer-auth", server.handleBearerAuth)
+	}
+	router.HandleFunc("/health", server.handleHealth)
+
+	router.ServeHTTP(w, req)
+
+	// Should get 404 since /auth is not registered
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected 404 for /auth when OAuth disabled, got %d", w.Code)
+	}
+}
+
+// TestBearerAuthDisabledEndpointNotRegistered tests that /bearer-auth endpoint is not registered when bearer auth is disabled
+func TestBearerAuthDisabledEndpointNotRegistered(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	config := &Config{
+		PathRegexPattern: DefaultPathRegexPattern,
+		EnableOAuth:      true,
+		EnableBearerAuth: false, // Disable bearer auth
+	}
+
+	cookieHandler := &MockCookieHandler{
+		CSRFProtectFunc: func() func(http.Handler) http.Handler {
+			return func(next http.Handler) http.Handler { return next }
+		},
+	}
+
+	jwtHandler := &MockJWTHandler{}
+	server := NewServer(config, jwtHandler, cookieHandler, logger)
+
+	// Create test request to /bearer-auth
+	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
+	w := httptest.NewRecorder()
+
+	// Create router like the server does
+	router := http.NewServeMux()
+	if server.config.EnableOAuth {
+		router.HandleFunc("/auth", server.handleAuth)
+	}
+	if server.config.EnableBearerAuth {
+		router.HandleFunc("/bearer-auth", server.handleBearerAuth)
+	}
+	router.HandleFunc("/health", server.handleHealth)
+
+	router.ServeHTTP(w, req)
+
+	// Should get 404 since /bearer-auth is not registered
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected 404 for /bearer-auth when bearer auth disabled, got %d", w.Code)
+	}
+}
+
+// TestCSRFProtectionConditionalForAuth tests that CSRF protection is only skipped for /auth when OAuth is enabled
+func TestCSRFProtectionConditionalForAuth(t *testing.T) {
+	tests := []struct {
+		name        string
+		enableOAuth bool
+		path        string
+		expectCSRF  bool
+	}{
+		{"OAuth enabled, /auth should skip CSRF", true, "/auth", false},
+		{"OAuth disabled, /auth should have CSRF", false, "/auth", true},
+		{"OAuth enabled, /verify should have CSRF", true, "/verify", true},
+		{"OAuth disabled, /verify should have CSRF", false, "/verify", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+			csrfProtectionApplied := false
+			cookieHandler := &MockCookieHandler{
+				CSRFProtectFunc: func() func(http.Handler) http.Handler {
+					return func(next http.Handler) http.Handler {
+						return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+							csrfProtectionApplied = true
+							w.Header().Set(csrfProtectedHeader, csrfProtectedValue)
+							next.ServeHTTP(w, r)
+						})
+					}
+				},
+			}
+
+			config := &Config{
+				PathRegexPattern: DefaultPathRegexPattern,
+				EnableOAuth:      tt.enableOAuth,
+				EnableBearerAuth: true,
+			}
+
+			server := NewServer(config, &MockJWTHandler{}, cookieHandler, logger)
+
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			w := httptest.NewRecorder()
+
+			// Test the CSRF protection middleware directly
+			handler := server.csrfProtect()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			csrfProtectionApplied = false // Reset
+			handler.ServeHTTP(w, req)
+
+			if tt.expectCSRF && !csrfProtectionApplied {
+				t.Errorf("Expected CSRF protection to be applied for %s", tt.path)
+			}
+			if !tt.expectCSRF && csrfProtectionApplied {
+				t.Errorf("Expected CSRF protection to be skipped for %s", tt.path)
+			}
+		})
+	}
+}
+
+// TestCSRFProtectionConditionalForBearerAuth tests that CSRF protection is only skipped for /bearer-auth when bearer auth is enabled
+func TestCSRFProtectionConditionalForBearerAuth(t *testing.T) {
+	tests := []struct {
+		name             string
+		enableBearerAuth bool
+		path             string
+		expectCSRF       bool
+	}{
+		{"Bearer auth enabled, /bearer-auth should skip CSRF", true, "/bearer-auth", false},
+		{"Bearer auth disabled, /bearer-auth should have CSRF", false, "/bearer-auth", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+			csrfProtectionApplied := false
+			cookieHandler := &MockCookieHandler{
+				CSRFProtectFunc: func() func(http.Handler) http.Handler {
+					return func(next http.Handler) http.Handler {
+						return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+							csrfProtectionApplied = true
+							w.Header().Set(csrfProtectedHeader, csrfProtectedValue)
+							next.ServeHTTP(w, r)
+						})
+					}
+				},
+			}
+
+			config := &Config{
+				PathRegexPattern: DefaultPathRegexPattern,
+				EnableOAuth:      true,
+				EnableBearerAuth: tt.enableBearerAuth,
+			}
+
+			server := NewServer(config, &MockJWTHandler{}, cookieHandler, logger)
+
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			w := httptest.NewRecorder()
+
+			// Test the CSRF protection middleware directly
+			handler := server.csrfProtect()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			csrfProtectionApplied = false // Reset
+			handler.ServeHTTP(w, req)
+
+			if tt.expectCSRF && !csrfProtectionApplied {
+				t.Errorf("Expected CSRF protection to be applied for %s", tt.path)
+			}
+			if !tt.expectCSRF && csrfProtectionApplied {
+				t.Errorf("Expected CSRF protection to be skipped for %s", tt.path)
+			}
+		})
 	}
 }

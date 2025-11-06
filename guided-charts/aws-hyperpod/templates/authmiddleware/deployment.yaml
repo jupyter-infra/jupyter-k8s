@@ -108,6 +108,8 @@ spec:
             value: "{{ .Values.authmiddleware.csrfCookieSecure }}"
           - name: CSRF_AUTH_KEY
             value: "{{ .Values.authmiddleware.csrfAuthKey }}"
+          - name: ENABLE_OAUTH
+            value: "{{ .Values.authmiddleware.oauthEnabled }}"
           - name: ENABLE_BEARER_URL_AUTH
             value: "{{ .Values.authmiddleware.enableBearerAuth }}"
         volumeMounts:
