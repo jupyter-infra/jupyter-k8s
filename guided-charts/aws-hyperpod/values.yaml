@@ -15,6 +15,14 @@ externalDns:
   # Whether to enable external-dns annotations for automatic DNS record creation
   enabled: true
 
+# Network policy configuration
+networkPolicy:
+  # Whether to enable network policies for enhanced security
+  # When enabled, restricts network access so only Traefik can communicate with:
+  # - Auth middleware service
+  # - Individual workspace services
+  enabled: true
+
 # Remote access configuration
 remoteAccess:
   enabled: false
