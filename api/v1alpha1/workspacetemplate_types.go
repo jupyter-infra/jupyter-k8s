@@ -131,6 +131,34 @@ type WorkspaceTemplateSpec struct {
 	AppType string `json:"appType,omitempty"`
 }
 
+// ResourceBounds defines minimum and maximum resource limits
+type ResourceBounds struct {
+	// CPU bounds
+	// +optional
+	CPU *ResourceRange `json:"cpu,omitempty"`
+
+	// Memory bounds
+	// +optional
+	Memory *ResourceRange `json:"memory,omitempty"`
+
+	// GPU bounds
+	// +optional
+	GPU *ResourceRange `json:"gpu,omitempty"`
+}
+
+// ResourceRange defines min and max for a resource
+// NOTE: CEL validation for min <= max is not possible due to resource.Quantity type limitations
+// Validation is enforced at runtime in the template resolver
+type ResourceRange struct {
+	// Min is the minimum allowed value
+	// +kubebuilder:validation:Required
+	Min resource.Quantity `json:"min"`
+
+	// Max is the maximum allowed value
+	// +kubebuilder:validation:Required
+	Max resource.Quantity `json:"max"`
+}
+
 // StorageConfig defines storage settings
 // NOTE: CEL validation for minSize <= maxSize is not possible due to resource.Quantity type limitations
 // Validation is enforced at runtime in the template resolver
