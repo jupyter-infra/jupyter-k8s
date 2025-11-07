@@ -7,8 +7,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
+	"text/template"
 
 	connectionv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
@@ -35,17 +39,39 @@ func (s *ExtensionServer) generateWebUIBearerTokenURL(r *http.Request, workspace
 		return "", "", fmt.Errorf("user information not found in request headers")
 	}
 
-	// Generate JWT token for the user and workspace
-	workspacePath := fmt.Sprintf("/workspaces/%s/%s", namespace, workspaceName)
-	token, err := s.jwtManager.GenerateToken(user, []string{}, user, map[string][]string{}, workspacePath, namespace, jwt.TokenTypeBootstrap)
+	// Generate webUI URL
+	webUIURL, err := s.generateBearerAuthWebUIURL(workspaceName, namespace)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Parse URL to extract domain and path for JWT claims
+	parsedURL, err := url.Parse(webUIURL)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to parse generated URL: %w", err)
+	}
+
+	domain := parsedURL.Host // Full host including subdomain
+	path := parsedURL.Path   // Path part
+
+	// Strip /bearer-auth from the end if present, as we don't want to include that in Claims
+	if strings.HasSuffix(path, "/bearer-auth") {
+		path = strings.TrimSuffix(path, "/bearer-auth")
+		if path == "" {
+			path = "/"
+		}
+	}
+
+	// Generate JWT token with domain and path
+	token, err := s.jwtManager.GenerateToken(user, []string{}, user, map[string][]string{}, path, domain, jwt.TokenTypeBootstrap)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate JWT token: %w", err)
 	}
 
-	// Construct the Web UI URL using the format: $DOMAIN/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/bearer-auth?token=<token>
-	webUIURL := fmt.Sprintf(WebUIURLFormat, s.config.Domain, namespace, workspaceName, token)
+	// Add token to URL
+	finalURL := fmt.Sprintf("%s?token=%s", webUIURL, token)
 
-	return connectionv1alpha1.ConnectionTypeWebUI, webUIURL, nil
+	return connectionv1alpha1.ConnectionTypeWebUI, finalURL, nil
 }
 
 // HandleConnectionCreate handles POST requests to create a connection
@@ -211,19 +237,12 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 	}
 
 	// Generate VSCode connection URL using SSM strategy
-	url, err := ssmStrategy.GenerateVSCodeConnectionURL(r.Context(), workspaceName, namespace, podUID, clusterId)
+	connectionURL, err := ssmStrategy.GenerateVSCodeConnectionURL(r.Context(), workspaceName, namespace, podUID, clusterId)
 	if err != nil {
 		return "", "", err
 	}
 
-	return connectionv1alpha1.ConnectionTypeVSCodeRemote, url, nil
-}
-
-// generateWebUIURL generates a Web UI connection URL
-// Returns (connectionType, connectionURL, error)
-func (s *ExtensionServer) generateWebUIURL(r *http.Request, workspaceName, namespace string) (string, string, error) {
-	// TODO: Implement Web UI URL generation with JWT tokens
-	return connectionv1alpha1.ConnectionTypeWebUI, "https://placeholder-webui-url.com", nil
+	return connectionv1alpha1.ConnectionTypeVSCodeRemote, connectionURL, nil
 }
 
 // checkWorkspaceAuthorization checks if the user is authorized to access the workspace
@@ -234,4 +253,57 @@ func (s *ExtensionServer) checkWorkspaceAuthorization(r *http.Request, workspace
 	}
 
 	return s.CheckWorkspaceAccess(namespace, workspaceName, user, s.logger)
+}
+
+// renderBearerAuthURL renders the BearerAuthURLTemplate with workspace variables
+func (s *ExtensionServer) renderBearerAuthURL(templateStr string, ws *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (string, error) {
+	tmpl, err := template.New("bearerauth").Funcs(template.FuncMap{
+		"b32encode": workspace.EncodeNamespaceB32,
+	}).Parse(templateStr)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	var result strings.Builder
+	data := map[string]interface{}{
+		"Workspace":      ws,
+		"AccessStrategy": accessStrategy,
+	}
+
+	if err := tmpl.Execute(&result, data); err != nil {
+		return "", fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return result.String(), nil
+}
+
+// generateBearerAuthWebUIURL fetches workspace and access strategy, then generates the bearer auth URL
+func (s *ExtensionServer) generateBearerAuthWebUIURL(workspaceName, namespace string) (string, error) {
+	// Fetch workspace to get AccessStrategy reference
+	ws, err := s.getWorkspace(namespace, workspaceName)
+	if err != nil {
+		return "", fmt.Errorf("failed to get workspace: %w", err)
+	}
+
+	// Fetch AccessStrategy
+	accessStrategy, err := s.getAccessStrategy(ws)
+	if err != nil {
+		return "", fmt.Errorf("failed to get access strategy: %w", err)
+	}
+
+	// Require AccessStrategy with BearerAuthURLTemplate
+	if accessStrategy == nil {
+		return "", fmt.Errorf("no AccessStrategy configured for workspace")
+	}
+	if accessStrategy.Spec.BearerAuthURLTemplate == "" {
+		return "", fmt.Errorf("BearerAuthURLTemplate not configured in AccessStrategy")
+	}
+
+	// Generate URL from template
+	webUIURL, err := s.renderBearerAuthURL(accessStrategy.Spec.BearerAuthURLTemplate, ws, accessStrategy)
+	if err != nil {
+		return "", fmt.Errorf("failed to render bearer auth URL: %w", err)
+	}
+
+	return webUIURL, nil
 }

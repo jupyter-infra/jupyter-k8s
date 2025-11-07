@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -176,7 +177,7 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.podEventHandler.HandleWorkspacePodEvents),
 			builderPkg.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				// Only watch pods with workspace labels
-				_, hasWorkspace := obj.GetLabels()[LabelWorkspaceName]
+				_, hasWorkspace := obj.GetLabels()[workspaceutil.LabelWorkspaceName]
 				return hasWorkspace
 			})),
 		)

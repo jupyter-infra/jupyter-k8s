@@ -87,8 +87,8 @@ func (s *Server) handleBearerAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set session cookie using appPath
-	s.cookieManager.SetCookie(w, sessionToken, appPath)
+	// Set session cookie using appPath and same domain as JWT token
+	s.cookieManager.SetCookie(w, sessionToken, appPath, host)
 
 	// Log successful token exchange
 	s.logger.Info("Token exchange successful",

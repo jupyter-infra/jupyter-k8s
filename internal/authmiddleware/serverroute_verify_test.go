@@ -28,7 +28,10 @@ func TestHandleVerifyMissingUriHeader(t *testing.T) {
 	// Create a Server with minimal setup
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &Config{
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern:            `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		RoutingMode:                 "path",
+		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
+		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
 	}
 	server := &Server{
 		config: cfg,
@@ -62,7 +65,10 @@ func TestHandleVerifyMissingHostHeader(t *testing.T) {
 	// Create a Server with minimal setup
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &Config{
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern:            `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		RoutingMode:                 "path",
+		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
+		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
 	}
 	server := &Server{
 		config: cfg,
@@ -108,7 +114,10 @@ func TestHandleVerifyMissingCookie(t *testing.T) {
 	// Create server with mocks
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &Config{
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern:            `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		RoutingMode:                 "path",
+		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
+		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
 	}
 	server := &Server{
 		config:        cfg,
@@ -164,7 +173,10 @@ func TestHandleVerifyInvalidJWT(t *testing.T) {
 	// Create server with mocks
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &Config{
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern:            `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		RoutingMode:                 "path",
+		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
+		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
 	}
 	server := &Server{
 		config:        cfg,
@@ -218,10 +230,10 @@ func TestHandleVerifyNoRefreshBeforeWindow(t *testing.T) {
 		GetCookieFunc: func(r *http.Request, path string) (string, error) {
 			return "valid-token", nil
 		},
-		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {
 			t.Error("SetCookie should not have been called")
 		},
-		ClearCookieFunc: func(w http.ResponseWriter, path string) {
+		ClearCookieFunc: func(w http.ResponseWriter, path string, domain string) {
 			t.Error("ClearCookie should not have been called")
 		},
 	}
@@ -245,7 +257,10 @@ func TestHandleVerifyNoRefreshBeforeWindow(t *testing.T) {
 	// Create server with mocks
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &Config{
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern:            `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		RoutingMode:                 "path",
+		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
+		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
 	}
 	server := &Server{
 		config:        cfg,
@@ -282,6 +297,7 @@ func createVerifyRefreshTestServer(cookieHandler CookieHandler, jwtHandler jwt.H
 		PathRegexPattern:            DefaultPathRegexPattern,
 		WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
 		WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+		RoutingMode:                 DefaultRoutingMode,
 		JWTRefreshEnable:            true,
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -330,7 +346,7 @@ func TestHandleVerifyWithRefresh_HappyPath(t *testing.T) {
 		GetCookieFunc: func(r *http.Request, path string) (string, error) {
 			return "valid-token", nil
 		},
-		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {
 			cookieSet = true
 			// Verify parameters
 			if token != newToken {
@@ -340,7 +356,7 @@ func TestHandleVerifyWithRefresh_HappyPath(t *testing.T) {
 				t.Errorf("Expected path %s, got '%s'", testAppPath2, path)
 			}
 		},
-		ClearCookieFunc: func(w http.ResponseWriter, path string) {
+		ClearCookieFunc: func(w http.ResponseWriter, path string, domain string) {
 			t.Error("ClearCookie should not have been called")
 		},
 	}
@@ -463,7 +479,7 @@ func TestHandleVerifyWithRefresh_NoLongerAuthorizedPath_Returns403AndClearCookie
 		GetCookieFunc: func(r *http.Request, path string) (string, error) {
 			return "valid-token2", nil
 		},
-		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {
 			cookieSet = true
 			// Verify parameters
 			if token != newToken {
@@ -473,7 +489,7 @@ func TestHandleVerifyWithRefresh_NoLongerAuthorizedPath_Returns403AndClearCookie
 				t.Errorf("Expected path %s, got '%s'", testAppPath2, path)
 			}
 		},
-		ClearCookieFunc: func(w http.ResponseWriter, path string) {
+		ClearCookieFunc: func(w http.ResponseWriter, path string, domain string) {
 			cookieCleared = true
 			// Verify parameters
 			if path != testAppPath2 {
@@ -602,7 +618,7 @@ func TestHandleVerifyWithRefresh_ConnectionAccessReviewFails_UpdateCookieToSkipF
 		GetCookieFunc: func(r *http.Request, path string) (string, error) {
 			return "valid-token3", nil
 		},
-		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {
 			cookieSet = true
 			// Verify parameters
 			if token != newToken {
@@ -612,7 +628,7 @@ func TestHandleVerifyWithRefresh_ConnectionAccessReviewFails_UpdateCookieToSkipF
 				t.Errorf("Expected path %s, got '%s'", testAppPath2, path)
 			}
 		},
-		ClearCookieFunc: func(w http.ResponseWriter, path string) {
+		ClearCookieFunc: func(w http.ResponseWriter, path string, domain string) {
 			t.Error("ClearCookie should not have been called")
 		},
 	}

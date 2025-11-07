@@ -13,6 +13,7 @@ import (
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	awsutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
 func TestNewPodEventHandler_Success(t *testing.T) {
@@ -134,7 +135,7 @@ func TestHandleWorkspacePodEvents_PodRunning_SSMSuccess(t *testing.T) {
 			Name:      "workspace-pod",
 			Namespace: "test-namespace",
 			Labels: map[string]string{
-				LabelWorkspaceName: "test-workspace",
+				workspaceutil.LabelWorkspaceName: "test-workspace",
 			},
 		},
 		Status: corev1.PodStatus{
@@ -167,7 +168,7 @@ func TestHandleWorkspacePodEvents_PodRunning_WorkspaceNotFound(t *testing.T) {
 			Name:      "workspace-pod",
 			Namespace: "test-namespace",
 			Labels: map[string]string{
-				LabelWorkspaceName: "missing-workspace",
+				workspaceutil.LabelWorkspaceName: "missing-workspace",
 			},
 		},
 		Status: corev1.PodStatus{
@@ -216,7 +217,7 @@ func TestHandleWorkspacePodEvents_PodRunning_SSMStrategyNil(t *testing.T) {
 			Name:      "workspace-pod",
 			Namespace: "test-namespace",
 			Labels: map[string]string{
-				LabelWorkspaceName: "test-workspace",
+				workspaceutil.LabelWorkspaceName: "test-workspace",
 			},
 		},
 		Status: corev1.PodStatus{
@@ -248,7 +249,7 @@ func TestHandleWorkspacePodEvents_PodDeleted_Success(t *testing.T) {
 			Name:      "workspace-pod",
 			Namespace: "test-namespace",
 			Labels: map[string]string{
-				LabelWorkspaceName: "test-workspace",
+				workspaceutil.LabelWorkspaceName: "test-workspace",
 			},
 			DeletionTimestamp: &deletionTime,
 		},
@@ -278,7 +279,7 @@ func TestHandleWorkspacePodEvents_PodDeleted_SSMStrategyNil(t *testing.T) {
 			Name:      "workspace-pod",
 			Namespace: "test-namespace",
 			Labels: map[string]string{
-				LabelWorkspaceName: "test-workspace",
+				workspaceutil.LabelWorkspaceName: "test-workspace",
 			},
 			DeletionTimestamp: &deletionTime,
 		},
@@ -308,7 +309,7 @@ func TestHandleWorkspacePodEvents_PodDeleted_SSMCleanupFailure(t *testing.T) {
 			Name:      "workspace-pod",
 			Namespace: "test-namespace",
 			Labels: map[string]string{
-				LabelWorkspaceName: "test-workspace",
+				workspaceutil.LabelWorkspaceName: "test-workspace",
 			},
 			DeletionTimestamp: &deletionTime,
 		},

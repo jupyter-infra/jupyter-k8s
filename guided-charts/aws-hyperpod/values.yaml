@@ -95,7 +95,12 @@ authmiddleware:
   cookieHttpOnly: "true"
   cookieSameSite: "lax"
   # Path configuration
-  pathRegexPattern: "^(/workspaces/[^/]+/[^/]+)(?:/.*)?$"
+  pathRegexPattern: "^(/).*$"
+  # Routing mode: "path" or "subdomain"
+  routingMode: "subdomain"
+  # Subdomain routing configuration (used when routingMode is "subdomain")
+  workspaceNameSubdomainRegex: "^([^-]+)-.*$"
+  workspaceNamespaceSubdomainRegex: "^[^-]+-(.*)$"
   maxCookiePaths: "20"
   # CSRF configuration
   # Required: must be provided as base64 encoded string (generate with: openssl rand -base64 32)
