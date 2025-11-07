@@ -1,0 +1,50 @@
+{{- if .Values.networkPolicy.enabled }}
+---
+# NetworkPolicy to restrict access to auth middleware
+# Only Traefik can communicate with auth middleware
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: authmiddleware-network-policy
+  namespace: {{ .Values.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: authmiddleware
+      component: auth
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: traefik
+          component: router
+    ports:
+    - protocol: TCP
+      port: 8080
+
+---
+# NetworkPolicy to restrict access to workspace services
+# Only Traefik can communicate with workspace pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: workspace-network-policy
+  namespace: {{ .Values.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: jupyter
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: traefik
+          component: router
+    ports:
+    - protocol: TCP
+      port: 8888
+{{- end }}

@@ -15,6 +15,14 @@ externalDns:
   # Whether to enable external-dns annotations for automatic DNS record creation
   enabled: true
 
+# Network policy configuration
+networkPolicy:
+  # Whether to enable network policies for enhanced security
+  # When enabled, restricts network access so only Traefik can communicate with:
+  # - Auth middleware service
+  # - Individual workspace services
+  enabled: true
+
 # Remote access configuration
 remoteAccess:
   enabled: false
@@ -76,7 +84,7 @@ authmiddleware:
   kmsKeyId: ""
   jwtIssuer: "jupyter-k8s-auth"
   jwtAudience: "workspace-users"
-  jwtExpiration: "1h"
+  jwtExpiration: "12h"
   jwtRefreshWindow: "15m"
   jwtRefreshHorizon: "12h"
   # Cookie configuration
@@ -101,3 +109,5 @@ authmiddleware:
   shutdownTimeout: "30s"
   # Bearer auth configuration
   enableBearerAuth: true
+  # JWT refresh configuration
+  enableRefresh: false
