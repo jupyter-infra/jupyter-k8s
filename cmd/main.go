@@ -285,7 +285,7 @@ func main() {
 		// Create config with a different port to avoid conflict with metrics
 		config := extensionapi.NewConfig(
 			extensionapi.WithServerPort(7443),
-			extensionapi.WithClusterId(os.Getenv("CLUSTER_ARN")),
+			extensionapi.WithClusterId(os.Getenv("CLUSTER_ID")),
 			extensionapi.WithKMSKeyID(os.Getenv("KMS_KEY_ID")),
 			extensionapi.WithDomain(os.Getenv("DOMAIN")),
 		)
