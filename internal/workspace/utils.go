@@ -11,8 +11,7 @@ import (
 
 // Label keys - defined here to avoid import cycles with controller package
 const (
-	LabelWorkspaceName         = "workspace.jupyter.org/workspaceName"
-	LabelComplianceCheckNeeded = "workspace.jupyter.org/compliance-check-needed"
+	LabelWorkspaceName = "workspace.jupyter.org/workspaceName"
 )
 
 // GetPodUIDFromWorkspaceName gets the pod UID for a given workspace name

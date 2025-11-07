@@ -28,12 +28,8 @@ const (
 	LabelWorkspaceTemplate          = "workspace.jupyter.org/template"
 	LabelWorkspaceTemplateNamespace = "workspace.jupyter.org/template-namespace"
 
-	// Compliance tracking label keys
-	LabelComplianceCheckNeeded = "workspace.jupyter.org/compliance-check-needed"
-
 	// Label values
-	AppLabelValue              = "jupyter"
-	LabelValueComplianceNeeded = "true"
+	AppLabelValue = "jupyter"
 
 	// Annotation keys
 	AnnotationCreatedBy                  = "workspace.jupyter.org/created-by"

@@ -15,19 +15,12 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// TemplateValidatorInterface defines the interface for template validation
-// This allows the controller to use the webhook's TemplateValidator without circular dependency
-type TemplateValidatorInterface interface {
-	ValidateCreateWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) error
-}
-
 // StateMachine handles the state transitions for Workspace
 type StateMachine struct {
-	resourceManager   *ResourceManager
-	statusManager     *StatusManager
-	recorder          record.EventRecorder
-	idleChecker       *WorkspaceIdleChecker
-	templateValidator TemplateValidatorInterface
+	resourceManager *ResourceManager
+	statusManager   *StatusManager
+	recorder        record.EventRecorder
+	idleChecker     *WorkspaceIdleChecker
 }
 
 // NewStateMachine creates a new StateMachine
@@ -36,14 +29,12 @@ func NewStateMachine(
 	statusManager *StatusManager,
 	recorder record.EventRecorder,
 	idleChecker *WorkspaceIdleChecker,
-	templateValidator TemplateValidatorInterface,
 ) *StateMachine {
 	return &StateMachine{
-		resourceManager:   resourceManager,
-		statusManager:     statusManager,
-		recorder:          recorder,
-		idleChecker:       idleChecker,
-		templateValidator: templateValidator,
+		resourceManager: resourceManager,
+		statusManager:   statusManager,
+		recorder:        recorder,
+		idleChecker:     idleChecker,
 	}
 }
 
@@ -54,11 +45,6 @@ func (sm *StateMachine) ReconcileDesiredState(
 
 	desiredStatus := sm.getDesiredStatus(workspace)
 	snapshotStatus := workspace.DeepCopy().Status
-
-	// Check if compliance check is needed (template constraints changed)
-	if result, err := sm.checkComplianceIfNeeded(ctx, workspace, &snapshotStatus); err != nil || result.RequeueAfter > 0 {
-		return result, err
-	}
 
 	switch desiredStatus {
 	case PhaseStopped:
@@ -392,120 +378,6 @@ func (sm *StateMachine) isAtLeastOneWorkspacePodReady(ctx context.Context, works
 
 	logger.V(1).Info("No ready workspace pods found")
 	return false, nil
-}
-
-// checkComplianceIfNeeded checks if template compliance validation is needed and performs it
-// This is triggered when template constraints change and workspaces need re-validation
-//
-// ARCHITECTURAL NOTE: Compliance checking belongs in the controller (not webhook) because:
-//  1. Webhooks have strict timeouts (<10s) - validating all workspaces during template update would timeout
-//  2. Only controllers can update resource status - webhooks don't have status subresource access
-//  3. This implements an asynchronous pattern: template webhook marks workspaces with a label,
-//     then this controller validates marked workspaces during normal reconciliation
-//  4. This follows standard Kubernetes patterns for label-triggered reconciliation
-//
-// The flow is: Template updated → Webhook adds compliance label → Controller validates → Status updated
-func (sm *StateMachine) checkComplianceIfNeeded(
-	ctx context.Context,
-	workspace *workspacev1alpha1.Workspace,
-	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (ctrl.Result, error) {
-
-	logger := logf.FromContext(ctx)
-
-	// Check if compliance check is needed
-	if workspace.Labels == nil || workspace.Labels[LabelComplianceCheckNeeded] != LabelValueComplianceNeeded {
-		return ctrl.Result{}, nil
-	}
-
-	logger.Info("Compliance check needed, re-validating workspace against current template constraints",
-		"workspace", workspace.Name,
-		"namespace", workspace.Namespace,
-		"template", getTemplateRef(workspace))
-
-	// Perform compliance check if validator is available
-	var validationErr error
-	if sm.templateValidator != nil {
-		validationErr = sm.templateValidator.ValidateCreateWorkspace(ctx, workspace)
-	} else {
-		logger.Info("Template validator not available, skipping compliance check")
-	}
-
-	// Remove compliance label regardless of validation result (idempotent operation)
-	// This ensures we don't get stuck in validation loops
-	if err := sm.removeComplianceLabel(ctx, workspace); err != nil {
-		logger.Error(err, "Failed to remove compliance label, will retry")
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
-	}
-
-	// Handle validation result
-	if validationErr != nil {
-		logger.Info("Workspace failed compliance check",
-			"workspace", workspace.Name,
-			"namespace", workspace.Namespace,
-			"error", validationErr.Error())
-
-		// Record event for visibility
-		sm.recorder.Event(workspace, corev1.EventTypeWarning, "ComplianceCheckFailed",
-			fmt.Sprintf("Workspace no longer complies with template constraints: %s", validationErr.Error()))
-
-		// Parse violation from error to set status properly
-		validation := &TemplateValidationResult{
-			Violations: []TemplateViolation{
-				{
-					Message: validationErr.Error(),
-					Field:   "template constraints",
-				},
-			},
-		}
-
-		// Update status to Invalid
-		if statusErr := sm.statusManager.SetInvalid(ctx, workspace, validation, snapshotStatus); statusErr != nil {
-			logger.Error(statusErr, "Failed to update invalid status")
-			return ctrl.Result{RequeueAfter: PollRequeueDelay}, statusErr
-		}
-
-		// Return error to requeue and allow user to fix the workspace
-		return ctrl.Result{RequeueAfter: LongRequeueDelay}, validationErr
-	}
-
-	logger.Info("Workspace passed compliance check",
-		"workspace", workspace.Name,
-		"namespace", workspace.Namespace)
-
-	// Record success event
-	sm.recorder.Event(workspace, corev1.EventTypeNormal, "ComplianceCheckPassed",
-		"Workspace complies with current template constraints")
-
-	// Continue with normal reconciliation
-	return ctrl.Result{}, nil
-}
-
-// removeComplianceLabel removes the compliance check label from the workspace
-func (sm *StateMachine) removeComplianceLabel(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
-	logger := logf.FromContext(ctx)
-
-	// Remove the label
-	delete(workspace.Labels, LabelComplianceCheckNeeded)
-
-	// Update the workspace to persist label removal
-	if err := sm.resourceManager.client.Update(ctx, workspace); err != nil {
-		logger.Error(err, "Failed to remove compliance check label")
-		return fmt.Errorf("failed to remove compliance label: %w", err)
-	}
-
-	logger.V(1).Info("Removed compliance check label",
-		"workspace", workspace.Name,
-		"namespace", workspace.Namespace)
-
-	return nil
-}
-
-// getTemplateRef returns the template ref name or empty string if not set
-func getTemplateRef(workspace *workspacev1alpha1.Workspace) string {
-	if workspace.Spec.TemplateRef == nil {
-		return ""
-	}
-	return workspace.Spec.TemplateRef.Name
 }
 
 // ReconcileDeletion handles workspace deletion with finalizer management

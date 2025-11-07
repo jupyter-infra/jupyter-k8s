@@ -66,12 +66,20 @@ var _ = Describe("Webhook Owner", Ordered, func() {
 		cmd := exec.Command("kubectl", "delete", "workspace", "--all", "--ignore-not-found", "--wait=false")
 		_, _ = utils.Run(cmd)
 
-		By("undeploying the controller-manager")
-		cmd = exec.Command("make", "undeploy")
-		_, _ = utils.Run(cmd)
+		By("waiting for all workspaces to be fully deleted")
+		Eventually(func(g Gomega) {
+			cmd := exec.Command("kubectl", "get", "workspace", "-o", "name")
+			output, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(strings.TrimSpace(string(output))).To(BeEmpty())
+		}).WithTimeout(180 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
 
 		By("uninstalling CRDs")
 		cmd = exec.Command("make", "uninstall")
+		_, _ = utils.Run(cmd)
+
+		By("undeploying the controller-manager")
+		cmd = exec.Command("make", "undeploy")
 		_, _ = utils.Run(cmd)
 	})
 

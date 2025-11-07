@@ -19,9 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,9 +37,6 @@ import (
 
 const (
 	templateFinalizerName = "workspace.jupyter.org/template-protection"
-	// ComplianceMarkingRateLimit is the rate limit for marking workspaces (workspaces per second)
-	// This prevents API server overload when marking large numbers of workspaces
-	ComplianceMarkingRateLimit = 10
 )
 
 // WorkspaceTemplateReconciler reconciles a WorkspaceTemplate object
@@ -79,12 +74,8 @@ func (r *WorkspaceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return r.handleDeletion(ctx, template)
 	}
 
-	// Handle spec changes and mark workspaces for compliance check if constraints changed
-	shouldUpdateStatus, newGeneration, err := r.handleSpecChanges(ctx, template)
-	if err != nil {
-		logger.Error(err, "Failed to handle spec changes")
-		return ctrl.Result{}, err
-	}
+	// Handle spec changes to track generation updates
+	shouldUpdateStatus, newGeneration := r.handleSpecChanges(ctx, template)
 
 	// Manage finalizer based on workspace usage (lazy finalizer pattern)
 	// This follows Kubernetes best practice: only add finalizers when needed
@@ -299,18 +290,21 @@ func SetupWorkspaceTemplateController(mgr ctrl.Manager) error {
 	return reconciler.SetupWithManager(mgr)
 }
 
-// handleSpecChanges detects template spec changes using Generation field and marks workspaces for compliance
+// handleSpecChanges detects template spec changes using Generation field
 // Uses Generation-based change detection following Kubernetes API conventions:
 // - metadata.generation is auto-incremented by kube-apiserver when spec changes
 // - status.observedGeneration tracks the last generation processed by this controller
 // - Only process each generation once (idempotent)
 // This pattern is standard across all Kubernetes resources (Deployments, StatefulSets, etc.)
 //
-// Returns: (shouldUpdateStatus bool, newGeneration int64, error)
+// Note: This controller tracks generation changes but does NOT proactively label workspaces.
+// Compliance is enforced lazily by the admission webhook when workspaces are created or updated.
+//
+// Returns: (shouldUpdateStatus bool, newGeneration int64)
 // The caller should update status.observedGeneration to newGeneration if shouldUpdateStatus is true.
 // This ensures status.observedGeneration is updated AFTER all reconciliation work completes,
 // following Kubernetes semantics where observedGeneration reflects fully-processed state.
-func (r *WorkspaceTemplateReconciler) handleSpecChanges(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) (bool, int64, error) {
+func (r *WorkspaceTemplateReconciler) handleSpecChanges(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) (bool, int64) {
 	logger := logf.FromContext(ctx)
 	currentGeneration := template.Generation
 	observedGeneration := template.Status.ObservedGeneration
@@ -322,108 +316,23 @@ func (r *WorkspaceTemplateReconciler) handleSpecChanges(ctx context.Context, tem
 	// Already processed this generation
 	if observedGeneration >= currentGeneration {
 		logger.V(1).Info("Generation already processed, skipping")
-		return false, 0, nil
+		return false, 0
 	}
 
 	// First creation (generation=1, never processed before)
 	if currentGeneration == 1 && observedGeneration == 0 {
-		logger.Info("Template created, marking generation as observed without compliance labeling")
-		return true, 1, nil
+		logger.Info("Template created, marking generation as observed")
+		return true, 1
 	}
 
-	// Spec was updated - mark workspaces for compliance check
-	logger.Info("Template spec changed, marking workspaces for compliance check",
+	// Spec was updated - just track it, webhook will enforce compliance on next workspace update
+	logger.Info("Template spec changed, updating observedGeneration",
 		"templateName", template.Name,
 		"oldGeneration", observedGeneration,
 		"newGeneration", currentGeneration)
 
-	if err := r.markWorkspacesForCompliance(ctx, template.Name); err != nil {
-		logger.Error(err, "Failed to mark workspaces for compliance")
-		return false, 0, err
-	}
-
-	// Return true to indicate status should be updated after all reconciliation completes
-	return true, currentGeneration, nil
-}
-
-// markWorkspacesForCompliance labels all workspaces using the template with compliance-check-needed=true
-// Uses controller-runtime's cached client which serves lists from memory (no pagination needed)
-// Rate-limits updates to prevent API server overload when marking large numbers of workspaces
-// Continues on individual failures to maximize workspaces marked
-func (r *WorkspaceTemplateReconciler) markWorkspacesForCompliance(ctx context.Context, templateName string) error {
-	logger := logf.FromContext(ctx)
-	startTime := time.Now()
-	marked := 0
-	failed := 0
-
-	// Create rate limiter: ComplianceMarkingRateLimit workspaces per second, burst of 10
-	rateLimiter := rate.NewLimiter(rate.Limit(ComplianceMarkingRateLimit), 10)
-
-	logger.Info("Starting workspace compliance marking",
-		"templateName", templateName,
-		"rateLimit", ComplianceMarkingRateLimit,
-		"timestamp", startTime)
-
-	// List all workspaces using this template from cache (no pagination)
-	// Controllers use cached clients, so all workspaces are already in memory
-	workspaces, _, err := workspace.ListByTemplate(ctx, r.Client, templateName, "", "", 0)
-	if err != nil {
-		return fmt.Errorf("failed to list workspaces using template %s: %w", templateName, err)
-	}
-
-	logger.V(1).Info("Listed workspaces from cache",
-		"templateName", templateName,
-		"workspaceCount", len(workspaces))
-
-	// Mark all workspaces
-	for i := range workspaces {
-		ws := &workspaces[i]
-		if ws.Labels == nil {
-			ws.Labels = make(map[string]string)
-		}
-
-		// Check if already marked
-		if ws.Labels[workspace.LabelComplianceCheckNeeded] == LabelValueComplianceNeeded {
-			logger.V(1).Info("Workspace already marked for compliance check",
-				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name))
-			marked++
-			continue
-		}
-
-		// Wait for rate limiter before updating
-		if err := rateLimiter.Wait(ctx); err != nil {
-			logger.Error(err, "Rate limiter context cancelled")
-			// Context cancelled - stop processing but don't fail entire operation
-			break
-		}
-
-		// Add label
-		ws.Labels[workspace.LabelComplianceCheckNeeded] = LabelValueComplianceNeeded
-		if err := r.Update(ctx, ws); err != nil {
-			logger.Error(err, "Failed to mark workspace for compliance check",
-				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name))
-			failed++
-			continue
-		}
-
-		logger.Info("Marked workspace for compliance check",
-			"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
-			"timestamp", time.Now())
-		marked++
-	}
-
-	duration := time.Since(startTime)
-	logger.Info("Finished marking workspaces for compliance",
-		"templateName", templateName,
-		"markedCount", marked,
-		"failedCount", failed,
-		"duration", duration)
-
-	if failed > 0 {
-		return fmt.Errorf("failed to mark %d workspaces for compliance (marked %d successfully)", failed, marked)
-	}
-
-	return nil
+	// Return true to indicate status should be updated
+	return true, currentGeneration
 }
 
 // updateStatusObservedGeneration updates the template's status.observedGeneration field
