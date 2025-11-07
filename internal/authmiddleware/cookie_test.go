@@ -155,7 +155,7 @@ func TestDynamicCookiePath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Test with SetCookie
 			w := httptest.NewRecorder()
-			manager.SetCookie(w, "test-token", tc.path)
+			manager.SetCookie(w, "test-token", tc.path, "")
 			cookies := w.Result().Cookies()
 			if len(cookies) == 0 {
 				t.Fatal("No cookie set")
@@ -208,7 +208,7 @@ func TestCookieWithDifferentPathsButSameApp(t *testing.T) {
 
 	// First set a cookie with the base path
 	baseWriter := httptest.NewRecorder()
-	manager.SetCookie(baseWriter, "base-token", basePath)
+	manager.SetCookie(baseWriter, "base-token", basePath, "")
 	baseCookies := baseWriter.Result().Cookies()
 	if len(baseCookies) == 0 {
 		t.Fatal("No base cookie set")
@@ -219,7 +219,7 @@ func TestCookieWithDifferentPathsButSameApp(t *testing.T) {
 	for _, subPath := range subPaths {
 		t.Run(subPath, func(t *testing.T) {
 			subWriter := httptest.NewRecorder()
-			manager.SetCookie(subWriter, "sub-token", subPath)
+			manager.SetCookie(subWriter, "sub-token", subPath, "")
 			subCookies := subWriter.Result().Cookies()
 			if len(subCookies) == 0 {
 				t.Fatal("No sub cookie set")
@@ -261,39 +261,58 @@ func TestSetCookieNameAndPath(t *testing.T) {
 	testCases := []struct {
 		name         string
 		path         string
+		domain       string
 		expectedPath string
 		token        string
 	}{
 		{
-			name:         "Root path",
+			name:         "Root path with empty domain",
 			path:         "/",
+			domain:       "",
 			expectedPath: "/",
 			token:        "token-root",
 		},
 		{
-			name:         "App path",
+			name:         "App path with empty domain",
 			path:         "/workspaces/namespace1/app1",
+			domain:       "",
 			expectedPath: "/workspaces/namespace1/app1",
 			token:        "token-app",
 		},
 		{
-			name:         "App subpath",
+			name:         "App subpath with empty domain",
 			path:         "/workspaces/namespace1/app1/lab",
+			domain:       "",
 			expectedPath: "/workspaces/namespace1/app1",
 			token:        "token-subpath",
 		},
 		{
-			name:         "Empty path",
+			name:         "Empty path with empty domain",
 			path:         "",
+			domain:       "",
 			expectedPath: "/",
 			token:        "token-empty",
+		},
+		{
+			name:         "Root path with specific domain",
+			path:         "/",
+			domain:       "workspace.example.com",
+			expectedPath: "/",
+			token:        "token-root-domain",
+		},
+		{
+			name:         "App path with specific domain",
+			path:         "/workspaces/namespace1/app1",
+			domain:       "app1-ns1.workspaces.example.com",
+			expectedPath: "/workspaces/namespace1/app1",
+			token:        "token-app-domain",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			manager.SetCookie(w, tc.token, tc.path)
+			manager.SetCookie(w, tc.token, tc.path, tc.domain)
 			cookies := w.Result().Cookies()
 			if len(cookies) == 0 {
 				t.Fatal("No cookie set")
@@ -311,8 +330,9 @@ func TestSetCookieNameAndPath(t *testing.T) {
 			}
 
 			// Check that the cookie has the correct domain
-			if cookie.Domain != config.CookieDomain {
-				t.Errorf("Expected cookie domain %q but got %q", config.CookieDomain, cookie.Domain)
+			expectedDomain := tc.domain
+			if cookie.Domain != expectedDomain {
+				t.Errorf("Expected cookie domain %q but got %q", expectedDomain, cookie.Domain)
 			}
 
 			// Check that the cookie has the correct max age
@@ -381,7 +401,7 @@ func TestGetCookieWithPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// First set the cookie
 			w := httptest.NewRecorder()
-			manager.SetCookie(w, tc.token, tc.path)
+			manager.SetCookie(w, tc.token, tc.path, "")
 
 			// Create a request with the cookie
 			req := httptest.NewRequest("GET", "http://example.com"+tc.path, nil)
@@ -458,20 +478,34 @@ func TestClearCookie(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name string
-		path string
+		name   string
+		path   string
+		domain string
 	}{
 		{
-			name: "Root path",
-			path: "/",
+			name:   "Root path with empty domain",
+			path:   "/",
+			domain: "",
 		},
 		{
-			name: "App path",
-			path: "/workspaces/namespace1/app1",
+			name:   "App path with empty domain",
+			path:   "/workspaces/namespace1/app1",
+			domain: "",
 		},
 		{
-			name: "App subpath",
-			path: "/workspaces/namespace1/app1/lab",
+			name:   "App subpath with empty domain",
+			path:   "/workspaces/namespace1/app1/lab",
+			domain: "",
+		},
+		{
+			name:   "Root path with specific domain",
+			path:   "/",
+			domain: "workspace.example.com",
+		},
+		{
+			name:   "App path with specific domain",
+			path:   "/workspaces/namespace1/app1",
+			domain: "app1-ns1.workspaces.example.com",
 		},
 	}
 
@@ -479,11 +513,11 @@ func TestClearCookie(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// First set a cookie with a value
 			w := httptest.NewRecorder()
-			manager.SetCookie(w, "test-token", tc.path)
+			manager.SetCookie(w, "test-token", tc.path, tc.domain)
 
 			// Now clear the cookie
 			clearW := httptest.NewRecorder()
-			manager.ClearCookie(clearW, tc.path)
+			manager.ClearCookie(clearW, tc.path, tc.domain)
 
 			// Get the cleared cookie
 			cookies := clearW.Result().Cookies()
@@ -500,6 +534,11 @@ func TestClearCookie(t *testing.T) {
 			// Check that the cookie max age is negative (expires immediately)
 			if cookie.MaxAge != -1 {
 				t.Errorf("Expected cookie max age -1 but got %d", cookie.MaxAge)
+			}
+
+			// Check that the cookie domain matches what was provided
+			if cookie.Domain != tc.domain {
+				t.Errorf("Expected cookie domain %q but got %q", tc.domain, cookie.Domain)
 			}
 
 			// Check that the cookie path is correct based on the input path

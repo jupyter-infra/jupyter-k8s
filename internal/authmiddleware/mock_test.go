@@ -81,9 +81,9 @@ func (m *MockJWTHandler) ShouldRefreshToken(claims *jwt.Claims) bool {
 
 // MockCookieHandler implements the CookieHandler interface for testing
 type MockCookieHandler struct {
-	SetCookieFunc   func(w http.ResponseWriter, token string, path string)
+	SetCookieFunc   func(w http.ResponseWriter, token string, path string, domain string)
 	GetCookieFunc   func(r *http.Request, path string) (string, error)
-	ClearCookieFunc func(w http.ResponseWriter, path string)
+	ClearCookieFunc func(w http.ResponseWriter, path string, domain string)
 	CSRFProtectFunc func() func(http.Handler) http.Handler
 }
 
@@ -91,9 +91,9 @@ type MockCookieHandler struct {
 var _ CookieHandler = (*MockCookieHandler)(nil)
 
 // SetCookie calls the mock implementation
-func (m *MockCookieHandler) SetCookie(w http.ResponseWriter, token string, path string) {
+func (m *MockCookieHandler) SetCookie(w http.ResponseWriter, token string, path string, domain string) {
 	if m.SetCookieFunc != nil {
-		m.SetCookieFunc(w, token, path)
+		m.SetCookieFunc(w, token, path, domain)
 	}
 }
 
@@ -106,9 +106,9 @@ func (m *MockCookieHandler) GetCookie(r *http.Request, path string) (string, err
 }
 
 // ClearCookie calls the mock implementation
-func (m *MockCookieHandler) ClearCookie(w http.ResponseWriter, path string) {
+func (m *MockCookieHandler) ClearCookie(w http.ResponseWriter, path string, domain string) {
 	if m.ClearCookieFunc != nil {
-		m.ClearCookieFunc(w, path)
+		m.ClearCookieFunc(w, path, domain)
 	}
 }
 

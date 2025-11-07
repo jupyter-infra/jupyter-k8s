@@ -43,6 +43,7 @@ func createTestServer(_ rest.Interface) *Server {
 		PathRegexPattern:            DefaultPathRegexPattern,
 		WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
 		WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+		RoutingMode:                 DefaultRoutingMode,
 		OidcUsernamePrefix:          DefaultOidcUsernamePrefix,
 		OidcGroupsPrefix:            DefaultOidcGroupsPrefix,
 	}
@@ -185,7 +186,7 @@ func TestHandleAuth_HappyPath(t *testing.T) {
 
 	// Create cookie handler mock
 	cookieHandler := &MockCookieHandler{
-		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {
 			cookieSet = true
 			// Verify parameters
 			if token != generatedToken {
