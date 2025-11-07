@@ -457,6 +457,7 @@ var _ = Describe("DeploymentBuilder", func() {
 
 			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(err).NotTo(HaveOccurred())
 
 			podSpec := deployment.Spec.Template.Spec
 			Expect(podSpec.SecurityContext).NotTo(BeNil())
