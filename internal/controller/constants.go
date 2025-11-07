@@ -31,7 +31,7 @@ const (
 	// LabelWorkspaceTemplate is the label key for workspace template
 	LabelWorkspaceTemplate = "workspace.jupyter.org/template"
 
-	// Label values
+	// AppLabelValue is the label value for app label
 	AppLabelValue = "jupyter"
 
 	// AnnotationCreatedBy is the annotation key for tracking resource creator
