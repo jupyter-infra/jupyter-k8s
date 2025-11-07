@@ -440,5 +440,28 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(needsUpdate).To(BeFalse())
 		})
+		It("should apply pod security context when specified", func() {
+			fsGroup := int64(1000)
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					DisplayName: "Test Workspace",
+					PodSecurityContext: &corev1.PodSecurityContext{
+						FSGroup: &fsGroup,
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			podSpec := deployment.Spec.Template.Spec
+			Expect(podSpec.SecurityContext).NotTo(BeNil())
+			Expect(podSpec.SecurityContext.FSGroup).NotTo(BeNil())
+			Expect(*podSpec.SecurityContext.FSGroup).To(Equal(int64(1000)))
+		})
 	})
 })

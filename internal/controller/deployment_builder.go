@@ -176,6 +176,11 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 		podSpec.ServiceAccountName = workspace.Spec.ServiceAccountName
 	}
 
+	// Apply pod security context
+	if workspace.Spec.PodSecurityContext != nil {
+		podSpec.SecurityContext = workspace.Spec.PodSecurityContext
+	}
+
 	return podSpec
 }
 

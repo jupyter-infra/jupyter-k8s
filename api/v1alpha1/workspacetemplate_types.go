@@ -122,6 +122,10 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultLifecycle *corev1.Lifecycle `json:"defaultLifecycle,omitempty"`
 
+	// DefaultPodSecurityContext specifies default pod-level security context
+	// +optional
+	DefaultPodSecurityContext *corev1.PodSecurityContext `json:"defaultPodSecurityContext,omitempty"`
+
 	// AppType specifies the application type for workspaces using this template
 	// +optional
 	AppType string `json:"appType,omitempty"`

@@ -175,16 +175,16 @@ spec:
 	})
 
 	AfterAll(func() {
-		By("cleaning up test workspaces")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Deleting test workspaces...\n")
-		cmd := exec.Command("kubectl", "delete", "workspace",
-			"workspace-with-template", "test-valid-workspace",
-			"cpu-exceed-test", "valid-overrides-test",
-			"deletion-protection-test", "templateref-mutability-test",
-			"lazy-application-test",
-			"cel-immutability-test",
-			"--ignore-not-found", "--wait=false")
-		_, _ = utils.Run(cmd)
+    By("cleaning up test workspaces")
+    _, _ = fmt.Fprintf(GinkgoWriter, "Deleting test workspaces...\n")
+    cmd := exec.Command("kubectl", "delete", "workspace",
+        "workspace-with-template", "test-valid-workspace",
+        "cpu-exceed-test", "valid-overrides-test",
+        "deletion-protection-test", "templateref-mutability-test",
+        "lazy-application-test", "cel-immutability-test",
+        "security-context-test",
+        "--ignore-not-found", "--timeout=60s")
+    _, _ = utils.Run(cmd)
 
 		By("waiting for all workspaces to be fully deleted")
 		Eventually(func(g Gomega) {
@@ -734,6 +734,69 @@ spec:
 			cmd = exec.Command("kubectl", "delete", "workspace", "custom-image-allowed-test")
 			_, _ = utils.Run(cmd)
 			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "custom-images-template")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should inherit pod security context from template", func() {
+			By("creating template with pod security context")
+			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: security-context-template
+spec:
+  displayName: "Security Context Template"
+  defaultImage: "jupyter/base-notebook:latest"
+  defaultPodSecurityContext:
+    fsGroup: 1000
+    runAsNonRoot: true
+    runAsUser: 1000
+  resourceBounds:
+    cpu:
+      min: "100m"
+      max: "2"
+    memory:
+      min: "128Mi"
+      max: "4Gi"
+`
+			cmd := exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating workspace without pod security context")
+			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: security-context-test
+spec:
+  displayName: "Security Context Test"
+  templateRef: "security-context-template"
+`
+			cmd = exec.Command("sh", "-c",
+				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying workspace inherited pod security context")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "security-context-test",
+					"-o", "jsonpath={.spec.podSecurityContext.fsGroup}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("1000"))
+			}).WithTimeout(10 * time.Second).Should(Succeed())
+
+			By("verifying runAsUser was inherited")
+			cmd = exec.Command("kubectl", "get", "workspace", "security-context-test",
+				"-o", "jsonpath={.spec.podSecurityContext.runAsUser}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("1000"))
+
+			By("cleaning up test resources")
+			cmd = exec.Command("kubectl", "delete", "workspace", "security-context-test", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "security-context-template", "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 		})
 	})
