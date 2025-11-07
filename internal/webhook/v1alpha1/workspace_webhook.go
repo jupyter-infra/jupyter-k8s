@@ -18,7 +18,6 @@ package v1alpha1
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -30,19 +29,13 @@ import (
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/stringutil"
 	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 )
 
 // nolint:unused
 // log is for logging in this package.
 var workspacelog = logf.Log.WithName("workspace-resource")
-
-func sanitizeUsername(username string) string {
-	// Use Go's JSON marshaling to properly escape the string
-	escaped, _ := json.Marshal(username)
-	// Remove the surrounding quotes that json.Marshal adds
-	return string(escaped[1 : len(escaped)-1])
-}
 
 // getEffectiveOwnershipType returns the effective access type, treating empty as Public
 // TODO: think of better way to convey defaults to user.
@@ -83,7 +76,7 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 		return fmt.Errorf("unable to extract user information from request context: %w", err)
 	}
 
-	currentUser := sanitizeUsername(req.UserInfo.Username)
+	currentUser := stringutil.SanitizeUsername(req.UserInfo.Username)
 	workspacelog.Info("Validating ownership permission", "currentUser", currentUser)
 
 	// Check if user is the owner
@@ -145,7 +138,7 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 
 	// Extract user info from request context
 	if req, err := admission.RequestFromContext(ctx); err == nil {
-		sanitizedUsername := sanitizeUsername(req.UserInfo.Username)
+		sanitizedUsername := stringutil.SanitizeUsername(req.UserInfo.Username)
 
 		// Always set created-by on CREATE operations
 		if req.Operation == "CREATE" {

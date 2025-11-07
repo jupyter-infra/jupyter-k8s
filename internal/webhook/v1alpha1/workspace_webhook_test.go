@@ -392,26 +392,6 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(err.Error()).To(ContainSubstring("created-by annotation is immutable"))
 			Expect(warnings).To(BeEmpty())
 		})
-	})
-
-	Context("sanitizeUsername", func() {
-		It("should handle normal usernames", func() {
-			Expect(sanitizeUsername("user123")).To(Equal("user123"))
-			Expect(sanitizeUsername("test@example.com")).To(Equal("test@example.com"))
-			Expect(sanitizeUsername("arn:aws:iam::123456789012:role/EKSRole")).To(Equal("arn:aws:iam::123456789012:role/EKSRole"))
-		})
-
-		It("should escape special characters", func() {
-			Expect(sanitizeUsername("user\nname")).To(Equal("user\\nname"))
-			Expect(sanitizeUsername("user\tname")).To(Equal("user\\tname"))
-			Expect(sanitizeUsername("user\"name")).To(Equal("user\\\"name"))
-			Expect(sanitizeUsername("user\\name")).To(Equal("user\\\\name"))
-		})
-
-		It("should handle unicode characters", func() {
-			Expect(sanitizeUsername("用户")).To(Equal("用户"))
-			Expect(sanitizeUsername("user🚀")).To(Equal("user🚀"))
-		})
 
 		It("should validate workspace deletion successfully", func() {
 			warnings, err := validator.ValidateDelete(ctx, workspace)
