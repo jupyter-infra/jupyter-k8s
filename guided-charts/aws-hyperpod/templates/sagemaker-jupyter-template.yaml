@@ -37,6 +37,10 @@ spec:
   defaultContainerConfig:
     command: ["/opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-jupyterlab"]
   
+  # Pod security context for SageMaker user access
+  defaultPodSecurityContext:
+    fsGroup: 1000  # sagemaker-user group ID
+  
   # Access configuration
   defaultOwnershipType: "Public"
   allowSecondaryStorages: true
