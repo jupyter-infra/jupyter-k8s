@@ -10,6 +10,16 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
+  - pods
+  - serviceaccounts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - events
   verbs:
   - create
@@ -29,15 +39,6 @@ rules:
   - list
   - patch
   - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  - serviceaccounts
-  verbs:
-  - get
-  - list
   - watch
 - apiGroups:
   - ""
