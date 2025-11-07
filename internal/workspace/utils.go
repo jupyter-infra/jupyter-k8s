@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -15,7 +14,7 @@ func GetPodUIDFromWorkspaceName(k8sClient client.Client, workspaceName string) (
 	// Get pods with the workspace label
 	podList := &corev1.PodList{}
 	err := k8sClient.List(context.TODO(), podList, client.MatchingLabels{
-		controller.LabelWorkspaceName: workspaceName,
+		LabelWorkspaceName: workspaceName,
 	})
 	if err != nil {
 		return "", err
