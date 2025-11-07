@@ -103,7 +103,7 @@ const (
 	DefaultWorkspaceNamePathRegex      = `^/workspaces/[^/]+/([^/]+)`
 
 	// Routing defaults
-	DefaultRoutingMode                      = "path"
+	DefaultRoutingMode                      = RoutingModePath
 	DefaultWorkspaceNamespaceSubdomainRegex = `^([^-]+)-.*`
 	DefaultWorkspaceNameSubdomainRegex      = `^[^-]+-(.*)$`
 
@@ -157,7 +157,7 @@ type Config struct {
 	WorkspaceNamePathRegex      string // Regex pattern to extract workspace name from path
 
 	// Routing configuration
-	RoutingMode                      string // Routing mode: "path" or "subdomain"
+	RoutingMode                      string // Routing mode: RoutingModePath or RoutingModeSubdomain
 	WorkspaceNamespaceSubdomainRegex string // Regex pattern to extract workspace namespace from subdomain
 	WorkspaceNameSubdomainRegex      string // Regex pattern to extract workspace name from subdomain
 

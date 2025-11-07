@@ -529,7 +529,7 @@ func TestVerifyWorkspaceAccess_ReturnsNoResponseAndNoError_WhenAccessReviewFails
 
 func TestExtractWorkspaceInfo_SubdomainMode(t *testing.T) {
 	config := &Config{
-		RoutingMode:                      "subdomain",
+		RoutingMode:                      RoutingModeSubdomain,
 		WorkspaceNameSubdomainRegex:      `^([^-]+)-.*$`,
 		WorkspaceNamespaceSubdomainRegex: `^[^-]+-(.*)$`,
 	}
@@ -554,7 +554,7 @@ func TestExtractWorkspaceInfo_SubdomainMode(t *testing.T) {
 
 func TestExtractWorkspaceInfo_PathMode(t *testing.T) {
 	config := &Config{
-		RoutingMode:                 "path",
+		RoutingMode:                 RoutingModePath,
 		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
 		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
 	}
@@ -597,7 +597,7 @@ func TestExtractWorkspaceInfo_UnsupportedMode(t *testing.T) {
 
 func TestExtractWorkspaceInfo_SubdomainModeInvalidHost(t *testing.T) {
 	config := &Config{
-		RoutingMode:                      "subdomain",
+		RoutingMode:                      RoutingModeSubdomain,
 		WorkspaceNameSubdomainRegex:      `^([^-]+)-.*$`,
 		WorkspaceNamespaceSubdomainRegex: `^[^-]+-(.*)$`,
 	}

@@ -54,7 +54,7 @@ func (s *ExtensionServer) generateWebUIBearerTokenURL(r *http.Request, workspace
 	domain := parsedURL.Host // Full host including subdomain
 	path := parsedURL.Path   // Path part
 
-	// Strip /bearer-auth from the end if present
+	// Strip /bearer-auth from the end if present, as we don't want to include that in Claims
 	if strings.HasSuffix(path, "/bearer-auth") {
 		path = strings.TrimSuffix(path, "/bearer-auth")
 		if path == "" {

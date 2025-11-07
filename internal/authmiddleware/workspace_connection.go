@@ -24,9 +24,9 @@ type WorkspaceInfo struct {
 // using the configured routing mode and regex patterns
 func (s *Server) ExtractWorkspaceInfo(r *http.Request) (*WorkspaceInfo, error) {
 	switch s.config.RoutingMode {
-	case "subdomain":
+	case RoutingModeSubdomain:
 		return s.extractWorkspaceInfoFromSubdomain(r)
-	case "path":
+	case RoutingModePath:
 		return s.extractWorkspaceInfoFromPath(r)
 	default:
 		return nil, fmt.Errorf("unsupported routing mode: %s", s.config.RoutingMode)

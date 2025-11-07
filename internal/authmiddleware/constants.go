@@ -16,4 +16,8 @@ const (
 
 	// Special groups
 	SystemAuthenticatedGroup = "system:authenticated"
+
+	// Routing modes
+	RoutingModeSubdomain = "subdomain"
+	RoutingModePath      = "path"
 )
