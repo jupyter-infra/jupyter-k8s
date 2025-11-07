@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -140,11 +141,72 @@ func TestKMSClient_createAliasWithConflictResolution_AlreadyExists(t *testing.T)
 	if keyID != "existing-key-id" {
 		t.Errorf("Expected existing keyID %q, got %q", "existing-key-id", keyID)
 	}
+	// Verify ScheduleKeyDeletion was called
+	if !mockKMS.scheduleKeyDeletionCalled {
+		t.Error("Expected ScheduleKeyDeletion to be called")
+	}
+	if mockKMS.scheduledKeyID != "new-key-id" {
+		t.Errorf("Expected scheduled key ID %q, got %q", "new-key-id", mockKMS.scheduledKeyID)
+	}
+}
+
+func TestKMSClient_createAliasWithConflictResolution_CreateAliasError(t *testing.T) {
+	// Mock that returns a generic error on CreateAlias
+	mockKMS := &MockKMSClientWithError{
+		createAliasError: aws.String("AccessDenied: User is not authorized"),
+	}
+	client := NewKMSWrapper(mockKMS, "us-west-2")
+
+	keyID, err := client.createAliasWithConflictResolution(context.Background(), "alias/test-alias", "new-key-id")
+
+	if err == nil {
+		t.Error("Expected error, got nil")
+	}
+	if keyID != "" {
+		t.Errorf("Expected empty keyID, got %q", keyID)
+	}
+	if err.Error() != "failed to create KMS key alias: AccessDenied: User is not authorized" {
+		t.Errorf("Expected specific error message, got %q", err.Error())
+	}
+}
+
+// MockKMSClientWithError simulates CreateAlias returning a generic error
+type MockKMSClientWithError struct {
+	createAliasError *string
+}
+
+func (m *MockKMSClientWithError) GenerateDataKey(ctx context.Context, params *kms.GenerateDataKeyInput, optFns ...func(*kms.Options)) (*kms.GenerateDataKeyOutput, error) {
+	return &kms.GenerateDataKeyOutput{}, nil
+}
+
+func (m *MockKMSClientWithError) Decrypt(ctx context.Context, params *kms.DecryptInput, optFns ...func(*kms.Options)) (*kms.DecryptOutput, error) {
+	return &kms.DecryptOutput{}, nil
+}
+
+func (m *MockKMSClientWithError) CreateKey(ctx context.Context, params *kms.CreateKeyInput, optFns ...func(*kms.Options)) (*kms.CreateKeyOutput, error) {
+	return &kms.CreateKeyOutput{}, nil
+}
+
+func (m *MockKMSClientWithError) CreateAlias(ctx context.Context, params *kms.CreateAliasInput, optFns ...func(*kms.Options)) (*kms.CreateAliasOutput, error) {
+	if m.createAliasError != nil {
+		return nil, errors.New(*m.createAliasError)
+	}
+	return &kms.CreateAliasOutput{}, nil
+}
+
+func (m *MockKMSClientWithError) DescribeKey(ctx context.Context, params *kms.DescribeKeyInput, optFns ...func(*kms.Options)) (*kms.DescribeKeyOutput, error) {
+	return &kms.DescribeKeyOutput{}, nil
+}
+
+func (m *MockKMSClientWithError) ScheduleKeyDeletion(ctx context.Context, params *kms.ScheduleKeyDeletionInput, optFns ...func(*kms.Options)) (*kms.ScheduleKeyDeletionOutput, error) {
+	return &kms.ScheduleKeyDeletionOutput{}, nil
 }
 
 // MockKMSClientWithAliasConflict simulates alias already exists scenario
 type MockKMSClientWithAliasConflict struct {
-	existingKeyID string
+	existingKeyID             string
+	scheduleKeyDeletionCalled bool
+	scheduledKeyID            string
 }
 
 func (m *MockKMSClientWithAliasConflict) GenerateDataKey(ctx context.Context, params *kms.GenerateDataKeyInput, optFns ...func(*kms.Options)) (*kms.GenerateDataKeyOutput, error) {
@@ -174,5 +236,7 @@ func (m *MockKMSClientWithAliasConflict) DescribeKey(ctx context.Context, params
 }
 
 func (m *MockKMSClientWithAliasConflict) ScheduleKeyDeletion(ctx context.Context, params *kms.ScheduleKeyDeletionInput, optFns ...func(*kms.Options)) (*kms.ScheduleKeyDeletionOutput, error) {
+	m.scheduleKeyDeletionCalled = true
+	m.scheduledKeyID = *params.KeyId
 	return &kms.ScheduleKeyDeletionOutput{}, nil
 }
