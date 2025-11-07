@@ -22,4 +22,7 @@ const (
 	RequestHeaderClientCAFileKey = "requestheader-client-ca-file"
 	// RequestHeaderAllowedNamesKey is the ConfigMap key for allowed client names
 	RequestHeaderAllowedNamesKey = "requestheader-allowed-names"
+
+	// WebUIURLFormat is the URL format for WebUI bearer token authentication
+	WebUIURLFormat = "%s/workspaces/%s/%s/bearer-auth?token=%s"
 )

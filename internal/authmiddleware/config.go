@@ -20,6 +20,7 @@ const (
 
 	// Auth configuration
 	EnvJwtSigningKey     = "JWT_SIGNING_KEY"
+	EnvJwtSigningType    = "JWT_SIGNING_TYPE"
 	EnvJwtIssuer         = "JWT_ISSUER"
 	EnvJwtAudience       = "JWT_AUDIENCE"
 	EnvJwtExpiration     = "JWT_EXPIRATION"
@@ -27,6 +28,7 @@ const (
 	EnvJwtRefreshWindow  = "JWT_REFRESH_WINDOW"
 	EnvJwtRefreshHorizon = "JWT_REFRESH_HORIZON"
 	EnvEnableBearerAuth  = "ENABLE_BEARER_URL_AUTH"
+	EnvKMSKeyId          = "KMS_KEY_ID"
 
 	// Cookie configuration
 	EnvCookieName     = "COOKIE_NAME"
@@ -57,6 +59,12 @@ const (
 	EnvOidcGroupsPrefix   = "OIDC_GROUPS_PREFIX"
 )
 
+// JWT signing types
+const (
+	JWTSigningTypeStandard = "standard"
+	JWTSigningTypeKMS      = "kms"
+)
+
 // Default values
 const (
 	// Server defaults
@@ -67,6 +75,7 @@ const (
 	// DefaultTrustedProxies is a slice, defined in createDefaultConfig
 
 	// Auth defaults
+	DefaultJwtSigningType    = JWTSigningTypeStandard
 	DefaultJwtIssuer         = "workspaces-auth"
 	DefaultJwtAudience       = "workspace-users"
 	DefaultJwtExpiration     = 1 * time.Hour
@@ -113,6 +122,7 @@ type Config struct {
 
 	// Auth configuration
 	JWTSigningKey     string
+	JWTSigningType    string
 	JWTIssuer         string
 	JWTAudience       string
 	JWTExpiration     time.Duration
@@ -120,6 +130,7 @@ type Config struct {
 	JWTRefreshWindow  time.Duration
 	JWTRefreshHorizon time.Duration
 	EnableBearerAuth  bool
+	KMSKeyId          string
 
 	// Cookie configuration
 	CookieName     string
@@ -192,6 +203,7 @@ func createDefaultConfig() *Config {
 		TrustedProxies:  []string{"127.0.0.1", "::1"}, // Default trusted proxies
 
 		// Auth defaults
+		JWTSigningType:    DefaultJwtSigningType,
 		JWTIssuer:         DefaultJwtIssuer,
 		JWTAudience:       DefaultJwtAudience,
 		JWTExpiration:     DefaultJwtExpiration,
@@ -272,11 +284,16 @@ func applyServerConfig(config *Config) error {
 
 // applyJWTConfig applies JWT-related environment variable overrides
 func applyJWTConfig(config *Config) error {
-	// Required JWT signing key
+	// Set signing type first so we can use it for validation
+	if signingType := os.Getenv(EnvJwtSigningType); signingType != "" {
+		config.JWTSigningType = signingType
+	}
+
+	// JWT signing key - only required for standard signing
 	if key := os.Getenv(EnvJwtSigningKey); key != "" {
 		config.JWTSigningKey = key
-	} else {
-		return fmt.Errorf("%s environment variable must be set", EnvJwtSigningKey)
+	} else if config.JWTSigningType == JWTSigningTypeStandard {
+		return fmt.Errorf("%s environment variable must be set for standard JWT signing", EnvJwtSigningKey)
 	}
 
 	if issuer := os.Getenv(EnvJwtIssuer); issuer != "" {
@@ -325,6 +342,10 @@ func applyJWTConfig(config *Config) error {
 			return fmt.Errorf("invalid %s: %w", EnvEnableBearerAuth, err)
 		}
 		config.EnableBearerAuth = enable
+	}
+
+	if kmsKeyId := os.Getenv(EnvKMSKeyId); kmsKeyId != "" {
+		config.KMSKeyId = kmsKeyId
 	}
 
 	// Validate that JWTExpiration >= JWTRefreshWindow

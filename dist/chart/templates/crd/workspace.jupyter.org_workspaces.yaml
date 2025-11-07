@@ -33,12 +33,6 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    - jsonPath: .metadata.annotations['workspace\.jupyter\.org/created-by']
-      name: CreatedBy
-      type: string
-    - jsonPath: .spec.ownershipType
-      name: OwnershipType
-      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -1399,6 +1393,10 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              serviceAccountName:
+                description: ServiceAccountName specifies the name of the ServiceAccount
+                  to use for the workspace pod
+                type: string
               storage:
                 description: Storage specifies the storage configuration
                 properties:

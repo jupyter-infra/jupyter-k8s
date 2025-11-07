@@ -48,6 +48,12 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	AllowedImages []string `json:"allowedImages,omitempty"`
 
+	// AllowCustomImages allows workspaces to use any container image, bypassing the AllowedImages restriction
+	// When true, workspaces can specify any image regardless of the AllowedImages list
+	// +kubebuilder:default=false
+	// +optional
+	AllowCustomImages *bool `json:"allowCustomImages,omitempty"`
+
 	// DefaultResources specifies the default resource requirements
 	// +optional
 	DefaultResources *corev1.ResourceRequirements `json:"defaultResources,omitempty"`
@@ -108,9 +114,17 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultAccessType string `json:"defaultAccessType,omitempty"`
 
+	// DefaultAccessStrategy specifies the default access strategy for workspaces using this template
+	// +optional
+	DefaultAccessStrategy *AccessStrategyRef `json:"defaultAccessStrategy,omitempty"`
+
 	// DefaultLifecycle specifies default lifecycle hooks for workspaces using this template
 	// +optional
 	DefaultLifecycle *corev1.Lifecycle `json:"defaultLifecycle,omitempty"`
+
+	// DefaultPodSecurityContext specifies default pod-level security context
+	// +optional
+	DefaultPodSecurityContext *corev1.PodSecurityContext `json:"defaultPodSecurityContext,omitempty"`
 
 	// AppType specifies the application type for workspaces using this template
 	// +optional

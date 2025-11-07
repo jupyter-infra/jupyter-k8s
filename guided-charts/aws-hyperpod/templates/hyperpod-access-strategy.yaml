@@ -1,0 +1,66 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: hyperpod-access-strategy
+  namespace: {{ .Release.Namespace }}
+spec:
+  displayName: HyperPod Bearer Auth Strategy
+  accessResourceNamespace: {{ .Release.Namespace }}
+  accessResourceTemplates:
+    # The authorized route - tries token verification on already authenticated requests
+    - kind: IngressRoute
+      apiVersion: traefik.io/v1alpha1
+      namePrefix: authorized-route
+      template: |
+        spec:
+          entryPoints:
+            - web
+          routes:
+            - match: "Host(`{{ .Values.domain }}`) && PathPrefix(`/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}`)"
+              kind: Rule
+              priority: 100
+              middlewares:
+                - name: auth-headers
+                  namespace: {{ .Release.Namespace }}
+                - name: authmiddleware-verify
+                  namespace: {{ .Release.Namespace }}
+              services:
+                - name: "{{`{{ .Service.Name }}`}}"
+                  namespace: "{{`{{ .Service.Namespace }}`}}"
+                  port: 8888
+
+    # The unauthorized route - handles bearer-auth path for initial authentication
+    - kind: IngressRoute
+      apiVersion: traefik.io/v1alpha1
+      namePrefix: unauthorized-route
+      template: |
+        spec:
+          entryPoints:
+            - web
+          routes:
+            - match: "Host(`{{ .Values.domain }}`) && PathPrefix(`/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth`)"
+              kind: Rule
+              priority: 110  # Higher priority specifically for bearer-auth paths
+              middlewares:
+                - name: auth-headers
+                  namespace: {{ .Release.Namespace }}
+                - name: authmiddleware-bearer-auth
+                  namespace: {{ .Release.Namespace }}
+                - name: strip-bearer-auth-suffix
+                  namespace: {{ .Release.Namespace }}
+              services:
+                - name: "{{`{{ .Service.Name }}`}}"
+                  namespace: "{{`{{ .Service.Namespace }}`}}"
+                  port: 8888
+  mergeEnv:
+    - name: WORKSPACE_NAMESPACE
+      valueTemplate: "{{`{{ .Workspace.Namespace }}`}}"
+    - name: WORKSPACE_NAME
+      valueTemplate: "{{`{{ .Workspace.Name }}`}}"
+    - name: WORKSPACE_ACCESS_TYPE
+      valueTemplate: "{{`{{ .Workspace.Spec.AccessType }}`}}"
+    - name: WORKSPACE_APP_TYPE
+      valueTemplate: "{{`{{ .Workspace.Spec.AppType }}`}}"
+    - name: JUPYTER_BASE_URL
+      valueTemplate: "/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/"
+  accessURLTemplate: "https://{{ .Values.domain }}/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth"

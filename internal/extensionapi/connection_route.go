@@ -10,18 +10,42 @@ import (
 
 	connectionv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+// Function variable for SSM strategy creation (mockable in tests)
+var newSSMRemoteAccessStrategy = aws.NewSSMRemoteAccessStrategy
 
 // noOpPodExec is a no-op implementation of PodExecInterface for connection URL generation
 type noOpPodExec struct{}
 
 func (n *noOpPodExec) ExecInPod(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string, stdin string) (string, error) {
 	return "", fmt.Errorf("pod exec not supported in connection URL generation")
+}
+
+// generateWebUIBearerTokenURL generates a Web UI connection URL with JWT token
+// Returns (connectionType, connectionURL, error)
+func (s *ExtensionServer) generateWebUIBearerTokenURL(r *http.Request, workspaceName, namespace string) (string, string, error) {
+	user := GetUserFromHeaders(r)
+	if user == "" {
+		return "", "", fmt.Errorf("user information not found in request headers")
+	}
+
+	// Generate JWT token for the user and workspace
+	workspacePath := fmt.Sprintf("/workspaces/%s/%s", namespace, workspaceName)
+	token, err := s.jwtManager.GenerateToken(user, []string{}, user, map[string][]string{}, workspacePath, namespace, jwt.TokenTypeBootstrap)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate JWT token: %w", err)
+	}
+
+	// Construct the Web UI URL using the format: $DOMAIN/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/bearer-auth?token=<token>
+	webUIURL := fmt.Sprintf(WebUIURLFormat, s.config.Domain, namespace, workspaceName, token)
+
+	return connectionv1alpha1.ConnectionTypeWebUI, webUIURL, nil
 }
 
 // HandleConnectionCreate handles POST requests to create a connection
@@ -108,7 +132,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	case connectionv1alpha1.ConnectionTypeVSCodeRemote:
 		responseType, responseURL, err = s.generateVSCodeURL(r, req.Spec.WorkspaceName, namespace)
 	case connectionv1alpha1.ConnectionTypeWebUI:
-		responseType, responseURL, err = s.generateWebUIURL(r, req.Spec.WorkspaceName, namespace)
+		responseType, responseURL, err = s.generateWebUIBearerTokenURL(r, req.Spec.WorkspaceName, namespace)
 	default:
 		logger.Error(nil, "Invalid workspace connection type", "connectionType", req.Spec.WorkspaceConnectionType)
 		WriteKubernetesError(w, http.StatusBadRequest, "Invalid workspace connection type")
@@ -157,7 +181,7 @@ func validateWorkspaceConnectionRequest(req *connectionv1alpha1.WorkspaceConnect
 	case connectionv1alpha1.ConnectionTypeVSCodeRemote, connectionv1alpha1.ConnectionTypeWebUI:
 		// Valid types
 	default:
-		return fmt.Errorf("invalid workspaceConnectionType: %s", req.Spec.WorkspaceConnectionType)
+		return fmt.Errorf("invalid workspaceConnectionType: '%s'. Valid types are: 'vscode-remote', 'web-ui'", req.Spec.WorkspaceConnectionType)
 	}
 
 	return nil
@@ -171,14 +195,8 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 	// Get cluster ID from config (already validated earlier)
 	clusterId := s.config.ClusterId
 
-	// Get pod UID from workspace name
-	config := ctrl.GetConfigOrDie()
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return "", "", err
-	}
-
-	podUID, err := workspace.GetPodUIDFromWorkspaceName(clientset, workspaceName)
+	// Get pod UID from workspace name using existing k8sClient
+	podUID, err := workspace.GetPodUIDFromWorkspaceName(s.k8sClient, workspaceName)
 	if err != nil {
 		logger.Error(err, "Failed to get pod UID", "workspaceName", workspaceName)
 		return "", "", err
@@ -187,7 +205,7 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 	logger.Info("Found pod UID for workspace", "workspaceName", workspaceName, "podUID", podUID)
 
 	// Create SSM remote access strategy
-	ssmStrategy, err := aws.NewSSMRemoteAccessStrategy(nil, &noOpPodExec{})
+	ssmStrategy, err := newSSMRemoteAccessStrategy(nil, &noOpPodExec{})
 	if err != nil {
 		return "", "", err
 	}

@@ -25,9 +25,6 @@ import (
 
 const testResourceName = "test-resource"
 
-// No need to override the function at init since we can't modify package functions
-// Instead we'll use variables that our test will check
-
 // MockHTTPServer is a wrapper around http.Server for testing
 type MockHTTPServer struct {
 	Server             *http.Server
@@ -184,8 +181,11 @@ var _ = Describe("Server", func() {
 		clientSet := &kubernetes.Clientset{}
 		sarClient = clientSet.AuthorizationV1().SubjectAccessReviews()
 
+		// Create mock JWT manager
+		mockJWT := &mockJWTManager{token: "test-token"}
+
 		// Create the server
-		server = newExtensionServer(config, &logger, k8sClient, sarClient)
+		server = newExtensionServer(config, &logger, k8sClient, sarClient, mockJWT)
 		server.registerAllRoutes()
 
 		// Create a minimal fake routes server without automatic route registration
@@ -506,6 +506,25 @@ var _ = Describe("Server", func() {
 				}
 			}
 			Expect(routeCount).To(Equal(2))
+		})
+
+		It("Should return 404 for paths with insufficient parts", func() {
+			mockJWT := &mockJWTManager{token: "test-token"}
+			server := newExtensionServer(config, &logger, k8sClient, sarClient, mockJWT)
+
+			resourceHandlers := map[string]func(http.ResponseWriter, *http.Request){
+				"test": func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(http.StatusOK)
+				},
+			}
+			server.registerNamespacedRoutes(resourceHandlers)
+
+			req := httptest.NewRequest("GET", "/apis/namespaces/short", nil)
+			w := httptest.NewRecorder()
+
+			server.mux.ServeHTTP(w, req)
+
+			Expect(w.Code).To(Equal(http.StatusNotFound))
 		})
 	})
 

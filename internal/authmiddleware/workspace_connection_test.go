@@ -17,6 +17,11 @@ const (
 	testWorkspacePath = "/workspaces/default/myworkspace/lab"
 	// ExpectApiGroup
 	expectApiGroupVersion = "connection.workspace.jupyter.org/v1alpha1"
+	// Test user constants
+	testUserValue   = "test-user"
+	testUIDValue    = "test-uid"
+	testPathValue   = "/workspaces/ns1/app1"
+	testDomainValue = "example.com"
 )
 
 func TestExtractWorkspaceInfoWithDefaultRegexes(t *testing.T) {

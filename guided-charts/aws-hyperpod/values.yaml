@@ -15,6 +15,14 @@ externalDns:
   # Whether to enable external-dns annotations for automatic DNS record creation
   enabled: true
 
+# Network policy configuration
+networkPolicy:
+  # Whether to enable network policies for enhanced security
+  # When enabled, restricts network access so only Traefik can communicate with:
+  # - Auth middleware service
+  # - Individual workspace services
+  enabled: true
+
 # Remote access configuration
 remoteAccess:
   enabled: false
@@ -40,7 +48,7 @@ traefik:
 storageClass:
   ebs:
     create: true
-    name: ebs-sc
+    name: sagemaker-spaces-default-storage-class
     isDefault: false
     provisioner: ebs.csi.aws.com
     reclaimPolicy: Delete
@@ -70,8 +78,10 @@ authmiddleware:
       cpu: 200m
       memory: 128Mi
   # JWT configuration
-  # JWT validation type: "hmac" or "kms"
-  jwtValidationType: "kms"
+  # JWT signing type: "standard" or "kms"
+  jwtSigningType: "kms"
+  # KMS Key ID/ARN for JWT signing (required when jwtValidationType is "kms")
+  kmsKeyId: ""
   jwtIssuer: "jupyter-k8s-auth"
   jwtAudience: "workspace-users"
   jwtExpiration: "1h"
