@@ -8,7 +8,7 @@ spec:
   {{- if .Values.authMiddleware.enabled }}
   accessResourceNamespace: {{ .Release.Namespace }}
   {{- end }}
-  
+
   {{- if .Values.authMiddleware.enabled }}
   accessResourceTemplates:
     # The authorized route - tries token verification on already authenticated requests
@@ -60,8 +60,6 @@ spec:
   accessResourceTemplates: []
   {{- end }}
 
-  mergeEnv: []
-
   {{- if .Values.authMiddleware.enabled }}
   accessURLTemplate: "https://{{ .Values.domain }}/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth"
   {{- end }}
@@ -79,7 +77,7 @@ spec:
         - name: "ssm-agent-sidecar"
           image: "{{ .Values.remoteAccess.ssmSidecarImage }}"
           command: ["/bin/sh"]
-          args: 
+          args:
             - "-c"
             - "cp /usr/local/bin/remote-access-server /opt/amazon/sagemaker/workspace/ || echo \"Failed to copy: $?\"; sleep infinity"
           resources:
@@ -97,7 +95,7 @@ spec:
               command: ["test", "-f", "/tmp/ssm-registered"]
             initialDelaySeconds: 2
             periodSeconds: 2
-      
+
       volumes:
         - name: "workspace-base"
           emptyDir:
@@ -111,9 +109,20 @@ spec:
           volumeMounts:
             - name: workspace-base
               mountPath: /workspace_base_dir
-    
+
     primaryContainer:
       volumeMounts:
         - name: "workspace-base"
           mountPath: "/opt/amazon/sagemaker/workspace"
   {{- end }}
+  mergeEnv:
+    - name: WORKSPACE_NAMESPACE
+      valueTemplate: "{{`{{ .Workspace.Namespace }}`}}"
+    - name: WORKSPACE_NAME
+      valueTemplate: "{{`{{ .Workspace.Name }}`}}"
+    - name: WORKSPACE_ACCESS_TYPE
+      valueTemplate: "{{`{{ .Workspace.Spec.AccessType }}`}}"
+    - name: WORKSPACE_APP_TYPE
+      valueTemplate: "{{`{{ .Workspace.Spec.AppType }}`}}"
+    - name: JUPYTER_BASE_URL
+      valueTemplate: "/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/"
