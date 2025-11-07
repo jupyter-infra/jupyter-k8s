@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 	jwt5 "github.com/golang-jwt/jwt/v5"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 )
@@ -33,6 +34,30 @@ func (m *MockKMSClient) Decrypt(ctx context.Context, params *kms.DecryptInput, o
 		Plaintext: m.dataKey,
 		KeyId:     aws.String("test-key-id"),
 	}, nil
+}
+
+func (m *MockKMSClient) CreateKey(ctx context.Context, params *kms.CreateKeyInput, optFns ...func(*kms.Options)) (*kms.CreateKeyOutput, error) {
+	return &kms.CreateKeyOutput{
+		KeyMetadata: &types.KeyMetadata{
+			KeyId: aws.String("test-key-id"),
+		},
+	}, nil
+}
+
+func (m *MockKMSClient) CreateAlias(ctx context.Context, params *kms.CreateAliasInput, optFns ...func(*kms.Options)) (*kms.CreateAliasOutput, error) {
+	return &kms.CreateAliasOutput{}, nil
+}
+
+func (m *MockKMSClient) DescribeKey(ctx context.Context, params *kms.DescribeKeyInput, optFns ...func(*kms.Options)) (*kms.DescribeKeyOutput, error) {
+	return &kms.DescribeKeyOutput{
+		KeyMetadata: &types.KeyMetadata{
+			KeyId: aws.String("test-key-id"),
+		},
+	}, nil
+}
+
+func (m *MockKMSClient) ScheduleKeyDeletion(ctx context.Context, params *kms.ScheduleKeyDeletionInput, optFns ...func(*kms.Options)) (*kms.ScheduleKeyDeletionOutput, error) {
+	return &kms.ScheduleKeyDeletionOutput{}, nil
 }
 
 func TestNewKMSJWTManager(t *testing.T) {
