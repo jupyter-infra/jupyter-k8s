@@ -4,8 +4,12 @@ metadata:
   name: hyperpod-access-strategy
   namespace: {{ .Release.Namespace }}
 spec:
-  displayName: HyperPod Bearer Auth Strategy
+  displayName: HyperPod Access Strategy
+  {{- if .Values.authMiddleware.enabled }}
   accessResourceNamespace: {{ .Release.Namespace }}
+  {{- end }}
+
+  {{- if .Values.authMiddleware.enabled }}
   accessResourceTemplates:
     # The authorized route - tries token verification on already authenticated requests
     - kind: IngressRoute
@@ -52,6 +56,65 @@ spec:
                 - name: "{{`{{ .Service.Name }}`}}"
                   namespace: "{{`{{ .Service.Namespace }}`}}"
                   port: 8888
+  {{- else }}
+  accessResourceTemplates: []
+  {{- end }}
+
+  {{- if .Values.authMiddleware.enabled }}
+  accessURLTemplate: "https://{{ .Values.domain }}/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth"
+  {{- end }}
+
+  {{- if .Values.remoteAccess.enabled }}
+  # Controller-specific configuration (not injected into workspace containers)
+  controllerConfig:
+    SSM_MANAGED_NODE_ROLE: "sagemaker-space-ssm-managed-node-role"
+    AWS_SSM_DOCUMENT_NAME: "AWS-StartSSHSession"
+
+  # Deployment modifications for SSM remote access
+  deploymentSpecModifications:
+    podSpec:
+      additionalContainers:
+        - name: "ssm-agent-sidecar"
+          image: "{{ .Values.remoteAccess.ssmSidecarImage }}"
+          command: ["/bin/sh"]
+          args:
+            - "-c"
+            - "cp /usr/local/bin/remote-access-server /opt/amazon/sagemaker/workspace/ || echo \"Failed to copy: $?\"; sleep infinity"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "1Gi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: "workspace-base"
+              mountPath: "/opt/amazon/sagemaker/workspace"
+          readinessProbe:
+            exec:
+              command: ["test", "-f", "/tmp/ssm-registered"]
+            initialDelaySeconds: 2
+            periodSeconds: 2
+
+      volumes:
+        - name: "workspace-base"
+          emptyDir:
+            sizeLimit: "1Gi"
+
+      initContainers:
+        - name: workspace-init-container
+          image: "{{ .Values.remoteAccess.ssmSidecarImage }}"
+          command:
+            - /opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-init-container
+          volumeMounts:
+            - name: workspace-base
+              mountPath: /workspace_base_dir
+
+    primaryContainer:
+      volumeMounts:
+        - name: "workspace-base"
+          mountPath: "/opt/amazon/sagemaker/workspace"
+  {{- end }}
   mergeEnv:
     - name: WORKSPACE_NAMESPACE
       valueTemplate: "{{`{{ .Workspace.Namespace }}`}}"
@@ -63,4 +126,3 @@ spec:
       valueTemplate: "{{`{{ .Workspace.Spec.AppType }}`}}"
     - name: JUPYTER_BASE_URL
       valueTemplate: "/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/"
-  accessURLTemplate: "https://{{ .Values.domain }}/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth"
