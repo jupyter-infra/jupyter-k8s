@@ -6,7 +6,7 @@ const (
 	AWSSSMDocumentNameEnv = "AWS_SSM_DOCUMENT_NAME"
 
 	// EKSClusterARNEnv is the environment variable key for EKS cluster ARN
-	EKSClusterARNEnv = "CLUSTER_ARN"
+	EKSClusterARNEnv = "CLUSTER_ID"
 
 	// SSHDocumentContentEnv is the environment variable for SSH document content
 	SSHDocumentContentEnv = "SSH_DOCUMENT_CONTENT"

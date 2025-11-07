@@ -121,7 +121,7 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
         sed -i.bak '/container:/a\
     env:\
       CLUSTER_ADMIN_GROUP: "cluster-workspace-admin"\
-      CLUSTER_ARN: ""
+      CLUSTER_ID: ""
 ' "${CHART_DIR}/values.yaml" && rm "${CHART_DIR}/values.yaml.bak"
     fi
 
