@@ -83,6 +83,7 @@ func (m *KMSJWTManager) GenerateToken(
 			Subject:   user,
 		},
 		User:      user,
+		CapsUser:  user,
 		Groups:    groups,
 		UID:       uid,
 		Extra:     extra,

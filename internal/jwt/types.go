@@ -28,6 +28,7 @@ var (
 type Claims struct {
 	jwt5.RegisteredClaims
 	User        string              `json:"user,omitempty"`
+	CapsUser    string              `json:"User,omitempty"` // temporarily adding to allow client code to pick up user
 	Groups      []string            `json:"groups,omitempty"`
 	UID         string              `json:"uid,omitempty"`
 	Extra       map[string][]string `json:"extra,omitempty"`

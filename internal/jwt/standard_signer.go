@@ -46,6 +46,7 @@ func (s *StandardSigner) GenerateToken(
 			Subject:   username,
 		},
 		User:        username,
+		CapsUser:    username,
 		Groups:      groups,
 		UID:         uid,
 		Extra:       extra,
