@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 )
 
 var _ = Describe("ServiceAccountDefaulter", func() {
@@ -93,7 +93,7 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 					Name:      "custom-default-sa",
 					Namespace: "default",
 					Labels: map[string]string{
-						controller.LabelDefaultServiceAccount: "true",
+						webhookconst.DefaultServiceAccountLabel: "true",
 					},
 				},
 			}
@@ -108,6 +108,80 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 			err := defaulter.ApplyServiceAccountDefaults(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspace.Spec.ServiceAccountName).To(Equal("custom-default-sa"))
+		})
+	})
+
+	Context("GetDefaultServiceAccount", func() {
+		It("should return 'default' when no service accounts have the label", func() {
+			scheme := runtime.NewScheme()
+			_ = corev1.AddToScheme(scheme)
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				Build()
+
+			result, err := GetDefaultServiceAccount(ctx, fakeClient, "default")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal("default"))
+		})
+
+		It("should return the service account name when exactly one has the label", func() {
+			scheme := runtime.NewScheme()
+			_ = corev1.AddToScheme(scheme)
+
+			sa := &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "custom-sa",
+					Namespace: "default",
+					Labels: map[string]string{
+						webhookconst.DefaultServiceAccountLabel: "true",
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(sa).
+				Build()
+
+			result, err := GetDefaultServiceAccount(ctx, fakeClient, "default")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal("custom-sa"))
+		})
+
+		It("should return error when multiple service accounts have the label", func() {
+			scheme := runtime.NewScheme()
+			_ = corev1.AddToScheme(scheme)
+
+			sa1 := &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "sa1",
+					Namespace: "default",
+					Labels: map[string]string{
+						webhookconst.DefaultServiceAccountLabel: "true",
+					},
+				},
+			}
+
+			sa2 := &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "sa2",
+					Namespace: "default",
+					Labels: map[string]string{
+						webhookconst.DefaultServiceAccountLabel: "true",
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(sa1, sa2).
+				Build()
+
+			result, err := GetDefaultServiceAccount(ctx, fakeClient, "default")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("multiple service accounts found"))
+			Expect(result).To(BeEmpty())
 		})
 	})
 })

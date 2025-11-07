@@ -31,10 +31,7 @@ const (
 	// LabelWorkspaceTemplate is the label key for workspace template
 	LabelWorkspaceTemplate = "workspace.jupyter.org/template"
 
-	// LabelDefaultServiceAccount is the label key for default service account
-	LabelDefaultServiceAccount = "workspace.jupyter.org/default-service-account"
-
-	// AppLabelValue is the default value for the app label
+	// Label values
 	AppLabelValue = "jupyter"
 
 	// AnnotationCreatedBy is the annotation key for tracking resource creator

@@ -103,12 +103,13 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 	templateValidator := NewTemplateValidator(mgr.GetClient())
 	templateDefaulter := NewTemplateDefaulter(mgr.GetClient())
+	templateGetter := NewTemplateGetter(mgr.GetClient())
 	serviceAccountValidator := NewServiceAccountValidator(mgr.GetClient())
 	serviceAccountDefaulter := NewServiceAccountDefaulter(mgr.GetClient())
 
 	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.Workspace{}).
 		WithValidator(&WorkspaceCustomValidator{templateValidator: templateValidator, serviceAccountValidator: serviceAccountValidator}).
-		WithDefaulter(&WorkspaceCustomDefaulter{templateDefaulter: templateDefaulter, serviceAccountDefaulter: serviceAccountDefaulter}).
+		WithDefaulter(&WorkspaceCustomDefaulter{templateDefaulter: templateDefaulter, serviceAccountDefaulter: serviceAccountDefaulter, templateGetter: templateGetter}).
 		Complete()
 }
 
@@ -122,6 +123,7 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 type WorkspaceCustomDefaulter struct {
 	templateDefaulter       *TemplateDefaulter
 	serviceAccountDefaulter *ServiceAccountDefaulter
+	templateGetter          *TemplateGetter
 }
 
 var _ webhook.CustomDefaulter = &WorkspaceCustomDefaulter{}
@@ -153,6 +155,12 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 		// Always set last-updated-by (CREATE and UPDATE operations)
 		workspace.Annotations[controller.AnnotationLastUpdatedBy] = sanitizedUsername
 		workspacelog.Info("Added last-updated-by annotation", "workspace", workspace.GetName(), "user", sanitizedUsername, "namespace", workspace.GetNamespace())
+	}
+
+	// Apply template getter
+	if err := d.templateGetter.ApplyTemplateName(ctx, workspace); err != nil {
+		workspacelog.Error(err, "Failed to apply template reference", "workspace", workspace.GetName())
+		return fmt.Errorf("failed to apply template reference: %w", err)
 	}
 
 	// Apply template defaults

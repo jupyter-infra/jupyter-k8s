@@ -52,5 +52,16 @@ spec:
                 - name: "{{`{{ .Service.Name }}`}}"
                   namespace: "{{`{{ .Service.Namespace }}`}}"
                   port: 8888
-  accessURLTemplate: "https://{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.domain }}/"
+  mergeEnv:
+    - name: WORKSPACE_NAMESPACE
+      valueTemplate: "{{`{{ .Workspace.Namespace }}`}}"
+    - name: WORKSPACE_NAME
+      valueTemplate: "{{`{{ .Workspace.Name }}`}}"
+    - name: WORKSPACE_ACCESS_TYPE
+      valueTemplate: "{{`{{ .Workspace.Spec.AccessType }}`}}"
+    - name: WORKSPACE_APP_TYPE
+      valueTemplate: "{{`{{ .Workspace.Spec.AppType }}`}}"
+    - name: JUPYTER_BASE_URL
+      valueTemplate: "/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/"
+  accessURLTemplate: "https://{{ .Values.domain }}/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth"
   bearerAuthURLTemplate: "https://{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.domain }}/bearer-auth"
