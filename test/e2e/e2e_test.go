@@ -74,18 +74,36 @@ var _ = Describe("Manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 	})
 
-	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
-	// and deleting the namespace.
+	// After all tests have been executed, clean up by deleting resources, undeploying the controller,
+	// uninstalling CRDs, and deleting the namespace.
+	// Resources must be deleted in reverse order of creation to properly process finalizers.
 	AfterAll(func() {
 		By("cleaning up the curl pod for metrics")
 		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
 		_, _ = utils.Run(cmd)
 
+		By("cleaning up all workspaces")
+		// Delete workspaces synchronously to ensure finalizers are processed
+		cmd = exec.Command("kubectl", "delete", "workspace", "--all", "-n", namespace, "--ignore-not-found", "--wait=true", "--timeout=180s")
+		_, _ = utils.Run(cmd)
+
 		By("undeploying the controller-manager")
+		// Undeploy controller BEFORE uninstalling CRDs to allow controller to process finalizers
+		// This follows K8s best practice: delete resources in reverse order of creation
 		cmd = exec.Command("make", "undeploy")
 		_, _ = utils.Run(cmd)
 
+		By("waiting for controller pod to be fully terminated")
+		// Ensure controller is completely stopped before deleting CRDs
+		Eventually(func(g Gomega) {
+			cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l", "control-plane=controller-manager", "-o", "name")
+			output, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(strings.TrimSpace(string(output))).To(BeEmpty())
+		}).WithTimeout(60 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
 		By("uninstalling CRDs")
+		// Delete CRDs last to avoid race conditions with controller finalizer processing
 		cmd = exec.Command("make", "uninstall")
 		_, _ = utils.Run(cmd)
 
