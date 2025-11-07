@@ -1,0 +1,44 @@
+{{- if .Values.traefik.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: traefik-alb
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: traefik
+    component: router
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    {{- if .Values.awsCertificateArn }}
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.awsCertificateArn | quote }}
+    {{- end }}
+    {{- if .Values.externalDns.enabled }}
+    external-dns.alpha.kubernetes.io/hostname: "{{ .Values.domain }},*.{{ .Values.domain }}"
+    {{- end }}
+spec:
+  rules:
+  - host: {{ .Values.domain }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: traefik
+            port:
+              number: 443
+  - host: "*.{{ .Values.domain }}"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: traefik
+            port:
+              number: 443
+{{- end }}
