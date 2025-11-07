@@ -84,7 +84,7 @@ authmiddleware:
   kmsKeyId: ""
   jwtIssuer: "jupyter-k8s-auth"
   jwtAudience: "workspace-users"
-  jwtExpiration: "1h"
+  jwtExpiration: "12h"
   jwtRefreshWindow: "15m"
   jwtRefreshHorizon: "12h"
   # Cookie configuration
@@ -109,3 +109,5 @@ authmiddleware:
   shutdownTimeout: "30s"
   # Bearer auth configuration
   enableBearerAuth: true
+  # JWT refresh configuration
+  enableRefresh: false
