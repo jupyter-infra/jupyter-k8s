@@ -44,8 +44,7 @@ spec:
                   - traefik
               topologyKey: kubernetes.io/hostname
       containers:
-      - image: {{ .Values.traefik.repository }}/{{ .Values.traefik.imageName }}:{{ .Values.traefik.imageTag }}
-        imagePullPolicy: IfNotPresent
+      - image: {{ .Values.traefik.containerRegistry }}/{{ .Values.traefik.repository }}:{{ .Values.traefik.imageTag }}
         name: traefik
         resources:
           requests:

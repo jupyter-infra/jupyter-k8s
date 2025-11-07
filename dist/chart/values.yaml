@@ -6,8 +6,9 @@ controllerManager:
       CLUSTER_ADMIN_GROUP: "cluster-workspace-admin"
       CLUSTER_ID: ""
     image:
-      repository: controller
-      tag: latest
+      containerRegistry: CONTAINER_REGISTRY
+      repository: sagemaker/space-operator
+      tag: 0.0.3
     imagePullPolicy: IfNotPresent
     args:
       - "--leader-elect"
