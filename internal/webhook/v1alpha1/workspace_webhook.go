@@ -18,7 +18,6 @@ package v1alpha1
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -33,6 +32,7 @@ import (
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/stringutil"
 	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 )
 
@@ -110,7 +110,7 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 		return fmt.Errorf("unable to extract user information from request context: %w", err)
 	}
 
-	currentUser := sanitizeUsername(req.UserInfo.Username)
+	currentUser := stringutil.SanitizeUsername(req.UserInfo.Username)
 	workspacelog.Info("Validating ownership permission", "currentUser", currentUser)
 
 	// Check if user is the owner
@@ -187,7 +187,7 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 
 	// Extract user info from request context
 	if req, err := admission.RequestFromContext(ctx); err == nil {
-		sanitizedUsername := sanitizeUsername(req.UserInfo.Username)
+		sanitizedUsername := stringutil.SanitizeUsername(req.UserInfo.Username)
 
 		// Always set created-by on CREATE operations
 		if req.Operation == "CREATE" {
