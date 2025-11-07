@@ -49,10 +49,6 @@ func (asv *AccessStrategyValidator) ValidateAccessStrategyResources(ctx context.
 		return err
 	}
 
-	if strategy == nil {
-		return nil // Access strategy not found, skip validation
-	}
-
 	return asv.validateResourceBounds(workspace, strategy)
 }
 
@@ -63,9 +59,6 @@ func (asv *AccessStrategyValidator) fetchAccessStrategy(ctx context.Context, wor
 		Name:      workspace.Spec.AccessStrategy.Name,
 		Namespace: workspace.Namespace,
 	}, strategy); err != nil {
-		if client.IgnoreNotFound(err) == nil {
-			return nil, nil // Access strategy not found, skip validation
-		}
 		return nil, fmt.Errorf("failed to get access strategy %s: %w", workspace.Spec.AccessStrategy.Name, err)
 	}
 	return strategy, nil
