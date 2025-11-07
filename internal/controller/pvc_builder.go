@@ -135,24 +135,23 @@ func (pb *PVCBuilder) NeedsUpdate(ctx context.Context, existingPVC *corev1.Persi
 		return false, nil
 	}
 
-	// Compare only the fields we control (ignore Kubernetes-managed fields)
+	// Compare only the MUTABLE fields (ignore immutable and Kubernetes-managed fields)
+	// Note: StorageClassName is immutable after creation, so we don't check it
 
-	// 1. Check AccessModes
+	// 1. Check AccessModes (immutable for bound PVCs, but we check for consistency)
 	if !reflect.DeepEqual(existingPVC.Spec.AccessModes, desiredPVC.Spec.AccessModes) {
 		return true, nil
 	}
 
-	// 2. Check Storage Size
+	// 2. Check Storage Size (can be increased but not decreased for bound claims)
 	existingStorage := existingPVC.Spec.Resources.Requests[corev1.ResourceStorage]
 	desiredStorage := desiredPVC.Spec.Resources.Requests[corev1.ResourceStorage]
 	if !existingStorage.Equal(desiredStorage) {
 		return true, nil
 	}
 
-	// 3. Check StorageClassName (handle nil cases)
-	if !reflect.DeepEqual(existingPVC.Spec.StorageClassName, desiredPVC.Spec.StorageClassName) {
-		return true, nil
-	}
+	// 3. DO NOT check StorageClassName - it's immutable after creation
+	// Changing it would cause Kubernetes API to reject the update
 
 	return false, nil
 }
@@ -169,10 +168,11 @@ func (pb *PVCBuilder) UpdatePVCSpec(ctx context.Context, existingPVC *corev1.Per
 		return fmt.Errorf("cannot update PVC to nil spec")
 	}
 
-	// Update only the fields we control (preserve Kubernetes-managed fields)
+	// Update only the MUTABLE fields (preserve immutable and Kubernetes-managed fields)
+	// Note: StorageClassName is immutable after creation and cannot be updated
 	existingPVC.Spec.AccessModes = desiredPVC.Spec.AccessModes
 	existingPVC.Spec.Resources = desiredPVC.Spec.Resources
-	existingPVC.Spec.StorageClassName = desiredPVC.Spec.StorageClassName
+	// DO NOT update StorageClassName - it's immutable after PVC creation
 
 	return nil
 }
