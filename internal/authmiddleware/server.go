@@ -61,8 +61,9 @@ func (s *Server) Start() error {
 	router := http.NewServeMux()
 
 	// Register routes
-	// todo: add flag to turn off oauth
-	router.HandleFunc("/auth", s.handleAuth)
+	if s.config.EnableOAuth {
+		router.HandleFunc("/auth", s.handleAuth)
+	}
 	if s.config.EnableBearerAuth {
 		router.HandleFunc("/bearer-auth", s.handleBearerAuth)
 	}
@@ -140,7 +141,15 @@ func (s *Server) csrfProtect() func(http.Handler) http.Handler {
 			//    - Clients should have received CSRF tokens from /auth endpoint
 
 			// Skip CSRF protection for specific endpoints
-			if r.URL.Path == "/auth" || r.URL.Path == "/health" {
+			skipCSRF := r.URL.Path == "/health"
+			if s.config.EnableOAuth && r.URL.Path == "/auth" {
+				skipCSRF = true
+			}
+			if s.config.EnableBearerAuth && r.URL.Path == "/bearer-auth" {
+				skipCSRF = true
+			}
+
+			if skipCSRF {
 				next.ServeHTTP(w, r)
 				return
 			}

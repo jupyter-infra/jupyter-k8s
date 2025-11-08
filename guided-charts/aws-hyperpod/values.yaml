@@ -113,6 +113,7 @@ authmiddleware:
   writeTimeout: "10s"
   shutdownTimeout: "30s"
   # Bearer auth configuration
+  oauthEnabled: false
   enableBearerAuth: true
   # JWT refresh configuration
   enableRefresh: false
