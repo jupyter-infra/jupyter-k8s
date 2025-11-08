@@ -111,20 +111,12 @@ func (s *ExtensionServer) CheckWorkspaceAccess(
 
 // getWorkspaceAccessType determines the ownership type of a workspace
 func getWorkspaceAccessType(workspace *workspacev1alpha1.Workspace) string {
-	if workspace != nil {
-		accessType := workspace.Spec.AccessType
-		if accessType == "" {
-			return AccessTypePrivate
-		}
-		switch accessType {
-		case "Public":
-			{
-				return AccessTypePublic
-			}
-		}
+	accessType := workspace.Spec.AccessType
+	if accessType == "" || accessType == "Public" {
+		return AccessTypePublic
+	} else {
+		return AccessTypePrivate
 	}
-	// For now, always assume private
-	return AccessTypePrivate
 }
 
 // getWorkspaceOwner gets the username of the workspace owner
