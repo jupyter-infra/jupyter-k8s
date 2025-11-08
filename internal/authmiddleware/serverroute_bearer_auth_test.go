@@ -225,7 +225,7 @@ func TestHandleBearerAuthSuccess(t *testing.T) {
 		},
 	}
 	cookieHandler := &MockCookieHandler{
-		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {
 			// Mock cookie setting
 		},
 	}

@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
 var _ = Describe("AccessResourcesBuilder", func() {
@@ -213,7 +214,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			Expect(labels).NotTo(BeNil())
 
 			// Check that all expected labels are present
-			Expect(labels[LabelWorkspaceName]).To(Equal(testWorkspace.Name))
+			Expect(labels[workspaceutil.LabelWorkspaceName]).To(Equal(testWorkspace.Name))
 			Expect(labels[LabelWorkspaceNamespace]).To(Equal(testWorkspace.Namespace))
 			Expect(labels[LabelAccessStrategyName]).To(Equal(testAccessStrategy.Name))
 			Expect(labels[LabelAccessStrategyNamespace]).To(Equal(testAccessStrategy.Namespace))
@@ -319,7 +320,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 				testAccessStrategy,
 			)
 
-			expectedSelector := fmt.Sprintf("%s=%s", LabelWorkspaceName, testWorkspace.Name)
+			expectedSelector := fmt.Sprintf("%s=%s", workspaceutil.LabelWorkspaceName, testWorkspace.Name)
 			Expect(selector).To(Equal(expectedSelector))
 		})
 	})

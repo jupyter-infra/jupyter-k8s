@@ -20,7 +20,7 @@ spec:
           entryPoints:
             - web
           routes:
-            - match: "Host(`{{ .Values.domain }}`) && PathPrefix(`/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}`)"
+            - match: "Host(`{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.domain }}`)"
               kind: Rule
               priority: 100
               middlewares:
@@ -42,7 +42,7 @@ spec:
           entryPoints:
             - web
           routes:
-            - match: "Host(`{{ .Values.domain }}`) && PathPrefix(`/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth`)"
+            - match: "Host(`{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.domain }}`) && PathPrefix(`/bearer-auth`)"
               kind: Rule
               priority: 110  # Higher priority specifically for bearer-auth paths
               middlewares:
@@ -126,3 +126,5 @@ spec:
       valueTemplate: "{{`{{ .Workspace.Spec.AppType }}`}}"
     - name: JUPYTER_BASE_URL
       valueTemplate: "/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/"
+  accessURLTemplate: "https://{{ .Values.domain }}/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth"
+  bearerAuthURLTemplate: "https://{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.domain }}/bearer-auth"

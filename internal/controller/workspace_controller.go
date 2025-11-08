@@ -170,7 +170,7 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.podEventHandler.HandleWorkspacePodEvents),
 			builderPkg.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				// Only watch pods with workspace labels
-				_, hasWorkspace := obj.GetLabels()[LabelWorkspaceName]
+				_, hasWorkspace := obj.GetLabels()[workspaceutil.LabelWorkspaceName]
 				return hasWorkspace
 			})),
 		)

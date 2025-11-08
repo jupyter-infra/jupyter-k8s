@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,6 +16,8 @@ import (
 const (
 	// TestDefaultNamespace is the default namespace used in tests
 	TestDefaultNamespace = "default"
+	// TestWorkspaceName is the default workspace name used in tests
+	TestWorkspaceName = "myworkspace"
 	// Test paths
 	testWorkspacePath = "/workspaces/default/myworkspace/lab"
 	// ExpectApiGroup
@@ -24,10 +29,18 @@ const (
 	testDomainValue = "example.com"
 )
 
+// createTestRequest creates a test HTTP request with the given path in X-Forwarded-URI header
+func createTestRequest(path string) *http.Request {
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.Header.Set(HeaderForwardedURI, path)
+	return req
+}
+
 func TestExtractWorkspaceInfoWithDefaultRegexes(t *testing.T) {
 	// Set up server with default regex patterns
 	server := &Server{
 		config: &Config{
+			RoutingMode:                 DefaultRoutingMode,
 			WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
 			WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
 		},
@@ -110,7 +123,8 @@ func TestExtractWorkspaceInfoWithDefaultRegexes(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			info, err := server.ExtractWorkspaceInfo(tc.path)
+			req := createTestRequest(tc.path)
+			info, err := server.ExtractWorkspaceInfo(req)
 
 			if tc.expectErr {
 				assert.Error(t, err)
@@ -129,6 +143,7 @@ func TestExtractWorkspaceInfoWithCustomRegexes(t *testing.T) {
 	// Set up server with custom regex patterns for a path like /services/[ws-ns]/workspaces/[ws-name]
 	server := &Server{
 		config: &Config{
+			RoutingMode:                 DefaultRoutingMode,
 			WorkspaceNamespacePathRegex: `^/services/([^/]+)/workspaces/[^/]+`,
 			WorkspaceNamePathRegex:      `^/services/[^/]+/workspaces/([^/]+)`,
 		},
@@ -190,7 +205,8 @@ func TestExtractWorkspaceInfoWithCustomRegexes(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			info, err := server.ExtractWorkspaceInfo(tc.path)
+			req := createTestRequest(tc.path)
+			info, err := server.ExtractWorkspaceInfo(req)
 
 			if tc.expectErr {
 				assert.Error(t, err)
@@ -342,8 +358,8 @@ func TestVerifyWorkspaceAccess_ReturnsResultInfoAndNoError_WhenAccessReviewSucce
 	username := testUserValue
 	groups := []string{"group1", "group2"}
 	uid := "test-uid4"
-	namespace := "default"
-	workspaceName := "myworkspace"
+	namespace := TestDefaultNamespace
+	workspaceName := TestWorkspaceName
 
 	// Mock response
 	reason := "Workspace not found"
@@ -372,6 +388,7 @@ func TestVerifyWorkspaceAccess_ReturnsResultInfoAndNoError_WhenAccessReviewSucce
 	// Create a server with our mock REST client and workspace path regex patterns
 	server := &Server{
 		config: &Config{
+			RoutingMode:                 DefaultRoutingMode,
 			WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
 			WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
 		},
@@ -383,9 +400,10 @@ func TestVerifyWorkspaceAccess_ReturnsResultInfoAndNoError_WhenAccessReviewSucce
 	path := testWorkspacePath
 
 	// Call the method being tested
+	req := createTestRequest(path)
 	response, workspaceInfo, err := server.VerifyWorkspaceAccess(
 		context.Background(),
-		path,
+		req,
 		username,
 		groups,
 		uid,
@@ -398,10 +416,10 @@ func TestVerifyWorkspaceAccess_ReturnsResultInfoAndNoError_WhenAccessReviewSucce
 	assert.False(t, response.Allowed)
 	assert.True(t, response.NotFound)
 	assert.Equal(t, reason, response.Reason)
-	assert.Equal(t, "myworkspace", workspaceInfo.Name, "Expected workspace name to be 'myworkspace'")
+	assert.Equal(t, TestWorkspaceName, workspaceInfo.Name, "Expected workspace name to be 'myworkspace'")
 	assert.NotNil(t, workspaceInfo, "Expected workspace info to be returned")
-	assert.Equal(t, "default", workspaceInfo.Namespace, "Expected namespace to be 'default'")
-	assert.Equal(t, "myworkspace", workspaceInfo.Name, "Expected workspace name to be 'myworkspace'")
+	assert.Equal(t, TestDefaultNamespace, workspaceInfo.Namespace, "Expected namespace to be 'default'")
+	assert.Equal(t, TestWorkspaceName, workspaceInfo.Name, "Expected workspace name to be 'myworkspace'")
 
 	// Verify the request was made to the correct URL
 	expectedPath := fmt.Sprintf("/apis/%s/namespaces/%s/connectionaccessreview",
@@ -426,6 +444,7 @@ func TestVerifyWorkspaceAccess_ReturnsNilAndNoError_WhenPathInterpolationFails(t
 	// Use workspace path regex patterns that won't match the path we'll provide
 	server := &Server{
 		config: &Config{
+			RoutingMode: DefaultRoutingMode,
 			// Expecting a different path format, not matching /workspaces/xxx/xxx
 			WorkspaceNamespacePathRegex: `^/different/([^/]+)/path/[^/]+`,
 			WorkspaceNamePathRegex:      `^/different/[^/]+/path/([^/]+)`,
@@ -442,9 +461,10 @@ func TestVerifyWorkspaceAccess_ReturnsNilAndNoError_WhenPathInterpolationFails(t
 	path := "/workspaces/default/myworkspace/lab"
 
 	// Call the method being tested
+	req := createTestRequest(path)
 	response, workspaceInfo, err := server.VerifyWorkspaceAccess(
 		context.Background(),
-		path,
+		req,
 		username,
 		groups,
 		uid,
@@ -474,6 +494,7 @@ func TestVerifyWorkspaceAccess_ReturnsNoResponseAndNoError_WhenAccessReviewFails
 	// Create a server with our mock REST client and workspace path regex patterns
 	server := &Server{
 		config: &Config{
+			RoutingMode:                 DefaultRoutingMode,
 			WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
 			WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
 		},
@@ -489,9 +510,10 @@ func TestVerifyWorkspaceAccess_ReturnsNoResponseAndNoError_WhenAccessReviewFails
 	path := testWorkspacePath
 
 	// Call the method being tested
+	req := createTestRequest(path)
 	response, workspaceInfo, err := server.VerifyWorkspaceAccess(
 		context.Background(),
-		path,
+		req,
 		username,
 		groups,
 		uid,
@@ -501,6 +523,93 @@ func TestVerifyWorkspaceAccess_ReturnsNoResponseAndNoError_WhenAccessReviewFails
 	assert.Error(t, err, "Expected error when create ConnectionAccessReview fails")
 	assert.Nil(t, response, "Expected ConnectionAccessReview response to be nil")
 	assert.NotNil(t, workspaceInfo, "Expected workspace info to be returned")
-	assert.Equal(t, "default", workspaceInfo.Namespace, "Expected namespace to be 'default'")
-	assert.Equal(t, "myworkspace", workspaceInfo.Name, "Expected workspace name to be 'myworkspace'")
+	assert.Equal(t, TestDefaultNamespace, workspaceInfo.Namespace, "Expected namespace to be 'default'")
+	assert.Equal(t, TestWorkspaceName, workspaceInfo.Name, "Expected workspace name to be 'myworkspace'")
+}
+
+func TestExtractWorkspaceInfo_SubdomainMode(t *testing.T) {
+	config := &Config{
+		RoutingMode:                      RoutingModeSubdomain,
+		WorkspaceNameSubdomainRegex:      `^([^-]+)-.*$`,
+		WorkspaceNamespaceSubdomainRegex: `^[^-]+-(.*)$`,
+	}
+	server := &Server{config: config}
+
+	req := httptest.NewRequest("GET", "/bearer-auth", nil)
+	req.Header.Set("X-Forwarded-Host", "myworkspace-mrswmylvnr2a.example.com")
+	req.Header.Set("X-Forwarded-URI", "/bearer-auth")
+
+	workspaceInfo, err := server.ExtractWorkspaceInfo(req)
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if workspaceInfo.Name != TestWorkspaceName {
+		t.Errorf("expected workspace name 'myworkspace', got '%s'", workspaceInfo.Name)
+	}
+	if workspaceInfo.Namespace != TestDefaultNamespace {
+		t.Errorf("expected namespace 'default', got '%s'", workspaceInfo.Namespace)
+	}
+}
+
+func TestExtractWorkspaceInfo_PathMode(t *testing.T) {
+	config := &Config{
+		RoutingMode:                 RoutingModePath,
+		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
+		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
+	}
+	server := &Server{config: config}
+
+	req := httptest.NewRequest("GET", "/workspaces/default/myworkspace/bearer-auth", nil)
+	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-URI", "/workspaces/default/myworkspace/bearer-auth")
+
+	workspaceInfo, err := server.ExtractWorkspaceInfo(req)
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if workspaceInfo.Name != TestWorkspaceName {
+		t.Errorf("expected workspace name 'myworkspace', got '%s'", workspaceInfo.Name)
+	}
+	if workspaceInfo.Namespace != TestDefaultNamespace {
+		t.Errorf("expected namespace 'default', got '%s'", workspaceInfo.Namespace)
+	}
+}
+
+func TestExtractWorkspaceInfo_UnsupportedMode(t *testing.T) {
+	config := &Config{
+		RoutingMode: "invalid",
+	}
+	server := &Server{config: config}
+
+	req := httptest.NewRequest("GET", "/test", nil)
+
+	_, err := server.ExtractWorkspaceInfo(req)
+
+	if err == nil {
+		t.Error("expected error for unsupported routing mode, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported routing mode") {
+		t.Errorf("expected routing mode error, got: %v", err)
+	}
+}
+
+func TestExtractWorkspaceInfo_SubdomainModeInvalidHost(t *testing.T) {
+	config := &Config{
+		RoutingMode:                      RoutingModeSubdomain,
+		WorkspaceNameSubdomainRegex:      `^([^-]+)-.*$`,
+		WorkspaceNamespaceSubdomainRegex: `^[^-]+-(.*)$`,
+	}
+	server := &Server{config: config}
+
+	req := httptest.NewRequest("GET", "/bearer-auth", nil)
+	req.Header.Set("X-Forwarded-Host", "noseparator.example.com") // No dash separator
+	req.Header.Set("X-Forwarded-URI", "/bearer-auth")
+
+	_, err := server.ExtractWorkspaceInfo(req)
+
+	if err == nil {
+		t.Error("expected error for invalid subdomain format, got nil")
+	}
 }

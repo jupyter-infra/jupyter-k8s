@@ -27,8 +27,14 @@ const (
 	EnvEnableJwtRefresh  = "JWT_REFRESH_ENABLE"
 	EnvJwtRefreshWindow  = "JWT_REFRESH_WINDOW"
 	EnvJwtRefreshHorizon = "JWT_REFRESH_HORIZON"
+	EnvEnableOAuth       = "ENABLE_OAUTH"
 	EnvEnableBearerAuth  = "ENABLE_BEARER_URL_AUTH"
 	EnvKMSKeyId          = "KMS_KEY_ID"
+
+	// Routing configuration
+	EnvRoutingMode                      = "ROUTING_MODE"
+	EnvWorkspaceNamespaceSubdomainRegex = "WORKSPACE_NAMESPACE_SUBDOMAIN_REGEX"
+	EnvWorkspaceNameSubdomainRegex      = "WORKSPACE_NAME_SUBDOMAIN_REGEX"
 
 	// Cookie configuration
 	EnvCookieName     = "COOKIE_NAME"
@@ -82,6 +88,7 @@ const (
 	DefaultJwtRefreshEnable  = true
 	DefaultJwtRefreshWindow  = 15 * time.Minute // 25% of the default expiration
 	DefaultJwtRefreshHorizon = 12 * time.Hour
+	DefaultEnableOAuth       = true
 	DefaultEnableBearerAuth  = false
 
 	// Cookie defaults
@@ -96,6 +103,11 @@ const (
 	DefaultPathRegexPattern            = `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`
 	DefaultWorkspaceNamespacePathRegex = `^/workspaces/([^/]+)/[^/]+`
 	DefaultWorkspaceNamePathRegex      = `^/workspaces/[^/]+/([^/]+)`
+
+	// Routing defaults
+	DefaultRoutingMode                      = RoutingModePath
+	DefaultWorkspaceNamespaceSubdomainRegex = `^([^-]+)-.*`
+	DefaultWorkspaceNameSubdomainRegex      = `^[^-]+-(.*)$`
 
 	// CSRF defaults
 	DefaultCsrfCookieName = "workspace_csrf"
@@ -129,6 +141,7 @@ type Config struct {
 	JWTRefreshEnable  bool
 	JWTRefreshWindow  time.Duration
 	JWTRefreshHorizon time.Duration
+	EnableOAuth       bool
 	EnableBearerAuth  bool
 	KMSKeyId          string
 
@@ -145,6 +158,11 @@ type Config struct {
 	PathRegexPattern            string // Regex pattern to extract app path from full path
 	WorkspaceNamespacePathRegex string // Regex pattern to extract workspace namespace from path
 	WorkspaceNamePathRegex      string // Regex pattern to extract workspace name from path
+
+	// Routing configuration
+	RoutingMode                      string // Routing mode: RoutingModePath or RoutingModeSubdomain
+	WorkspaceNamespaceSubdomainRegex string // Regex pattern to extract workspace namespace from subdomain
+	WorkspaceNameSubdomainRegex      string // Regex pattern to extract workspace name from subdomain
 
 	// CSRF configuration
 	CSRFAuthKey    string
@@ -210,6 +228,7 @@ func createDefaultConfig() *Config {
 		JWTRefreshEnable:  DefaultJwtRefreshEnable,
 		JWTRefreshWindow:  DefaultJwtRefreshWindow,
 		JWTRefreshHorizon: DefaultJwtRefreshHorizon,
+		EnableOAuth:       DefaultEnableOAuth,
 		EnableBearerAuth:  DefaultEnableBearerAuth,
 
 		// Cookie defaults
@@ -227,6 +246,11 @@ func createDefaultConfig() *Config {
 		// These regex patterns extract workspace namespace and name from the path
 		WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
 		WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+
+		// Routing defaults
+		RoutingMode:                      DefaultRoutingMode,
+		WorkspaceNamespaceSubdomainRegex: DefaultWorkspaceNamespaceSubdomainRegex,
+		WorkspaceNameSubdomainRegex:      DefaultWorkspaceNameSubdomainRegex,
 
 		// CSRF defaults
 		CSRFCookieName:   DefaultCsrfCookieName,
@@ -336,12 +360,33 @@ func applyJWTConfig(config *Config) error {
 		config.JWTRefreshHorizon = d
 	}
 
+	if enableOAuth := os.Getenv(EnvEnableOAuth); enableOAuth != "" {
+		enable, err := strconv.ParseBool(enableOAuth)
+		if err != nil {
+			return fmt.Errorf("invalid %s: %w", EnvEnableOAuth, err)
+		}
+		config.EnableOAuth = enable
+	}
+
 	if enableBearerAuth := os.Getenv(EnvEnableBearerAuth); enableBearerAuth != "" {
 		enable, err := strconv.ParseBool(enableBearerAuth)
 		if err != nil {
 			return fmt.Errorf("invalid %s: %w", EnvEnableBearerAuth, err)
 		}
 		config.EnableBearerAuth = enable
+	}
+
+	// Routing configuration
+	if routingMode := os.Getenv(EnvRoutingMode); routingMode != "" {
+		config.RoutingMode = routingMode
+	}
+
+	if namespaceSubdomainRegex := os.Getenv(EnvWorkspaceNamespaceSubdomainRegex); namespaceSubdomainRegex != "" {
+		config.WorkspaceNamespaceSubdomainRegex = namespaceSubdomainRegex
+	}
+
+	if nameSubdomainRegex := os.Getenv(EnvWorkspaceNameSubdomainRegex); nameSubdomainRegex != "" {
+		config.WorkspaceNameSubdomainRegex = nameSubdomainRegex
 	}
 
 	if kmsKeyId := os.Getenv(EnvKMSKeyId); kmsKeyId != "" {
