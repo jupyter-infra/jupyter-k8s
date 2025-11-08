@@ -9,11 +9,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Label keys - defined here to avoid import cycles with controller package
-const (
-	LabelWorkspaceName = "workspace.jupyter.org/workspaceName"
-)
-
 // GetPodUIDFromWorkspaceName gets the pod UID for a given workspace name
 func GetPodUIDFromWorkspaceName(k8sClient client.Client, workspaceName string) (string, error) {
 	// Get pods with the workspace label

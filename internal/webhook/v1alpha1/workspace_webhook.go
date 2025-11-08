@@ -37,8 +37,6 @@ import (
 	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 )
 
-const templateFinalizerName = "workspace.jupyter.org/template-protection"
-
 // log is for logging in this package.
 var workspacelog = logf.Log.WithName("workspace-resource")
 
@@ -57,12 +55,12 @@ func ensureTemplateFinalizer(ctx context.Context, k8sClient client.Client, templ
 	}
 
 	// Check if finalizer already exists
-	if controllerutil.ContainsFinalizer(template, templateFinalizerName) {
+	if controllerutil.ContainsFinalizer(template, webhookconst.TemplateFinalizerName) {
 		return nil
 	}
 
 	// Add finalizer
-	controllerutil.AddFinalizer(template, templateFinalizerName)
+	controllerutil.AddFinalizer(template, webhookconst.TemplateFinalizerName)
 	if err := k8sClient.Update(ctx, template); err != nil {
 		workspacelog.Error(err, "Failed to add finalizer to template", "template", templateRef)
 		return fmt.Errorf("failed to add finalizer to template %s: %w", templateRef, err)
