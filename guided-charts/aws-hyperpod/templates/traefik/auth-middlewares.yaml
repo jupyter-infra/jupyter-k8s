@@ -13,7 +13,7 @@ spec:
     sslHost: {{ .Values.domain }}
     stsIncludeSubdomains: true
     stsPreload: true
-    frameDeny: true
+    frameDeny: false
 ---
 {{- if .Values.authmiddleware.enabled }}
 apiVersion: traefik.io/v1alpha1
