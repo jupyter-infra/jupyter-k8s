@@ -3,7 +3,9 @@ package extensionapi
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -33,6 +35,7 @@ type ExtensionServer struct {
 	httpServer interface {
 		ListenAndServe() error
 		ListenAndServeTLS(certFile, keyFile string) error
+		Serve(l net.Listener) error
 		Shutdown(ctx context.Context) error
 	}
 	routes map[string]func(http.ResponseWriter, *http.Request)
@@ -87,17 +90,17 @@ func (s *ExtensionServer) authMiddleware(next http.HandlerFunc) http.HandlerFunc
 			return
 		}
 
-		// Authenticate request
-		userInfo, err := s.authConfig.AuthenticateRequest(r)
-		if err != nil {
+		// Authenticate request using official Kubernetes authenticator
+		resp, ok, err := s.authConfig.authenticator.AuthenticateRequest(r)
+		if err != nil || !ok {
 			logger := GetLoggerFromContext(r.Context())
-			logger.Error(err, "Authentication failed")
+			logger.Error(err, "Authentication failed", "remote", r.RemoteAddr)
 			WriteError(w, http.StatusUnauthorized, "Authentication failed")
 			return
 		}
 
 		// Add user info to context
-		ctx := AddUserInfoToContext(r.Context(), userInfo)
+		ctx := AddUserInfoToContext(r.Context(), resp.User)
 		next(w, r.WithContext(ctx))
 	}
 }
@@ -211,15 +214,20 @@ func (s *ExtensionServer) Start(ctx context.Context) error {
 
 	// Load authentication configuration now that the cache is started
 	if s.authConfig == nil {
-		authConfig, err := loadAuthConfigFromConfigMap(ctx, s.k8sClient)
+		// Get the rest config from the manager
+		cfg := ctrl.GetConfigOrDie()
+
+		// Create Kubernetes client for authentication
+		clientset, err := kubernetes.NewForConfig(cfg)
 		if err != nil {
-			setupLog.Error(err, "Failed to load auth config, authentication will be disabled")
+			setupLog.Error(err, "Failed to create Kubernetes client for authentication")
 		} else {
-			// Initialize standard Kubernetes authenticator
+			authConfig := NewAuthConfig(clientset)
+			// Initialize official Kubernetes authenticator
 			if err := authConfig.InitializeAuthenticator(); err != nil {
 				setupLog.Error(err, "Failed to initialize authenticator")
 			} else {
-				setupLog.Info("Authentication configuration loaded successfully")
+				setupLog.Info("Official Kubernetes authentication initialized successfully")
 				s.authConfig = authConfig
 			}
 		}
@@ -237,12 +245,29 @@ func (s *ExtensionServer) Start(ctx context.Context) error {
 			setupLog.Info("Starting server with HTTP (TLS disabled)")
 			err = s.httpServer.ListenAndServe()
 		} else {
-			// Configure TLS
-			// We don't need to set TLSConfig as it's handled by ListenAndServeTLS
+			// Configure TLS to request (but not require) client certificates
+			cert, err := tls.LoadX509KeyPair(s.config.CertPath, s.config.KeyPath)
+			if err != nil {
+				setupLog.Error(err, "Failed to load TLS certificate")
+				errChan <- err
+				return
+			}
 
-			// Start HTTPS server
-			setupLog.Info("Starting server with HTTPS", "certPath", s.config.CertPath, "keyPath", s.config.KeyPath)
-			err = s.httpServer.ListenAndServeTLS(s.config.CertPath, s.config.KeyPath)
+			tlsConfig := &tls.Config{
+				Certificates: []tls.Certificate{cert},
+				ClientAuth:   tls.RequestClientCert, // Request but don't require client cert
+			}
+
+			listener, err := tls.Listen("tcp", fmt.Sprintf(":%d", s.config.ServerPort), tlsConfig)
+			if err != nil {
+				setupLog.Error(err, "Failed to create TLS listener")
+				errChan <- err
+				return
+			}
+
+			// Start HTTPS server with custom TLS config
+			setupLog.Info("Starting server with HTTPS (requesting client certificates)", "certPath", s.config.CertPath, "keyPath", s.config.KeyPath)
+			err = s.httpServer.Serve(listener)
 		}
 
 		if err != nil && err != http.ErrServerClosed {

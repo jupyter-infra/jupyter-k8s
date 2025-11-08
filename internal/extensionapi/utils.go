@@ -8,6 +8,7 @@ import (
 	"regexp"
 
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/stringutil"
+	"k8s.io/apiserver/pkg/authentication/user"
 )
 
 type userInfoKey struct{}
@@ -57,14 +58,14 @@ func GetUserFromHeaders(r *http.Request) string {
 }
 
 // AddUserInfoToContext returns a new Context with the given user info
-func AddUserInfoToContext(ctx context.Context, userInfo *UserInfo) context.Context {
+func AddUserInfoToContext(ctx context.Context, userInfo user.Info) context.Context {
 	return context.WithValue(ctx, userInfoKey{}, userInfo)
 }
 
 // GetUserInfoFromContext returns the UserInfo stored in context
 // Returns nil if none is found
-func GetUserInfoFromContext(ctx context.Context) *UserInfo {
-	if userInfo, ok := ctx.Value(userInfoKey{}).(*UserInfo); ok {
+func GetUserInfoFromContext(ctx context.Context) user.Info {
+	if userInfo, ok := ctx.Value(userInfoKey{}).(user.Info); ok {
 		return userInfo
 	}
 	return nil

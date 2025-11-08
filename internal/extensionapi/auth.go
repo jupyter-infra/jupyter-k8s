@@ -1,88 +1,51 @@
+// Package extensionapi provides authentication using official Kubernetes patterns.
 package extensionapi
 
 import (
-	"crypto/x509"
-	"fmt"
-	"net/http"
-
 	"k8s.io/apiserver/pkg/authentication/authenticator"
-	"k8s.io/apiserver/pkg/authentication/request/headerrequest"
+	"k8s.io/apiserver/pkg/server"
+	"k8s.io/apiserver/pkg/server/options"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// AuthConfig holds authentication configuration for extension API server
+// AuthConfig holds the authentication configuration
 type AuthConfig struct {
-	ClientCA      *x509.Certificate     // CA for verifying client certificates
-	AllowedNames  []string              // Allowed client certificate names
-	authenticator authenticator.Request // Standard Kubernetes authenticator
+	authenticator authenticator.Request
+	client        kubernetes.Interface
 }
 
-// UserInfo represents authenticated user information
-type UserInfo struct {
-	Username string   `json:"username"`
-	Groups   []string `json:"groups"`
+// NewAuthConfig creates a new authentication configuration
+func NewAuthConfig(client kubernetes.Interface) *AuthConfig {
+	return &AuthConfig{
+		client: client,
+	}
 }
 
-// InitializeAuthenticator sets up standard Kubernetes authenticator
+// InitializeAuthenticator initializes the authenticator using official Kubernetes patterns
 func (a *AuthConfig) InitializeAuthenticator() error {
-	if a == nil {
-		return fmt.Errorf("AuthConfig is nil")
-	}
+	setupLog := log.Log.WithName("extension-api-auth")
 
-	var err error
-	a.authenticator, err = headerrequest.New(
-		[]string{HeaderRemoteUser},  // Username headers
-		nil,                         // UID headers (not used)
-		[]string{HeaderRemoteGroup}, // Group headers
-		[]string{ExtraHeaderPrefix}, // Extra header prefixes
-	)
+	// Create delegating authentication options (same as kube-apiserver)
+	authOptions := options.NewDelegatingAuthenticationOptions()
+
+	// Configure to use in-cluster lookup (reads extension-apiserver-authentication ConfigMap)
+	authOptions.SkipInClusterLookup = false
+	authOptions.TolerateInClusterLookupFailure = false
+	authOptions.RemoteKubeConfigFile = "" // Use in-cluster config
+
+	// Create authentication info and config
+	authInfo := &server.AuthenticationInfo{}
+
+	// Apply the options to create RequestHeaderConfig automatically
+	err := authOptions.ApplyTo(authInfo, nil, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create authenticator: %w", err)
+		return err
 	}
 
+	// The authenticator is now set up in authInfo
+	a.authenticator = authInfo.Authenticator
+
+	setupLog.Info("Official Kubernetes authentication initialized successfully")
 	return nil
-}
-
-// AuthenticateRequest validates request using Kubernetes authentication headers
-func (a *AuthConfig) AuthenticateRequest(r *http.Request) (*UserInfo, error) {
-	if a == nil {
-		return nil, fmt.Errorf("AuthConfig is nil")
-	}
-	if a.authenticator == nil {
-		return nil, fmt.Errorf("authenticator not initialized")
-	}
-	if r == nil {
-		return nil, fmt.Errorf("request is nil")
-	}
-
-	// Use standard Kubernetes authentication
-	response, ok, err := a.authenticator.AuthenticateRequest(r)
-	if err != nil {
-		return nil, fmt.Errorf("authentication failed: %w", err)
-	}
-	if !ok {
-		return nil, fmt.Errorf("authentication failed: no valid credentials")
-	}
-	if response == nil || response.User == nil {
-		return nil, fmt.Errorf("authentication failed: invalid response")
-	}
-
-	// Convert to our UserInfo format
-	return &UserInfo{
-		Username: response.User.GetName(),
-		Groups:   response.User.GetGroups(),
-	}, nil
-}
-
-// IsAllowedClientName checks if certificate Common Name is allowed
-func (a *AuthConfig) IsAllowedClientName(commonName string) bool {
-	if a == nil || commonName == "" {
-		return false
-	}
-
-	for _, allowed := range a.AllowedNames {
-		if commonName == allowed {
-			return true
-		}
-	}
-	return false
 }

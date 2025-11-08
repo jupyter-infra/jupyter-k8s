@@ -87,7 +87,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	// Log authenticated user info
 	userInfo := GetUserInfoFromContext(r.Context())
 	if userInfo != nil {
-		logger.Info("Authenticated user creating connection", "username", userInfo.Username, "groups", userInfo.Groups)
+		logger.Info("Authenticated user creating connection", "username", userInfo.GetName(), "groups", userInfo.GetGroups())
 	}
 
 	// Extract namespace from URL path
