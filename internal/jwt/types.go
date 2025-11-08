@@ -27,12 +27,12 @@ var (
 // Claims represents the JWT claims for our auth token
 type Claims struct {
 	jwt5.RegisteredClaims
-	User        string              `json:"user,omitempty"`
-	Groups      []string            `json:"groups,omitempty"`
-	UID         string              `json:"uid,omitempty"`
-	Extra       map[string][]string `json:"extra,omitempty"`
-	Path        string              `json:"path,omitempty"`
-	Domain      string              `json:"domain,omitempty"`
-	TokenType   string              `json:"token_type,omitempty"`
-	SkipRefresh bool                `json:"skipRefresh,omitempty"`
+	User        string              `json:"User,omitempty"`
+	Groups      []string            `json:"Groups,omitempty"`
+	UID         string              `json:"Uid,omitempty"`
+	Extra       map[string][]string `json:"Extra,omitempty"`
+	Path        string              `json:"Path,omitempty"`
+	Domain      string              `json:"Domain,omitempty"`
+	TokenType   string              `json:"TokenType,omitempty"`
+	SkipRefresh bool                `json:"SkipRefresh,omitempty"`
 }
