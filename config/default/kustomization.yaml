@@ -43,6 +43,11 @@ patches:
   target:
     kind: Deployment
 
+# [SCHEDULING] Add scheduling configuration support to the manager deployment
+- path: manager_scheduling_patch.yaml
+  target:
+    kind: Deployment
+
 # Uncomment the patches line if you enable Metrics and CertManager
 # [METRICS-WITH-CERTS] To enable metrics protected with certManager, uncomment the following line.
 # This patch will protect the metrics with certManager self-signed certs.
