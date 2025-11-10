@@ -228,19 +228,19 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
                     # macOS sed
                     sed -i '' '/{{- if .Values.controllerManager.container.env }}/,/{{- end }}/ {
                         /{{- end }}/a\
-          - name: CONTROLLER_POD_NAMESPACE\
-            valueFrom:\
-              fieldRef:\
-                fieldPath: metadata.namespace\
-          - name: CONTROLLER_POD_SERVICE_ACCOUNT\
-            valueFrom:\
-              fieldRef:\
-                fieldPath: spec.serviceAccountName
+            - name: CONTROLLER_POD_NAMESPACE\
+              valueFrom:\
+                fieldRef:\
+                  fieldPath: metadata.namespace\
+            - name: CONTROLLER_POD_SERVICE_ACCOUNT\
+              valueFrom:\
+                fieldRef:\
+                  fieldPath: spec.serviceAccountName
                     }' "${MANAGER_YAML}"
                 else
                     # Linux sed
                     sed -i '/{{- if .Values.controllerManager.container.env }}/,/{{- end }}/ {
-                        /{{- end }}/a\          - name: CONTROLLER_POD_NAMESPACE\n            valueFrom:\n              fieldRef:\n                fieldPath: metadata.namespace\n          - name: CONTROLLER_POD_SERVICE_ACCOUNT\n            valueFrom:\n              fieldRef:\n                fieldPath: spec.serviceAccountName
+                        /{{- end }}/a\            - name: CONTROLLER_POD_NAMESPACE\n              valueFrom:\n                fieldRef:\n                  fieldPath: metadata.namespace\n            - name: CONTROLLER_POD_SERVICE_ACCOUNT\n              valueFrom:\n                fieldRef:\n                  fieldPath: spec.serviceAccountName
                     }' "${MANAGER_YAML}"
                 fi
             else
