@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 )
 
 func TestHandleBearerAuthMethodNotAllowed(t *testing.T) {
@@ -78,8 +80,8 @@ func TestHandleBearerAuthMissingToken(t *testing.T) {
 func TestHandleBearerAuthInvalidToken(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*Claims, error) {
-			return nil, ErrInvalidToken
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
+			return nil, jwt.ErrInvalidToken
 		},
 	}
 	server := &Server{
@@ -104,12 +106,12 @@ func TestHandleBearerAuthInvalidToken(t *testing.T) {
 func TestHandleBearerAuthInvalidTokenType(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*Claims, error) {
-			return &Claims{
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
+			return &jwt.Claims{
 				User:      "test-user",
 				Groups:    []string{"users"},
 				Path:      "/workspaces/test/workspace",
-				TokenType: TokenTypeSession, // Wrong type - should be bootstrap
+				TokenType: jwt.TokenTypeSession, // Wrong type - should be bootstrap
 			}, nil
 		},
 	}
@@ -135,12 +137,12 @@ func TestHandleBearerAuthInvalidTokenType(t *testing.T) {
 func TestHandleBearerAuthMissingForwardedHost(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*Claims, error) {
-			return &Claims{
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
+			return &jwt.Claims{
 				User:      "test-user",
 				Groups:    []string{"users"},
 				Path:      "/workspaces/test/workspace",
-				TokenType: TokenTypeBootstrap,
+				TokenType: jwt.TokenTypeBootstrap,
 			}, nil
 		},
 	}
@@ -166,12 +168,12 @@ func TestHandleBearerAuthMissingForwardedHost(t *testing.T) {
 func TestHandleBearerAuthTokenPathMismatch(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*Claims, error) {
-			return &Claims{
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
+			return &jwt.Claims{
 				User:      "test-user",
 				Groups:    []string{"users"},
 				Path:      "/workspaces/different/workspace",
-				TokenType: TokenTypeBootstrap,
+				TokenType: jwt.TokenTypeBootstrap,
 			}, nil
 		},
 	}
@@ -203,12 +205,12 @@ func TestHandleBearerAuthSuccess(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*Claims, error) {
-			return &Claims{
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
+			return &jwt.Claims{
 				User:      "test-user",
 				Groups:    []string{"users"},
 				Path:      "/workspaces/test/workspace",
-				TokenType: TokenTypeBootstrap, // Correct type for bearer auth
+				TokenType: jwt.TokenTypeBootstrap, // Correct type for bearer auth
 			}, nil
 		},
 		GenerateTokenFunc: func(
@@ -223,7 +225,7 @@ func TestHandleBearerAuthSuccess(t *testing.T) {
 		},
 	}
 	cookieHandler := &MockCookieHandler{
-		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {
 			// Mock cookie setting
 		},
 	}

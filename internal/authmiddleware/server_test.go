@@ -468,7 +468,7 @@ func TestAuthIsNotProtectedByCSRF(t *testing.T) {
 				})
 			}
 		},
-		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {},
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {},
 	}
 
 	// Create JWT manager mock
@@ -486,7 +486,10 @@ func TestAuthIsNotProtectedByCSRF(t *testing.T) {
 	}
 
 	// Create server
-	config := &Config{PathRegexPattern: DefaultPathRegexPattern}
+	config := &Config{
+		PathRegexPattern: DefaultPathRegexPattern,
+		EnableOAuth:      true, // Enable OAuth so /auth endpoint is not CSRF protected
+	}
 	server := NewServer(config, jwtHandler, cookieHandler, logger)
 
 	// Create test request to /auth

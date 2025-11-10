@@ -3,6 +3,8 @@ package authmiddleware
 import (
 	"net/http"
 	"net/url"
+
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 )
 
 // handleBearerAuth handles bearer token authentication requests
@@ -48,8 +50,8 @@ func (s *Server) handleBearerAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate token type - bearer auth should only accept bootstrap tokens
-	if claims.TokenType != TokenTypeBootstrap {
-		s.logger.Error("Invalid token type for bearer auth", "expected", TokenTypeBootstrap, "actual", claims.TokenType)
+	if claims.TokenType != jwt.TokenTypeBootstrap {
+		s.logger.Error("Invalid token type for bearer auth", "expected", jwt.TokenTypeBootstrap, "actual", claims.TokenType)
 		http.Error(w, "Invalid token type", http.StatusUnauthorized)
 		return
 	}
@@ -78,15 +80,15 @@ func (s *Server) handleBearerAuth(w http.ResponseWriter, r *http.Request) {
 
 	// Generate new long-term session token
 	sessionToken, err := s.jwtManager.GenerateToken(
-		claims.Subject, claims.Groups, claims.UID, claims.Extra, appPath, host, TokenTypeSession)
+		claims.Subject, claims.Groups, claims.UID, claims.Extra, appPath, host, jwt.TokenTypeSession)
 	if err != nil {
 		s.logger.Error("Failed to generate session token", "error", err, "user", claims.Subject)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	// Set session cookie using appPath
-	s.cookieManager.SetCookie(w, sessionToken, appPath)
+	// Set session cookie using appPath and same domain as JWT token
+	s.cookieManager.SetCookie(w, sessionToken, appPath, host)
 
 	// Log successful token exchange
 	s.logger.Info("Token exchange successful",

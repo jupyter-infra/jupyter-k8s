@@ -168,6 +168,15 @@ type WorkspaceSpec struct {
 	// AppType specifies the application type for this workspace
 	// +optional
 	AppType string `json:"appType,omitempty"`
+
+	// ServiceAccountName specifies the name of the ServiceAccount to use for the workspace pod
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
+	// PodSecurityContext specifies pod-level security context
+	// Overrides template defaults when specified
+	// +optional
+	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 }
 
 // AccessResourceStatus defines the status of a resource created from a template
@@ -239,8 +248,8 @@ type WorkspaceStatus struct {
 // +kubebuilder:printcolumn:name="Progressing",type="string",JSONPath=".status.conditions[?(@.type==\"Progressing\")].status"
 // +kubebuilder:printcolumn:name="Degraded",type="string",JSONPath=".status.conditions[?(@.type==\"Degraded\")].status"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:printcolumn:name="CreatedBy",type="string",JSONPath=`.metadata.annotations['workspace\.jupyter\.org/created-by']`
-// +kubebuilder:printcolumn:name="OwnershipType",type="string",JSONPath=".spec.ownershipType"
+// +kubebuilder:printcolumn:name="CreatedBy",type="string",JSONPath=`.metadata.annotations['workspace\.jupyter\.org/created-by']`,priority=1
+// +kubebuilder:printcolumn:name="OwnershipType",type="string",JSONPath=".spec.ownershipType",priority=1
 
 // Workspace is the Schema for the workspaces API
 type Workspace struct {

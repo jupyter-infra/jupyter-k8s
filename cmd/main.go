@@ -292,6 +292,8 @@ func main() {
 		config := extensionapi.NewConfig(
 			extensionapi.WithServerPort(7443),
 			extensionapi.WithClusterId(os.Getenv("CLUSTER_ID")),
+			extensionapi.WithKMSKeyID(os.Getenv("KMS_KEY_ID")),
+			extensionapi.WithDomain(os.Getenv("DOMAIN")),
 		)
 		if err := extensionapi.SetupExtensionAPIServerWithManager(mgr, config); err != nil {
 			setupLog.Error(err, "unable to create extension API server", "extensionapi", "Server")

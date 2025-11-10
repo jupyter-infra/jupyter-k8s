@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -29,6 +30,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	builderPkg "sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	mngr "sigs.k8s.io/controller-runtime/pkg/manager"
@@ -77,9 +79,10 @@ func (r *WorkspaceReconciler) SetStateMachine(sm *StateMachine) {
 }
 
 // +kubebuilder:rbac:groups=workspace.jupyter.org,resources=*,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=workspace.jupyter.org,resources=workspaces/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods;serviceaccounts,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
 // +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
@@ -109,6 +112,22 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		logger.Error(err, "Failed to get Workspace")
 		return ctrl.Result{}, err
+	}
+
+	// Handle deletion if DeletionTimestamp is set
+	if !workspace.DeletionTimestamp.IsZero() {
+		return r.stateMachine.ReconcileDeletion(ctx, workspace)
+	}
+
+	// Add finalizer if missing (for new workspaces)
+	if !controllerutil.ContainsFinalizer(workspace, WorkspaceFinalizerName) {
+		logger.Info("Adding finalizer to workspace")
+		controllerutil.AddFinalizer(workspace, WorkspaceFinalizerName)
+		if err := r.Update(ctx, workspace); err != nil {
+			logger.Error(err, "Failed to add finalizer")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	// Ensure template label is set if workspace uses a template
@@ -157,7 +176,7 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.podEventHandler.HandleWorkspacePodEvents),
 			builderPkg.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				// Only watch pods with workspace labels
-				_, hasWorkspace := obj.GetLabels()[LabelWorkspaceName]
+				_, hasWorkspace := obj.GetLabels()[workspaceutil.LabelWorkspaceName]
 				return hasWorkspace
 			})),
 		)

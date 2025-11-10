@@ -11,24 +11,26 @@ import (
 	"time"
 
 	jwt5 "github.com/golang-jwt/jwt/v5"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/authmiddleware"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 )
 
 // Error definitions
 var (
-	ErrInvalidClaims = errors.New("invalid token claims")
-	ErrTokenExpired  = errors.New("token has expired")
+	ErrInvalidClaims = jwt.ErrInvalidClaims
+	ErrTokenExpired  = jwt.ErrTokenExpired
 )
 
 // KMSJWTManager handles JWT token creation and validation using AWS KMS envelope encryption
 type KMSJWTManager struct {
-	kmsClient  *KMSClient
-	keyId      string
-	issuer     string
-	audience   string
-	expiration time.Duration
-	keyCache   map[string][]byte // encrypted_key_hash -> plaintext_key
-	cacheMutex sync.RWMutex
+	kmsClient   *KMSClient
+	keyId       string
+	issuer      string
+	audience    string
+	expiration  time.Duration
+	keyCache    map[string][]byte    // encrypted_key_hash -> plaintext_key
+	cacheExpiry map[string]time.Time // encrypted_key_hash -> expiry_time
+	lastCleanup time.Time
+	cacheMutex  sync.RWMutex
 }
 
 // KMSJWTConfig contains configuration for KMS JWT manager
@@ -43,17 +45,27 @@ type KMSJWTConfig struct {
 // NewKMSJWTManager creates a new KMSJWTManager
 func NewKMSJWTManager(config KMSJWTConfig) *KMSJWTManager {
 	return &KMSJWTManager{
-		kmsClient:  config.KMSClient,
-		keyId:      config.KeyId,
-		issuer:     config.Issuer,
-		audience:   config.Audience,
-		expiration: config.Expiration,
-		keyCache:   make(map[string][]byte), // TODO implement eviction of old keys
+		kmsClient:   config.KMSClient,
+		keyId:       config.KeyId,
+		issuer:      config.Issuer,
+		audience:    config.Audience,
+		expiration:  config.Expiration,
+		keyCache:    make(map[string][]byte),
+		cacheExpiry: make(map[string]time.Time),
+		lastCleanup: time.Now(),
 	}
 }
 
 // GenerateToken creates a new JWT token using KMS envelope encryption
-func (m *KMSJWTManager) GenerateToken(user string, groups []string, path string, domain string, tokenType string) (string, error) {
+func (m *KMSJWTManager) GenerateToken(
+	user string,
+	groups []string,
+	uid string,
+	extra map[string][]string,
+	path string,
+	domain string,
+	tokenType string,
+) (string, error) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 
@@ -65,7 +77,7 @@ func (m *KMSJWTManager) GenerateToken(user string, groups []string, path string,
 	}
 
 	// Create claims
-	claims := &authmiddleware.Claims{
+	claims := &jwt.Claims{
 		RegisteredClaims: jwt5.RegisteredClaims{
 			ExpiresAt: jwt5.NewNumericDate(now.Add(m.expiration)),
 			IssuedAt:  jwt5.NewNumericDate(now),
@@ -76,6 +88,8 @@ func (m *KMSJWTManager) GenerateToken(user string, groups []string, path string,
 		},
 		User:      user,
 		Groups:    groups,
+		UID:       uid,
+		Extra:     extra,
 		Path:      path,
 		Domain:    domain,
 		TokenType: tokenType,
@@ -97,19 +111,17 @@ func (m *KMSJWTManager) GenerateToken(user string, groups []string, path string,
 
 	// Cache the plaintext key
 	keyHash := m.hashKey(encryptedKey)
-	m.cacheMutex.Lock()
-	m.keyCache[keyHash] = plaintextKey
-	m.cacheMutex.Unlock()
+	m.setCachedKey(keyHash, plaintextKey)
 
 	return tokenString, nil
 }
 
 // ValidateToken validates token using envelope decryption
-func (m *KMSJWTManager) ValidateToken(tokenString string) (*authmiddleware.Claims, error) {
+func (m *KMSJWTManager) ValidateToken(tokenString string) (*jwt.Claims, error) {
 	ctx := context.Background()
 
 	// Parse token to extract header with encrypted data key
-	token, err := jwt5.ParseWithClaims(tokenString, &authmiddleware.Claims{}, func(token *jwt5.Token) (interface{}, error) {
+	token, err := jwt5.ParseWithClaims(tokenString, &jwt.Claims{}, func(token *jwt5.Token) (interface{}, error) {
 		// Verify signing method
 		if token.Method != jwt5.SigningMethodHS384 {
 			return nil, fmt.Errorf("unexpected signing method: %v, expected HS384", token.Header["alg"])
@@ -136,6 +148,9 @@ func (m *KMSJWTManager) ValidateToken(tokenString string) (*authmiddleware.Claim
 			return plaintextKey, nil
 		}
 
+		// Periodic cleanup of expired entries
+		m.cleanupExpiredKeys()
+
 		// Cache miss - decrypt with KMS
 		plaintextKey, err = m.kmsClient.Decrypt(ctx, encryptedKey)
 		if err != nil {
@@ -144,9 +159,7 @@ func (m *KMSJWTManager) ValidateToken(tokenString string) (*authmiddleware.Claim
 		}
 
 		// Cache the decrypted key
-		m.cacheMutex.Lock()
-		m.keyCache[keyHash] = plaintextKey
-		m.cacheMutex.Unlock()
+		m.setCachedKey(keyHash, plaintextKey)
 
 		return plaintextKey, nil
 	})
@@ -156,7 +169,7 @@ func (m *KMSJWTManager) ValidateToken(tokenString string) (*authmiddleware.Claim
 		return nil, err
 	}
 
-	claims, ok := token.Claims.(*authmiddleware.Claims)
+	claims, ok := token.Claims.(*jwt.Claims)
 	if !ok {
 		return nil, ErrInvalidClaims
 	}
@@ -168,6 +181,38 @@ func (m *KMSJWTManager) ValidateToken(tokenString string) (*authmiddleware.Claim
 	}
 
 	return claims, nil
+}
+
+// setCachedKey stores a key in cache with TTL
+func (m *KMSJWTManager) setCachedKey(keyHash string, plaintextKey []byte) {
+	m.cacheMutex.Lock()
+	m.keyCache[keyHash] = plaintextKey
+	m.cacheExpiry[keyHash] = time.Now().Add(m.expiration * 2) // Buffer: 2x JWT expiration
+	m.cacheMutex.Unlock()
+}
+
+// cleanupExpiredKeys removes all expired entries from cache
+func (m *KMSJWTManager) cleanupExpiredKeys() {
+	if time.Since(m.lastCleanup) <= 15*time.Minute {
+		return
+	}
+
+	m.cacheMutex.Lock()
+	defer m.cacheMutex.Unlock()
+
+	// Re-check after acquiring lock to prevent double cleanup
+	if time.Since(m.lastCleanup) <= 15*time.Minute {
+		return
+	}
+
+	now := time.Now()
+	for hash, expiry := range m.cacheExpiry {
+		if now.After(expiry) {
+			delete(m.keyCache, hash)
+			delete(m.cacheExpiry, hash)
+		}
+	}
+	m.lastCleanup = now
 }
 
 // hashKey creates a hash of the encrypted key for cache indexing

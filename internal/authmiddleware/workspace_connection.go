@@ -5,9 +5,12 @@ package authmiddleware
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"regexp"
 
 	v1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -17,32 +20,79 @@ type WorkspaceInfo struct {
 	Name      string
 }
 
-// ExtractWorkspaceInfo extracts workspace namespace and name from a path
-// using the configured regex patterns
-func (s *Server) ExtractWorkspaceInfo(path string) (*WorkspaceInfo, error) {
-	if path == "" {
-		return nil, fmt.Errorf("empty path")
+// ExtractWorkspaceInfo extracts workspace namespace and name from request
+// using the configured routing mode and regex patterns
+func (s *Server) ExtractWorkspaceInfo(r *http.Request) (*WorkspaceInfo, error) {
+	switch s.config.RoutingMode {
+	case RoutingModeSubdomain:
+		return s.extractWorkspaceInfoFromSubdomain(r)
+	case RoutingModePath:
+		return s.extractWorkspaceInfoFromPath(r)
+	default:
+		return nil, fmt.Errorf("unsupported routing mode: %s", s.config.RoutingMode)
+	}
+}
+
+// extractWorkspaceInfoFromPath extracts workspace info from URL path
+func (s *Server) extractWorkspaceInfoFromPath(r *http.Request) (*WorkspaceInfo, error) {
+	path, err := GetForwardedURI(r)
+	if err != nil {
+		return nil, err
 	}
 
-	// Extract namespace using the namespace regex pattern
+	// Extract namespace using regex
 	namespaceRe := regexp.MustCompile(s.config.WorkspaceNamespacePathRegex)
 	namespaceMatches := namespaceRe.FindStringSubmatch(path)
 	if len(namespaceMatches) != 2 {
 		return nil, fmt.Errorf("failed to extract namespace from path: %s", path)
 	}
-	namespace := namespaceMatches[1]
 
-	// Extract name using the name regex pattern
+	// Extract workspace name using regex
 	nameRe := regexp.MustCompile(s.config.WorkspaceNamePathRegex)
 	nameMatches := nameRe.FindStringSubmatch(path)
 	if len(nameMatches) != 2 {
 		return nil, fmt.Errorf("failed to extract workspace name from path: %s", path)
 	}
-	name := nameMatches[1]
+
+	return &WorkspaceInfo{
+		Namespace: namespaceMatches[1],
+		Name:      nameMatches[1],
+	}, nil
+}
+
+// extractWorkspaceInfoFromSubdomain extracts workspace info from subdomain
+func (s *Server) extractWorkspaceInfoFromSubdomain(r *http.Request) (*WorkspaceInfo, error) {
+	host, err := GetForwardedHost(r)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract subdomain part (before first dot)
+	subdomain := ExtractSubdomain(host)
+
+	// Extract workspace name using regex
+	nameRe := regexp.MustCompile(s.config.WorkspaceNameSubdomainRegex)
+	nameMatches := nameRe.FindStringSubmatch(subdomain)
+	if len(nameMatches) != 2 {
+		return nil, fmt.Errorf("failed to extract workspace name from subdomain: %s", subdomain)
+	}
+
+	// Extract namespace using regex
+	namespaceRe := regexp.MustCompile(s.config.WorkspaceNamespaceSubdomainRegex)
+	namespaceMatches := namespaceRe.FindStringSubmatch(subdomain)
+	if len(namespaceMatches) != 2 {
+		return nil, fmt.Errorf("failed to extract namespace from subdomain: %s", subdomain)
+	}
+
+	// Decode base32 encoded namespace
+	namespace, err := workspace.DecodeNamespaceB32(namespaceMatches[1])
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode namespace from base32: %w", err)
+	}
 
 	return &WorkspaceInfo{
 		Namespace: namespace,
-		Name:      name,
+		Name:      nameMatches[1],
 	}, nil
 }
 
@@ -120,21 +170,21 @@ func (s *Server) createConnectionAccessReview(
 	return &result.Status, nil
 }
 
-// VerifyWorkspaceAccess checks if the user has access to the workspace path
-// It extracts the workspace info from the path, call the connection API
+// VerifyWorkspaceAccess checks if the user has access to the workspace
+// It extracts the workspace info from the request, calls the connection API
 // create:ConnectionAccessReview, return the result and WorkspaceInfo.
 func (s *Server) VerifyWorkspaceAccess(
 	ctx context.Context,
-	path string,
+	r *http.Request,
 	username string,
 	groups []string,
 	uid string,
 	extra map[string][]string,
 ) (*v1alpha1.ConnectionAccessReviewStatus, *WorkspaceInfo, error) {
-	// Extract workspace info from path
-	workspaceInfo, err := s.ExtractWorkspaceInfo(path)
+	// Extract workspace info from request
+	workspaceInfo, err := s.ExtractWorkspaceInfo(r)
 	if err != nil {
-		s.logger.Info(fmt.Sprintf("Invalid workspace path: %s", path))
+		s.logger.Info(fmt.Sprintf("Invalid workspace request: %v", err))
 		return nil, nil, err
 	}
 
@@ -162,13 +212,13 @@ func (s *Server) VerifyWorkspaceAccess(
 // return the result and WorkspaceInfo.
 func (s *Server) VerifyWorkspaceAccessFromJwt(
 	ctx context.Context,
-	path string,
-	claims *Claims,
+	r *http.Request,
+	claims *jwt.Claims,
 ) (*v1alpha1.ConnectionAccessReviewStatus, *WorkspaceInfo, error) {
-	// Extract workspace info from path
-	workspaceInfo, err := s.ExtractWorkspaceInfo(path)
+	// Extract workspace info from request
+	workspaceInfo, err := s.ExtractWorkspaceInfo(r)
 	if err != nil {
-		s.logger.Info(fmt.Sprintf("Invalid workspace path: %s", path))
+		s.logger.Info(fmt.Sprintf("Invalid workspace request: %v", err))
 		return nil, nil, err
 	}
 
