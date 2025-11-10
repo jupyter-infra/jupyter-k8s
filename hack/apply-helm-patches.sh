@@ -222,6 +222,62 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
     fi
 fi
 
+# Handle manager scheduling patch
+if [ -f "${PATCHES_DIR}/manager-scheduling.yaml.patch" ]; then
+    MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
+    if [ -f "${MANAGER_YAML}" ]; then
+        echo "Applying scheduling patch to manager.yaml..."
+        
+        # Check if scheduling patch is already applied
+        if ! grep -q "{{- with .Values.controller.nodeSelector }}" "${MANAGER_YAML}"; then
+            echo "Adding scheduling configuration to manager.yaml"
+            
+            # Replace the scheduling section between serviceAccountName and securityContext
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                # macOS sed - replace the section after serviceAccountName and before securityContext
+                sed -i '' '/serviceAccountName:/a\
+      {{- with .Values.controller.nodeSelector }}\
+      nodeSelector:\
+        {{- toYaml . | nindent 8 }}\
+      {{- end }}\
+      {{- with .Values.controller.tolerations }}\
+      tolerations:\
+        {{- toYaml . | nindent 8 }}\
+      {{- end }}\
+      {{- with .Values.controller.affinity }}\
+      affinity:\
+        {{- toYaml . | nindent 8 }}\
+      {{- else }}\
+      affinity:\
+        nodeAffinity:\
+          requiredDuringSchedulingIgnoredDuringExecution:\
+            nodeSelectorTerms:\
+              - matchExpressions:\
+                - key: kubernetes.io/arch\
+                  operator: In\
+                  values:\
+                    - amd64\
+                    - arm64\
+                    - ppc64le\
+                    - s390x\
+                - key: kubernetes.io/os\
+                  operator: In\
+                  values:\
+                    - linux\
+      {{- end }}' "${MANAGER_YAML}"
+            else
+                # Linux sed - replace the section after serviceAccountName and before securityContext
+                sed -i '/serviceAccountName:/a\      {{- with .Values.controller.nodeSelector }}\n      nodeSelector:\n        {{- toYaml . | nindent 8 }}\n      {{- end }}\n      {{- with .Values.controller.tolerations }}\n      tolerations:\n        {{- toYaml . | nindent 8 }}\n      {{- end }}\n      {{- with .Values.controller.affinity }}\n      affinity:\n        {{- toYaml . | nindent 8 }}\n      {{- else }}\n      affinity:\n        nodeAffinity:\n          requiredDuringSchedulingIgnoredDuringExecution:\n            nodeSelectorTerms:\n              - matchExpressions:\n                - key: kubernetes.io/arch\n                  operator: In\n                  values:\n                    - amd64\n                    - arm64\n                    - ppc64le\n                    - s390x\n                - key: kubernetes.io/os\n                  operator: In\n                  values:\n                    - linux\n      {{- end }}' "${MANAGER_YAML}"
+            fi
+            echo "Successfully applied scheduling patch"
+        else
+            echo "Scheduling patch already applied, skipping"
+        fi
+    else
+        echo "Warning: manager.yaml not found at ${MANAGER_YAML}"
+    fi
+fi
+
 # Patch the issuer name and add extension certificate in certmanager/certificate.yaml
 echo "Patching certmanager/certificate.yaml..."
 CERT_YAML="${CHART_DIR}/templates/certmanager/certificate.yaml"

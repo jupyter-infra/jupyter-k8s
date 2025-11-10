@@ -92,6 +92,15 @@ application:
   # Image registry for Workspaces controller
   imagesRegistry: "docker.io/library"
 
+# [CONTROLLER]: Controller pod scheduling configuration
+controller:
+  # Node selector for controller pod
+  nodeSelector: {}
+  # Tolerations for controller pod
+  tolerations: []
+  # Affinity for controller pod (if not specified, uses default arch/os affinity)
+  affinity: {}
+
 # [WORKSPACE POD WATCHING]: Configure workspace pod event watching
 workspacePodWatching:
   # Whether to enable workspace pod event watching
