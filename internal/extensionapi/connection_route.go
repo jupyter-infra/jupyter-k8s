@@ -78,6 +78,13 @@ func (s *ExtensionServer) generateWebUIBearerTokenURL(r *http.Request, workspace
 func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.Request) {
 	logger := GetLoggerFromContext(r.Context())
 
+	// Ensure AWS resources are initialized (only happens once)
+	if err := aws.EnsureResourcesInitialized(r.Context()); err != nil {
+		logger.Error(err, "Failed to initialize resources")
+		WriteKubernetesError(w, http.StatusInternalServerError, "Failed to initialize resources")
+		return
+	}
+
 	if r.Method != "POST" {
 		logger.Error(nil, "Invalid HTTP method", "method", r.Method)
 		WriteKubernetesError(w, http.StatusBadRequest, "Connection must use POST method")
