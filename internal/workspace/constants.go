@@ -18,5 +18,5 @@ package workspace
 
 const (
 	// LabelWorkspaceName is the label key for workspace name
-	LabelWorkspaceName = "workspace.jupyter.org/workspaceName"
+	LabelWorkspaceName = "workspace.jupyter.org/workspace-name"
 )
