@@ -105,7 +105,8 @@ func (r *WorkspaceTemplateReconciler) manageFinalizer(ctx context.Context, templ
 	logger := logf.FromContext(ctx)
 
 	// Check if any active workspaces are using this template
-	workspaces, _, err := workspace.ListByTemplate(ctx, r.Client, template.Name, template.Namespace, "", 0)
+	// Use limit=1 since we only need to know if workspaces exist, not get all of them
+	workspaces, _, err := workspace.ListByTemplate(ctx, r.Client, template.Name, template.Namespace, "", 1)
 	if err != nil {
 		logger.Error(err, "Failed to list workspaces using template")
 		return ctrl.Result{}, err
@@ -162,25 +163,24 @@ func (r *WorkspaceTemplateReconciler) handleDeletion(ctx context.Context, templa
 	}
 
 	// Check if any workspaces are using this template
-	workspaces, _, err := workspace.ListByTemplate(ctx, r.Client, template.Name, template.Namespace, "", 0)
+	// Use limit=1 since we only need to know if workspaces exist, not get all of them
+	workspaces, _, err := workspace.ListByTemplate(ctx, r.Client, template.Name, template.Namespace, "", 1)
 	if err != nil {
 		logger.Error(err, "Failed to list workspaces using template")
 		return ctrl.Result{}, err
 	}
 
-	// Log workspace names for debugging
-	workspaceNames := make([]string, len(workspaces))
-	for i, ws := range workspaces {
-		workspaceNames[i] = workspace.GetWorkspaceKey(&ws)
+	if len(workspaces) > 0 {
+		logger.Info("Template is in use, blocking deletion",
+			"templateName", template.Name,
+			"exampleWorkspace", workspace.GetWorkspaceKey(&workspaces[0]))
+	} else {
+		logger.Info("No workspaces using template",
+			"templateName", template.Name)
 	}
-	logger.Info("Checked workspaces using template",
-		"templateName", template.Name,
-		"workspaceCount", len(workspaces),
-		"workspaceNames", workspaceNames)
 
 	if len(workspaces) > 0 {
-		msg := fmt.Sprintf("Cannot delete template: in use by %d workspace(s)", len(workspaces))
-		logger.Info(msg, "workspaces", len(workspaces))
+		msg := "Cannot delete template: in use by workspace(s)"
 		if r.recorder != nil {
 			r.recorder.Event(template, "Warning", "TemplateInUse", msg)
 		}
@@ -193,8 +193,7 @@ func (r *WorkspaceTemplateReconciler) handleDeletion(ctx context.Context, templa
 
 	// No workspaces using template - safe to delete
 	logger.Info("No workspaces using template, removing finalizer",
-		"templateName", template.Name,
-		"workspaceCount", len(workspaces))
+		"templateName", template.Name)
 	controllerutil.RemoveFinalizer(template, templateFinalizerName)
 	if err := r.Update(ctx, template); err != nil {
 		logger.Error(err, "Failed to remove finalizer from template",
