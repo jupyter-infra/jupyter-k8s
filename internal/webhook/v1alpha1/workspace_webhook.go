@@ -18,7 +18,6 @@ package v1alpha1
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -68,13 +67,6 @@ func ensureTemplateFinalizer(ctx context.Context, k8sClient client.Client, templ
 
 	workspacelog.Info("Added finalizer to template", "template", templateRef)
 	return nil
-}
-
-func sanitizeUsername(username string) string {
-	// Use Go's JSON marshaling to properly escape the string
-	escaped, _ := json.Marshal(username)
-	// Remove the surrounding quotes that json.Marshal adds
-	return string(escaped[1 : len(escaped)-1])
 }
 
 // getEffectiveOwnershipType returns the effective access type, treating empty as Public

@@ -22,12 +22,17 @@ const (
 	// AppLabel is the label key for application identification
 	AppLabel = "app"
 
-	// Access strategy label keys
-	LabelWorkspaceName              = "workspace.jupyter.org/workspaceName"
-	LabelWorkspaceNamespace         = "workspace.jupyter.org/workspaceNamespace"
-	LabelAccessStrategyName         = "workspace.jupyter.org/accessStrategyName"
-	LabelAccessStrategyNamespace    = "workspace.jupyter.org/accessStrategyNamespace"
-	LabelWorkspaceTemplate          = "workspace.jupyter.org/template"
+	// LabelWorkspaceName is the label key for workspace name
+	LabelWorkspaceName = "workspace.jupyter.org/workspaceName"
+	// LabelWorkspaceNamespace is the label key for workspace namespace
+	LabelWorkspaceNamespace = "workspace.jupyter.org/workspaceNamespace"
+	// LabelAccessStrategyName is the label key for access strategy name
+	LabelAccessStrategyName = "workspace.jupyter.org/accessStrategyName"
+	// LabelAccessStrategyNamespace is the label key for access strategy namespace
+	LabelAccessStrategyNamespace = "workspace.jupyter.org/accessStrategyNamespace"
+	// LabelWorkspaceTemplate is the label key for workspace template name
+	LabelWorkspaceTemplate = "workspace.jupyter.org/template"
+	// LabelWorkspaceTemplateNamespace is the label key for workspace template namespace
 	LabelWorkspaceTemplateNamespace = "workspace.jupyter.org/template-namespace"
 
 	// AppLabelValue is the label value for app label
