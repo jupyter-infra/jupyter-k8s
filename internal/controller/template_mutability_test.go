@@ -175,14 +175,14 @@ var _ = Describe("Template Mutability", func() {
 		})
 
 		It("should list workspaces using a template", func() {
-			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "", "", 0)
+			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, template.Namespace, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(HaveLen(1))
 			Expect(workspaces[0].Name).To(Equal(workspace.Name))
 		})
 
 		It("should return empty list when no workspaces use template", func() {
-			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, "nonexistent-template", "", "", 0)
+			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, "nonexistent-template", "default", "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(BeEmpty())
 		})
@@ -193,7 +193,7 @@ var _ = Describe("Template Mutability", func() {
 			Expect(k8sClient.Update(ctx, template)).To(Succeed())
 
 			// Verify we can detect workspaces using the template
-			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "", "", 0)
+			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, template.Namespace, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(HaveLen(1))
 
@@ -218,7 +218,7 @@ var _ = Describe("Template Mutability", func() {
 			}()
 
 			// Verify no workspaces use this template
-			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, unusedTemplate.Name, "", "", 0)
+			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, unusedTemplate.Name, unusedTemplate.Namespace, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(BeEmpty())
 
@@ -284,11 +284,6 @@ var _ = Describe("Template Mutability", func() {
 			workspaces, _, err = workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "default", "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(BeEmpty())
-
-			// Query without namespace filter - should find workspace (wildcard)
-			workspaces, _, err = workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "", "", 0)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(workspaces).To(HaveLen(1))
 		})
 
 		It("should use workspace namespace as default when templateRef.namespace is empty", func() {
