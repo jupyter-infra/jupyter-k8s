@@ -246,9 +246,12 @@ func (r *WorkspaceTemplateReconciler) findTemplatesForWorkspace(ctx context.Cont
 	// When workspace is deleted, spec fields are cleared but labels remain
 	// This ensures template reconciliation is triggered even during workspace deletion
 	templateName := ws.Labels[workspace.LabelWorkspaceTemplate]
-	if templateName == "" {
-		logger.V(1).Info("Workspace has no template label, skipping template reconciliation",
+	templateNamespace := ws.Labels[workspace.LabelWorkspaceTemplateNamespace]
+	if templateName == "" || templateNamespace == "" {
+		logger.V(1).Info("Workspace has incomplete template labels, skipping template reconciliation",
 			"workspace", workspace.GetWorkspaceKey(ws),
+			"templateName", templateName,
+			"templateNamespace", templateNamespace,
 			"deletionTimestamp", ws.DeletionTimestamp)
 		return nil
 	}
@@ -256,13 +259,15 @@ func (r *WorkspaceTemplateReconciler) findTemplatesForWorkspace(ctx context.Cont
 	logger.Info("Workspace changed, enqueueing template reconciliation",
 		"workspace", workspace.GetWorkspaceKey(ws),
 		"template", templateName,
+		"templateNamespace", templateNamespace,
 		"deletionTimestamp", ws.DeletionTimestamp,
 		"hasLabel", true)
 
 	// Trigger reconciliation of the template when workspace changes
 	return []reconcile.Request{
 		{NamespacedName: types.NamespacedName{
-			Name: templateName,
+			Name:      templateName,
+			Namespace: templateNamespace,
 		}},
 	}
 }

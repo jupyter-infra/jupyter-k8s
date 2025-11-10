@@ -233,7 +233,8 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 					Name:      "test-workspace",
 					Namespace: "default",
 					Labels: map[string]string{
-						workspaceutil.LabelWorkspaceTemplate: "my-template",
+						workspaceutil.LabelWorkspaceTemplate:          "my-template",
+						workspaceutil.LabelWorkspaceTemplateNamespace: "default",
 					},
 				},
 			}
@@ -241,6 +242,7 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 			requests := reconciler.findTemplatesForWorkspace(ctx, workspace)
 			Expect(requests).To(HaveLen(1))
 			Expect(requests[0].Name).To(Equal("my-template"))
+			Expect(requests[0].Namespace).To(Equal("default"))
 		})
 
 		It("should return template name during workspace deletion", func() {
@@ -251,7 +253,8 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 					Namespace:         "default",
 					DeletionTimestamp: &now,
 					Labels: map[string]string{
-						workspaceutil.LabelWorkspaceTemplate: "my-template",
+						workspaceutil.LabelWorkspaceTemplate:          "my-template",
+						workspaceutil.LabelWorkspaceTemplateNamespace: "default",
 					},
 				},
 			}
@@ -260,6 +263,8 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 			Expect(requests).To(HaveLen(1))
 			Expect(requests[0].Name).To(Equal("my-template"),
 				"should return template name even during deletion (labels persist)")
+			Expect(requests[0].Namespace).To(Equal("default"),
+				"should return template namespace even during deletion (labels persist)")
 		})
 
 		It("should return empty when workspace has no template label", func() {
@@ -272,6 +277,42 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 
 			requests := reconciler.findTemplatesForWorkspace(ctx, workspace)
 			Expect(requests).To(BeEmpty())
+		})
+
+		It("should return empty when workspace has incomplete template labels", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: "default",
+					Labels: map[string]string{
+						workspaceutil.LabelWorkspaceTemplate: "my-template",
+						// Missing LabelWorkspaceTemplateNamespace
+					},
+				},
+			}
+
+			requests := reconciler.findTemplatesForWorkspace(ctx, workspace)
+			Expect(requests).To(BeEmpty(),
+				"should skip reconciliation when namespace label is missing")
+		})
+
+		It("should support cross-namespace template references", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: "workspace-ns",
+					Labels: map[string]string{
+						workspaceutil.LabelWorkspaceTemplate:          "shared-template",
+						workspaceutil.LabelWorkspaceTemplateNamespace: "templates-ns",
+					},
+				},
+			}
+
+			requests := reconciler.findTemplatesForWorkspace(ctx, workspace)
+			Expect(requests).To(HaveLen(1))
+			Expect(requests[0].Name).To(Equal("shared-template"))
+			Expect(requests[0].Namespace).To(Equal("templates-ns"),
+				"should reconcile template in different namespace")
 		})
 
 		It("should return empty for non-workspace objects", func() {
