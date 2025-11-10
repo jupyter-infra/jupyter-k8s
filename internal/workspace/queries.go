@@ -79,7 +79,7 @@ func ListByTemplate(ctx context.Context, k8sClient client.Client, templateName s
 		// Verify templateRef matches label to guard against label/spec mismatch.
 		// This is somewhat redundant given CEL immutability validation but adds zero cost and adds a layer of verification.
 		if ws.Spec.TemplateRef == nil {
-			logger.V(1).Info("Workspace has template label but nil templateRef",
+			logger.Info("Workspace has template label but nil templateRef - data integrity issue",
 				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
 				"label", templateName)
 			continue
