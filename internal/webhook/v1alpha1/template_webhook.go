@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -144,38 +145,11 @@ func resourceBoundsChanged(oldBounds, newBounds *workspacev1alpha1.ResourceBound
 		return false
 	}
 
-	// Check CPU bounds
-	if resourceRangeChanged(oldBounds.CPU, newBounds.CPU) {
-		return true
-	}
-
-	// Check Memory bounds
-	if resourceRangeChanged(oldBounds.Memory, newBounds.Memory) {
-		return true
-	}
-
-	// Check GPU bounds
-	if resourceRangeChanged(oldBounds.GPU, newBounds.GPU) {
-		return true
-	}
-
-	return false
-}
-
-// resourceRangeChanged checks if a resource range changed
-func resourceRangeChanged(oldRange, newRange *workspacev1alpha1.ResourceRange) bool {
-	// If one is nil and the other isn't, they're different
-	if (oldRange == nil) != (newRange == nil) {
-		return true
-	}
-
-	// Both nil means no change
-	if oldRange == nil {
-		return false
-	}
-
-	// Compare Min and Max
-	return !oldRange.Min.Equal(newRange.Min) || !oldRange.Max.Equal(newRange.Max)
+	// Use semantic equality which properly handles resource.Quantity comparison.
+	// Semantic.DeepEqual uses Quantity.Cmp() internally to compare numeric values
+	// rather than internal representations, ensuring "1000m" equals "1".
+	// See: https://github.com/kubernetes/kubernetes/issues/82242
+	return !equality.Semantic.DeepEqual(oldBounds, newBounds)
 }
 
 // maxStorageSizeChanged checks if max storage size changed
