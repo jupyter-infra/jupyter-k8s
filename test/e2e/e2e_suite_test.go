@@ -100,7 +100,8 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	By("removing shared test namespace")
-	cmd := exec.Command("kubectl", "delete", "ns", namespace, "--wait=true", "--timeout=300s")
+	// Increased timeout to 600s to handle finalizer processing in large test suites
+	cmd := exec.Command("kubectl", "delete", "ns", namespace, "--wait=true", "--timeout=600s")
 	_, _ = utils.Run(cmd)
 
 	// Teardown CertManager after the suite if not skipped and if it was not already installed

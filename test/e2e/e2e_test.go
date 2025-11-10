@@ -76,6 +76,22 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd = exec.Command("kubectl", "delete", "workspace", "--all", "-n", namespace, "--ignore-not-found", "--wait=true", "--timeout=180s")
 		_, _ = utils.Run(cmd)
 
+		By("removing finalizers from workspace templates")
+		// Force remove finalizers from templates to unblock namespace deletion
+		// This handles cases where controller didn't process finalizer removal
+		cmd = exec.Command("kubectl", "get", "workspacetemplate", "-n", namespace, "-o", "name")
+		output, err := utils.Run(cmd)
+		if err == nil && len(output) > 0 {
+			templates := strings.Split(strings.TrimSpace(string(output)), "\n")
+			for _, template := range templates {
+				if template != "" {
+					cmd = exec.Command("kubectl", "patch", template, "-n", namespace, "--type=json",
+						"-p=[{\"op\":\"remove\",\"path\":\"/metadata/finalizers\"}]")
+					_, _ = utils.Run(cmd)
+				}
+			}
+		}
+
 		By("undeploying the controller-manager")
 		// Undeploy controller BEFORE uninstalling CRDs to allow controller to process finalizers
 		// This follows K8s best practice: delete resources in reverse order of creation
