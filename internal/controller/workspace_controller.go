@@ -125,21 +125,61 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// Ensure template label is set if workspace uses a template
+	// Ensure template labels are set or removed based on templateRef
 	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
+		// Template is referenced - ensure both labels are set
 		if workspace.Labels == nil {
 			workspace.Labels = make(map[string]string)
 		}
-		if workspace.Labels[workspaceutil.LabelWorkspaceTemplate] != workspace.Spec.TemplateRef.Name {
-			logger.Info("Adding template label to workspace", "template", workspace.Spec.TemplateRef.Name)
-			workspace.Labels[workspaceutil.LabelWorkspaceTemplate] = workspace.Spec.TemplateRef.Name
+
+		templateName := workspace.Spec.TemplateRef.Name
+		templateNamespace := workspaceutil.GetTemplateRefNamespace(workspace)
+
+		needsUpdate := false
+		if workspace.Labels[workspaceutil.LabelWorkspaceTemplate] != templateName {
+			workspace.Labels[workspaceutil.LabelWorkspaceTemplate] = templateName
+			needsUpdate = true
+		}
+		if workspace.Labels[workspaceutil.LabelWorkspaceTemplateNamespace] != templateNamespace {
+			workspace.Labels[workspaceutil.LabelWorkspaceTemplateNamespace] = templateNamespace
+			needsUpdate = true
+		}
+
+		if needsUpdate {
+			logger.Info("Adding/updating template labels",
+				"template", templateName,
+				"templateNamespace", templateNamespace)
 			if err := r.Update(ctx, workspace); err != nil {
-				logger.Error(err, "Failed to update workspace with template label")
+				logger.Error(err, "Failed to update workspace with template labels")
 				return ctrl.Result{}, err
 			}
-			logger.Info("Successfully added template label to workspace")
+			logger.Info("Successfully updated template labels")
 			// Requeue to process with updated labels
 			return ctrl.Result{Requeue: true}, nil
+		}
+	} else {
+		// Template is not referenced - ensure labels are removed
+		if workspace.Labels != nil {
+			needsUpdate := false
+			if _, hasTemplateLabel := workspace.Labels[workspaceutil.LabelWorkspaceTemplate]; hasTemplateLabel {
+				delete(workspace.Labels, workspaceutil.LabelWorkspaceTemplate)
+				needsUpdate = true
+			}
+			if _, hasNamespaceLabel := workspace.Labels[workspaceutil.LabelWorkspaceTemplateNamespace]; hasNamespaceLabel {
+				delete(workspace.Labels, workspaceutil.LabelWorkspaceTemplateNamespace)
+				needsUpdate = true
+			}
+
+			if needsUpdate {
+				logger.Info("Removing template labels (no template reference)")
+				if err := r.Update(ctx, workspace); err != nil {
+					logger.Error(err, "Failed to remove template labels")
+					return ctrl.Result{}, err
+				}
+				logger.Info("Successfully removed template labels")
+				// Requeue to process with updated labels
+				return ctrl.Result{Requeue: true}, nil
+			}
 		}
 	}
 
