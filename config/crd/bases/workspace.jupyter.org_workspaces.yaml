@@ -1664,7 +1664,7 @@ spec:
               templateRef:
                 description: |-
                   TemplateRef references a WorkspaceTemplate to use as base configuration
-                  When set, template provides defaults and spec fields act as overrides
+                  When set, template provides defaults and workspace spec fields act as overrides
                 properties:
                   name:
                     description: Name of the WorkspaceTemplate

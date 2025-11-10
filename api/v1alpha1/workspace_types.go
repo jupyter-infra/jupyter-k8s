@@ -166,7 +166,7 @@ type WorkspaceSpec struct {
 	AccessStrategy *AccessStrategyRef `json:"accessStrategy,omitempty"`
 
 	// TemplateRef references a WorkspaceTemplate to use as base configuration
-	// When set, template provides defaults and spec fields act as overrides
+	// When set, template provides defaults and workspace spec fields act as overrides
 	// +optional
 	TemplateRef *TemplateRef `json:"templateRef,omitempty"`
 
