@@ -82,17 +82,6 @@ rules:
 - apiGroups:
   - workspace.jupyter.org
   resources:
-  - workspaces
-  - workspacetemplates
-  verbs:
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - workspace.jupyter.org
-  resources:
   - workspaces/finalizers
   - workspacetemplates/finalizers
   verbs:
