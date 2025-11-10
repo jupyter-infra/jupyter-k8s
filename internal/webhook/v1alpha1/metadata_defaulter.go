@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	workspacequery "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
 // applyMetadataDefaults applies metadata defaults (labels and annotations) from template to workspace
@@ -31,11 +32,6 @@ func applyMetadataDefaults(workspace *workspacev1alpha1.Workspace, template *wor
 
 	// Set template namespace label - use workspace namespace if templateRef.namespace is empty
 	// This follows Kubernetes convention (e.g., ConfigMapRef, SecretRef default to same namespace)
-	templateNamespace := ""
-	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Namespace != "" {
-		templateNamespace = workspace.Spec.TemplateRef.Namespace
-	} else {
-		templateNamespace = workspace.Namespace
-	}
+	templateNamespace := workspacequery.GetTemplateRefNamespace(workspace)
 	workspace.Labels[controller.LabelWorkspaceTemplateNamespace] = templateNamespace
 }

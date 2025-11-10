@@ -175,7 +175,7 @@ func (r *WorkspaceTemplateReconciler) handleDeletion(ctx context.Context, templa
 	// Log workspace names for debugging
 	workspaceNames := make([]string, len(workspaces))
 	for i, ws := range workspaces {
-		workspaceNames[i] = fmt.Sprintf("%s/%s", ws.Namespace, ws.Name)
+		workspaceNames[i] = workspace.GetWorkspaceKey(&ws)
 	}
 	logger.Info("Checked workspaces using template",
 		"templateName", template.Name,
@@ -252,13 +252,13 @@ func (r *WorkspaceTemplateReconciler) findTemplatesForWorkspace(ctx context.Cont
 	templateName := ws.Labels[workspace.LabelWorkspaceTemplate]
 	if templateName == "" {
 		logger.V(1).Info("Workspace has no template label, skipping template reconciliation",
-			"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
+			"workspace", workspace.GetWorkspaceKey(ws),
 			"deletionTimestamp", ws.DeletionTimestamp)
 		return nil
 	}
 
 	logger.Info("Workspace changed, enqueueing template reconciliation",
-		"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
+		"workspace", workspace.GetWorkspaceKey(ws),
 		"template", templateName,
 		"deletionTimestamp", ws.DeletionTimestamp,
 		"hasLabel", true)

@@ -33,6 +33,21 @@ const (
 	LabelWorkspaceTemplateNamespace = "workspace.jupyter.org/template-namespace"
 )
 
+// GetTemplateRefNamespace returns the namespace for a workspace's template reference,
+// defaulting to the workspace's namespace if not specified
+func GetTemplateRefNamespace(ws *workspacev1alpha1.Workspace) string {
+	if ws.Spec.TemplateRef == nil || ws.Spec.TemplateRef.Namespace == "" {
+		return ws.Namespace
+	}
+	return ws.Spec.TemplateRef.Namespace
+}
+
+// GetWorkspaceKey returns the namespace/name key for a workspace
+// This follows Kubernetes convention for logging object references (similar to klog.KObj)
+func GetWorkspaceKey(ws *workspacev1alpha1.Workspace) string {
+	return fmt.Sprintf("%s/%s", ws.Namespace, ws.Name)
+}
+
 // ListByTemplate returns all active workspaces using the specified template
 // Supports pagination for large-scale deployments
 // Filters out workspaces being deleted (DeletionTimestamp set)
@@ -80,7 +95,7 @@ func ListByTemplate(ctx context.Context, k8sClient client.Client, templateName s
 		// This is somewhat redundant given CEL immutability validation but adds zero cost and adds a layer of verification.
 		if ws.Spec.TemplateRef == nil {
 			logger.Info("Workspace has template label but nil templateRef - data integrity issue",
-				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
+				"workspace", GetWorkspaceKey(&ws),
 				"label", templateName)
 			continue
 		}
@@ -88,7 +103,7 @@ func ListByTemplate(ctx context.Context, k8sClient client.Client, templateName s
 		if ws.Spec.TemplateRef.Name != templateName {
 			// This should never happen - log if it occurs
 			logger.Info("Workspace has template label but different templateRef name",
-				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
+				"workspace", GetWorkspaceKey(&ws),
 				"label", templateName,
 				"spec", ws.Spec.TemplateRef.Name)
 			continue
@@ -96,14 +111,10 @@ func ListByTemplate(ctx context.Context, k8sClient client.Client, templateName s
 
 		// Verify namespace if filtering by namespace
 		if templateNamespace != "" {
-			// Determine the actual namespace the workspace is using for template ref
-			actualNamespace := ws.Spec.TemplateRef.Namespace
-			if actualNamespace == "" {
-				actualNamespace = ws.Namespace // Default to workspace namespace
-			}
+			actualNamespace := GetTemplateRefNamespace(&ws)
 			if actualNamespace != templateNamespace {
 				logger.V(1).Info("Workspace has template label but different namespace",
-					"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
+					"workspace", GetWorkspaceKey(&ws),
 					"labelNamespace", templateNamespace,
 					"specNamespace", actualNamespace)
 				continue
