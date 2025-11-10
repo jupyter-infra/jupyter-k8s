@@ -79,7 +79,8 @@ type TemplateRef struct {
 	// Name of the WorkspaceTemplate
 	Name string `json:"name"`
 
-	// Namespace where the WorkspaceTemplate is located (optional for cluster-scoped)
+	// Namespace where the WorkspaceTemplate is located
+	// When omitted, defaults to the workspace's namespace
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
 }

@@ -1670,8 +1670,9 @@ spec:
                     description: Name of the WorkspaceTemplate
                     type: string
                   namespace:
-                    description: Namespace where the WorkspaceTemplate is located
-                      (optional for cluster-scoped)
+                    description: |-
+                      Namespace where the WorkspaceTemplate is located
+                      When omitted, defaults to the workspace's namespace
                     type: string
                 required:
                 - name
