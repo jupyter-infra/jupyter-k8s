@@ -102,6 +102,12 @@ type WorkspaceAccessStrategySpec struct {
 	// +optional
 	AccessURLTemplate string `json:"accessURLTemplate,omitempty"`
 
+	// BearerAuthURLTemplate is a template string for constructing the bearer auth URL
+	// Template variables include .Workspace and .AccessStrategy objects
+	// Used by the extension API to generate initial authentication URLs
+	// +optional
+	BearerAuthURLTemplate string `json:"bearerAuthURLTemplate,omitempty"`
+
 	// ControllerConfig contains settings used by the controller for strategy-specific operations
 	// +optional
 	ControllerConfig map[string]string `json:"controllerConfig,omitempty"`

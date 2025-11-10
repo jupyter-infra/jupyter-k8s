@@ -36,9 +36,16 @@ spec:
   # Container configuration
   defaultContainerConfig:
     command: ["/opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-code-editor"]
-  
+
+  # Pod security context for SageMaker user access
+  defaultPodSecurityContext:
+    fsGroup: 1000  # sagemaker-user group ID
+
   # Access configuration
   defaultOwnershipType: "Public"
+  defaultAccessStrategy:
+    name: "hyperpod-access-strategy"
+    namespace: {{ .Release.Namespace }}
   allowSecondaryStorages: true
   
   # Application type
