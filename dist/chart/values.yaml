@@ -1,25 +1,6 @@
 # [MANAGER]: Manager Deployment Configurations
 controllerManager:
   replicas: 1
-  
-  # Pod scheduling configuration
-  nodeSelector: {}
-  tolerations: []
-  affinity:
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-          - matchExpressions:
-            - key: kubernetes.io/arch
-              operator: In
-              values:
-                - amd64
-                - arm64
-            - key: kubernetes.io/os
-              operator: In
-              values:
-                - linux
-  
   container:
     env:
       CLUSTER_ADMIN_GROUP: "cluster-workspace-admin"
