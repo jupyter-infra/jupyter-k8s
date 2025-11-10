@@ -175,14 +175,14 @@ var _ = Describe("Template Mutability", func() {
 		})
 
 		It("should list workspaces using a template", func() {
-			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, template.Namespace, "", 0)
+			workspaces, _, err := workspacequery.ListActiveWorkspacesByTemplate(ctx, k8sClient, template.Name, template.Namespace, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(HaveLen(1))
 			Expect(workspaces[0].Name).To(Equal(workspace.Name))
 		})
 
 		It("should return empty list when no workspaces use template", func() {
-			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, "nonexistent-template", "default", "", 0)
+			workspaces, _, err := workspacequery.ListActiveWorkspacesByTemplate(ctx, k8sClient, "nonexistent-template", "default", "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(BeEmpty())
 		})
@@ -193,7 +193,7 @@ var _ = Describe("Template Mutability", func() {
 			Expect(k8sClient.Update(ctx, template)).To(Succeed())
 
 			// Verify we can detect workspaces using the template
-			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, template.Namespace, "", 0)
+			workspaces, _, err := workspacequery.ListActiveWorkspacesByTemplate(ctx, k8sClient, template.Name, template.Namespace, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(HaveLen(1))
 
@@ -218,7 +218,7 @@ var _ = Describe("Template Mutability", func() {
 			}()
 
 			// Verify no workspaces use this template
-			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, unusedTemplate.Name, unusedTemplate.Namespace, "", 0)
+			workspaces, _, err := workspacequery.ListActiveWorkspacesByTemplate(ctx, k8sClient, unusedTemplate.Name, unusedTemplate.Namespace, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(BeEmpty())
 
@@ -275,13 +275,13 @@ var _ = Describe("Template Mutability", func() {
 			}()
 
 			// Query with namespace filter - should find workspace
-			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "other-namespace", "", 0)
+			workspaces, _, err := workspacequery.ListActiveWorkspacesByTemplate(ctx, k8sClient, template.Name, "other-namespace", "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(HaveLen(1))
 			Expect(workspaces[0].Name).To(Equal("cross-ns-workspace"))
 
 			// Query with different namespace - should not find workspace
-			workspaces, _, err = workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "default", "", 0)
+			workspaces, _, err = workspacequery.ListActiveWorkspacesByTemplate(ctx, k8sClient, template.Name, "default", "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(BeEmpty())
 		})
@@ -327,7 +327,7 @@ var _ = Describe("Template Mutability", func() {
 			}()
 
 			// Query with workspace namespace - should find it
-			workspaces, _, err := workspacequery.ListByTemplate(ctx, k8sClient, template.Name, "default", "", 0)
+			workspaces, _, err := workspacequery.ListActiveWorkspacesByTemplate(ctx, k8sClient, template.Name, "default", "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(HaveLen(1))
 			Expect(workspaces[0].Labels[LabelWorkspaceTemplateNamespace]).To(Equal("default"))

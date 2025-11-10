@@ -48,12 +48,13 @@ func GetWorkspaceKey(ws *workspacev1alpha1.Workspace) string {
 	return fmt.Sprintf("%s/%s", ws.Namespace, ws.Name)
 }
 
-// ListByTemplate returns all active workspaces using the specified template
-// Supports pagination for large-scale deployments
-// Filters out workspaces being deleted (DeletionTimestamp set)
-// Validates templateRef matches label to guard against drift
-// If templateNamespace is empty, it acts as a wildcard (backwards compatible)
-func ListByTemplate(ctx context.Context, k8sClient client.Client, templateName string, templateNamespace string, continueToken string, limit int64) ([]workspacev1alpha1.Workspace, string, error) {
+// ListActiveWorkspacesByTemplate returns all active (non-deleted) workspaces using the specified template.
+// Reads from controller-runtime's informer cache (not direct API calls), providing efficient lookup
+// with eventual consistency guarantees. Filters out workspaces being deleted (DeletionTimestamp set).
+// Validates templateRef matches label to guard against drift.
+// If templateNamespace is empty, it acts as a wildcard (backwards compatible).
+// Supports pagination for large-scale deployments via continueToken and limit parameters.
+func ListActiveWorkspacesByTemplate(ctx context.Context, k8sClient client.Client, templateName string, templateNamespace string, continueToken string, limit int64) ([]workspacev1alpha1.Workspace, string, error) {
 	logger := logf.FromContext(ctx)
 
 	workspaceList := &workspacev1alpha1.WorkspaceList{}
@@ -130,23 +131,34 @@ func ListByTemplate(ctx context.Context, k8sClient client.Client, templateName s
 	return activeWorkspaces, nextToken, nil
 }
 
-// HasWorkspacesWithTemplate checks if any active workspace uses the specified template
-// More efficient than ListByTemplate when only existence check is needed
-// Returns true if at least one workspace uses the template
-func HasWorkspacesWithTemplate(ctx context.Context, k8sClient client.Client, templateName string) (bool, error) {
+// HasActiveWorkspacesWithTemplate checks if any active (non-deleted) workspace uses the specified template.
+// Reads from controller-runtime's informer cache with eventual consistency guarantees.
+// Returns true if at least one active workspace uses the template.
+func HasActiveWorkspacesWithTemplate(ctx context.Context, k8sClient client.Client, templateName string, templateNamespace string) (bool, error) {
 	workspaceList := &workspacev1alpha1.WorkspaceList{}
-	if err := k8sClient.List(ctx, workspaceList,
-		client.MatchingLabels{
-			LabelWorkspaceTemplate: templateName,
-		},
-		client.Limit(1), // Only need to know if ANY exist
-	); err != nil {
+
+	// Build label selector - namespace is optional for backwards compatibility
+	labels := map[string]string{
+		LabelWorkspaceTemplate: templateName,
+	}
+	if templateNamespace != "" {
+		labels[LabelWorkspaceTemplateNamespace] = templateNamespace
+	}
+
+	if err := k8sClient.List(ctx, workspaceList, client.MatchingLabels(labels)); err != nil {
 		return false, fmt.Errorf("failed to check workspaces by template label: %w", err)
 	}
 
 	// Check if any non-deleted workspace exists
 	for _, ws := range workspaceList.Items {
 		if ws.DeletionTimestamp.IsZero() && ws.Spec.TemplateRef != nil && ws.Spec.TemplateRef.Name == templateName {
+			// Verify namespace if filtering by namespace
+			if templateNamespace != "" {
+				actualNamespace := GetTemplateRefNamespace(&ws)
+				if actualNamespace != templateNamespace {
+					continue
+				}
+			}
 			return true, nil
 		}
 	}
