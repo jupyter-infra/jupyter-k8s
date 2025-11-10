@@ -1,6 +1,7 @@
 # [MANAGER]: Manager Deployment Configurations
 controllerManager:
   replicas: 1
+  
   # Pod scheduling configuration
   nodeSelector: {}
   tolerations: []
@@ -18,6 +19,7 @@ controllerManager:
               operator: In
               values:
                 - linux
+  
   container:
     env:
       CLUSTER_ADMIN_GROUP: "cluster-workspace-admin"

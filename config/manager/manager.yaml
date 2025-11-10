@@ -31,18 +31,24 @@ spec:
         app.kubernetes.io/name: jupyter-k8s
     spec:
       # Node scheduling configuration for the operator pod
-      {{- with .Values.controllerManager.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.controllerManager.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.controllerManager.affinity }}
+      nodeSelector: {}
+      tolerations: []
       affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: kubernetes.io/arch
+                  operator: In
+                  values:
+                    - amd64
+                    - arm64
+                    - ppc64le
+                    - s390x
+                - key: kubernetes.io/os
+                  operator: In
+                  values:
+                    - linux
       securityContext:
         # Projects are configured by default to adhere to the "restricted" Pod Security Standards.
         # This ensures that deployments meet the highest security requirements for Kubernetes.
