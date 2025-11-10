@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -14,13 +15,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
 var _ = Describe("PodExec Webhook", func() {
 	var (
-		validator *PodExecValidator
-		ctx       context.Context
-		scheme    *runtime.Scheme
+		validator                  *PodExecValidator
+		ctx                        context.Context
+		scheme                     *runtime.Scheme
+		expectedControllerUsername string
 	)
 
 	BeforeEach(func() {
@@ -29,6 +32,15 @@ var _ = Describe("PodExec Webhook", func() {
 		Expect(corev1.AddToScheme(scheme)).To(Succeed())
 
 		validator = &PodExecValidator{}
+
+		// Set required environment variables for tests
+		GinkgoT().Setenv(controller.ControllerPodNamespaceEnv, "jupyter-k8s-system")
+		GinkgoT().Setenv(controller.ControllerPodServiceAccountEnv, "jupyter-k8s-controller-manager")
+
+		// Build expected controller service account username
+		expectedControllerUsername = fmt.Sprintf("system:serviceaccount:%s:%s",
+			"jupyter-k8s-system",
+			"jupyter-k8s-controller-manager")
 	})
 
 	Context("when validating pod exec requests", func() {
@@ -39,7 +51,7 @@ var _ = Describe("PodExec Webhook", func() {
 					Name:      "workspace-pod",
 					Namespace: "test-namespace",
 					Labels: map[string]string{
-						controller.LabelWorkspaceName: "test-workspace",
+						workspaceutil.LabelWorkspaceName: "test-workspace",
 					},
 				},
 			}
@@ -56,7 +68,7 @@ var _ = Describe("PodExec Webhook", func() {
 					Name:      "workspace-pod",
 					Namespace: "test-namespace",
 					UserInfo: authenticationv1.UserInfo{
-						Username: controller.ControllerServiceAccount,
+						Username: expectedControllerUsername,
 					},
 				},
 			}
@@ -91,7 +103,7 @@ var _ = Describe("PodExec Webhook", func() {
 					Name:      "regular-pod",
 					Namespace: "test-namespace",
 					UserInfo: authenticationv1.UserInfo{
-						Username: controller.ControllerServiceAccount,
+						Username: expectedControllerUsername,
 					},
 				},
 			}
@@ -111,7 +123,7 @@ var _ = Describe("PodExec Webhook", func() {
 					Name:      "workspace-pod",
 					Namespace: "test-namespace",
 					Labels: map[string]string{
-						controller.LabelWorkspaceName: "test-workspace",
+						workspaceutil.LabelWorkspaceName: "test-workspace",
 					},
 				},
 			}
@@ -153,7 +165,7 @@ var _ = Describe("PodExec Webhook", func() {
 					Name:      "non-existent-pod",
 					Namespace: "test-namespace",
 					UserInfo: authenticationv1.UserInfo{
-						Username: controller.ControllerServiceAccount,
+						Username: expectedControllerUsername,
 					},
 				},
 			}
@@ -164,6 +176,88 @@ var _ = Describe("PodExec Webhook", func() {
 			// Should be an error
 			Expect(resp.Allowed).To(BeFalse())
 			Expect(resp.Result.Code).To(Equal(int32(500)))
+		})
+
+		It("should fail when CONTROLLER_POD_NAMESPACE env var is not set", func() {
+			// Unset the environment variable
+			GinkgoT().Setenv(controller.ControllerPodNamespaceEnv, "")
+
+			// Create a workspace pod
+			workspacePod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "workspace-pod",
+					Namespace: "test-namespace",
+					Labels: map[string]string{
+						workspaceutil.LabelWorkspaceName: "test-workspace",
+					},
+				},
+			}
+
+			// Create fake client with the pod
+			validator.Client = fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(workspacePod).
+				Build()
+
+			// Create admission request
+			req := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Name:      "workspace-pod",
+					Namespace: "test-namespace",
+					UserInfo: authenticationv1.UserInfo{
+						Username: "system:serviceaccount:jupyter-k8s-system:jupyter-k8s-controller-manager",
+					},
+				},
+			}
+
+			// Validate the request
+			resp := validator.Handle(ctx, req)
+
+			// Should be an error
+			Expect(resp.Allowed).To(BeFalse())
+			Expect(resp.Result.Code).To(Equal(int32(500)))
+			Expect(resp.Result.Message).To(ContainSubstring("CONTROLLER_POD_NAMESPACE"))
+		})
+
+		It("should fail when CONTROLLER_POD_SERVICE_ACCOUNT env var is not set", func() {
+			// Unset the service account environment variable
+			GinkgoT().Setenv(controller.ControllerPodServiceAccountEnv, "")
+
+			// Create a workspace pod
+			workspacePod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "workspace-pod",
+					Namespace: "test-namespace",
+					Labels: map[string]string{
+						workspaceutil.LabelWorkspaceName: "test-workspace",
+					},
+				},
+			}
+
+			// Create fake client with the pod
+			validator.Client = fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(workspacePod).
+				Build()
+
+			// Create admission request
+			req := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Name:      "workspace-pod",
+					Namespace: "test-namespace",
+					UserInfo: authenticationv1.UserInfo{
+						Username: "system:serviceaccount:jupyter-k8s-system:jupyter-k8s-controller-manager",
+					},
+				},
+			}
+
+			// Validate the request
+			resp := validator.Handle(ctx, req)
+
+			// Should be an error
+			Expect(resp.Allowed).To(BeFalse())
+			Expect(resp.Result.Code).To(Equal(int32(500)))
+			Expect(resp.Result.Message).To(ContainSubstring("CONTROLLER_POD_SERVICE_ACCOUNT"))
 		})
 	})
 })

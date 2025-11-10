@@ -79,14 +79,14 @@ const (
 	// IdleCheckInterval is the interval for checking workspace idle status
 	IdleCheckInterval = 5 * time.Minute
 
-	// ControllerNamespace is the namespace where the controller runs
-	ControllerNamespace = "jupyter-k8s-system"
-	
-	// ControllerServiceAccount is the full service account username for the controller
-	ControllerServiceAccount = "system:serviceaccount:" + ControllerNamespace + ":jupyter-k8s-controller-manager"
-	
 	// WorkspaceFinalizerName is the finalizer name for workspace cleanup protection
 	WorkspaceFinalizerName = "workspace.jupyter.org/cleanup-protection"
+
+	// ControllerPodNamespaceEnv is the environment variable for the controller pod namespace
+	ControllerPodNamespaceEnv = "CONTROLLER_POD_NAMESPACE"
+
+	// ControllerPodServiceAccountEnv is the environment variable for the controller pod service account
+	ControllerPodServiceAccountEnv = "CONTROLLER_POD_SERVICE_ACCOUNT"
 )
 
 // GenerateDeploymentName creates a consistent deployment name

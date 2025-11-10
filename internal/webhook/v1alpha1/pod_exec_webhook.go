@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -29,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
 // +kubebuilder:webhook:path=/validate-pods-exec-workspace,mutating=false,failurePolicy=fail,sideEffects=None,groups="",resources=pods/exec,verbs=connect,versions=v1,name=vpods-exec-workspace-v1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
@@ -48,6 +50,36 @@ func (v *PodExecValidator) Handle(ctx context.Context, req admission.Request) ad
 		"namespace", req.Namespace,
 		"user", req.UserInfo.Username)
 
+	// Build the expected controller service account username from environment variables
+	controllerNamespace := os.Getenv(controller.ControllerPodNamespaceEnv)
+	if controllerNamespace == "" {
+		podexeclog.Error(nil, "Required environment variable not set",
+			"envVar", controller.ControllerPodNamespaceEnv)
+		return admission.Errored(http.StatusInternalServerError,
+			fmt.Errorf("required environment variable %s not set", controller.ControllerPodNamespaceEnv))
+	}
+
+	controllerServiceAccount := os.Getenv(controller.ControllerPodServiceAccountEnv)
+	if controllerServiceAccount == "" {
+		podexeclog.Error(nil, "Required environment variable not set",
+			"envVar", controller.ControllerPodServiceAccountEnv)
+		return admission.Errored(http.StatusInternalServerError,
+			fmt.Errorf("required environment variable %s not set", controller.ControllerPodServiceAccountEnv))
+	}
+
+	expectedUser := fmt.Sprintf("system:serviceaccount:%s:%s", controllerNamespace, controllerServiceAccount)
+
+	// Check if request is from controller service account
+	if req.UserInfo.Username != expectedUser {
+		// Not controller SA - allow immediately without fetching pod
+		podexeclog.Info("Allowing non-controller exec to any pod",
+			"pod", req.Name,
+			"namespace", req.Namespace,
+			"user", req.UserInfo.Username)
+		return admission.Allowed("exec request allowed")
+	}
+
+	// Controller SA - validate it can only exec into workspace pods
 	// Get the target pod
 	pod := &corev1.Pod{}
 	if err := v.Get(ctx, types.NamespacedName{
@@ -59,29 +91,19 @@ func (v *PodExecValidator) Handle(ctx context.Context, req admission.Request) ad
 			fmt.Errorf("failed to get pod: %w", err))
 	}
 
-	// Check if request is from controller service account
-	expectedUser := controller.ControllerServiceAccount
-
-	if req.UserInfo.Username == expectedUser {
-		// Controller SA can only exec into workspace pods
-		_, hasWorkspace := pod.Labels[controller.LabelWorkspaceName]
-		if !hasWorkspace {
-			podexeclog.Info("Denying controller exec to non-workspace pod",
-				"user", req.UserInfo.Username,
-				"pod", req.Name,
-				"namespace", req.Namespace)
-			return admission.Denied("controller service account can only exec into workspace pods")
-		}
-
-		podexeclog.Info("Allowing controller exec to workspace pod",
+	// Controller SA can only exec into workspace pods
+	_, hasWorkspace := pod.Labels[workspaceutil.LabelWorkspaceName]
+	if !hasWorkspace {
+		podexeclog.Info("Denying controller exec to non-workspace pod",
+			"user", req.UserInfo.Username,
 			"pod", req.Name,
-			"workspace", pod.Labels[controller.LabelWorkspaceName])
-	} else {
-		podexeclog.Info("Allowing non-controller exec to any pod",
-			"pod", req.Name,
-			"namespace", req.Namespace,
-			"user", req.UserInfo.Username)
+			"namespace", req.Namespace)
+		return admission.Denied("controller service account can only exec into workspace pods")
 	}
+
+	podexeclog.Info("Allowing controller exec to workspace pod",
+		"pod", req.Name,
+		"workspace", pod.Labels[workspaceutil.LabelWorkspaceName])
 
 	return admission.Allowed("exec request allowed")
 }

@@ -217,6 +217,55 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
         else
             echo "Warning: Could not find proper args section in manager.yaml"
         fi
+        
+        # Add dynamic environment variables for namespace and service account
+        echo "Adding dynamic environment variables to manager.yaml..."
+        if ! grep -q "CONTROLLER_POD_NAMESPACE" "${MANAGER_YAML}"; then
+            # Find where to insert env vars - after imagePullPolicy or after the existing env section
+            if grep -q "{{- if .Values.controllerManager.container.env }}" "${MANAGER_YAML}"; then
+                # Env section exists, add our dynamic vars after the closing {{- end }}
+                if [[ "$OSTYPE" == "darwin"* ]]; then
+                    # macOS sed
+                    sed -i '' '/{{- if .Values.controllerManager.container.env }}/,/{{- end }}/ {
+                        /{{- end }}/a\
+          - name: CONTROLLER_POD_NAMESPACE\
+            valueFrom:\
+              fieldRef:\
+                fieldPath: metadata.namespace\
+          - name: CONTROLLER_POD_SERVICE_ACCOUNT\
+            valueFrom:\
+              fieldRef:\
+                fieldPath: spec.serviceAccountName
+                    }' "${MANAGER_YAML}"
+                else
+                    # Linux sed
+                    sed -i '/{{- if .Values.controllerManager.container.env }}/,/{{- end }}/ {
+                        /{{- end }}/a\          - name: CONTROLLER_POD_NAMESPACE\n            valueFrom:\n              fieldRef:\n                fieldPath: metadata.namespace\n          - name: CONTROLLER_POD_SERVICE_ACCOUNT\n            valueFrom:\n              fieldRef:\n                fieldPath: spec.serviceAccountName
+                    }' "${MANAGER_YAML}"
+                fi
+            else
+                # No env section exists, create one after imagePullPolicy
+                if [[ "$OSTYPE" == "darwin"* ]]; then
+                    sed -i '' '/imagePullPolicy:/a\
+          env:\
+          - name: CONTROLLER_POD_NAMESPACE\
+            valueFrom:\
+              fieldRef:\
+                fieldPath: metadata.namespace\
+          - name: CONTROLLER_POD_SERVICE_ACCOUNT\
+            valueFrom:\
+              fieldRef:\
+                fieldPath: spec.serviceAccountName
+' "${MANAGER_YAML}"
+                else
+                    sed -i '/imagePullPolicy:/a\          env:\n          - name: CONTROLLER_POD_NAMESPACE\n            valueFrom:\n              fieldRef:\n                fieldPath: metadata.namespace\n          - name: CONTROLLER_POD_SERVICE_ACCOUNT\n            valueFrom:\n              fieldRef:\n                fieldPath: spec.serviceAccountName
+' "${MANAGER_YAML}"
+                fi
+            fi
+            echo "Added CONTROLLER_POD_NAMESPACE and CONTROLLER_POD_SERVICE_ACCOUNT environment variables"
+        else
+            echo "CONTROLLER_POD_NAMESPACE already exists, skipping env var injection"
+        fi
     else
         echo "Warning: manager.yaml not found at ${MANAGER_YAML}"
     fi
