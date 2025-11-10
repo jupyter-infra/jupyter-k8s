@@ -106,7 +106,7 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 	newSpec := &newTemplate.Spec
 
 	// Check AllowedImages changes
-	if !stringSlicesEqual(oldSpec.AllowedImages, newSpec.AllowedImages) {
+	if !equality.Semantic.DeepEqual(oldSpec.AllowedImages, newSpec.AllowedImages) {
 		return true
 	}
 
