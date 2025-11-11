@@ -24,47 +24,24 @@ import (
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
 // TemplateValidator handles template validation for webhooks
 type TemplateValidator struct {
-	client                   client.Client
-	defaultTemplateNamespace string
+	resolver *workspaceutil.TemplateResolver
 }
 
 // NewTemplateValidator creates a new TemplateValidator
 func NewTemplateValidator(k8sClient client.Client, defaultTemplateNamespace string) *TemplateValidator {
 	return &TemplateValidator{
-		client:                   k8sClient,
-		defaultTemplateNamespace: defaultTemplateNamespace,
+		resolver: workspaceutil.NewTemplateResolver(k8sClient, defaultTemplateNamespace),
 	}
 }
 
-// fetchTemplate retrieves a template by name using namespace resolution
+// fetchTemplate retrieves a template using centralized resolver
 func (tv *TemplateValidator) fetchTemplate(ctx context.Context, templateRef *workspacev1alpha1.TemplateRef, workspaceNamespace string) (*workspacev1alpha1.WorkspaceTemplate, error) {
-	// Determine template namespace using fallback logic
-	templateNamespace := templateRef.Namespace
-	if templateNamespace == "" {
-		templateNamespace = workspaceNamespace
-	}
-
-	// Try to get template from determined namespace
-	template := &workspacev1alpha1.WorkspaceTemplate{}
-	templateKey := client.ObjectKey{Name: templateRef.Name, Namespace: templateNamespace}
-	err := tv.client.Get(ctx, templateKey, template)
-
-	// If not found and we have a default namespace, try there
-	if err != nil && tv.defaultTemplateNamespace != "" && templateNamespace != tv.defaultTemplateNamespace {
-		templateKey = client.ObjectKey{Name: templateRef.Name, Namespace: tv.defaultTemplateNamespace}
-		if fallbackErr := tv.client.Get(ctx, templateKey, template); fallbackErr == nil {
-			return template, nil
-		}
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to get template %s: %w", templateRef.Name, err)
-	}
-	return template, nil
+	return tv.resolver.ResolveTemplate(ctx, templateRef, workspaceNamespace)
 }
 
 // ValidateCreateWorkspace validates workspace against template constraints

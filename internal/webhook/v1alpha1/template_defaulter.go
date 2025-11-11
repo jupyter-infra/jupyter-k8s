@@ -18,12 +18,11 @@ package v1alpha1
 
 import (
 	"context"
-	"fmt"
 
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
 // DefaultApplicator applies defaults for a specific field or group of fields
@@ -31,15 +30,13 @@ type DefaultApplicator func(workspace *workspacev1alpha1.Workspace, template *wo
 
 // TemplateDefaulter handles applying template defaults to workspaces
 type TemplateDefaulter struct {
-	client                   client.Client
-	defaultTemplateNamespace string
+	resolver *workspaceutil.TemplateResolver
 }
 
 // NewTemplateDefaulter creates a new TemplateDefaulter
 func NewTemplateDefaulter(k8sClient client.Client, defaultTemplateNamespace string) *TemplateDefaulter {
 	return &TemplateDefaulter{
-		client:                   k8sClient,
-		defaultTemplateNamespace: defaultTemplateNamespace,
+		resolver: workspaceutil.NewTemplateResolver(k8sClient, defaultTemplateNamespace),
 	}
 }
 
@@ -74,41 +71,7 @@ func (td *TemplateDefaulter) ApplyTemplateDefaults(ctx context.Context, workspac
 	return nil
 }
 
-// fetchTemplate retrieves a template by WorkspaceTemplateRef with fallback logic
+// fetchTemplate retrieves a template using centralized resolver
 func (td *TemplateDefaulter) fetchTemplate(ctx context.Context, templateRef workspacev1alpha1.TemplateRef, workspaceNamespace string) (*workspacev1alpha1.WorkspaceTemplate, error) {
-	template := &workspacev1alpha1.WorkspaceTemplate{}
-
-	// If namespace is explicitly specified, use it directly
-	if templateRef.Namespace != "" {
-		namespacedName := types.NamespacedName{
-			Name:      templateRef.Name,
-			Namespace: templateRef.Namespace,
-		}
-		if err := td.client.Get(ctx, namespacedName, template); err != nil {
-			return nil, fmt.Errorf("failed to get template %s in namespace %s: %w", templateRef.Name, templateRef.Namespace, err)
-		}
-		return template, nil
-	}
-
-	// If namespace not specified, try workspace namespace first
-	namespacedName := types.NamespacedName{
-		Name:      templateRef.Name,
-		Namespace: workspaceNamespace,
-	}
-	err := td.client.Get(ctx, namespacedName, template)
-	if err == nil {
-		return template, nil
-	}
-
-	// If not found in workspace namespace and default namespace is configured, try default namespace
-	if td.defaultTemplateNamespace != "" && td.defaultTemplateNamespace != workspaceNamespace {
-		namespacedName.Namespace = td.defaultTemplateNamespace
-		if err := td.client.Get(ctx, namespacedName, template); err != nil {
-			return nil, fmt.Errorf("failed to get template %s in workspace namespace %s or default namespace %s", templateRef.Name, workspaceNamespace, td.defaultTemplateNamespace)
-		}
-		return template, nil
-	}
-
-	// Return the original error if no fallback available
-	return nil, fmt.Errorf("failed to get template %s in namespace %s: %w", templateRef.Name, workspaceNamespace, err)
+	return td.resolver.ResolveTemplate(ctx, &templateRef, workspaceNamespace)
 }
