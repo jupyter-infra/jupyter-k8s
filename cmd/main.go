@@ -278,6 +278,12 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Workspace")
 			os.Exit(1)
 		}
+
+		// Setup pod exec webhook for security validation
+		if err := webhookv1alpha1.SetupPodExecWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "PodExec")
+			os.Exit(1)
+		}
 	}
 
 	// Set up WorkspaceTemplate webhook (enabled by default, controlled by ENABLE_WORKSPACE_TEMPLATE_WEBHOOK)

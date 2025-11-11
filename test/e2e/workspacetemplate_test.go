@@ -105,6 +105,18 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy controller")
 
+		// Set environment variables for e2e testing
+		By("setting controller environment variables")
+		envVars := []string{
+			"CONTROLLER_POD_SERVICE_ACCOUNT=jupyter-k8s-controller-manager",
+			"CONTROLLER_POD_NAMESPACE=jupyter-k8s-system",
+		}
+		for _, envVar := range envVars {
+			cmd = exec.Command("kubectl", "set", "env", "deployment/jupyter-k8s-controller-manager", envVar, "-n", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to set environment variable: %s", envVar))
+		}
+
 		By("waiting for controller-manager to be ready")
 		_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for controller manager pod...\n")
 		verifyControllerUp := func(g Gomega) {

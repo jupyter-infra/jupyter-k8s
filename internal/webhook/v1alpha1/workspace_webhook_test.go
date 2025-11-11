@@ -841,23 +841,39 @@ var _ = Describe("Workspace Webhook", func() {
 		})
 	})
 
-	Context("isAdminUser", func() {
+	Context("isControllerOrAdminUser", func() {
 		It("should return true for system:masters group", func() {
-			groups := []string{"system:masters", "other-group"}
-			Expect(isAdminUser(groups)).To(BeTrue())
+			adminCtx := createUserContext(ctx, "UPDATE", "admin-user", "system:masters")
+			Expect(isControllerOrAdminUser(adminCtx)).To(BeTrue())
 		})
 
 		It("should return true for environment variable admin group", func() {
 			Expect(os.Setenv("CLUSTER_ADMIN_GROUP", "custom-admin-group")).To(Succeed())
 			defer func() { _ = os.Unsetenv("CLUSTER_ADMIN_GROUP") }()
 
-			groups := []string{"custom-admin-group", "other-group"}
-			Expect(isAdminUser(groups)).To(BeTrue())
+			adminCtx := createUserContext(ctx, "UPDATE", "admin-user", "custom-admin-group")
+			Expect(isControllerOrAdminUser(adminCtx)).To(BeTrue())
+		})
+
+		It("should return true for controller service account", func() {
+			Expect(os.Setenv(controller.ControllerPodNamespaceEnv, "default")).To(Succeed())
+			Expect(os.Setenv(controller.ControllerPodServiceAccountEnv, "controller")).To(Succeed())
+			defer func() {
+				_ = os.Unsetenv(controller.ControllerPodNamespaceEnv)
+				_ = os.Unsetenv(controller.ControllerPodServiceAccountEnv)
+			}()
+
+			controllerCtx := createUserContext(ctx, "UPDATE", "system:serviceaccount:default:controller")
+			Expect(isControllerOrAdminUser(controllerCtx)).To(BeTrue())
 		})
 
 		It("should return false for non-admin groups", func() {
-			groups := []string{"regular-user", "data-scientists"}
-			Expect(isAdminUser(groups)).To(BeFalse())
+			userCtx := createUserContext(ctx, "UPDATE", "regular-user", "regular-user", "data-scientists")
+			Expect(isControllerOrAdminUser(userCtx)).To(BeFalse())
+		})
+
+		It("should return false when no request context", func() {
+			Expect(isControllerOrAdminUser(ctx)).To(BeFalse())
 		})
 	})
 
