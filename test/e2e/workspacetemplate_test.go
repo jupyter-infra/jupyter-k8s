@@ -248,7 +248,7 @@ spec:
 			By("verifying production template exists")
 			verifyTemplateExists := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "workspacetemplate",
-					"production-notebook-template", "-o", "jsonpath={.metadata.name}")
+					"production-notebook-template", "-n", "jupyter-k8s-shared", "-o", "jsonpath={.metadata.name}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("production-notebook-template"))
