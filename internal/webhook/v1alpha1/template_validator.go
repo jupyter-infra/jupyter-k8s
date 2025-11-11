@@ -20,32 +20,28 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
 // TemplateValidator handles template validation for webhooks
 type TemplateValidator struct {
-	client client.Client
+	resolver *workspaceutil.TemplateResolver
 }
 
 // NewTemplateValidator creates a new TemplateValidator
-func NewTemplateValidator(k8sClient client.Client) *TemplateValidator {
+func NewTemplateValidator(k8sClient client.Client, defaultTemplateNamespace string) *TemplateValidator {
 	return &TemplateValidator{
-		client: k8sClient,
+		resolver: workspaceutil.NewTemplateResolver(k8sClient, defaultTemplateNamespace),
 	}
 }
 
-// fetchTemplate retrieves a template by name
-func (tv *TemplateValidator) fetchTemplate(ctx context.Context, templateName string) (*workspacev1alpha1.WorkspaceTemplate, error) {
-	template := &workspacev1alpha1.WorkspaceTemplate{}
-	if err := tv.client.Get(ctx, types.NamespacedName{Name: templateName}, template); err != nil {
-		return nil, fmt.Errorf("failed to get template %s: %w", templateName, err)
-	}
-	return template, nil
+// fetchTemplate retrieves a template using centralized resolver
+func (tv *TemplateValidator) fetchTemplate(ctx context.Context, templateRef *workspacev1alpha1.TemplateRef, workspaceNamespace string) (*workspacev1alpha1.WorkspaceTemplate, error) {
+	return tv.resolver.ResolveTemplate(ctx, templateRef, workspaceNamespace)
 }
 
 // ValidateCreateWorkspace validates workspace against template constraints
@@ -54,7 +50,7 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		return nil
 	}
 
-	template, err := tv.fetchTemplate(ctx, workspace.Spec.TemplateRef.Name)
+	template, err := tv.fetchTemplate(ctx, workspace.Spec.TemplateRef, workspace.Namespace)
 	if err != nil {
 		return err
 	}

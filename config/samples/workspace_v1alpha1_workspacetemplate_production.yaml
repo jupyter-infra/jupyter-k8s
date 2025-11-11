@@ -3,6 +3,7 @@ apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
   name: production-notebook-template
+  namespace: jupyter-k8s-shared
 spec:
   displayName: "Production Jupyter Notebook"
   description: "Secure, resource-controlled notebook for production workloads"

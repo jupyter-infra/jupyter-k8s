@@ -44,7 +44,8 @@ var _ = Describe("Template Mutability", func() {
 
 			template1 = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "mutable-template-1",
+					Name:      "mutable-template-1",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Template 1",
@@ -55,7 +56,8 @@ var _ = Describe("Template Mutability", func() {
 
 			template2 = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "mutable-template-2",
+					Name:      "mutable-template-2",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Template 2",
@@ -135,7 +137,8 @@ var _ = Describe("Template Mutability", func() {
 
 			template = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "protected-template",
+					Name:      "protected-template",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Protected Template",
@@ -149,12 +152,16 @@ var _ = Describe("Template Mutability", func() {
 					Name:      "protection-test-workspace",
 					Namespace: "default",
 					Labels: map[string]string{
-						"workspace.jupyter.org/template": template.Name,
+						"workspace.jupyter.org/template":           template.Name,
+						"workspace.jupyter.org/template-namespace": template.Namespace,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Protection Test",
-					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name},
+					TemplateRef: &workspacev1alpha1.TemplateRef{
+						Name:      template.Name,
+						Namespace: template.Namespace,
+					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
@@ -205,7 +212,8 @@ var _ = Describe("Template Mutability", func() {
 			// Create a template that no workspace uses
 			unusedTemplate := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "unused-template",
+					Name:      "unused-template",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Unused Template",
@@ -239,7 +247,8 @@ var _ = Describe("Template Mutability", func() {
 			// Create template (cluster-scoped, no namespace in metadata)
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "cross-ns-template",
+					Name:      "cross-ns-template",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Cross-NS Template",
@@ -291,7 +300,8 @@ var _ = Describe("Template Mutability", func() {
 
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "default-ns-template",
+					Name:      "default-ns-template",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Default NS Template",
@@ -339,7 +349,8 @@ var _ = Describe("Template Mutability", func() {
 			ctx := context.Background()
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "mutable-template",
+					Name:      "mutable-template",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Original Display Name",
@@ -374,7 +385,8 @@ var _ = Describe("Template Mutability", func() {
 			ctx := context.Background()
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "metadata-mutable-template",
+					Name:      "metadata-mutable-template",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Metadata Test",
