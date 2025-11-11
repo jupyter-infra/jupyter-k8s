@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: custom-image-rejected-test
+spec:
+  displayName: "Custom Image Rejected Test"
+  templateRef:
+    name: "restricted-images-template"
+  image: "custom/unauthorized:latest"

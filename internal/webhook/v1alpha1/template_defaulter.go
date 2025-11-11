@@ -57,7 +57,7 @@ var defaultApplicators = []DefaultApplicator{
 
 // ApplyTemplateDefaults applies template defaults to workspace
 func (td *TemplateDefaulter) ApplyTemplateDefaults(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
-	if workspace.Spec.TemplateRef == nil {
+	if workspace.Spec.TemplateRef == nil || workspace.Spec.TemplateRef.Name == "" {
 		return nil
 	}
 
@@ -75,7 +75,7 @@ func (td *TemplateDefaulter) ApplyTemplateDefaults(ctx context.Context, workspac
 }
 
 // fetchTemplate retrieves a template by WorkspaceTemplateRef with fallback logic
-func (td *TemplateDefaulter) fetchTemplate(ctx context.Context, templateRef workspacev1alpha1.WorkspaceTemplateRef, workspaceNamespace string) (*workspacev1alpha1.WorkspaceTemplate, error) {
+func (td *TemplateDefaulter) fetchTemplate(ctx context.Context, templateRef workspacev1alpha1.TemplateRef, workspaceNamespace string) (*workspacev1alpha1.WorkspaceTemplate, error) {
 	template := &workspacev1alpha1.WorkspaceTemplate{}
 
 	// If namespace is explicitly specified, use it directly

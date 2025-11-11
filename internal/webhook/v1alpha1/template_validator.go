@@ -83,52 +83,76 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 	}
 
 	if len(violations) > 0 {
-		return fmt.Errorf("workspace violates template '%s' constraints: %s", *workspace.Spec.TemplateRef, formatViolations(violations))
+		return fmt.Errorf("workspace violates template '%s' constraints: %s", workspace.Spec.TemplateRef.Name, formatViolations(violations))
 	}
 
 	return nil
 }
 
-// ValidateUpdateWorkspace validates only changed fields in workspace against template constraints
+// ValidateUpdateWorkspace validates entire spec when any spec field changes (Kubernetes best practice)
+// Handles templateRef lifecycle: added, deleted, changed, unchanged
 func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWorkspace, newWorkspace *workspacev1alpha1.Workspace) error {
-	if newWorkspace.Spec.TemplateRef == nil {
+	oldTemplateRef := oldWorkspace.Spec.TemplateRef
+	newTemplateRef := newWorkspace.Spec.TemplateRef
+
+	// Detect templateRef transitions
+	templateRefDeleted := oldTemplateRef != nil && newTemplateRef == nil
+	templateRefAdded := oldTemplateRef == nil && newTemplateRef != nil
+	templateRefChanged := oldTemplateRef != nil && newTemplateRef != nil && oldTemplateRef.Name != newTemplateRef.Name
+
+	// Case 1: TemplateRef deleted (template → standalone)
+	// Removing constraints is always safe - no validation needed
+	if templateRefDeleted {
+		workspacelog.Info("TemplateRef deleted, allowing transition to standalone workspace", "workspace", newWorkspace.Name)
 		return nil
 	}
 
-	template, err := tv.fetchTemplate(ctx, newWorkspace.Spec.TemplateRef.Name)
-	if err != nil {
-		return err
+	// Case 2: TemplateRef changed (template A → template B)
+	// Must validate entire spec against NEW template
+	if templateRefChanged {
+		workspacelog.Info("TemplateRef changed, validating against new template",
+			"workspace", newWorkspace.Name,
+			"oldTemplate", oldTemplateRef.Name,
+			"newTemplate", newTemplateRef.Name)
+		return tv.ValidateCreateWorkspace(ctx, newWorkspace)
 	}
 
-	var violations []controller.TemplateViolation
-
-	// Only validate image if it changed
-	if oldWorkspace.Spec.Image != newWorkspace.Spec.Image && newWorkspace.Spec.Image != "" {
-		if violation := validateImageAllowed(newWorkspace.Spec.Image, template); violation != nil {
-			violations = append(violations, *violation)
-		}
+	// Case 3: TemplateRef added (standalone → template)
+	// Validate entire spec against template
+	if templateRefAdded {
+		workspacelog.Info("TemplateRef added, validating against template", "workspace", newWorkspace.Name)
+		return tv.ValidateCreateWorkspace(ctx, newWorkspace)
 	}
 
-	// Only validate resources if they changed
-	if !resourcesEqual(oldWorkspace.Spec.Resources, newWorkspace.Spec.Resources) && newWorkspace.Spec.Resources != nil {
-		if resourceViolations := validateResourceBounds(*newWorkspace.Spec.Resources, template); len(resourceViolations) > 0 {
-			violations = append(violations, resourceViolations...)
-		}
+	// Case 4: No templateRef in both old and new
+	// No template constraints to validate
+	if newTemplateRef == nil {
+		return nil
 	}
 
-	// Only validate storage if it changed
-	if !storageEqual(oldWorkspace.Spec.Storage, newWorkspace.Spec.Storage) &&
-		newWorkspace.Spec.Storage != nil && !newWorkspace.Spec.Storage.Size.IsZero() {
-		if violation := validateStorageSize(newWorkspace.Spec.Storage.Size, template); violation != nil {
-			violations = append(violations, *violation)
-		}
+	// Case 5: TemplateRef unchanged - check other conditions
+
+	// Check if any spec field changed
+	if !specChanged(&oldWorkspace.Spec, &newWorkspace.Spec) {
+		// No spec changes - skip validation (metadata-only update)
+		return nil
 	}
 
-	if len(violations) > 0 {
-		return fmt.Errorf("workspace violates template '%s' constraints: %s", *newWorkspace.Spec.TemplateRef, formatViolations(violations))
+	// Special case: If ONLY DesiredStatus changed to Stopped, allow without validation
+	// This enables users to stop workspaces without validation (emergency shutdown, cost savings)
+	// However, if other spec fields also changed, those changes must be validated
+	if newWorkspace.Spec.DesiredStatus == controller.PhaseStopped &&
+		oldWorkspace.Spec.DesiredStatus != controller.PhaseStopped &&
+		onlyDesiredStatusChanged(&oldWorkspace.Spec, &newWorkspace.Spec) {
+		workspacelog.Info("Allowing workspace stop without template validation (status-only change)", "workspace", newWorkspace.Name)
+		return nil
 	}
 
-	return nil
+	// Spec changed with same template - validate ENTIRE spec against template
+	// This follows Kubernetes best practices: admission webhooks validate desired state, not deltas
+	// This includes cases where stopping + other changes occur simultaneously
+	workspacelog.Info("Spec changed, validating entire workspace against template", "workspace", newWorkspace.Name)
+	return tv.ValidateCreateWorkspace(ctx, newWorkspace)
 }
 
 // formatViolations formats template violations into a readable error message

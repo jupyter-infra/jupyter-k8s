@@ -74,12 +74,13 @@ type AccessStrategyRef struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
-// WorkspaceTemplateRef defines a reference to a WorkspaceTemplate
-type WorkspaceTemplateRef struct {
+// TemplateRef defines a reference to a WorkspaceTemplate
+type TemplateRef struct {
 	// Name of the WorkspaceTemplate
 	Name string `json:"name"`
 
 	// Namespace where the WorkspaceTemplate is located
+	// When omitted, defaults to the workspace's namespace
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
 }
@@ -165,11 +166,9 @@ type WorkspaceSpec struct {
 	AccessStrategy *AccessStrategyRef `json:"accessStrategy,omitempty"`
 
 	// TemplateRef references a WorkspaceTemplate to use as base configuration
-	// When set, template provides defaults and spec fields (Image, Resources, Storage.Size) act as overrides
-	// IMMUTABLE: Cannot be changed after workspace creation
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="templateRef is immutable"
+	// When set, template provides defaults and workspace spec fields act as overrides
 	// +optional
-	TemplateRef *WorkspaceTemplateRef `json:"templateRef,omitempty"`
+	TemplateRef *TemplateRef `json:"templateRef,omitempty"`
 
 	// IdleShutdown specifies idle shutdown configuration
 	// +optional

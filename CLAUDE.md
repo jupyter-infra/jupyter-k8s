@@ -10,6 +10,9 @@ Jupyter-k8s is a Kubernetes operator for Jupyter notebooks and other IDEs. It ma
 - **Workspace**: A compute unit with dedicated storage, unique URL, and access control list for users
 - **WorkspaceAccessStrategy**: Handles network routing with HTTPS ingress or tunneling out from workspaces
 - **WorkspaceTemplate**: Provides default settings and bounds for variations
+  - Template constraints are enforced **lazily** via admission webhooks during workspace CREATE/UPDATE operations
+  - Templates use **lazy finalizers** - only added when workspaces reference them, removed when no workspaces use them
+  - Template changes do NOT trigger proactive workspace validation (webhook validates on next workspace mutation)
 
 ## Architecture
 

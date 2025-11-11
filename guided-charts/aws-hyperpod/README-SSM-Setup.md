@@ -279,7 +279,7 @@ EOF
 
 ```bash
 # Watch pod creation
-kubectl get pods -l workspace.jupyter.org/workspaceName=test-ssm-workspace -w
+kubectl get pods -l workspace.jupyter.org/workspace-name=test-ssm-workspace -w
 
 # Monitor operator logs for SSM workflow
 kubectl logs -f deployment/jupyter-k8s-controller-manager -n jupyter-k8s-system | grep -i ssm

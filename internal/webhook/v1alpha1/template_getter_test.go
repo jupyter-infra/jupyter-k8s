@@ -51,8 +51,9 @@ var _ = Describe("TemplateGetter", func() {
 
 	Context("ApplyTemplateName", func() {
 		It("should skip if workspace already has templateRef", func() {
-			templateRef := "existing-template"
-			workspace.Spec.TemplateRef = &workspacev1alpha1.WorkspaceTemplateRef{Name: templateRef}
+			workspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+				Name: "existing-template",
+			}
 
 			err := templateGetter.ApplyTemplateName(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())

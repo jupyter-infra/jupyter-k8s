@@ -67,7 +67,9 @@ func (tg *TemplateGetter) ApplyTemplateName(ctx context.Context, workspace *work
 
 	// Set the template reference
 	defaultTemplate := templateList.Items[0]
-	workspace.Spec.TemplateRef = &workspacev1alpha1.WorkspaceTemplateRef{Name: defaultTemplate.Name}
+	workspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+		Name: defaultTemplate.Name,
+	}
 
 	return nil
 }

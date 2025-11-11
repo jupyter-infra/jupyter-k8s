@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: restricted-images-template
+spec:
+  displayName: "Restricted Images Template"
+  description: "Template that restricts custom images"
+  defaultImage: "jupyter/base-notebook:latest"
+  allowedImages:
+    - "jupyter/base-notebook:latest"
+    - "jupyter/scipy-notebook:latest"
+  allowCustomImages: false
