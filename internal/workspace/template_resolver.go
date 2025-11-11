@@ -44,7 +44,7 @@ func (tr *TemplateResolver) ResolveTemplate(ctx context.Context, templateRef *wo
 	err := tr.client.Get(ctx, templateKey, template)
 
 	// If not found and we have a default namespace, try there
-	if err != nil && tr.defaultTemplateNamespace != "" && templateNamespace != tr.defaultTemplateNamespace {
+	if client.IgnoreNotFound(err) == nil && tr.defaultTemplateNamespace != "" && templateNamespace != tr.defaultTemplateNamespace {
 		templateKey = client.ObjectKey{Name: templateRef.Name, Namespace: tr.defaultTemplateNamespace}
 		if fallbackErr := tr.client.Get(ctx, templateKey, template); fallbackErr == nil {
 			return template, nil
