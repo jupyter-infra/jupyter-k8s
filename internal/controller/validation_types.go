@@ -24,12 +24,6 @@ type TemplateValidationResult struct {
 	// Violations contains details about any validation failures
 	// Empty slice if Valid is true
 	Violations []TemplateViolation
-
-	// Template contains the resolved template configuration
-	// INVARIANT: Template is never nil when Valid is true
-	// May be nil when Valid is false (e.g., template not found)
-	// This ensures downstream components can safely use Template when validation passes
-	Template *ResolvedTemplate
 }
 
 // TemplateViolation describes a specific validation failure

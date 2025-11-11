@@ -1,0 +1,24 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: lazy-app-template
+spec:
+  displayName: "Lazy Application Test - After"
+  description: "Strict bounds after modification"
+  defaultOwnershipType: Public
+  defaultImage: "jk8s-application-jupyter-uv:latest"
+  allowedImages:
+    - "jk8s-application-jupyter-uv:latest"
+  defaultResources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+  resourceBounds:
+    cpu:
+      min: "50m"
+      max: "500m"  # Strictened from 2 to 500m
+    memory:
+      min: "64Mi"
+      max: "512Mi"  # Strictened from 2Gi to 512Mi
+  primaryStorage:
+    defaultSize: 1Gi

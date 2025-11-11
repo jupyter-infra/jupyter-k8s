@@ -84,4 +84,23 @@ webhooks:
           - v1alpha1
         resources:
           - workspaces
+  - name: vworkspacetemplate-v1alpha1.kb.io
+    clientConfig:
+      service:
+        name: jupyter-k8s-webhook-service
+        namespace: {{ .Release.Namespace }}
+        path: /validate-workspace-jupyter-org-v1alpha1-workspacetemplate
+    failurePolicy: Ignore
+    sideEffects: None
+    admissionReviewVersions:
+      - v1
+    rules:
+      - operations:
+          - UPDATE
+        apiGroups:
+          - workspace.jupyter.org
+        apiVersions:
+          - v1alpha1
+        resources:
+          - workspacetemplates
 {{- end }}

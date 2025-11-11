@@ -1,0 +1,15 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: multi-violation-test
+spec:
+  displayName: "Multi Violation Test"
+  templateRef:
+    name: "restricted-template"
+  image: "invalid/image:latest"
+  resources:
+    requests:
+      cpu: "10"
+      memory: "20Gi"
+  storage:
+    size: "100Gi"

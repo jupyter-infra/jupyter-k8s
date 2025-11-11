@@ -27,11 +27,8 @@ func TestPVCBuilder_ExplicitStorage(t *testing.T) {
 			Storage: &workspacev1alpha1.StorageSpec{Size: resource.MustParse("5Gi")},
 		},
 	}
-	template := &ResolvedTemplate{
-		StorageConfiguration: &workspacev1alpha1.StorageConfig{DefaultSize: resource.MustParse("50Gi")},
-	}
 
-	pvc, err := builder.BuildPVC(workspace, template)
+	pvc, err := builder.BuildPVC(workspace)
 	if err != nil {
 		t.Fatalf("BuildPVC failed: %v", err)
 	}
@@ -46,16 +43,17 @@ func TestPVCBuilder_ExplicitStorage(t *testing.T) {
 }
 
 func TestPVCBuilder_TemplateStorage(t *testing.T) {
+	// Note: Template defaults are now applied via webhooks during admission
+	// This test verifies workspace storage spec is respected
 	builder := setupPVCBuilder()
 	workspace := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
-		Spec:       workspacev1alpha1.WorkspaceSpec{},
-	}
-	template := &ResolvedTemplate{
-		StorageConfiguration: &workspacev1alpha1.StorageConfig{DefaultSize: resource.MustParse("50Gi")},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			Storage: &workspacev1alpha1.StorageSpec{Size: resource.MustParse("50Gi")},
+		},
 	}
 
-	pvc, err := builder.BuildPVC(workspace, template)
+	pvc, err := builder.BuildPVC(workspace)
 	if err != nil {
 		t.Fatalf("BuildPVC failed: %v", err)
 	}
@@ -76,7 +74,7 @@ func TestPVCBuilder_NoStorage(t *testing.T) {
 		Spec:       workspacev1alpha1.WorkspaceSpec{},
 	}
 
-	pvc, err := builder.BuildPVC(workspace, nil)
+	pvc, err := builder.BuildPVC(workspace)
 	if err != nil {
 		t.Fatalf("BuildPVC failed: %v", err)
 	}
@@ -94,7 +92,7 @@ func TestPVCBuilder_DefaultSize(t *testing.T) {
 		},
 	}
 
-	pvc, err := builder.BuildPVC(workspace, nil)
+	pvc, err := builder.BuildPVC(workspace)
 	if err != nil {
 		t.Fatalf("BuildPVC failed: %v", err)
 	}
@@ -121,7 +119,7 @@ func TestPVCBuilder_StorageClass(t *testing.T) {
 		},
 	}
 
-	pvc, err := builder.BuildPVC(workspace, nil)
+	pvc, err := builder.BuildPVC(workspace)
 	if err != nil {
 		t.Fatalf("BuildPVC failed: %v", err)
 	}
@@ -143,7 +141,7 @@ func TestPVCBuilder_Metadata(t *testing.T) {
 		},
 	}
 
-	pvc, err := builder.BuildPVC(workspace, nil)
+	pvc, err := builder.BuildPVC(workspace)
 	if err != nil {
 		t.Fatalf("BuildPVC failed: %v", err)
 	}
@@ -170,7 +168,7 @@ func TestPVCBuilder_OwnerReference(t *testing.T) {
 		},
 	}
 
-	pvc, err := builder.BuildPVC(workspace, nil)
+	pvc, err := builder.BuildPVC(workspace)
 	if err != nil {
 		t.Fatalf("BuildPVC failed: %v", err)
 	}
@@ -203,12 +201,12 @@ func TestPVCBuilder_UpdateDetection(t *testing.T) {
 		},
 	}
 
-	existingPVC, err := builder.BuildPVC(workspace, nil)
+	existingPVC, err := builder.BuildPVC(workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	needsUpdate, err := builder.NeedsUpdate(ctx, existingPVC, workspace, nil)
+	needsUpdate, err := builder.NeedsUpdate(ctx, existingPVC, workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +215,7 @@ func TestPVCBuilder_UpdateDetection(t *testing.T) {
 	}
 
 	workspace.Spec.Storage.Size = resource.MustParse("20Gi")
-	needsUpdate, err = builder.NeedsUpdate(ctx, existingPVC, workspace, nil)
+	needsUpdate, err = builder.NeedsUpdate(ctx, existingPVC, workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
