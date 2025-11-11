@@ -42,6 +42,10 @@ controllerManager:
     seccompProfile:
       type: RuntimeDefault
   terminationGracePeriodSeconds: 10
+  # Controller pod scheduling configuration
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
   serviceAccountName: jupyter-k8s-controller-manager
 
 # [RBAC]: To enable RBAC (Permissions) configurations

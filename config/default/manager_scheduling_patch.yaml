@@ -1,0 +1,34 @@
+# This patch adds scheduling configuration support to the manager deployment
+# The scheduling fields are set to empty defaults and can be customized using kustomize overlays
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+  namespace: system
+spec:
+  template:
+    spec:
+      # Default empty nodeSelector - can be overridden in overlays
+      nodeSelector: {}
+      
+      # Default empty tolerations - can be overridden in overlays  
+      tolerations: []
+      
+      # Keep the default affinity for arch/os compatibility
+      # Can be completely overridden in overlays if needed
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: kubernetes.io/arch
+                  operator: In
+                  values:
+                    - amd64
+                    - arm64
+                    - ppc64le
+                    - s390x
+                - key: kubernetes.io/os
+                  operator: In
+                  values:
+                    - linux
