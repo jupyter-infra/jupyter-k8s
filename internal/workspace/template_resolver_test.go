@@ -17,12 +17,12 @@ import (
 )
 
 func TestNewTemplateResolver(t *testing.T) {
-	client := fake.NewClientBuilder().Build()
-	resolver := NewTemplateResolver(client, "default-ns")
+	k8sClient := fake.NewClientBuilder().Build()
+	resolver := NewTemplateResolver(k8sClient, "default-ns")
 
 	assert.NotNil(t, resolver)
 	assert.Equal(t, "default-ns", resolver.defaultTemplateNamespace)
-	assert.Equal(t, client, resolver.client)
+	assert.Equal(t, k8sClient, resolver.client)
 }
 
 func TestResolveTemplate(t *testing.T) {
@@ -132,22 +132,22 @@ func TestResolveTemplate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var client client.Client
-			
+			var k8sClient client.Client
+
 			if tt.mockError != nil {
-				client = &mockClient{
+				k8sClient = &mockClient{
 					getFunc: func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 						return tt.mockError
 					},
 				}
 			} else {
-				client = fake.NewClientBuilder().
+				k8sClient = fake.NewClientBuilder().
 					WithScheme(scheme).
 					WithObjects(tt.existingTemplates...).
 					Build()
 			}
 
-			resolver := NewTemplateResolver(client, tt.defaultTemplateNamespace)
+			resolver := NewTemplateResolver(k8sClient, tt.defaultTemplateNamespace)
 
 			template, err := resolver.ResolveTemplate(context.Background(), tt.templateRef, tt.workspaceNamespace)
 
@@ -172,14 +172,14 @@ func TestResolveTemplate_NonNotFoundError(t *testing.T) {
 	require.NoError(t, workspacev1alpha1.AddToScheme(scheme))
 
 	// Create a mock client that returns a non-NotFound error
-	client := &mockClient{
+	k8sClient := &mockClient{
 		getFunc: func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 			// Return a permission error instead of NotFound
 			return apierrors.NewForbidden(schema.GroupResource{}, key.Name, nil)
 		},
 	}
 
-	resolver := NewTemplateResolver(client, "default-ns")
+	resolver := NewTemplateResolver(k8sClient, "default-ns")
 	templateRef := &workspacev1alpha1.TemplateRef{Name: "test-template"}
 
 	template, err := resolver.ResolveTemplate(context.Background(), templateRef, "workspace-ns")
@@ -241,12 +241,12 @@ func TestResolveTemplateForWorkspace(t *testing.T) {
 				},
 			}
 
-			client := fake.NewClientBuilder().
+			k8sClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(existingTemplates...).
 				Build()
 
-			resolver := NewTemplateResolver(client, "")
+			resolver := NewTemplateResolver(k8sClient, "")
 
 			template, err := resolver.ResolveTemplateForWorkspace(context.Background(), tt.workspace)
 
