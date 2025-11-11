@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -484,6 +485,26 @@ func TestSSMClient_createSageMakerSpaceSSMDocument_Success(t *testing.T) {
 	// Assert
 	assert.NoError(t, err)
 	mockClient.AssertExpectations(t)
+}
+
+func TestSSHDocumentContent_EmbedWorking(t *testing.T) {
+	// Test that the embedded SSH document content is properly loaded
+	assert.NotEmpty(t, SSHDocumentContent, "SSH document content should not be empty")
+	assert.Contains(t, SSHDocumentContent, "schemaVersion", "SSH document should contain schemaVersion")
+	assert.Contains(t, SSHDocumentContent, "sessionType", "SSH document should contain sessionType")
+	assert.Contains(t, SSHDocumentContent, "Port", "SSH document should contain Port sessionType")
+	assert.Contains(t, SSHDocumentContent, "portNumber", "SSH document should contain portNumber parameter")
+	assert.Contains(t, SSHDocumentContent, "idleSessionTimeout", "SSH document should contain idleSessionTimeout")
+	assert.Contains(t, SSHDocumentContent, "maxSessionDuration", "SSH document should contain maxSessionDuration")
+
+	// Verify it's valid JSON by unmarshaling
+	var doc map[string]interface{}
+	err := json.Unmarshal([]byte(SSHDocumentContent), &doc)
+	assert.NoError(t, err, "SSH document content should be valid JSON")
+
+	// Verify specific structure
+	assert.Equal(t, "1.0", doc["schemaVersion"])
+	assert.Equal(t, "Port", doc["sessionType"])
 }
 
 func TestSSMClient_createSageMakerSpaceSSMDocument_DocumentAlreadyExists(t *testing.T) {
