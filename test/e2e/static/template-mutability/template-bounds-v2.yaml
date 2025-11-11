@@ -1,6 +1,7 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
+  name: template-bounds-v2
   namespace: default
 spec:
   displayName: "Bounds Test V2"

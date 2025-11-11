@@ -1,6 +1,7 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
+  name: base-template
   namespace: default
 spec:
   displayName: "Original DisplayName"
