@@ -48,6 +48,12 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	AllowedImages []string `json:"allowedImages,omitempty"`
 
+	// AllowCustomImages allows workspaces to use any container image, bypassing the AllowedImages restriction
+	// When true, workspaces can specify any image regardless of the AllowedImages list
+	// +kubebuilder:default=false
+	// +optional
+	AllowCustomImages *bool `json:"allowCustomImages,omitempty"`
+
 	// DefaultResources specifies the default resource requirements
 	// +optional
 	DefaultResources *corev1.ResourceRequirements `json:"defaultResources,omitempty"`
@@ -108,9 +114,17 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultAccessType string `json:"defaultAccessType,omitempty"`
 
+	// DefaultAccessStrategy specifies the default access strategy for workspaces using this template
+	// +optional
+	DefaultAccessStrategy *AccessStrategyRef `json:"defaultAccessStrategy,omitempty"`
+
 	// DefaultLifecycle specifies default lifecycle hooks for workspaces using this template
 	// +optional
 	DefaultLifecycle *corev1.Lifecycle `json:"defaultLifecycle,omitempty"`
+
+	// DefaultPodSecurityContext specifies default pod-level security context
+	// +optional
+	DefaultPodSecurityContext *corev1.PodSecurityContext `json:"defaultPodSecurityContext,omitempty"`
 
 	// AppType specifies the application type for workspaces using this template
 	// +optional
@@ -188,20 +202,32 @@ type IdleShutdownOverridePolicy struct {
 	MaxTimeoutMinutes *int `json:"maxTimeoutMinutes,omitempty"`
 }
 
+// WorkspaceTemplateStatus defines the observed state of WorkspaceTemplate
+// Follows Kubernetes API conventions for status reporting
+type WorkspaceTemplateStatus struct {
+	// ObservedGeneration reflects the generation of the most recently observed WorkspaceTemplate spec.
+	// This field is used by controllers to determine if they need to reconcile the template.
+	// When metadata.generation != status.observedGeneration, the controller has not yet processed the latest spec.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+}
+
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:resource:scope=Namespaced
+// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Display Name",type="string",JSONPath=".spec.displayName"
 // +kubebuilder:printcolumn:name="Default Image",type="string",JSONPath=".spec.defaultImage"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // WorkspaceTemplate is the Schema for the workspacetemplates API
 // Templates define reusable, secure-by-default configurations for workspaces.
-// The spec is immutable after creation - to update a template, create a new version.
+// Template spec can be updated; existing workspaces keep their configuration (lazy application).
 type WorkspaceTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec WorkspaceTemplateSpec `json:"spec,omitempty"`
+	Spec   WorkspaceTemplateSpec   `json:"spec,omitempty"`
+	Status WorkspaceTemplateStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: restricted-template-mutability
+  namespace: default
+spec:
+  displayName: "Restricted Template"
+  description: "Restricted template for mutability testing"
+  defaultOwnershipType: Public
+  allowedImages:
+    - "jk8s-application-jupyter-uv:latest"
+  defaultImage: "jk8s-application-jupyter-uv:latest"

@@ -11,6 +11,7 @@ import (
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	awsutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
 // Variables for dependency injection in tests
@@ -65,7 +66,7 @@ func (h *PodEventHandler) HandleWorkspacePodEvents(ctx context.Context, obj clie
 	logger.V(1).Info("Received pod event", "phase", pod.Status.Phase)
 
 	// Get workspace name from labels (predicate ensures this exists)
-	workspaceName := pod.Labels[LabelWorkspaceName]
+	workspaceName := pod.Labels[workspaceutil.LabelWorkspaceName]
 
 	logger.Info("Processing workspace pod event",
 		"workspaceName", workspaceName,
@@ -171,7 +172,7 @@ func (h *PodEventHandler) handlePodRunning(ctx context.Context, pod *corev1.Pod,
 	}
 
 	// Handle SSM remote access strategy
-	if accessStrategy != nil && accessStrategy.Name == "aws-ssm-remote-access" {
+	if accessStrategy != nil && (accessStrategy.Name == "aws-ssm-remote-access" || accessStrategy.Name == "hyperpod-access-strategy") {
 		if h.ssmRemoteAccessStrategy == nil {
 			logger.Error(nil, "SSM remote access strategy not available - cannot initialize SSM agent")
 		} else {

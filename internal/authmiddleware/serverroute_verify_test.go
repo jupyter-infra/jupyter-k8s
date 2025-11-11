@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,7 +28,10 @@ func TestHandleVerifyMissingUriHeader(t *testing.T) {
 	// Create a Server with minimal setup
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &Config{
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern:            `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		RoutingMode:                 "path",
+		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
+		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
 	}
 	server := &Server{
 		config: cfg,
@@ -61,7 +65,10 @@ func TestHandleVerifyMissingHostHeader(t *testing.T) {
 	// Create a Server with minimal setup
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &Config{
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern:            `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		RoutingMode:                 "path",
+		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
+		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
 	}
 	server := &Server{
 		config: cfg,
@@ -107,7 +114,10 @@ func TestHandleVerifyMissingCookie(t *testing.T) {
 	// Create server with mocks
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &Config{
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern:            `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		RoutingMode:                 "path",
+		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
+		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
 	}
 	server := &Server{
 		config:        cfg,
@@ -130,7 +140,7 @@ func TestHandleVerifyMissingCookie(t *testing.T) {
 	}
 }
 
-// For this test file, we are using mock implementations of the JWTHandler and CookieHandler interfaces
+// For this test file, we are using mock implementations of the jwt.Handler and CookieHandler interfaces
 // defined in mock_test.go within the same package.
 
 // TestHandleVerifyInvalidJWT tests that handleVerify returns 401 if JWT is invalid
@@ -151,7 +161,7 @@ func TestHandleVerifyInvalidJWT(t *testing.T) {
 	}
 
 	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*Claims, error) {
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
 			// Verify parameter
 			if tokenString != "invalid-token" {
 				t.Errorf("Expected token 'invalid-token', got '%s'", tokenString)
@@ -163,7 +173,10 @@ func TestHandleVerifyInvalidJWT(t *testing.T) {
 	// Create server with mocks
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &Config{
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern:            `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		RoutingMode:                 "path",
+		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
+		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
 	}
 	server := &Server{
 		config:        cfg,
@@ -198,13 +211,13 @@ func TestHandleVerifyNoRefreshBeforeWindow(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	// Create claims
-	claims := &Claims{
+	claims := &jwt.Claims{
 		User:      "testuser",
 		Groups:    []string{"group1", "group2"},
 		UID:       "testuid",
 		Path:      testAppPath2,
 		Domain:    "example.com",
-		TokenType: TokenTypeSession, // Add session token type
+		TokenType: jwt.TokenTypeSession, // Add session token type
 	}
 
 	// Track method calls
@@ -217,25 +230,25 @@ func TestHandleVerifyNoRefreshBeforeWindow(t *testing.T) {
 		GetCookieFunc: func(r *http.Request, path string) (string, error) {
 			return "valid-token", nil
 		},
-		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {
 			t.Error("SetCookie should not have been called")
 		},
-		ClearCookieFunc: func(w http.ResponseWriter, path string) {
+		ClearCookieFunc: func(w http.ResponseWriter, path string, domain string) {
 			t.Error("ClearCookie should not have been called")
 		},
 	}
 
 	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*Claims, error) {
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
 			tokenValidated = true
 			return claims, nil
 		},
-		ShouldRefreshTokenFunc: func(claims *Claims) bool {
+		ShouldRefreshTokenFunc: func(claims *jwt.Claims) bool {
 			tokenRefreshChecked = true
 			// Don't refresh
 			return false
 		},
-		RefreshTokenFunc: func(claims *Claims) (string, error) {
+		RefreshTokenFunc: func(claims *jwt.Claims) (string, error) {
 			tokenRefreshed = true
 			return "new-token", nil
 		},
@@ -244,7 +257,10 @@ func TestHandleVerifyNoRefreshBeforeWindow(t *testing.T) {
 	// Create server with mocks
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &Config{
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern:            `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		RoutingMode:                 "path",
+		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
+		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
 	}
 	server := &Server{
 		config:        cfg,
@@ -276,11 +292,12 @@ func TestHandleVerifyNoRefreshBeforeWindow(t *testing.T) {
 // createVerifyRefreshTestServer creates a minimal server for testing
 // The mockRestClient parameter is currently unused, but kept for future expansion
 // when we need to test with a configured REST client
-func createVerifyRefreshTestServer(cookieHandler CookieHandler, jwtHandler JWTHandler) *Server {
+func createVerifyRefreshTestServer(cookieHandler CookieHandler, jwtHandler jwt.Handler) *Server {
 	config := &Config{
 		PathRegexPattern:            DefaultPathRegexPattern,
 		WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
 		WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+		RoutingMode:                 DefaultRoutingMode,
 		JWTRefreshEnable:            true,
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -307,13 +324,13 @@ func TestHandleVerifyWithRefresh_HappyPath(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	// Create claims
-	claims := &Claims{
+	claims := &jwt.Claims{
 		User:      "testuser1",
 		Groups:    []string{"group1", "group2"},
 		UID:       "testuid",
 		Path:      testAppPath2,
 		Domain:    "example.com",
-		TokenType: TokenTypeSession, // Add session token type
+		TokenType: jwt.TokenTypeSession, // Add session token type
 	}
 
 	// Track method calls
@@ -329,7 +346,7 @@ func TestHandleVerifyWithRefresh_HappyPath(t *testing.T) {
 		GetCookieFunc: func(r *http.Request, path string) (string, error) {
 			return "valid-token", nil
 		},
-		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {
 			cookieSet = true
 			// Verify parameters
 			if token != newToken {
@@ -339,22 +356,22 @@ func TestHandleVerifyWithRefresh_HappyPath(t *testing.T) {
 				t.Errorf("Expected path %s, got '%s'", testAppPath2, path)
 			}
 		},
-		ClearCookieFunc: func(w http.ResponseWriter, path string) {
+		ClearCookieFunc: func(w http.ResponseWriter, path string, domain string) {
 			t.Error("ClearCookie should not have been called")
 		},
 	}
 
 	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*Claims, error) {
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
 			tokenValidated = true
 			return claims, nil
 		},
-		ShouldRefreshTokenFunc: func(claims *Claims) bool {
+		ShouldRefreshTokenFunc: func(claims *jwt.Claims) bool {
 			tokenRefreshChecked = true
 			// Do refresh
 			return true
 		},
-		RefreshTokenFunc: func(claims *Claims) (string, error) {
+		RefreshTokenFunc: func(claims *jwt.Claims) (string, error) {
 			tokenRefreshed = true
 			// Verify claims
 			if claims.User != "testuser1" {
@@ -365,7 +382,7 @@ func TestHandleVerifyWithRefresh_HappyPath(t *testing.T) {
 			}
 			return newToken, nil
 		},
-		UpdateSkipRefreshTokenFunc: func(claims *Claims) (string, error) {
+		UpdateSkipRefreshTokenFunc: func(claims *jwt.Claims) (string, error) {
 			tokenSkipUpdated = true
 			return newToken, nil
 		},
@@ -439,13 +456,13 @@ func TestHandleVerifyWithRefresh_NoLongerAuthorizedPath_Returns403AndClearCookie
 	w := httptest.NewRecorder()
 
 	// Create claims
-	claims := &Claims{
+	claims := &jwt.Claims{
 		User:      "testuser2",
 		Groups:    []string{"group1", "group2"},
 		UID:       "testuid",
 		Path:      testAppPath2,
 		Domain:    "example.com",
-		TokenType: TokenTypeSession, // Add session token type
+		TokenType: jwt.TokenTypeSession, // Add session token type
 	}
 
 	// Track method calls
@@ -462,7 +479,7 @@ func TestHandleVerifyWithRefresh_NoLongerAuthorizedPath_Returns403AndClearCookie
 		GetCookieFunc: func(r *http.Request, path string) (string, error) {
 			return "valid-token2", nil
 		},
-		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {
 			cookieSet = true
 			// Verify parameters
 			if token != newToken {
@@ -472,7 +489,7 @@ func TestHandleVerifyWithRefresh_NoLongerAuthorizedPath_Returns403AndClearCookie
 				t.Errorf("Expected path %s, got '%s'", testAppPath2, path)
 			}
 		},
-		ClearCookieFunc: func(w http.ResponseWriter, path string) {
+		ClearCookieFunc: func(w http.ResponseWriter, path string, domain string) {
 			cookieCleared = true
 			// Verify parameters
 			if path != testAppPath2 {
@@ -482,16 +499,16 @@ func TestHandleVerifyWithRefresh_NoLongerAuthorizedPath_Returns403AndClearCookie
 	}
 
 	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*Claims, error) {
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
 			tokenValidated = true
 			return claims, nil
 		},
-		ShouldRefreshTokenFunc: func(claims *Claims) bool {
+		ShouldRefreshTokenFunc: func(claims *jwt.Claims) bool {
 			tokenRefreshChecked = true
 			// Do refresh
 			return true
 		},
-		RefreshTokenFunc: func(claims *Claims) (string, error) {
+		RefreshTokenFunc: func(claims *jwt.Claims) (string, error) {
 			tokenRefreshed = true
 			// Verify claims
 			if claims.User != "testuser" {
@@ -502,7 +519,7 @@ func TestHandleVerifyWithRefresh_NoLongerAuthorizedPath_Returns403AndClearCookie
 			}
 			return newToken, nil
 		},
-		UpdateSkipRefreshTokenFunc: func(claims *Claims) (string, error) {
+		UpdateSkipRefreshTokenFunc: func(claims *jwt.Claims) (string, error) {
 			tokenSkipUpdated = true
 			return newToken, nil
 		},
@@ -579,13 +596,13 @@ func TestHandleVerifyWithRefresh_ConnectionAccessReviewFails_UpdateCookieToSkipF
 	w := httptest.NewRecorder()
 
 	// Create claims
-	claims := &Claims{
+	claims := &jwt.Claims{
 		User:      "testuser3",
 		Groups:    []string{"group1", "group2"},
 		UID:       "testuid",
 		Path:      testAppPath2,
 		Domain:    "example.com",
-		TokenType: TokenTypeSession, // Add session token type
+		TokenType: jwt.TokenTypeSession, // Add session token type
 	}
 
 	// Track method calls
@@ -601,7 +618,7 @@ func TestHandleVerifyWithRefresh_ConnectionAccessReviewFails_UpdateCookieToSkipF
 		GetCookieFunc: func(r *http.Request, path string) (string, error) {
 			return "valid-token3", nil
 		},
-		SetCookieFunc: func(w http.ResponseWriter, token string, path string) {
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {
 			cookieSet = true
 			// Verify parameters
 			if token != newToken {
@@ -611,22 +628,22 @@ func TestHandleVerifyWithRefresh_ConnectionAccessReviewFails_UpdateCookieToSkipF
 				t.Errorf("Expected path %s, got '%s'", testAppPath2, path)
 			}
 		},
-		ClearCookieFunc: func(w http.ResponseWriter, path string) {
+		ClearCookieFunc: func(w http.ResponseWriter, path string, domain string) {
 			t.Error("ClearCookie should not have been called")
 		},
 	}
 
 	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*Claims, error) {
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
 			tokenValidated = true
 			return claims, nil
 		},
-		ShouldRefreshTokenFunc: func(claims *Claims) bool {
+		ShouldRefreshTokenFunc: func(claims *jwt.Claims) bool {
 			tokenRefreshChecked = true
 			// Do refresh
 			return true
 		},
-		RefreshTokenFunc: func(claims *Claims) (string, error) {
+		RefreshTokenFunc: func(claims *jwt.Claims) (string, error) {
 			tokenRefreshed = true
 			// Verify claims
 			if claims.User != "testuser3" {
@@ -637,7 +654,7 @@ func TestHandleVerifyWithRefresh_ConnectionAccessReviewFails_UpdateCookieToSkipF
 			}
 			return newToken, nil
 		},
-		UpdateSkipRefreshTokenFunc: func(claims *Claims) (string, error) {
+		UpdateSkipRefreshTokenFunc: func(claims *jwt.Claims) (string, error) {
 			tokenSkipUpdated = true
 			return newToken, nil
 		},

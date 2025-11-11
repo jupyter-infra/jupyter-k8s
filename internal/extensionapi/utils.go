@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/stringutil"
 )
 
 // WriteError writes an error response in JSON format
@@ -43,10 +45,10 @@ func GetNamespaceFromPath(path string) (string, error) {
 // GetUserFromHeaders extracts the user from request headers
 func GetUserFromHeaders(r *http.Request) string {
 	if user := r.Header.Get(HeaderUser); user != "" {
-		return user
+		return stringutil.SanitizeUsername(user)
 	}
 	if user := r.Header.Get(HeaderRemoteUser); user != "" {
-		return user
+		return stringutil.SanitizeUsername(user)
 	}
 	return ""
 }

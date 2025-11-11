@@ -1,0 +1,19 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: security-context-template
+  namespace: default
+spec:
+  displayName: "Security Context Template"
+  defaultImage: "jupyter/base-notebook:latest"
+  defaultPodSecurityContext:
+    fsGroup: 1000
+    runAsNonRoot: true
+    runAsUser: 1000
+  resourceBounds:
+    cpu:
+      min: "100m"
+      max: "2"
+    memory:
+      min: "128Mi"
+      max: "4Gi"

@@ -3,6 +3,8 @@ package authmiddleware
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 )
 
 // handleAuth handles authentication requests
@@ -58,7 +60,7 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 		// Verify workspace access using the new extracted function
 		connectionAccessReviewResult, workspaceInfo, err := s.VerifyWorkspaceAccess(
 			r.Context(),
-			appPath,
+			r,
 			k8sUsername,
 			k8sGroups,
 			k8sUID,
@@ -105,16 +107,15 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate JWT token with app path and domain for authorization scope
-	token, err := s.jwtManager.GenerateToken(k8sUsername, k8sGroups, k8sUID, nil, appPath, host, TokenTypeSession)
+	token, err := s.jwtManager.GenerateToken(k8sUsername, k8sGroups, k8sUID, nil, appPath, host, jwt.TokenTypeSession)
 	if err != nil {
 		s.logger.Error("Failed to generate token", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	// Set cookie using appPath
-	// passing full_path would fallback to `app_path` anyway
-	s.cookieManager.SetCookie(w, token, appPath)
+	// Set cookie using appPath and same domain as JWT token
+	s.cookieManager.SetCookie(w, token, appPath, host)
 
 	// Create empty response
 	response := map[string]string{}

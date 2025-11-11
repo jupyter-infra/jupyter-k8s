@@ -1,0 +1,53 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: sagemaker-code-editor-template
+  namespace: jupyter-k8s-shared
+  labels:
+    app.kubernetes.io/name: jupyter-k8s-aws-hyperpod
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  displayName: "SageMaker Code Editor"
+  description: "Code Editor environment using SageMaker Distribution with pre-installed ML libraries and tools"
+  
+  # Image configuration
+  defaultImage: "public.ecr.aws/sagemaker/sagemaker-distribution:latest-cpu"
+  allowedImages:
+    - "public.ecr.aws/sagemaker/sagemaker-distribution:latest-cpu"
+    - "public.ecr.aws/sagemaker/sagemaker-distribution:latest-gpu"
+  
+  # Resource configuration
+  defaultResources:
+    requests:
+      cpu: "2"
+      memory: "8Gi"
+    limits:
+      cpu: "2"
+      memory: "8Gi"
+  
+  # Storage configuration
+  primaryStorage:
+    defaultSize: "5Gi"
+    minSize: "1Gi"
+    maxSize: "100Gi"
+    defaultStorageClassName: "sagemaker-spaces-default-storage-class"
+    defaultMountPath: "/home/sagemaker-user"
+  
+  # Container configuration
+  defaultContainerConfig:
+    command: ["/opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-code-editor"]
+
+  # Pod security context for SageMaker user access
+  defaultPodSecurityContext:
+    fsGroup: 1000  # sagemaker-user group ID
+
+  # Access configuration
+  defaultOwnershipType: "Public"
+  defaultAccessStrategy:
+    name: "hyperpod-access-strategy"
+    namespace: {{ .Release.Namespace }}
+  allowSecondaryStorages: true
+  
+  # Application type
+  appType: "code-editor"

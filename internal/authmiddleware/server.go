@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -16,7 +17,7 @@ import (
 // Server represents the HTTP server for authentication middleware
 type Server struct {
 	config        *Config
-	jwtManager    JWTHandler
+	jwtManager    jwt.Handler
 	cookieManager CookieHandler
 	logger        *slog.Logger
 	httpServer    *http.Server
@@ -24,7 +25,7 @@ type Server struct {
 }
 
 // NewServer creates a new server instance
-func NewServer(config *Config, jwtManager JWTHandler, cookieManager CookieHandler, logger *slog.Logger) *Server {
+func NewServer(config *Config, jwtManager jwt.Handler, cookieManager CookieHandler, logger *slog.Logger) *Server {
 	// Initialize Kubernetes client for in-cluster use
 	k8sConfig, err := rest.InClusterConfig()
 	var restClient rest.Interface
@@ -60,8 +61,9 @@ func (s *Server) Start() error {
 	router := http.NewServeMux()
 
 	// Register routes
-	// todo: add flag to turn off oauth
-	router.HandleFunc("/auth", s.handleAuth)
+	if s.config.EnableOAuth {
+		router.HandleFunc("/auth", s.handleAuth)
+	}
 	if s.config.EnableBearerAuth {
 		router.HandleFunc("/bearer-auth", s.handleBearerAuth)
 	}
@@ -139,7 +141,15 @@ func (s *Server) csrfProtect() func(http.Handler) http.Handler {
 			//    - Clients should have received CSRF tokens from /auth endpoint
 
 			// Skip CSRF protection for specific endpoints
-			if r.URL.Path == "/auth" || r.URL.Path == "/health" {
+			skipCSRF := r.URL.Path == "/health"
+			if s.config.EnableOAuth && r.URL.Path == "/auth" {
+				skipCSRF = true
+			}
+			if s.config.EnableBearerAuth && r.URL.Path == "/bearer-auth" {
+				skipCSRF = true
+			}
+
+			if skipCSRF {
 				next.ServeHTTP(w, r)
 				return
 			}

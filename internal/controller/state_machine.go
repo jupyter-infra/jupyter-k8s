@@ -11,32 +11,30 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // StateMachine handles the state transitions for Workspace
 type StateMachine struct {
-	resourceManager  *ResourceManager
-	statusManager    *StatusManager
-	templateResolver *TemplateResolver
-	recorder         record.EventRecorder
-	idleChecker      *WorkspaceIdleChecker
+	resourceManager *ResourceManager
+	statusManager   *StatusManager
+	recorder        record.EventRecorder
+	idleChecker     *WorkspaceIdleChecker
 }
 
 // NewStateMachine creates a new StateMachine
 func NewStateMachine(
 	resourceManager *ResourceManager,
 	statusManager *StatusManager,
-	templateResolver *TemplateResolver,
 	recorder record.EventRecorder,
 	idleChecker *WorkspaceIdleChecker,
 ) *StateMachine {
 	return &StateMachine{
-		resourceManager:  resourceManager,
-		statusManager:    statusManager,
-		templateResolver: templateResolver,
-		recorder:         recorder,
-		idleChecker:      idleChecker,
+		resourceManager: resourceManager,
+		statusManager:   statusManager,
+		recorder:        recorder,
+		idleChecker:     idleChecker,
 	}
 }
 
@@ -191,15 +189,8 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	logger := logf.FromContext(ctx)
 	logger.Info("Attempting to bring Workspace status to 'Running'")
 
-	// Validate template BEFORE creating any resources
-	resolvedTemplate, shouldContinue, err := sm.handleTemplateValidation(ctx, workspace, snapshotStatus)
-	if !shouldContinue {
-		logger.Info("Template validation failed, stopping reconciliation", "error", err)
-		return ctrl.Result{}, nil
-	}
-
 	// Ensure PVC exists first (if storage is configured)
-	_, err = sm.resourceManager.EnsurePVCExists(ctx, workspace, resolvedTemplate)
+	_, err := sm.resourceManager.EnsurePVCExists(ctx, workspace)
 	if err != nil {
 		pvcErr := fmt.Errorf("failed to ensure PVC exists: %w", err)
 		if statusErr := sm.statusManager.UpdateErrorStatus(
@@ -209,11 +200,8 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, pvcErr
 	}
 
-	// Ensure deployment exists (pass the resolved template)
-	// EnsureDeploymentExists internally fetches the deployment and returns it with current status
-	// On first reconciliation: creates deployment (status will be empty initially)
-	// On subsequent reconciliations: returns existing deployment with populated status
-	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace, resolvedTemplate)
+	// EnsureDeploymentExists creates deployment if missing, or returns existing deployment
+	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace)
 	if err != nil {
 		deployErr := fmt.Errorf("failed to ensure deployment exists: %w", err)
 		// Update error condition
@@ -263,7 +251,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		}
 
 		// Handle idle shutdown for running workspaces
-		return sm.handleIdleShutdownForRunningWorkspace(ctx, workspace, resolvedTemplate)
+		return sm.handleIdleShutdownForRunningWorkspace(ctx, workspace)
 	}
 
 	// Resources are being created/started but not fully ready yet
@@ -285,79 +273,14 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
 }
 
-// handleTemplateValidation validates the workspace's template reference and handles all validation outcomes.
-// If validation fails or encounters a system error, it updates the workspace status and returns shouldContinue=false.
-// On success, it returns the resolved template with shouldContinue=true.
-func (sm *StateMachine) handleTemplateValidation(
-	ctx context.Context,
-	workspace *workspacev1alpha1.Workspace,
-	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (template *ResolvedTemplate, shouldContinue bool, err error) {
-	logger := logf.FromContext(ctx)
-
-	// No template reference - continue with default configuration
-	if workspace.Spec.TemplateRef == nil {
-		return nil, true, nil
-	}
-
-	validation, err := sm.templateResolver.ValidateAndResolveTemplate(ctx, workspace)
-	if err != nil {
-		// System error (couldn't fetch template, etc.)
-		logger.Error(err, "Failed to validate template")
-		if statusErr := sm.statusManager.UpdateErrorStatus(
-			ctx, workspace, ReasonDeploymentError, err.Error(), snapshotStatus); statusErr != nil {
-			logger.Error(statusErr, "Failed to update error status")
-		}
-		return nil, false, err
-	}
-
-	if !validation.Valid {
-		// Validation failed - policy enforced, stop reconciliation
-		logger.Info("Validation failed, rejecting workspace", "violations", len(validation.Violations))
-
-		// Log violation details
-		for i, violation := range validation.Violations {
-			logger.Info("Validation violation", "index", i, "type", violation.Type, "message", violation.Message)
-		}
-
-		// Record validation failure event
-		templateName := *workspace.Spec.TemplateRef
-		message := fmt.Sprintf("Validation failed for %s with %d violations", templateName, len(validation.Violations))
-		sm.recorder.Event(workspace, corev1.EventTypeWarning, "ValidationFailed", message)
-
-		if statusErr := sm.statusManager.SetInvalid(ctx, workspace, validation, snapshotStatus); statusErr != nil {
-			logger.Error(statusErr, "Failed to update validation status")
-		}
-		// No error - successful policy enforcement
-		return nil, false, nil
-	}
-
-	// Validation passed
-	logger.Info("Validation passed")
-
-	// Record successful validation event
-	templateName := *workspace.Spec.TemplateRef
-	message := "Validation passed for " + templateName
-	sm.recorder.Event(workspace, corev1.EventTypeNormal, "Validated", message)
-
-	return validation.Template, true, nil
-}
-
 // handleIdleShutdownForRunningWorkspace handles idle shutdown logic for running workspaces
 func (sm *StateMachine) handleIdleShutdownForRunningWorkspace(
 	ctx context.Context,
-	workspace *workspacev1alpha1.Workspace,
-	resolvedTemplate *ResolvedTemplate) (ctrl.Result, error) {
+	workspace *workspacev1alpha1.Workspace) (ctrl.Result, error) {
 
 	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name, "resourceVersion", workspace.ResourceVersion)
 
-	// Resolve effective idle shutdown config
-	// TODO - After copying of resolved spec (template+requestSpec) to workspaceSpec is implemented, we will directly use workspace.Spec
-	var idleConfig *workspacev1alpha1.IdleShutdownSpec
-	if resolvedTemplate != nil && resolvedTemplate.IdleShutdown != nil {
-		idleConfig = resolvedTemplate.IdleShutdown // Template-based workspace (already merged)
-	} else {
-		idleConfig = workspace.Spec.IdleShutdown // Non-template workspace
-	}
+	idleConfig := workspace.Spec.IdleShutdown
 
 	// If idle shutdown is not enabled, no requeue needed
 	if idleConfig == nil || !idleConfig.Enabled {
@@ -455,4 +378,43 @@ func (sm *StateMachine) isAtLeastOneWorkspacePodReady(ctx context.Context, works
 
 	logger.V(1).Info("No ready workspace pods found")
 	return false, nil
+}
+
+// ReconcileDeletion handles workspace deletion with finalizer management
+func (sm *StateMachine) ReconcileDeletion(ctx context.Context, workspace *workspacev1alpha1.Workspace) (ctrl.Result, error) {
+	logger := logf.FromContext(ctx)
+	logger.Info("Handling workspace deletion", "workspace", workspace.Name)
+
+	if !controllerutil.ContainsFinalizer(workspace, WorkspaceFinalizerName) {
+		logger.Info("No finalizer present, allowing deletion")
+		return ctrl.Result{}, nil
+	}
+
+	// Update status to Deleting
+	if err := sm.statusManager.UpdateDeletingStatus(ctx, workspace); err != nil {
+		logger.Error(err, "Failed to update deleting status")
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+	}
+
+	// Clean up all workspace resources via resource manager
+	allDeleted, err := sm.resourceManager.CleanupAllResources(ctx, workspace)
+	if err != nil {
+		logger.Error(err, "Failed to cleanup workspace resources")
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+	}
+	if !allDeleted {
+		logger.Info("Resources still being deleted, will retry")
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
+	}
+
+	// All resources cleaned up, remove finalizer to allow deletion
+	logger.Info("All resources cleaned up, removing finalizer")
+	controllerutil.RemoveFinalizer(workspace, WorkspaceFinalizerName)
+	if err := sm.resourceManager.client.Update(ctx, workspace); err != nil {
+		logger.Error(err, "Failed to remove finalizer")
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("Finalizer removed, workspace deletion will proceed")
+	return ctrl.Result{}, nil
 }

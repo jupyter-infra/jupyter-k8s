@@ -1,0 +1,25 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: template-before
+  namespace: default
+spec:
+  displayName: "Lazy Application Test - Before"
+  description: "Permissive bounds initially"
+  defaultOwnershipType: Public
+  defaultImage: "jk8s-application-jupyter-uv:latest"
+  allowedImages:
+    - "jk8s-application-jupyter-uv:latest"
+  defaultResources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+  resourceBounds:
+    cpu:
+      min: "50m"
+      max: "2"  # Permissive initially
+    memory:
+      min: "64Mi"
+      max: "2Gi"
+  primaryStorage:
+    defaultSize: 1Gi

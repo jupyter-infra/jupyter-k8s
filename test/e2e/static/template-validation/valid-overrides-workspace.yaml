@@ -1,0 +1,18 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: valid-overrides-test
+spec:
+  displayName: "Valid Overrides Test"
+  templateRef:
+    name: "production-notebook-template"
+  ownershipType: Public
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  storage:
+    size: 100Mi

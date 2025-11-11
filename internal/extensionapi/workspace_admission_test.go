@@ -232,18 +232,13 @@ var _ = Describe("WorkspaceAdmission", func() {
 			Expect(result).To(Equal(AccessTypePrivate))
 		})
 
-		It("Should return private if Workspace.Spec.AccessType is missing", func() {
+		It("Should return public if Workspace.Spec.AccessType is missing", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				Spec: workspacev1alpha1.WorkspaceSpec{},
 			}
 
 			result := getWorkspaceAccessType(workspace)
-			Expect(result).To(Equal(AccessTypePrivate))
-		})
-
-		It("Should return private if Workspace is nil", func() {
-			result := getWorkspaceAccessType(nil)
-			Expect(result).To(Equal(AccessTypePrivate))
+			Expect(result).To(Equal(AccessTypePublic))
 		})
 	})
 

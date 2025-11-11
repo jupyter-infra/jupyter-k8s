@@ -12,3 +12,14 @@ const (
 const (
 	DefaultAdminGroup = "system:masters"
 )
+
+// Template label constants
+const (
+	DefaultClusterTemplateLabel = "workspace.jupyter.org/default-cluster-template"
+	DefaultServiceAccountLabel  = "workspace.jupyter.org/default-service-account"
+)
+
+// Finalizer constants
+const (
+	TemplateFinalizerName = "workspace.jupyter.org/template-protection"
+)

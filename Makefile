@@ -475,6 +475,9 @@ load-images-aws-internal: manifests generate fmt vet ## Build and push container
 load-images-aws:
 	$(MAKE) load-images-aws-internal CLOUD_PROVIDER=aws
 
+# Optional traefik access resources parameter
+ENABLE_TRAEFIK_ACCESS_RESOURCES ?= true
+
 deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remote cluster
 	@echo "Deploying jupyter-k8s CRD and controller with Helm chart to remote AWS cluster..."
 	rm -rf /tmp/jk8s-helm-crd-only
@@ -485,9 +488,10 @@ deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remot
 		--set controllerManager.container.imagePullPolicy=Always \
 		--set controllerManager.container.image.repository=$(ECR_REGISTRY)/$(ECR_REPOSITORY) \
 		--set controllerManager.container.image.tag=latest \
+		--set controllerManager.container.env.CLUSTER_ID="$(EKS_CONTEXT)" \
 		--set application.imagesPullPolicy=Always \
 		--set application.imagesRegistry=$(ECR_REGISTRY) \
-		--set accessResources.traefik.enable=true \
+		$(if $(filter true,$(ENABLE_TRAEFIK_ACCESS_RESOURCES)),--set accessResources.traefik.enable=true) \
 		--set workspacePodWatching.enable=true \
 		--set extensionApi.enable=true
 	@echo "Helm chart jupyter-k8s deployed successfully to remote AWS cluster"
@@ -594,6 +598,11 @@ deploy-aws-hyperpod-internal:
 .PHONY: deploy-aws-hyperpod
 deploy-aws-hyperpod: ## Deploy aws-hyperpod guided chart
 	$(MAKE) deploy-aws-hyperpod-internal CLOUD_PROVIDER=aws
+
+.PHONY: deploy-aws-hyperpod-all
+deploy-aws-hyperpod-all: ## Deploy all guided charts (aws-traefik-dex and aws-hyperpod)
+	$(MAKE) deploy-aws-traefik-dex CLOUD_PROVIDER=aws
+	$(MAKE) deploy-aws-hyperpod CLOUD_PROVIDER=aws
 
 .PHONY: undeploy-aws-hyperpod  
 undeploy-aws-hyperpod: ## Remove aws-hyperpod guided chart

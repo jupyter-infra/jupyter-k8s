@@ -1,0 +1,77 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package v1alpha1
+
+import (
+	"context"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
+)
+
+// DefaultApplicator applies defaults for a specific field or group of fields
+type DefaultApplicator func(workspace *workspacev1alpha1.Workspace, template *workspacev1alpha1.WorkspaceTemplate)
+
+// TemplateDefaulter handles applying template defaults to workspaces
+type TemplateDefaulter struct {
+	resolver *workspaceutil.TemplateResolver
+}
+
+// NewTemplateDefaulter creates a new TemplateDefaulter
+func NewTemplateDefaulter(k8sClient client.Client, defaultTemplateNamespace string) *TemplateDefaulter {
+	return &TemplateDefaulter{
+		resolver: workspaceutil.NewTemplateResolver(k8sClient, defaultTemplateNamespace),
+	}
+}
+
+// defaultApplicators is the registry of all default applicators
+var defaultApplicators = []DefaultApplicator{
+	applyCoreDefaults,
+	applyResourceDefaults,
+	applyStorageDefaults,
+	applySchedulingDefaults,
+	applyMetadataDefaults,
+	applyAccessStrategyDefaults,
+	applyLifecycleDefaults,
+	applySecurityDefaults,
+}
+
+// ApplyTemplateDefaults applies template defaults to workspace
+func (td *TemplateDefaulter) ApplyTemplateDefaults(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
+	if workspace.Spec.TemplateRef == nil || workspace.Spec.TemplateRef.Name == "" {
+		return nil
+	}
+
+	template, err := td.fetchTemplate(ctx, *workspace.Spec.TemplateRef, workspace.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Apply all defaults using registered applicators
+	for _, applicator := range defaultApplicators {
+		applicator(workspace, template)
+	}
+
+	return nil
+}
+
+// fetchTemplate retrieves a template using centralized resolver
+func (td *TemplateDefaulter) fetchTemplate(ctx context.Context, templateRef workspacev1alpha1.TemplateRef, workspaceNamespace string) (*workspacev1alpha1.WorkspaceTemplate, error) {
+	return td.resolver.ResolveTemplate(ctx, &templateRef, workspaceNamespace)
+}

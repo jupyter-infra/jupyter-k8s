@@ -20,13 +20,21 @@ const (
 
 	// Auth configuration
 	EnvJwtSigningKey     = "JWT_SIGNING_KEY"
+	EnvJwtSigningType    = "JWT_SIGNING_TYPE"
 	EnvJwtIssuer         = "JWT_ISSUER"
 	EnvJwtAudience       = "JWT_AUDIENCE"
 	EnvJwtExpiration     = "JWT_EXPIRATION"
 	EnvEnableJwtRefresh  = "JWT_REFRESH_ENABLE"
 	EnvJwtRefreshWindow  = "JWT_REFRESH_WINDOW"
 	EnvJwtRefreshHorizon = "JWT_REFRESH_HORIZON"
+	EnvEnableOAuth       = "ENABLE_OAUTH"
 	EnvEnableBearerAuth  = "ENABLE_BEARER_URL_AUTH"
+	EnvKMSKeyId          = "KMS_KEY_ID"
+
+	// Routing configuration
+	EnvRoutingMode                      = "ROUTING_MODE"
+	EnvWorkspaceNamespaceSubdomainRegex = "WORKSPACE_NAMESPACE_SUBDOMAIN_REGEX"
+	EnvWorkspaceNameSubdomainRegex      = "WORKSPACE_NAME_SUBDOMAIN_REGEX"
 
 	// Cookie configuration
 	EnvCookieName     = "COOKIE_NAME"
@@ -57,6 +65,12 @@ const (
 	EnvOidcGroupsPrefix   = "OIDC_GROUPS_PREFIX"
 )
 
+// JWT signing types
+const (
+	JWTSigningTypeStandard = "standard"
+	JWTSigningTypeKMS      = "kms"
+)
+
 // Default values
 const (
 	// Server defaults
@@ -67,12 +81,14 @@ const (
 	// DefaultTrustedProxies is a slice, defined in createDefaultConfig
 
 	// Auth defaults
+	DefaultJwtSigningType    = JWTSigningTypeStandard
 	DefaultJwtIssuer         = "workspaces-auth"
 	DefaultJwtAudience       = "workspace-users"
 	DefaultJwtExpiration     = 1 * time.Hour
 	DefaultJwtRefreshEnable  = true
 	DefaultJwtRefreshWindow  = 15 * time.Minute // 25% of the default expiration
 	DefaultJwtRefreshHorizon = 12 * time.Hour
+	DefaultEnableOAuth       = true
 	DefaultEnableBearerAuth  = false
 
 	// Cookie defaults
@@ -87,6 +103,11 @@ const (
 	DefaultPathRegexPattern            = `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`
 	DefaultWorkspaceNamespacePathRegex = `^/workspaces/([^/]+)/[^/]+`
 	DefaultWorkspaceNamePathRegex      = `^/workspaces/[^/]+/([^/]+)`
+
+	// Routing defaults
+	DefaultRoutingMode                      = RoutingModePath
+	DefaultWorkspaceNamespaceSubdomainRegex = `^([^-]+)-.*`
+	DefaultWorkspaceNameSubdomainRegex      = `^[^-]+-(.*)$`
 
 	// CSRF defaults
 	DefaultCsrfCookieName = "workspace_csrf"
@@ -113,13 +134,16 @@ type Config struct {
 
 	// Auth configuration
 	JWTSigningKey     string
+	JWTSigningType    string
 	JWTIssuer         string
 	JWTAudience       string
 	JWTExpiration     time.Duration
 	JWTRefreshEnable  bool
 	JWTRefreshWindow  time.Duration
 	JWTRefreshHorizon time.Duration
+	EnableOAuth       bool
 	EnableBearerAuth  bool
+	KMSKeyId          string
 
 	// Cookie configuration
 	CookieName     string
@@ -134,6 +158,11 @@ type Config struct {
 	PathRegexPattern            string // Regex pattern to extract app path from full path
 	WorkspaceNamespacePathRegex string // Regex pattern to extract workspace namespace from path
 	WorkspaceNamePathRegex      string // Regex pattern to extract workspace name from path
+
+	// Routing configuration
+	RoutingMode                      string // Routing mode: RoutingModePath or RoutingModeSubdomain
+	WorkspaceNamespaceSubdomainRegex string // Regex pattern to extract workspace namespace from subdomain
+	WorkspaceNameSubdomainRegex      string // Regex pattern to extract workspace name from subdomain
 
 	// CSRF configuration
 	CSRFAuthKey    string
@@ -192,12 +221,14 @@ func createDefaultConfig() *Config {
 		TrustedProxies:  []string{"127.0.0.1", "::1"}, // Default trusted proxies
 
 		// Auth defaults
+		JWTSigningType:    DefaultJwtSigningType,
 		JWTIssuer:         DefaultJwtIssuer,
 		JWTAudience:       DefaultJwtAudience,
 		JWTExpiration:     DefaultJwtExpiration,
 		JWTRefreshEnable:  DefaultJwtRefreshEnable,
 		JWTRefreshWindow:  DefaultJwtRefreshWindow,
 		JWTRefreshHorizon: DefaultJwtRefreshHorizon,
+		EnableOAuth:       DefaultEnableOAuth,
 		EnableBearerAuth:  DefaultEnableBearerAuth,
 
 		// Cookie defaults
@@ -215,6 +246,11 @@ func createDefaultConfig() *Config {
 		// These regex patterns extract workspace namespace and name from the path
 		WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
 		WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+
+		// Routing defaults
+		RoutingMode:                      DefaultRoutingMode,
+		WorkspaceNamespaceSubdomainRegex: DefaultWorkspaceNamespaceSubdomainRegex,
+		WorkspaceNameSubdomainRegex:      DefaultWorkspaceNameSubdomainRegex,
 
 		// CSRF defaults
 		CSRFCookieName:   DefaultCsrfCookieName,
@@ -272,11 +308,16 @@ func applyServerConfig(config *Config) error {
 
 // applyJWTConfig applies JWT-related environment variable overrides
 func applyJWTConfig(config *Config) error {
-	// Required JWT signing key
+	// Set signing type first so we can use it for validation
+	if signingType := os.Getenv(EnvJwtSigningType); signingType != "" {
+		config.JWTSigningType = signingType
+	}
+
+	// JWT signing key - only required for standard signing
 	if key := os.Getenv(EnvJwtSigningKey); key != "" {
 		config.JWTSigningKey = key
-	} else {
-		return fmt.Errorf("%s environment variable must be set", EnvJwtSigningKey)
+	} else if config.JWTSigningType == JWTSigningTypeStandard {
+		return fmt.Errorf("%s environment variable must be set for standard JWT signing", EnvJwtSigningKey)
 	}
 
 	if issuer := os.Getenv(EnvJwtIssuer); issuer != "" {
@@ -319,12 +360,37 @@ func applyJWTConfig(config *Config) error {
 		config.JWTRefreshHorizon = d
 	}
 
+	if enableOAuth := os.Getenv(EnvEnableOAuth); enableOAuth != "" {
+		enable, err := strconv.ParseBool(enableOAuth)
+		if err != nil {
+			return fmt.Errorf("invalid %s: %w", EnvEnableOAuth, err)
+		}
+		config.EnableOAuth = enable
+	}
+
 	if enableBearerAuth := os.Getenv(EnvEnableBearerAuth); enableBearerAuth != "" {
 		enable, err := strconv.ParseBool(enableBearerAuth)
 		if err != nil {
 			return fmt.Errorf("invalid %s: %w", EnvEnableBearerAuth, err)
 		}
 		config.EnableBearerAuth = enable
+	}
+
+	// Routing configuration
+	if routingMode := os.Getenv(EnvRoutingMode); routingMode != "" {
+		config.RoutingMode = routingMode
+	}
+
+	if namespaceSubdomainRegex := os.Getenv(EnvWorkspaceNamespaceSubdomainRegex); namespaceSubdomainRegex != "" {
+		config.WorkspaceNamespaceSubdomainRegex = namespaceSubdomainRegex
+	}
+
+	if nameSubdomainRegex := os.Getenv(EnvWorkspaceNameSubdomainRegex); nameSubdomainRegex != "" {
+		config.WorkspaceNameSubdomainRegex = nameSubdomainRegex
+	}
+
+	if kmsKeyId := os.Getenv(EnvKMSKeyId); kmsKeyId != "" {
+		config.KMSKeyId = kmsKeyId
 	}
 
 	// Validate that JWTExpiration >= JWTRefreshWindow

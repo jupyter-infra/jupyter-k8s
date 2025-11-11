@@ -18,30 +18,73 @@ package v1alpha1
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/stringutil"
 	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
-// nolint:unused
 // log is for logging in this package.
 var workspacelog = logf.Log.WithName("workspace-resource")
 
-func sanitizeUsername(username string) string {
-	// Use Go's JSON marshaling to properly escape the string
-	escaped, _ := json.Marshal(username)
-	// Remove the surrounding quotes that json.Marshal adds
-	return string(escaped[1 : len(escaped)-1])
+// ensureTemplateFinalizer ensures the template has a finalizer to prevent deletion while in use.
+// Uses lazy finalizer pattern: only adds finalizer if at least one active workspace uses the template.
+// Accepts workspaces with DeletionTimestamp set (they'll be deleted eventually).
+func ensureTemplateFinalizer(ctx context.Context, k8sClient client.Client, templateName string, templateNamespace string) error {
+	if templateName == "" {
+		return nil
+	}
+
+	// Check if at least 1 active workspace uses this template (limit=1 for efficiency)
+	// ListActiveWorkspacesByTemplate filters out workspaces with DeletionTimestamp != nil
+	workspaces, _, err := workspaceutil.ListActiveWorkspacesByTemplate(ctx, k8sClient, templateName, templateNamespace, "", 1)
+	if err != nil {
+		workspacelog.Error(err, "Failed to check workspace usage", "template", templateName, "templateNamespace", templateNamespace)
+		return fmt.Errorf("failed to check workspace usage for template %s/%s: %w", templateNamespace, templateName, err)
+	}
+
+	// If no active workspaces use the template, don't add finalizer
+	// This implements lazy finalizer pattern - controller will add it when needed
+	if len(workspaces) == 0 {
+		workspacelog.V(1).Info("No active workspaces use template, skipping finalizer", "template", templateName, "templateNamespace", templateNamespace)
+		return nil
+	}
+
+	// Fetch the template
+	template := &workspacev1alpha1.WorkspaceTemplate{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: templateName, Namespace: templateNamespace}, template); err != nil {
+		// Don't fail webhook if template doesn't exist - let validation handle it
+		workspacelog.Info("Template not found during finalizer check", "template", templateName, "templateNamespace", templateNamespace, "error", err)
+		return nil
+	}
+
+	// Check if finalizer already exists
+	if controllerutil.ContainsFinalizer(template, webhookconst.TemplateFinalizerName) {
+		return nil
+	}
+
+	// Add finalizer since active workspace(s) use this template
+	controllerutil.AddFinalizer(template, webhookconst.TemplateFinalizerName)
+	if err := k8sClient.Update(ctx, template); err != nil {
+		workspacelog.Error(err, "Failed to add finalizer to template", "template", templateName, "templateNamespace", templateNamespace)
+		return fmt.Errorf("failed to add finalizer to template %s/%s: %w", templateNamespace, templateName, err)
+	}
+
+	workspacelog.Info("Added finalizer to template", "template", templateName, "templateNamespace", templateNamespace)
+	return nil
 }
 
 // getEffectiveOwnershipType returns the effective access type, treating empty as Public
@@ -53,27 +96,38 @@ func getEffectiveOwnershipType(ownershipType string) string {
 	return ownershipType
 }
 
-// isAdminUser checks if the user groups include any admin groups
-func isAdminUser(groups []string) bool {
+// isControllerOrAdminUser checks if the user is the controller service account or has admin privileges
+func isControllerOrAdminUser(ctx context.Context) bool {
+	req, err := admission.RequestFromContext(ctx)
+	if err != nil {
+		return false
+	}
+
+	// Check if user is controller
+	controllerServiceAccount := os.Getenv(controller.ControllerPodServiceAccountEnv)
+	controllerNamespace := os.Getenv(controller.ControllerPodNamespaceEnv)
+	if controllerServiceAccount != "" && controllerNamespace != "" {
+		// Build the full service account name: system:serviceaccount:namespace:name
+		fullControllerSA := fmt.Sprintf("system:serviceaccount:%s:%s", controllerNamespace, controllerServiceAccount)
+		if req.UserInfo.Username == fullControllerSA {
+			return true
+		}
+	}
+
+	// Check if user is admin
 	adminGroups := []string{webhookconst.DefaultAdminGroup}
 	if clusterAdminGroup := os.Getenv("CLUSTER_ADMIN_GROUP"); clusterAdminGroup != "" {
 		adminGroups = append(adminGroups, clusterAdminGroup)
 	}
-	for _, group := range groups {
+	for _, group := range req.UserInfo.Groups {
 		for _, adminGroup := range adminGroups {
 			if group == adminGroup {
 				return true
 			}
 		}
 	}
-	return false
-}
 
-func fetchTemplateRef(workspace *workspacev1alpha1.Workspace) string {
-	if workspace.Spec.TemplateRef != nil {
-		return *workspace.Spec.TemplateRef
-	}
-	return ""
+	return false
 }
 
 // validateOwnershipPermission checks if the user has permission to modify/delete an OwnerOnly workspace
@@ -83,7 +137,7 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 		return fmt.Errorf("unable to extract user information from request context: %w", err)
 	}
 
-	currentUser := sanitizeUsername(req.UserInfo.Username)
+	currentUser := stringutil.SanitizeUsername(req.UserInfo.Username)
 	workspacelog.Info("Validating ownership permission", "currentUser", currentUser)
 
 	// Check if user is the owner
@@ -96,23 +150,27 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 		}
 	}
 
-	// Check if user is cluster admin
-	workspacelog.Info("Checking admin status", "groups", req.UserInfo.Groups)
-	if isAdminUser(req.UserInfo.Groups) {
-		workspacelog.Info("User is admin, allowing access")
-		return nil
-	}
-
-	return fmt.Errorf("access denied: only workspace owner or cluster admins can modify OwnerOnly workspaces")
+	return fmt.Errorf("access denied: only workspace owner can modify OwnerOnly workspaces")
 }
 
 // SetupWorkspaceWebhookWithManager registers the webhook for Workspace in the manager.
-func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
-	templateValidator := NewTemplateValidator(mgr.GetClient())
+// RBAC Note: This webhook requires WorkspaceTemplate access (get, update, finalizers/update)
+// which is provided by the workspacetemplate controller RBAC markers.
+func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace string) error {
+	templateValidator := NewTemplateValidator(mgr.GetClient(), defaultTemplateNamespace)
+	templateDefaulter := NewTemplateDefaulter(mgr.GetClient(), defaultTemplateNamespace)
+	templateGetter := NewTemplateGetter(mgr.GetClient())
+	serviceAccountValidator := NewServiceAccountValidator(mgr.GetClient())
+	serviceAccountDefaulter := NewServiceAccountDefaulter(mgr.GetClient())
 
 	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.Workspace{}).
-		WithValidator(&WorkspaceCustomValidator{templateValidator: templateValidator}).
-		WithDefaulter(&WorkspaceCustomDefaulter{templateValidator: templateValidator}).
+		WithValidator(&WorkspaceCustomValidator{templateValidator: templateValidator, serviceAccountValidator: serviceAccountValidator}).
+		WithDefaulter(&WorkspaceCustomDefaulter{
+			templateDefaulter:       templateDefaulter,
+			serviceAccountDefaulter: serviceAccountDefaulter,
+			templateGetter:          templateGetter,
+			client:                  mgr.GetClient(),
+		}).
 		Complete()
 }
 
@@ -124,7 +182,10 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as it is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceCustomDefaulter struct {
-	templateValidator *TemplateValidator
+	templateDefaulter       *TemplateDefaulter
+	serviceAccountDefaulter *ServiceAccountDefaulter
+	templateGetter          *TemplateGetter
+	client                  client.Client
 }
 
 var _ webhook.CustomDefaulter = &WorkspaceCustomDefaulter{}
@@ -138,6 +199,14 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 	}
 	workspacelog.Info("Defaulting for Workspace", "name", workspace.GetName(), "namespace", workspace.GetNamespace())
 
+	// Skip template defaulting if workspace is being deleted
+	// During deletion, only finalizer removal happens and we don't need to apply defaults
+	// This prevents webhook failures when template is already deleted
+	if !workspace.DeletionTimestamp.IsZero() {
+		workspacelog.Info("Skipping defaulting for workspace being deleted", "name", workspace.GetName())
+		return nil
+	}
+
 	// Add ownership tracking annotations
 	if workspace.Annotations == nil {
 		workspace.Annotations = make(map[string]string)
@@ -145,7 +214,7 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 
 	// Extract user info from request context
 	if req, err := admission.RequestFromContext(ctx); err == nil {
-		sanitizedUsername := sanitizeUsername(req.UserInfo.Username)
+		sanitizedUsername := stringutil.SanitizeUsername(req.UserInfo.Username)
 
 		// Always set created-by on CREATE operations
 		if req.Operation == "CREATE" {
@@ -158,16 +227,36 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 		workspacelog.Info("Added last-updated-by annotation", "workspace", workspace.GetName(), "user", sanitizedUsername, "namespace", workspace.GetNamespace())
 	}
 
+	// Apply template getter
+	if err := d.templateGetter.ApplyTemplateName(ctx, workspace); err != nil {
+		workspacelog.Error(err, "Failed to apply template reference", "workspace", workspace.GetName())
+		return fmt.Errorf("failed to apply template reference: %w", err)
+	}
+
 	// Apply template defaults
-	if err := d.templateValidator.ApplyTemplateDefaults(ctx, workspace); err != nil {
+	if err := d.templateDefaulter.ApplyTemplateDefaults(ctx, workspace); err != nil {
 		workspacelog.Error(err, "Failed to apply template defaults", "workspace", workspace.GetName())
 		return fmt.Errorf("failed to apply template defaults: %w", err)
+	}
+
+	// Apply service account defaults
+	if err := d.serviceAccountDefaulter.ApplyServiceAccountDefaults(ctx, workspace); err != nil {
+		workspacelog.Error(err, "Failed to apply service account defaults", "workspace", workspace.GetName())
+		return fmt.Errorf("failed to apply service account defaults: %w", err)
+	}
+
+	// Ensure template has finalizer to prevent deletion while in use
+	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
+		templateNamespace := workspaceutil.GetTemplateRefNamespace(workspace)
+		if err := ensureTemplateFinalizer(ctx, d.client, workspace.Spec.TemplateRef.Name, templateNamespace); err != nil {
+			workspacelog.Error(err, "Failed to add finalizer to template", "workspace", workspace.GetName(), "template", workspace.Spec.TemplateRef.Name, "templateNamespace", templateNamespace)
+			return fmt.Errorf("failed to add finalizer to template: %w", err)
+		}
 	}
 
 	return nil
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 // NOTE: The 'path' attribute must follow a specific pattern and should not be modified directly here.
 // Modifying the path for an invalid path can cause API server errors; failing to locate the webhook.
 // +kubebuilder:webhook:path=/validate-workspace-jupyter-org-v1alpha1-workspace,mutating=false,failurePolicy=fail,sideEffects=None,groups=workspace.jupyter.org,resources=workspaces,verbs=create;update;delete,versions=v1alpha1,name=vworkspace-v1alpha1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
@@ -178,7 +267,8 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceCustomValidator struct {
-	templateValidator *TemplateValidator
+	templateValidator       *TemplateValidator
+	serviceAccountValidator *ServiceAccountValidator
 }
 
 var _ webhook.CustomValidator = &WorkspaceCustomValidator{}
@@ -193,6 +283,16 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, obj runti
 
 	// Validate template constraints
 	if err := v.templateValidator.ValidateCreateWorkspace(ctx, workspace); err != nil {
+		return nil, err
+	}
+
+	// Controller or admin users bypass validation
+	if isControllerOrAdminUser(ctx) {
+		return nil, nil
+	}
+
+	// Validate service account access
+	if err := v.serviceAccountValidator.ValidateServiceAccountAccess(ctx, workspace); err != nil {
 		return nil, err
 	}
 
@@ -211,32 +311,37 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 	}
 	workspacelog.Info("Validation for Workspace upon update", "name", newWorkspace.GetName(), "namespace", newWorkspace.GetNamespace())
 
-	// Check if user is admin
-	isAdmin := false
-	if req, err := admission.RequestFromContext(ctx); err == nil {
-		isAdmin = isAdminUser(req.UserInfo.Groups)
+	// Skip validation if workspace is being deleted (has deletionTimestamp)
+	// This allows finalizer removal even if template is already deleted
+	if !newWorkspace.DeletionTimestamp.IsZero() {
+		return nil, nil
 	}
 
-	// Validate templateRef immutability
-	oldTemplateRef := fetchTemplateRef(oldWorkspace)
-	newTemplateRef := fetchTemplateRef(newWorkspace)
-	if oldTemplateRef != "" && oldTemplateRef != newTemplateRef && !isAdmin {
-		return nil, fmt.Errorf("templateRef is immutable and cannot be changed")
+	// Controller or admin users bypass validation
+	isAdmin := isControllerOrAdminUser(ctx)
+
+	// NOTE: Removed templateRef immutability check to enable template mutability (PR #129)
+	// Templates can now be changed after workspace creation
+
+	// Admin users bypass user validation
+	if isAdmin {
+		return nil, nil
 	}
 
-	// Validate that ownership annotations are immutable (except for admins)
+	// Validate service account access for new workspace
+	if err := v.serviceAccountValidator.ValidateServiceAccountAccess(ctx, newWorkspace); err != nil {
+		return nil, err
+	}
+
+	// Validate that ownership annotations are immutable
 	if oldWorkspace.Annotations != nil && oldWorkspace.Annotations[controller.AnnotationCreatedBy] != "" {
 		oldCreatedBy := oldWorkspace.Annotations[controller.AnnotationCreatedBy]
 		// Check if annotations are being cleared
 		if newWorkspace.Annotations == nil {
-			if !isAdmin {
-				return nil, fmt.Errorf("created-by annotation cannot be removed")
-			}
+			return nil, fmt.Errorf("created-by annotation cannot be removed")
 		}
 		if newCreatedBy := newWorkspace.Annotations[controller.AnnotationCreatedBy]; newCreatedBy != oldCreatedBy {
-			if !isAdmin {
-				return nil, fmt.Errorf("created-by annotation is immutable")
-			}
+			return nil, fmt.Errorf("created-by annotation is immutable")
 		}
 	}
 
@@ -271,6 +376,11 @@ func (v *WorkspaceCustomValidator) ValidateDelete(ctx context.Context, obj runti
 		return nil, fmt.Errorf("expected a Workspace object but got %T", obj)
 	}
 	workspacelog.Info("Validation for Workspace upon deletion", "name", workspace.GetName(), "namespace", workspace.GetNamespace())
+
+	// Controller or admin users bypass validation
+	if isControllerOrAdminUser(ctx) {
+		return nil, nil
+	}
 
 	// For OwnerOnly workspaces, check if user has permission
 	effectiveOwnershipType := getEffectiveOwnershipType(workspace.Spec.OwnershipType)

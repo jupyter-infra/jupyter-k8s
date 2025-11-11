@@ -7,6 +7,7 @@ import (
 	"text/template"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -41,7 +42,9 @@ func (b *AccessResourcesBuilder) BuildUnstructuredResource(
 	name := fmt.Sprintf("%s-%s", accessResourceTemplate.NamePrefix, workspace.Name)
 
 	// Process resource template
-	resourceTmpl, err := template.New("resource").Parse(accessResourceTemplate.Template)
+	resourceTmpl, err := template.New("resource").Funcs(template.FuncMap{
+		"b32encode": workspaceutil.EncodeNamespaceB32,
+	}).Parse(accessResourceTemplate.Template)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse resource template: %w", err)
 	}
@@ -106,7 +109,7 @@ func (b *AccessResourcesBuilder) BuildUnstructuredResource(
 	if accessStrategyNamespace == "" {
 		accessStrategyNamespace = workspace.Namespace
 	}
-	labels[LabelWorkspaceName] = workspace.Name
+	labels[workspaceutil.LabelWorkspaceName] = workspace.Name
 	labels[LabelWorkspaceNamespace] = workspace.Namespace
 	labels[LabelAccessStrategyName] = accessStrategy.Name
 	labels[LabelAccessStrategyNamespace] = accessStrategyNamespace
@@ -129,7 +132,9 @@ func (b *AccessResourcesBuilder) ResolveAccessURL(
 	}
 
 	// Resolve the AccessURLTemplate using the template engine
-	tmpl, err := template.New("accessURL").Parse(accessUrlTemplate)
+	tmpl, err := template.New("accessURL").Funcs(template.FuncMap{
+		"b32encode": workspaceutil.EncodeNamespaceB32,
+	}).Parse(accessUrlTemplate)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse AccessURLTemplate: %w", err)
 	}
@@ -164,5 +169,5 @@ func (b *AccessResourcesBuilder) ResolveAccessResourceSelector(
 	}
 
 	// Format: key1=value1,key2=value2
-	return fmt.Sprintf("%s=%s", LabelWorkspaceName, workspace.Name)
+	return fmt.Sprintf("%s=%s", workspaceutil.LabelWorkspaceName, workspace.Name)
 }

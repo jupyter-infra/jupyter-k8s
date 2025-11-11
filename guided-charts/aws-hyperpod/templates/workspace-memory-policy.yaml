@@ -1,0 +1,33 @@
+{{- if .Values.remoteAccess.enabled }}
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: hyperpod-workspace-memory-policy
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - operations: ["CREATE", "UPDATE"]
+      apiGroups: ["workspace.jupyter.org"]
+      apiVersions: ["v1alpha1"]
+      resources: ["workspaces"]
+  validations:
+  - expression: |
+      has(object.spec.resources) && 
+      has(object.spec.resources.requests) && 
+      has(object.spec.resources.requests.memory) &&
+      quantity(object.spec.resources.requests.memory).isGreaterThan(quantity("8Gi"))
+    message: "HyperPod workspace requires minimum 8GB memory for remote access functionality"
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: hyperpod-workspace-memory-binding
+spec:
+  policyName: hyperpod-workspace-memory-policy
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        hyperpod.aws.com/managed: "true"
+{{- end }}

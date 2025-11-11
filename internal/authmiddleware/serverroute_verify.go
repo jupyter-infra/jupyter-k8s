@@ -3,6 +3,8 @@ package authmiddleware
 import (
 	"net/http"
 	"strings"
+
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 )
 
 // handleVerify handles token verification requests
@@ -41,8 +43,8 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate token type - verify should only accept session tokens
-	if claims.TokenType != TokenTypeSession {
-		s.logger.Info("Invalid token type for verify", "expected", TokenTypeSession, "actual", claims.TokenType)
+	if claims.TokenType != jwt.TokenTypeSession {
+		s.logger.Info("Invalid token type for verify", "expected", jwt.TokenTypeSession, "actual", claims.TokenType)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -68,7 +70,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		s.logger.Debug("Refreshing token", "user", claims.User, "path", claims.Path)
 
 		// Verify that the user still has access to the specific Workspace
-		accessReviewResult, workspaceInfo, accessErr := s.VerifyWorkspaceAccessFromJwt(r.Context(), requestPath, claims)
+		accessReviewResult, workspaceInfo, accessErr := s.VerifyWorkspaceAccessFromJwt(r.Context(), r, claims)
 
 		// UNHAPPY CASE 1: we can't check authZ for some reason, stop attempting to refresh
 		if accessErr != nil {
@@ -78,7 +80,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 				s.logger.Warn("Failed to update token to skip", "error", err)
 			} else {
 				// Set refreshed cookie with the same path as the original token
-				s.cookieManager.SetCookie(w, newToken, claims.Path)
+				s.cookieManager.SetCookie(w, newToken, claims.Path, claims.Domain)
 				s.logger.Info("Token refreshed successfully", "user", claims.User, "path", claims.Path)
 			}
 			// UNHAPPY CASE 2: user is no longer allowed, return 403
@@ -91,7 +93,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 				workspaceInfo.Namespace,
 				"reason",
 				accessReviewResult.Reason)
-			s.cookieManager.ClearCookie(w, claims.Path)
+			s.cookieManager.ClearCookie(w, claims.Path, claims.Domain)
 			http.Error(w, "Access denied: you are no longer authorized to access this workspace", http.StatusForbidden)
 			return
 			// HAPPY CASE: user is allowed, refresh their cookie
@@ -103,7 +105,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 				s.logger.Warn("Failed to refresh token", "error", err)
 			} else {
 				// Set refreshed cookie with the same path as the original token
-				s.cookieManager.SetCookie(w, newToken, claims.Path)
+				s.cookieManager.SetCookie(w, newToken, claims.Path, claims.Domain)
 				s.logger.Info("Token refreshed successfully", "user", claims.User, "path", claims.Path)
 			}
 		}

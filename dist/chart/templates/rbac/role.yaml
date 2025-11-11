@@ -34,6 +34,7 @@ rules:
   - ""
   resources:
   - pods
+  - serviceaccounts
   verbs:
   - get
   - list
@@ -96,17 +97,16 @@ rules:
 - apiGroups:
   - workspace.jupyter.org
   resources:
-  - workspacetemplates
+  - workspaces/finalizers
+  - workspacetemplates/finalizers
   verbs:
-  - get
-  - list
-  - patch
   - update
-  - watch
 - apiGroups:
   - workspace.jupyter.org
   resources:
-  - workspacetemplates/finalizers
+  - workspacetemplates/status
   verbs:
+  - get
+  - patch
   - update
 {{- end -}}
