@@ -42,12 +42,6 @@ func GetTemplateRefNamespace(ws *workspacev1alpha1.Workspace) string {
 	return ws.Spec.TemplateRef.Namespace
 }
 
-// GetWorkspaceKey returns the namespace/name key for a workspace
-// This follows Kubernetes convention for logging object references (similar to klog.KObj)
-func GetWorkspaceKey(ws *workspacev1alpha1.Workspace) string {
-	return fmt.Sprintf("%s/%s", ws.Namespace, ws.Name)
-}
-
 // ListActiveWorkspacesByTemplate returns all active (non-deleted) workspaces using the specified template.
 // Reads from controller-runtime's informer cache (not direct API calls), providing efficient lookup
 // with eventual consistency guarantees. Filters out workspaces being deleted (DeletionTimestamp set).
@@ -96,7 +90,8 @@ func ListActiveWorkspacesByTemplate(ctx context.Context, k8sClient client.Client
 		// This is somewhat redundant given CEL immutability validation but adds zero cost and adds a layer of verification.
 		if ws.Spec.TemplateRef == nil {
 			logger.Info("Workspace has template label but nil templateRef - data integrity issue",
-				"workspace", GetWorkspaceKey(&ws),
+				"workspace", ws.Name,
+				"workspaceNamespace", ws.Namespace,
 				"label", templateName)
 			continue
 		}
@@ -104,7 +99,8 @@ func ListActiveWorkspacesByTemplate(ctx context.Context, k8sClient client.Client
 		if ws.Spec.TemplateRef.Name != templateName {
 			// This should never happen - log if it occurs
 			logger.Info("Workspace has template label but different templateRef name",
-				"workspace", GetWorkspaceKey(&ws),
+				"workspace", ws.Name,
+				"workspaceNamespace", ws.Namespace,
 				"label", templateName,
 				"spec", ws.Spec.TemplateRef.Name)
 			continue
@@ -115,7 +111,8 @@ func ListActiveWorkspacesByTemplate(ctx context.Context, k8sClient client.Client
 			actualNamespace := GetTemplateRefNamespace(&ws)
 			if actualNamespace != templateNamespace {
 				logger.V(1).Info("Workspace has template label but different namespace",
-					"workspace", GetWorkspaceKey(&ws),
+					"workspace", ws.Name,
+					"workspaceNamespace", ws.Namespace,
 					"labelNamespace", templateNamespace,
 					"specNamespace", actualNamespace)
 				continue
