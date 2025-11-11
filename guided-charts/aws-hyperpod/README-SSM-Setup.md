@@ -251,7 +251,7 @@ kubectl logs -f deployment/jupyter-k8s-controller-manager -n jupyter-k8s-system
 ### 5.1 Create Test Workspace
 
 ```bash
-cat > test-workspace.yaml << EOF
+kubectl apply -f - << EOF
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
@@ -273,15 +273,13 @@ spec:
   accessStrategy:
     name: aws-ssm-remote-access
 EOF
-
-kubectl apply -f test-workspace.yaml
 ```
 
 ### 5.2 Monitor SSM Registration
 
 ```bash
 # Watch pod creation
-kubectl get pods -l workspace.jupyter.org/workspaceName=test-ssm-workspace -w
+kubectl get pods -l workspace.jupyter.org/workspace-name=test-ssm-workspace -w
 
 # Monitor operator logs for SSM workflow
 kubectl logs -f deployment/jupyter-k8s-controller-manager -n jupyter-k8s-system | grep -i ssm

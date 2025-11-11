@@ -63,14 +63,30 @@ var _ = Describe("Webhook Owner", Ordered, func() {
 
 	AfterAll(func() {
 		By("cleaning up test workspaces")
-		cmd := exec.Command("kubectl", "delete", "workspace", "--all", "--ignore-not-found", "--wait=false")
+		// Use --wait=true for synchronous deletion to ensure finalizers are processed
+		cmd := exec.Command("kubectl", "delete", "workspace", "--all", "--ignore-not-found", "--wait=true", "--timeout=180s")
 		_, _ = utils.Run(cmd)
 
 		By("undeploying the controller-manager")
+		// Undeploy controller BEFORE uninstalling CRDs to allow controller to process finalizers
+		// This follows K8s best practice: delete resources in reverse order of creation
 		cmd = exec.Command("make", "undeploy")
 		_, _ = utils.Run(cmd)
 
+		By("waiting for controller pod to be fully terminated")
+		// Ensure controller is completely stopped before deleting CRDs
+		Eventually(func(g Gomega) {
+			cmd := exec.Command("kubectl", "get", "pods",
+				"-n", "jupyter-k8s-system",
+				"-l", "control-plane=controller-manager",
+				"-o", "name")
+			output, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(strings.TrimSpace(string(output))).To(BeEmpty())
+		}).WithTimeout(60 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
 		By("uninstalling CRDs")
+		// Delete CRDs last to avoid race conditions with controller finalizer processing
 		cmd = exec.Command("make", "uninstall")
 		_, _ = utils.Run(cmd)
 	})

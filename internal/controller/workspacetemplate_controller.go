@@ -32,19 +32,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
-const templateFinalizerName = "workspace.jupyter.org/template-protection"
+const (
+	templateFinalizerName = "workspace.jupyter.org/template-protection"
+)
 
 // WorkspaceTemplateReconciler reconciles a WorkspaceTemplate object
 type WorkspaceTemplateReconciler struct {
 	client.Client
-	Scheme           *runtime.Scheme
-	recorder         record.EventRecorder
-	templateResolver *TemplateResolver
+	Scheme   *runtime.Scheme
+	recorder record.EventRecorder
 }
 
-// +kubebuilder:rbac:groups=workspace.jupyter.org,resources=workspacetemplates,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=workspace.jupyter.org,resources=workspacetemplates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=workspace.jupyter.org,resources=workspacetemplates/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -70,21 +72,41 @@ func (r *WorkspaceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return r.handleDeletion(ctx, template)
 	}
 
+	// Handle spec changes to track generation updates
+	shouldUpdateStatus, newGeneration := r.handleSpecChanges(ctx, template)
+
 	// Manage finalizer based on workspace usage (lazy finalizer pattern)
 	// This follows Kubernetes best practice: only add finalizers when needed
-	return r.manageFinalizer(ctx, template)
+	result, err := r.manageFinalizer(ctx, template)
+	if err != nil {
+		return result, err
+	}
+
+	// Update status.observedGeneration AFTER all reconciliation work completes
+	// This follows Kubernetes semantics: observedGeneration reflects fully-processed state
+	if shouldUpdateStatus {
+		if err := r.updateStatusObservedGeneration(ctx, template, newGeneration); err != nil {
+			logger.Error(err, "Failed to update status.observedGeneration")
+			return ctrl.Result{}, err
+		}
+	}
+
+	return result, nil
 }
 
-// manageFinalizer implements lazy finalizer management for WorkspaceTemplates
-// Following Kubernetes best practices:
-// - Finalizers are only added when workspaces start using the template
-// - Finalizers are removed when all workspaces stop using the template
-// - This minimizes overhead and complexity compared to adding finalizers to all templates
+// manageFinalizer implements lazy finalizer management for WorkspaceTemplates.
+// Finalizers are only added when workspaces use the template, and removed when all workspaces stop using it.
+//
+// Dual protection: workspace webhook adds finalizers eagerly (fail-fast at admission), while this controller
+// adds them lazily as a safety net and handles removal (webhooks cannot detect when all workspaces are gone).
+//
+//nolint:unparam // ctrl.Result signature maintained for consistency with controller-runtime patterns
 func (r *WorkspaceTemplateReconciler) manageFinalizer(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
 	// Check if any active workspaces are using this template
-	workspaces, err := r.templateResolver.ListWorkspacesUsingTemplate(ctx, template.Name)
+	// Reads from controller-runtime's informer cache (not direct API calls)
+	workspaces, _, err := workspace.ListActiveWorkspacesByTemplate(ctx, r.Client, template.Name, template.Namespace, "", 0)
 	if err != nil {
 		logger.Error(err, "Failed to list workspaces using template")
 		return ctrl.Result{}, err
@@ -141,26 +163,28 @@ func (r *WorkspaceTemplateReconciler) handleDeletion(ctx context.Context, templa
 	}
 
 	// Check if any workspaces are using this template
-	workspaces, err := r.templateResolver.ListWorkspacesUsingTemplate(ctx, template.Name)
+	// Reads from controller-runtime's informer cache (not direct API calls)
+	workspaces, _, err := workspace.ListActiveWorkspacesByTemplate(ctx, r.Client, template.Name, template.Namespace, "", 0)
 	if err != nil {
 		logger.Error(err, "Failed to list workspaces using template")
 		return ctrl.Result{}, err
 	}
 
-	// Log workspace names for debugging
-	workspaceNames := make([]string, len(workspaces))
-	for i, ws := range workspaces {
-		workspaceNames[i] = fmt.Sprintf("%s/%s", ws.Namespace, ws.Name)
+	if len(workspaces) > 0 {
+		logger.Info("Template is in use, blocking deletion",
+			"templateName", template.Name,
+			"exampleWorkspace", workspaces[0].Name,
+			"exampleWorkspaceNamespace", workspaces[0].Namespace)
+	} else {
+		logger.Info("No workspaces using template",
+			"templateName", template.Name)
 	}
-	logger.Info("Checked workspaces using template",
-		"templateName", template.Name,
-		"workspaceCount", len(workspaces),
-		"workspaceNames", workspaceNames)
 
 	if len(workspaces) > 0 {
-		msg := fmt.Sprintf("Cannot delete template: in use by %d workspace(s)", len(workspaces))
-		logger.Info(msg, "workspaces", len(workspaces))
-		r.recorder.Event(template, "Warning", "TemplateInUse", msg)
+		msg := "Cannot delete template: in use by workspace(s)"
+		if r.recorder != nil {
+			r.recorder.Event(template, "Warning", "TemplateInUse", msg)
+		}
 
 		// Don't remove finalizer - block deletion
 		// Return nil (not error) - we successfully determined template is in use
@@ -169,14 +193,17 @@ func (r *WorkspaceTemplateReconciler) handleDeletion(ctx context.Context, templa
 	}
 
 	// No workspaces using template - safe to delete
-	logger.Info("No workspaces using template, removing finalizer", "templateName", template.Name)
+	logger.Info("No workspaces using template, removing finalizer",
+		"templateName", template.Name)
 	controllerutil.RemoveFinalizer(template, templateFinalizerName)
 	if err := r.Update(ctx, template); err != nil {
-		logger.Error(err, "Failed to remove finalizer from template")
+		logger.Error(err, "Failed to remove finalizer from template",
+			"templateName", template.Name)
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Template finalizer removed - deletion allowed", "templateName", template.Name)
+	logger.Info("Template finalizer removed successfully - deletion allowed",
+		"templateName", template.Name)
 	return ctrl.Result{}, nil
 }
 
@@ -208,24 +235,41 @@ func (r *WorkspaceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // findTemplatesForWorkspace maps a Workspace to the WorkspaceTemplate it references
 // This ensures the template is reconciled when a workspace using it is created/updated/deleted
 func (r *WorkspaceTemplateReconciler) findTemplatesForWorkspace(ctx context.Context, obj client.Object) []reconcile.Request {
-	workspace, ok := obj.(*workspacev1alpha1.Workspace)
+	ws, ok := obj.(*workspacev1alpha1.Workspace)
 	if !ok {
 		return nil
 	}
 
-	if workspace.Spec.TemplateRef == nil || *workspace.Spec.TemplateRef == "" {
+	logger := logf.FromContext(ctx)
+
+	// Use label instead of spec.templateRef because labels persist during deletion
+	// When workspace is deleted, spec fields are cleared but labels remain
+	// This ensures template reconciliation is triggered even during workspace deletion
+	templateName := ws.Labels[workspace.LabelWorkspaceTemplate]
+	templateNamespace := ws.Labels[workspace.LabelWorkspaceTemplateNamespace]
+	if templateName == "" || templateNamespace == "" {
+		logger.V(1).Info("Workspace has incomplete template labels, skipping template reconciliation",
+			"workspace", ws.Name,
+			"workspaceNamespace", ws.Namespace,
+			"templateName", templateName,
+			"templateNamespace", templateNamespace,
+			"deletionTimestamp", ws.DeletionTimestamp)
 		return nil
 	}
 
-	logger := logf.FromContext(ctx)
-	logger.V(1).Info("Workspace changed, enqueueing template reconciliation",
-		"workspace", fmt.Sprintf("%s/%s", workspace.Namespace, workspace.Name),
-		"template", *workspace.Spec.TemplateRef)
+	logger.Info("Workspace changed, enqueueing template reconciliation",
+		"workspace", ws.Name,
+		"workspaceNamespace", ws.Namespace,
+		"template", templateName,
+		"templateNamespace", templateNamespace,
+		"deletionTimestamp", ws.DeletionTimestamp,
+		"hasLabel", true)
 
 	// Trigger reconciliation of the template when workspace changes
 	return []reconcile.Request{
 		{NamespacedName: types.NamespacedName{
-			Name: *workspace.Spec.TemplateRef,
+			Name:      templateName,
+			Namespace: templateNamespace,
 		}},
 	}
 }
@@ -238,15 +282,79 @@ func SetupWorkspaceTemplateController(mgr ctrl.Manager) error {
 	k8sClient := mgr.GetClient()
 	scheme := mgr.GetScheme()
 	eventRecorder := mgr.GetEventRecorderFor("workspacetemplate-controller")
-	templateResolver := NewTemplateResolver(k8sClient)
 
 	reconciler := &WorkspaceTemplateReconciler{
-		Client:           k8sClient,
-		Scheme:           scheme,
-		recorder:         eventRecorder,
-		templateResolver: templateResolver,
+		Client:   k8sClient,
+		Scheme:   scheme,
+		recorder: eventRecorder,
 	}
 
 	logger.Info("Calling SetupWithManager for WorkspaceTemplate controller")
 	return reconciler.SetupWithManager(mgr)
+}
+
+// handleSpecChanges detects template spec changes using Generation field
+// Uses Generation-based change detection following Kubernetes API conventions:
+// - metadata.generation is auto-incremented by kube-apiserver when spec changes
+// - status.observedGeneration tracks the last generation processed by this controller
+// - Only process each generation once (idempotent)
+// This pattern is standard across all Kubernetes resources (Deployments, StatefulSets, etc.)
+//
+// Note: This controller tracks generation changes but does NOT proactively label workspaces.
+// Compliance is enforced lazily by the admission webhook when workspaces are created or updated.
+//
+// Returns: (shouldUpdateStatus bool, newGeneration int64)
+// The caller should update status.observedGeneration to newGeneration if shouldUpdateStatus is true.
+// This ensures status.observedGeneration is updated AFTER all reconciliation work completes,
+// following Kubernetes semantics where observedGeneration reflects fully-processed state.
+func (r *WorkspaceTemplateReconciler) handleSpecChanges(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) (bool, int64) {
+	logger := logf.FromContext(ctx)
+	currentGeneration := template.Generation
+	observedGeneration := template.Status.ObservedGeneration
+
+	logger.V(1).Info("Checking template generation",
+		"currentGeneration", currentGeneration,
+		"observedGeneration", observedGeneration)
+
+	// Already processed this generation
+	if observedGeneration >= currentGeneration {
+		logger.V(1).Info("Generation already processed, skipping")
+		return false, 0
+	}
+
+	// First creation (generation=1, never processed before)
+	if currentGeneration == 1 && observedGeneration == 0 {
+		logger.Info("Template created, marking generation as observed")
+		return true, 1
+	}
+
+	// Spec was updated - just track it, webhook will enforce compliance on next workspace update
+	logger.Info("Template spec changed, updating observedGeneration",
+		"templateName", template.Name,
+		"oldGeneration", observedGeneration,
+		"newGeneration", currentGeneration)
+
+	// Return true to indicate status should be updated
+	return true, currentGeneration
+}
+
+// updateStatusObservedGeneration updates the template's status.observedGeneration field
+// Following Kubernetes API conventions for status tracking
+func (r *WorkspaceTemplateReconciler) updateStatusObservedGeneration(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate, generation int64) error {
+	logger := logf.FromContext(ctx)
+
+	template.Status.ObservedGeneration = generation
+
+	if err := r.Status().Update(ctx, template); err != nil {
+		logger.Error(err, "Failed to update status.observedGeneration",
+			"templateName", template.Name,
+			"generation", generation)
+		return fmt.Errorf("failed to update status: %w", err)
+	}
+
+	logger.V(1).Info("Updated status.observedGeneration",
+		"templateName", template.Name,
+		"generation", generation)
+
+	return nil
 }
