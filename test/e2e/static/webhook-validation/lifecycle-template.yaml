@@ -1,0 +1,25 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: lifecycle-template
+spec:
+  displayName: "Lifecycle Template"
+  defaultImage: "jupyter/base-notebook:latest"
+  defaultLifecycle:
+    postStart:
+      exec:
+        command: ["/bin/sh", "-c", "echo started"]
+  defaultIdleShutdown:
+    enabled: true
+    timeoutMinutes: 30
+    detection:
+      httpGet:
+        path: "/api/status"
+        port: 8888
+  resourceBounds:
+    cpu:
+      min: "100m"
+      max: "2"
+    memory:
+      min: "128Mi"
+      max: "4Gi"

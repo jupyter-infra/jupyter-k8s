@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: templateref-mutability-test
+spec:
+  displayName: "TemplateRef Mutability Test"
+  ownershipType: Public
+  templateRef:
+    name: production-notebook-template

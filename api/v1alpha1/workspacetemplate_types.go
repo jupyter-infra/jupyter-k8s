@@ -202,20 +202,32 @@ type IdleShutdownOverridePolicy struct {
 	MaxTimeoutMinutes *int `json:"maxTimeoutMinutes,omitempty"`
 }
 
+// WorkspaceTemplateStatus defines the observed state of WorkspaceTemplate
+// Follows Kubernetes API conventions for status reporting
+type WorkspaceTemplateStatus struct {
+	// ObservedGeneration reflects the generation of the most recently observed WorkspaceTemplate spec.
+	// This field is used by controllers to determine if they need to reconcile the template.
+	// When metadata.generation != status.observedGeneration, the controller has not yet processed the latest spec.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Display Name",type="string",JSONPath=".spec.displayName"
 // +kubebuilder:printcolumn:name="Default Image",type="string",JSONPath=".spec.defaultImage"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // WorkspaceTemplate is the Schema for the workspacetemplates API
 // Templates define reusable, secure-by-default configurations for workspaces.
-// The spec is immutable after creation - to update a template, create a new version.
+// Template spec can be updated; existing workspaces keep their configuration (lazy application).
 type WorkspaceTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec WorkspaceTemplateSpec `json:"spec,omitempty"`
+	Spec   WorkspaceTemplateSpec   `json:"spec,omitempty"`
+	Status WorkspaceTemplateStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

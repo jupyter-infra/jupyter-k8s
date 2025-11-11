@@ -313,7 +313,7 @@ func TestGenerateVSCodeURLWithPod(t *testing.T) {
 			Namespace: "default",
 			UID:       "test-uid-123",
 			Labels: map[string]string{
-				"workspace.jupyter.org/workspaceName": "test-workspace",
+				"workspace.jupyter.org/workspace-name": "test-workspace",
 			},
 		},
 	}
@@ -459,7 +459,7 @@ func TestGenerateVSCodeURLSSMSuccess(t *testing.T) {
 			Namespace: "default",
 			UID:       "test-uid-123",
 			Labels: map[string]string{
-				"workspace.jupyter.org/workspaceName": "test-workspace",
+				"workspace.jupyter.org/workspace-name": "test-workspace",
 			},
 		},
 	}

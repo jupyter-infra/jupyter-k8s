@@ -51,12 +51,13 @@ var _ = Describe("TemplateGetter", func() {
 
 	Context("ApplyTemplateName", func() {
 		It("should skip if workspace already has templateRef", func() {
-			templateRef := "existing-template"
-			workspace.Spec.TemplateRef = &templateRef
+			workspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
+				Name: "existing-template",
+			}
 
 			err := templateGetter.ApplyTemplateName(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(*workspace.Spec.TemplateRef).To(Equal("existing-template"))
+			Expect(workspace.Spec.TemplateRef.Name).To(Equal("existing-template"))
 		})
 
 		It("should continue without error if no default template exists", func() {
@@ -84,7 +85,7 @@ var _ = Describe("TemplateGetter", func() {
 			err := templateGetter.ApplyTemplateName(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspace.Spec.TemplateRef).NotTo(BeNil())
-			Expect(*workspace.Spec.TemplateRef).To(Equal("default-template"))
+			Expect(workspace.Spec.TemplateRef.Name).To(Equal("default-template"))
 
 			// Cleanup
 			Expect(k8sClient.Delete(ctx, template)).To(Succeed())

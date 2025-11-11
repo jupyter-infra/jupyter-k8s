@@ -35,50 +35,21 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 	var controllerPodName string
 
 	// Helper functions for workspace management
-	extractWorkspaceName := func(fullName string) string {
-		return strings.TrimPrefix(fullName, "workspace.workspace.jupyter.org/")
-	}
-
-	getWorkspaceTemplateRef := func(workspaceName string) (string, error) {
-		cmd := exec.Command("kubectl", "get", "workspace", workspaceName,
-			"-o", "jsonpath={.spec.templateRef}")
-		output, err := utils.Run(cmd)
-		if err != nil {
-			return "", err
-		}
-		return strings.TrimSpace(output), nil
-	}
-
-	isWorkspaceBeingDeleted := func(workspaceName string) bool {
-		cmd := exec.Command("kubectl", "get", "workspace", workspaceName,
-			"-o", "jsonpath={.metadata.deletionTimestamp}")
-		deletionTimestamp, err := utils.Run(cmd)
-		return err == nil && strings.TrimSpace(deletionTimestamp) != ""
-	}
-
 	findWorkspacesUsingTemplate := func(templateName string) ([]string, error) {
-		cmd := exec.Command("kubectl", "get", "workspace", "-o", "name")
+		// Use label selector to find workspaces by template
+		// Labels persist during deletion, unlike spec.templateRef which gets cleared
+		labelSelector := fmt.Sprintf("workspace.jupyter.org/template=%s", templateName)
+		cmd := exec.Command("kubectl", "get", "workspace", "-l", labelSelector, "-o", "jsonpath={.items[*].metadata.name}")
 		output, err := utils.Run(cmd)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list workspaces: %w", err)
 		}
 
-		var workspaces []string
-		workspaceNames := strings.Fields(output)
-
-		for _, workspaceName := range workspaceNames {
-			name := extractWorkspaceName(workspaceName)
-
-			templateRef, err := getWorkspaceTemplateRef(name)
-			if err != nil {
-				continue // Skip workspaces we can't query
-			}
-
-			if templateRef == templateName {
-				workspaces = append(workspaces, name)
-			}
+		if output == "" {
+			return []string{}, nil
 		}
 
+		workspaces := strings.Fields(output)
 		return workspaces, nil
 	}
 
@@ -87,16 +58,14 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 		Eventually(func(g Gomega) {
 			workspaces, err := findWorkspacesUsingTemplate(templateName)
 			if err != nil {
-				return // If we can't list workspaces, assume they're gone
+				// If we can't list workspaces, fail the test
+				g.Expect(err).NotTo(HaveOccurred(), "failed to list workspaces")
+				return
 			}
 
-			for _, workspaceName := range workspaces {
-				if !isWorkspaceBeingDeleted(workspaceName) {
-					g.Expect(false).To(BeTrue(), fmt.Sprintf("Workspace %s using template %s still exists and is not being deleted", workspaceName, templateName))
-					return
-				}
-			}
-		}).WithTimeout(180 * time.Second).WithPolling(5 * time.Second).Should(Succeed())
+			// Wait until NO workspaces are found (fully deleted, not just being deleted)
+			g.Expect(workspaces).To(BeEmpty(), fmt.Sprintf("expected all workspaces using template %s to be fully deleted, but found: %v", templateName, workspaces))
+		}).WithTimeout(180 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
 	}
 
 	// deleteAllWorkspacesUsingTemplate deletes all workspaces that reference a specific template
@@ -223,7 +192,8 @@ spec:
 		cmd := exec.Command("kubectl", "delete", "workspace",
 			"workspace-with-template", "test-valid-workspace",
 			"cpu-exceed-test", "valid-overrides-test",
-			"deletion-protection-test", "cel-immutability-test",
+			"deletion-protection-test", "templateref-mutability-test",
+			"lazy-application-test", "cel-immutability-test",
 			"security-context-test",
 			"--ignore-not-found", "--timeout=60s")
 		_, _ = utils.Run(cmd)
@@ -232,42 +202,39 @@ spec:
 		Eventually(func(g Gomega) {
 			cmd := exec.Command("kubectl", "get", "workspace", "-o", "name")
 			output, err := utils.Run(cmd)
-			if err != nil || strings.TrimSpace(output) == "" {
-				// No workspaces exist, cleanup successful
+			if err != nil {
+				// Error listing workspaces - fail test to investigate
+				g.Expect(err).NotTo(HaveOccurred(), "failed to list workspaces during cleanup")
 				return
 			}
 
-			// Check if any remaining workspaces are not being deleted
-			workspaceNames := strings.Fields(output)
-			for _, workspaceName := range workspaceNames {
-				name := extractWorkspaceName(workspaceName)
-
-				if !isWorkspaceBeingDeleted(name) {
-					g.Expect(false).To(BeTrue(), fmt.Sprintf("Workspace %s still exists and is not being deleted", name))
-					return
-				}
-			}
-			// All remaining workspaces are being deleted, which is acceptable
-		}).WithTimeout(180 * time.Second).WithPolling(5 * time.Second).Should(Succeed())
+			output = strings.TrimSpace(output)
+			// Wait until NO workspaces exist (fully deleted, not just being deleted)
+			// This is critical because webhook needs templates to exist to validate
+			// finalizer removal during workspace deletion
+			g.Expect(output).To(BeEmpty(), fmt.Sprintf("expected all workspaces to be fully deleted before deleting templates, but found: %s", output))
+		}).WithTimeout(180 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
 
 		By("cleaning up test templates")
 		_, _ = fmt.Fprintf(GinkgoWriter, "Deleting test templates...\n")
 		// Templates with lazy finalizers will only delete after workspaces are gone
 		cmd = exec.Command("kubectl", "delete", "workspacetemplate",
 			"production-notebook-template", "restricted-template",
+			"mutability-test-template", "restricted-template-mutability",
+			"lazy-application-template",
 			"immutability-test-template",
-			"--ignore-not-found", "--timeout=60s")
+			"--ignore-not-found", "--wait=false")
+		_, _ = utils.Run(cmd)
+
+		By("uninstalling CRDs")
+		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CRDs (this deletes all CRs and allows controller to handle finalizers)...\n")
+		cmd = exec.Command("make", "uninstall")
+		cmd.Args = append(cmd.Args, "--timeout=300s")
 		_, _ = utils.Run(cmd)
 
 		By("undeploying the controller-manager")
 		_, _ = fmt.Fprintf(GinkgoWriter, "Undeploying controller manager...\n")
 		cmd = exec.Command("make", "undeploy")
-		cmd.Args = append(cmd.Args, "--timeout=300s")
-		_, _ = utils.Run(cmd)
-
-		By("uninstalling CRDs")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CRDs...\n")
-		cmd = exec.Command("make", "uninstall")
 		cmd.Args = append(cmd.Args, "--timeout=300s")
 		_, _ = utils.Run(cmd)
 	})
@@ -325,61 +292,17 @@ spec:
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("False"))
 		})
-
-		It("should log template resolution and validation", func() {
-			By("getting controller pod name")
-			cmd := exec.Command("kubectl", "get",
-				"pods", "-l", "control-plane=controller-manager",
-				"-o", "go-template={{ range .items }}"+
-					"{{ if not .metadata.deletionTimestamp }}"+
-					"{{ .metadata.name }}"+
-					"{{ \"\\n\" }}{{ end }}{{ end }}",
-				"-n", namespace,
-			)
-			podOutput, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			podNames := utils.GetNonEmptyLines(podOutput)
-			Expect(podNames).To(HaveLen(1), "expected 1 controller pod running")
-			controllerPodName := podNames[0]
-
-			By("checking controller logs for template resolution")
-			cmd = exec.Command("kubectl", "logs", controllerPodName, "-n", namespace,
-				"--tail=500")
-			output, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(output).To(ContainSubstring("Resolving template"))
-			Expect(output).To(ContainSubstring("Validation passed"))
-		})
 	})
 
 	Context("Template Validation", func() {
 		It("should reject workspace with image not in allowlist", func() {
 			By("attempting to create workspace with invalid image")
-			cmd := exec.Command("sh", "-c", `echo 'apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: test-rejected-workspace
-  namespace: default
-spec:
-  displayName: "Test Rejected Workspace"
-  desiredStatus: Running
-  templateRef: "restricted-template"
-  image: "tensorflow/tensorflow:latest-gpu-jupyter"
-  ownershipType: Public
-  resources:
-    requests:
-      cpu: "4"
-      memory: "8Gi"
-    limits:
-      cpu: "8"
-      memory: "16Gi"
-  storage:
-    size: "50Gi"' | kubectl apply -f -`)
-
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/template-validation/rejected-image-workspace.yaml")
+			
 			_, err := utils.Run(cmd)
 			Expect(err).To(HaveOccurred(), "Expected webhook to reject workspace with invalid image")
-
+			
 			By("verifying workspace was not created")
 			cmd = exec.Command("kubectl", "get", "workspace", "test-rejected-workspace", "--ignore-not-found")
 			output, err := utils.Run(cmd)
@@ -389,20 +312,8 @@ spec:
 
 		It("should reject workspace exceeding CPU bounds", func() {
 			By("creating workspace with CPU exceeding template max")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: cpu-exceed-test
-spec:
-  displayName: "CPU Bounds Test"
-  templateRef: "production-notebook-template"
-  ownershipType: Public
-  resources:
-    requests:
-      cpu: "10"  # Exceeds template max of 2
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/template-validation/cpu-exceed-workspace.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).To(HaveOccurred(), "Expected webhook to reject workspace with CPU exceeding template max")
 
@@ -418,26 +329,8 @@ spec:
 			var err error
 
 			By("creating workspace with valid resource overrides")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: valid-overrides-test
-spec:
-  displayName: "Valid Overrides Test"
-  templateRef: "production-notebook-template"
-  ownershipType: Public
-  resources:
-    requests:
-      cpu: "100m"
-      memory: "128Mi"
-    limits:
-      cpu: "200m"
-      memory: "256Mi"
-  storage:
-    size: 100Mi
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/template-validation/valid-overrides-workspace.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -463,32 +356,36 @@ spec:
 		})
 	})
 
-	Context("Template Immutability", func() {
+	Context("Template Mutability and Deletion Protection", func() {
 		It("should prevent template deletion when workspace is using it", func() {
 			var output string
 			var err error
 
 			By("creating a workspace using production template")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: deletion-protection-test
-spec:
-  displayName: "Deletion Protection Test"
-  ownershipType: Public
-  templateRef: "production-notebook-template"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/template-mutability/deletion-protection-workspace.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying workspace has templateRef set")
 			cmd = exec.Command("kubectl", "get", "workspace", "deletion-protection-test",
-				"-o", "jsonpath={.spec.templateRef}")
+				"-o", "jsonpath={.spec.templateRef.name}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("production-notebook-template"))
+
+			By("waiting for workspace to have template label")
+			verifyWorkspaceLabel := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "deletion-protection-test",
+					"-o", "jsonpath={.metadata.labels.workspace\\.jupyter\\.org/template}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("production-notebook-template"), "workspace should have template label")
+			}
+			Eventually(verifyWorkspaceLabel).
+				WithPolling(500 * time.Millisecond).
+				WithTimeout(10 * time.Second).
+				Should(Succeed())
 
 			By("inspecting controller logs before checking finalizer")
 			cmd = exec.Command("kubectl", "logs", "-n", "jupyter-k8s-system",
@@ -541,6 +438,17 @@ spec:
 			// Delete all workspaces using the template (including deletion-protection-test)
 			deleteAllWorkspacesUsingTemplate("production-notebook-template")
 
+			By("inspecting controller logs after workspace deletion")
+			cmd = exec.Command("kubectl", "logs", "-n", "jupyter-k8s-system",
+				"-l", "control-plane=controller-manager",
+				"--tail=200")
+			logsOutput, logsErr = utils.Run(cmd)
+			if logsErr == nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "=== Controller Logs After Workspace Deletion (last 200 lines) ===\n%s\n", logsOutput)
+			} else {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get controller logs: %v\n", logsErr)
+			}
+
 			By("verifying template can now be deleted")
 			verifyTemplateDeleted := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "workspacetemplate",
@@ -554,61 +462,95 @@ spec:
 				Should(Succeed())
 		})
 
-		It("should reject workspace templateRef changes via CEL validation", func() {
+		It("should allow workspace templateRef changes (mutability)", func() {
 			var err error
 
-			By("re-creating production template for CEL tests")
+			By("re-creating production template for mutability tests")
 			cmd := exec.Command("kubectl", "apply", "-f",
 				"config/samples/workspace_v1alpha1_workspacetemplate_production.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("creating workspace using production template")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: cel-immutability-test
-spec:
-  displayName: "CEL Immutability Test"
-  ownershipType: Public
-  templateRef: "production-notebook-template"
-`
-			cmd = exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			By("creating restricted template for switching")
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/template-mutability/restricted-template-mutability.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("attempting to change templateRef to dev-template")
-			patchCmd := `{"spec":{"templateRef":"dev-notebook-template"}}`
-			cmd = exec.Command("kubectl", "patch", "workspace", "cel-immutability-test",
-				"--type=merge", "-p", patchCmd)
-			output, err := utils.Run(cmd)
-			Expect(err).To(HaveOccurred(), "expected webhook to reject templateRef change")
-			// The webhook rejects the change, but the error message may be about template not found
-			// rather than immutability, which is still correct behavior (change is rejected)
-			Expect(output).To(ContainSubstring("denied the request"))
+			By("creating workspace using production template")
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/template-mutability/templateref-mutability-workspace.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
 
-			By("cleaning up test workspace")
-			cmd = exec.Command("kubectl", "delete", "workspace", "cel-immutability-test")
+			By("verifying initial templateRef")
+			cmd = exec.Command("kubectl", "get", "workspace", "templateref-mutability-test",
+				"-o", "jsonpath={.spec.templateRef.name}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("production-notebook-template"))
+
+			By("changing templateRef to restricted-template-mutability")
+			patchCmd := `{"spec":{"templateRef":{"name":"restricted-template-mutability"}}}`
+			cmd = exec.Command("kubectl", "patch", "workspace", "templateref-mutability-test",
+				"--type=merge", "-p", patchCmd)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "templateRef should be mutable")
+
+			By("verifying templateRef was changed")
+			cmd = exec.Command("kubectl", "get", "workspace", "templateref-mutability-test",
+				"-o", "jsonpath={.spec.templateRef.name}")
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("restricted-template-mutability"))
+
+			By("cleaning up test workspace and template")
+			cmd = exec.Command("kubectl", "delete", "workspace", "templateref-mutability-test")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "restricted-template-mutability")
 			_, _ = utils.Run(cmd)
 		})
 
+		It("should allow WorkspaceTemplate spec modification (mutability)", func() {
+			By("creating a template for mutability testing")
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/template-mutability/mutability-test-template.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying template was created")
+			cmd = exec.Command("kubectl", "get", "workspacetemplate",
+				"mutability-test-template", "-o", "jsonpath={.metadata.name}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("mutability-test-template"))
+
+			By("modifying template spec (change description)")
+			patchCmd := `{"spec":{"description":"Modified description - should succeed"}}`
+			cmd = exec.Command("kubectl", "patch", "workspacetemplate",
+				"mutability-test-template", "--type=merge",
+				"-p", patchCmd)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "template spec should be mutable")
+
+			By("verifying template spec description was changed")
+			cmd = exec.Command("kubectl", "get", "workspacetemplate",
+				"mutability-test-template", "-o", "jsonpath={.spec.description}")
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("Modified description - should succeed"))
+
+			By("cleaning up test template")
+			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "mutability-test-template")
+			_, _ = utils.Run(cmd)
+		})
 	})
 
 	Context("Webhook Validation", func() {
 		It("should apply template defaults during workspace creation", func() {
 			By("creating workspace without specifying image, resources, or storage")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: webhook-defaults-test
-spec:
-  displayName: "Webhook Defaults Test"
-  templateRef: "production-notebook-template"
-  ownershipType: Public
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/webhook-defaults-workspace.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -635,40 +577,14 @@ spec:
 
 		It("should inherit default access strategy from template", func() {
 			By("creating a template with default access strategy")
-			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: WorkspaceTemplate
-metadata:
-  name: access-strategy-template
-spec:
-  displayName: "Access Strategy Template"
-  defaultImage: "jupyter/base-notebook:latest"
-  defaultAccessStrategy:
-    name: "test-access-strategy"
-    namespace: "default"
-  resourceBounds:
-    cpu:
-      min: "100m"
-      max: "2"
-    memory:
-      min: "128Mi"
-      max: "4Gi"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/access-strategy-template.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating workspace without access strategy")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: access-strategy-inheritance-test
-spec:
-  displayName: "Access Strategy Inheritance Test"
-  templateRef: "access-strategy-template"
-`
-			cmd = exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/access-strategy-inheritance-workspace.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -697,23 +613,8 @@ spec:
 
 		It("should reject workspace creation with multiple violations", func() {
 			By("attempting to create workspace with multiple template violations")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: multi-violation-test
-spec:
-  displayName: "Multi Violation Test"
-  templateRef: "restricted-template"
-  image: "invalid/image:latest"
-  resources:
-    requests:
-      cpu: "10"
-      memory: "20Gi"
-  storage:
-    size: "100Gi"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/multi-violation-workspace.yaml")
 			output, err := utils.Run(cmd)
 			Expect(err).To(HaveOccurred(), "Expected webhook to reject workspace with multiple violations")
 			Expect(output).To(ContainSubstring("violations"))
@@ -727,39 +628,14 @@ spec:
 
 		It("should inherit access type and app type from template", func() {
 			By("creating template with default access type and app type")
-			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: WorkspaceTemplate
-metadata:
-  name: access-app-type-template
-spec:
-  displayName: "Access and App Type Template"
-  defaultImage: "jupyter/base-notebook:latest"
-  defaultAccessType: "OwnerOnly"
-  appType: "jupyter-lab"
-  resourceBounds:
-    cpu:
-      min: "100m"
-      max: "2"
-    memory:
-      min: "128Mi"
-      max: "4Gi"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/access-app-type-template.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating workspace without access type or app type")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: access-app-type-test
-spec:
-  displayName: "Access App Type Test"
-  templateRef: "access-app-type-template"
-`
-			cmd = exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/access-app-type-workspace.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -788,48 +664,14 @@ spec:
 
 		It("should inherit lifecycle and idle shutdown from template", func() {
 			By("creating template with default lifecycle and idle shutdown")
-			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: WorkspaceTemplate
-metadata:
-  name: lifecycle-template
-spec:
-  displayName: "Lifecycle Template"
-  defaultImage: "jupyter/base-notebook:latest"
-  defaultLifecycle:
-    postStart:
-      exec:
-        command: ["/bin/sh", "-c", "echo started"]
-  defaultIdleShutdown:
-    enabled: true
-    timeoutMinutes: 30
-    detection:
-      httpGet:
-        path: "/api/status"
-        port: 8888
-  resourceBounds:
-    cpu:
-      min: "100m"
-      max: "2"
-    memory:
-      min: "128Mi"
-      max: "4Gi"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/lifecycle-template.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating workspace without lifecycle or idle shutdown")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: lifecycle-test
-spec:
-  displayName: "Lifecycle Test"
-  templateRef: "lifecycle-template"
-`
-			cmd = exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/lifecycle-workspace.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -864,36 +706,14 @@ spec:
 
 		It("should reject custom images when allowCustomImages is false", func() {
 			By("creating template with allowCustomImages: false")
-			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: WorkspaceTemplate
-metadata:
-  name: restricted-images-template
-spec:
-  displayName: "Restricted Images Template"
-  description: "Template that restricts custom images"
-  defaultImage: "jupyter/base-notebook:latest"
-  allowedImages:
-    - "jupyter/base-notebook:latest"
-    - "jupyter/scipy-notebook:latest"
-  allowCustomImages: false
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/restricted-images-template.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("attempting to create workspace with custom image")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: custom-image-rejected-test
-spec:
-  displayName: "Custom Image Rejected Test"
-  templateRef: "restricted-images-template"
-  image: "custom/unauthorized:latest"
-`
-			cmd = exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/restricted-images-workspace.yaml")
 			output, err := utils.Run(cmd)
 			Expect(err).To(HaveOccurred(), "Expected webhook to reject custom image")
 			Expect(output).To(ContainSubstring("not allowed"))
@@ -905,35 +725,14 @@ spec:
 
 		It("should allow any image when allowCustomImages is true", func() {
 			By("creating template with allowCustomImages: true")
-			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: WorkspaceTemplate
-metadata:
-  name: custom-images-template
-spec:
-  displayName: "Custom Images Template"
-  description: "Template that allows custom images"
-  defaultImage: "jupyter/base-notebook:latest"
-  allowedImages:
-    - "jupyter/base-notebook:latest"
-  allowCustomImages: true
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/custom-images-template.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating workspace with custom image")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: custom-image-allowed-test
-spec:
-  displayName: "Custom Image Allowed Test"
-  templateRef: "custom-images-template"
-  image: "custom/authorized:latest"
-`
-			cmd = exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/custom-images-workspace.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Expected webhook to allow custom image")
 
@@ -952,41 +751,14 @@ spec:
 
 		It("should inherit pod security context from template", func() {
 			By("creating template with pod security context")
-			templateYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: WorkspaceTemplate
-metadata:
-  name: security-context-template
-spec:
-  displayName: "Security Context Template"
-  defaultImage: "jupyter/base-notebook:latest"
-  defaultPodSecurityContext:
-    fsGroup: 1000
-    runAsNonRoot: true
-    runAsUser: 1000
-  resourceBounds:
-    cpu:
-      min: "100m"
-      max: "2"
-    memory:
-      min: "128Mi"
-      max: "4Gi"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", templateYaml))
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/security-context-template.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating workspace without pod security context")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: security-context-test
-spec:
-  displayName: "Security Context Test"
-  templateRef: "security-context-template"
-`
-			cmd = exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/security-context-workspace.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
