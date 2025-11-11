@@ -11,6 +11,12 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	genericapiserver "k8s.io/apiserver/pkg/server"
+	"k8s.io/apiserver/pkg/server/mux"
+	genericoptions "k8s.io/apiserver/pkg/server/options"
+	"k8s.io/apiserver/pkg/util/compatibility"
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -20,47 +26,40 @@ import (
 
 var (
 	setupLog = log.Log.WithName("extension-api-server")
+	Scheme   = runtime.NewScheme()
+	Codecs   = serializer.NewCodecFactory(Scheme)
 )
 
 // ExtensionServer represents the extension API HTTP server
 type ExtensionServer struct {
-	config     *ExtensionConfig
-	k8sClient  client.Client
-	sarClient  v1.SubjectAccessReviewInterface
-	jwtManager jwt.Signer
-	logger     *logr.Logger
-	httpServer interface {
-		ListenAndServe() error
-		ListenAndServeTLS(certFile, keyFile string) error
-		Shutdown(ctx context.Context) error
-	}
-	routes map[string]func(http.ResponseWriter, *http.Request)
-	mux    *http.ServeMux
+	config        *ExtensionConfig
+	k8sClient     client.Client
+	sarClient     v1.SubjectAccessReviewInterface
+	jwtManager    jwt.Signer
+	logger        *logr.Logger
+	genericServer *genericapiserver.GenericAPIServer
+	routes        map[string]func(http.ResponseWriter, *http.Request)
+	mux           *mux.PathRecorderMux
 }
 
-// newExtensionServer creates a new extension API server
-func newExtensionServer(
+// NewExtensionServer creates a new extension API server using GenericAPIServer
+func NewExtensionServer(
+	genericServer *genericapiserver.GenericAPIServer,
 	config *ExtensionConfig,
 	logger *logr.Logger,
 	k8sClient client.Client,
 	sarClient v1.SubjectAccessReviewInterface,
 	jwtManager jwt.Signer) *ExtensionServer {
-	mux := http.NewServeMux()
 
 	server := &ExtensionServer{
-		config:     config,
-		logger:     logger,
-		k8sClient:  k8sClient,
-		sarClient:  sarClient,
-		jwtManager: jwtManager,
-		routes:     make(map[string]func(http.ResponseWriter, *http.Request)),
-		mux:        mux,
-		httpServer: &http.Server{
-			Addr:         fmt.Sprintf(":%d", config.ServerPort),
-			Handler:      mux,
-			ReadTimeout:  time.Duration(config.ReadTimeoutSeconds) * time.Second,
-			WriteTimeout: time.Duration(config.WriteTimeoutSeconds) * time.Second,
-		},
+		config:        config,
+		logger:        logger,
+		k8sClient:     k8sClient,
+		sarClient:     sarClient,
+		jwtManager:    jwtManager,
+		routes:        make(map[string]func(http.ResponseWriter, *http.Request)),
+		genericServer: genericServer,
+		mux:           genericServer.Handler.NonGoRestfulMux,
 	}
 
 	return server
@@ -150,7 +149,7 @@ func (s *ExtensionServer) registerNamespacedRoutes(resourceHandlers map[string]f
 	})
 
 	// Register the single wrapped handler for the namespaced path prefix
-	s.mux.HandleFunc(namespacedPathPrefix, wrappedHandler)
+	s.mux.HandlePrefix(namespacedPathPrefix, http.HandlerFunc(wrappedHandler))
 	setupLog.Info("Registered namespaced routes handler", "pathPrefix", namespacedPathPrefix)
 }
 
@@ -171,56 +170,17 @@ func (s *ExtensionServer) registerAllRoutes() {
 
 // Start starts the extension API server and implements the controller-runtime's Runnable interface
 func (s *ExtensionServer) Start(ctx context.Context) error {
-	setupLog.Info("Starting extension API server", "port", s.config.ServerPort, "disableTLS", s.config.DisableTLS)
+	setupLog.Info("Starting extension API server with GenericAPIServer")
 
-	// Error channel to capture server errors
-	errChan := make(chan error, 1)
-
-	// Start the server in a goroutine
-	go func() {
-		var err error
-
-		if s.config.DisableTLS {
-			// Start HTTP server
-			setupLog.Info("Starting server with HTTP (TLS disabled)")
-			err = s.httpServer.ListenAndServe()
-		} else {
-			// Configure TLS
-			// We don't need to set TLSConfig as it's handled by ListenAndServeTLS
-
-			// Start HTTPS server
-			setupLog.Info("Starting server with HTTPS", "certPath", s.config.CertPath, "keyPath", s.config.KeyPath)
-			err = s.httpServer.ListenAndServeTLS(s.config.CertPath, s.config.KeyPath)
-		}
-
-		if err != nil && err != http.ErrServerClosed {
-			setupLog.Error(err, "Extension API server failed")
-			errChan <- err
-		}
-	}()
-
-	// Wait for context cancellation or server error
-	select {
-	case <-ctx.Done():
-		// Context was canceled, gracefully shutdown the server
-		setupLog.Info("Shutting down extension API server due to context cancellation")
-		return s.Stop(context.Background())
-	case err := <-errChan:
-		// Server encountered an error
-		return fmt.Errorf("extension API server failed: %w", err)
-	}
+	// Prepare and run the GenericAPIServer
+	preparedServer := s.genericServer.PrepareRun()
+	return preparedServer.RunWithContext(ctx)
 }
 
 // NeedLeaderElection implements the LeaderElectionRunnable interface
 // This indicates this runnable doesn't need to be a leader to run
 func (s *ExtensionServer) NeedLeaderElection() bool {
 	return false
-}
-
-// Stop stops the extension API server
-func (s *ExtensionServer) Stop(ctx context.Context) error {
-	setupLog.Info("Shutting down extension API server")
-	return s.httpServer.Shutdown(ctx)
 }
 
 // SetupExtensionAPIServerWithManager sets up the extension API server and adds it to the manager
@@ -259,7 +219,36 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	})
 
 	// Create server with config
-	server := newExtensionServer(config, &logger, k8sClient, sarClient, jwtManager)
+	// Create RecommendedOptions for GenericAPIServer
+	recommendedOptions := genericoptions.NewRecommendedOptions(
+		"/unused",
+		nil, // No codec needed for our simple case
+	)
+
+	// Configure port and certificates
+	recommendedOptions.SecureServing.BindPort = config.ServerPort
+	recommendedOptions.SecureServing.ServerCert.CertDirectory = ""
+	recommendedOptions.SecureServing.ServerCert.CertKey.CertFile = config.CertPath
+	recommendedOptions.SecureServing.ServerCert.CertKey.KeyFile = config.KeyPath
+	recommendedOptions.SecureServing.ServerCert.PairName = "tls"
+
+	// Create server config
+	serverConfig := genericapiserver.NewRecommendedConfig(Codecs)
+	serverConfig.EffectiveVersion = compatibility.DefaultBuildEffectiveVersion()
+
+	// Apply options to configure authentication automatically
+	if err := recommendedOptions.ApplyTo(serverConfig); err != nil {
+		return fmt.Errorf("failed to apply recommended options: %w", err)
+	}
+
+	// Create GenericAPIServer
+	genericServer, err := serverConfig.Complete().New("extension-apiserver", genericapiserver.NewEmptyDelegate())
+	if err != nil {
+		return fmt.Errorf("failed to create generic API server: %w", err)
+	}
+
+	// Create extension server
+	server := NewExtensionServer(genericServer, config, &logger, k8sClient, sarClient, jwtManager)
 	server.registerAllRoutes()
 
 	// Add the server as a runnable to the manager
