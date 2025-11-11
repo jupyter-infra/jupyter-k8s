@@ -1,6 +1,7 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
+  name: lifecycle-template
   namespace: default
 spec:
   displayName: "Lifecycle Template"
