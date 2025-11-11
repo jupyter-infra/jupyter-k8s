@@ -52,20 +52,7 @@ func (v *PodExecValidator) Handle(ctx context.Context, req admission.Request) ad
 
 	// Build the expected controller service account username from environment variables
 	controllerNamespace := os.Getenv(controller.ControllerPodNamespaceEnv)
-	if controllerNamespace == "" {
-		podexeclog.Error(nil, "Required environment variable not set",
-			"envVar", controller.ControllerPodNamespaceEnv)
-		return admission.Errored(http.StatusInternalServerError,
-			fmt.Errorf("required environment variable %s not set", controller.ControllerPodNamespaceEnv))
-	}
-
 	controllerServiceAccount := os.Getenv(controller.ControllerPodServiceAccountEnv)
-	if controllerServiceAccount == "" {
-		podexeclog.Error(nil, "Required environment variable not set",
-			"envVar", controller.ControllerPodServiceAccountEnv)
-		return admission.Errored(http.StatusInternalServerError,
-			fmt.Errorf("required environment variable %s not set", controller.ControllerPodServiceAccountEnv))
-	}
 
 	expectedUser := fmt.Sprintf("system:serviceaccount:%s:%s", controllerNamespace, controllerServiceAccount)
 
@@ -116,5 +103,21 @@ func SetupPodExecWebhookWithManager(mgr ctrl.Manager) error {
 
 	mgr.GetWebhookServer().Register("/validate-pods-exec-workspace",
 		&admission.Webhook{Handler: podExecValidator})
+
+	// Build the expected controller service account username from environment variables
+	controllerNamespace := os.Getenv(controller.ControllerPodNamespaceEnv)
+	if controllerNamespace == "" {
+		podexeclog.Error(nil, "Required environment variable not set",
+			"envVar", controller.ControllerPodNamespaceEnv)
+		return fmt.Errorf("required environment variable %s not set", controller.ControllerPodNamespaceEnv)
+	}
+
+	controllerServiceAccount := os.Getenv(controller.ControllerPodServiceAccountEnv)
+	if controllerServiceAccount == "" {
+		podexeclog.Error(nil, "Required environment variable not set",
+			"envVar", controller.ControllerPodServiceAccountEnv)
+		return fmt.Errorf("required environment variable %s not set", controller.ControllerPodServiceAccountEnv)
+	}
+
 	return nil
 }

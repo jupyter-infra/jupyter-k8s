@@ -46,19 +46,37 @@ func getEffectiveOwnershipType(ownershipType string) string {
 	return ownershipType
 }
 
-// isAdminUser checks if the user groups include any admin groups
-func isAdminUser(groups []string) bool {
+// isControllerOrAdminUser checks if the user is the controller service account or has admin privileges
+func isControllerOrAdminUser(ctx context.Context) bool {
+	req, err := admission.RequestFromContext(ctx)
+	if err != nil {
+		return false
+	}
+
+	// Check if user is controller
+	controllerServiceAccount := os.Getenv(controller.ControllerPodServiceAccountEnv)
+	controllerNamespace := os.Getenv(controller.ControllerPodNamespaceEnv)
+	if controllerServiceAccount != "" && controllerNamespace != "" {
+		// Build the full service account name: system:serviceaccount:namespace:name
+		fullControllerSA := fmt.Sprintf("system:serviceaccount:%s:%s", controllerNamespace, controllerServiceAccount)
+		if req.UserInfo.Username == fullControllerSA {
+			return true
+		}
+	}
+
+	// Check if user is admin
 	adminGroups := []string{webhookconst.DefaultAdminGroup}
 	if clusterAdminGroup := os.Getenv("CLUSTER_ADMIN_GROUP"); clusterAdminGroup != "" {
 		adminGroups = append(adminGroups, clusterAdminGroup)
 	}
-	for _, group := range groups {
+	for _, group := range req.UserInfo.Groups {
 		for _, adminGroup := range adminGroups {
 			if group == adminGroup {
 				return true
 			}
 		}
 	}
+
 	return false
 }
 
@@ -201,9 +219,8 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, obj runti
 		return nil, err
 	}
 
-	// Admin users bypass validation
-	req, err := admission.RequestFromContext(ctx)
-	if err == nil && isAdminUser(req.UserInfo.Groups) {
+	// Controller or admin users bypass validation
+	if isControllerOrAdminUser(ctx) {
 		return nil, nil
 	}
 
@@ -233,12 +250,8 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 		return nil, nil
 	}
 
-	// Check if user is admin
-	isAdmin := false
-	req, reqErr := admission.RequestFromContext(ctx)
-	if reqErr == nil {
-		isAdmin = isAdminUser(req.UserInfo.Groups)
-	}
+	// Controller or admin users bypass validation
+	isAdmin := isControllerOrAdminUser(ctx)
 
 	// Validate templateRef immutability
 	oldTemplateRef := fetchTemplateRef(oldWorkspace)
@@ -301,9 +314,8 @@ func (v *WorkspaceCustomValidator) ValidateDelete(ctx context.Context, obj runti
 	}
 	workspacelog.Info("Validation for Workspace upon deletion", "name", workspace.GetName(), "namespace", workspace.GetNamespace())
 
-	// Admin users bypass validation
-	req, err := admission.RequestFromContext(ctx)
-	if err == nil && isAdminUser(req.UserInfo.Groups) {
+	// Controller or admin users bypass validation
+	if isControllerOrAdminUser(ctx) {
 		return nil, nil
 	}
 
