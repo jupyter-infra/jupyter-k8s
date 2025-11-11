@@ -42,7 +42,8 @@ var _ = Describe("Lazy Application", func() {
 
 		template = &workspacev1alpha1.WorkspaceTemplate{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "lazy-app-template",
+				Name:      "lazy-app-template",
+				Namespace: "default",
 			},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 				DisplayName:  "Lazy Application Template",

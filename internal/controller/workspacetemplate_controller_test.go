@@ -47,7 +47,8 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 
 			template = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: fmt.Sprintf("test-template-%d", time.Now().UnixNano()),
+					Name:      fmt.Sprintf("test-template-%d", time.Now().UnixNano()),
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Test Template",
@@ -79,12 +80,13 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 					Name:      fmt.Sprintf("test-workspace-%d", time.Now().UnixNano()),
 					Namespace: "default",
 					Labels: map[string]string{
-						workspaceutil.LabelWorkspaceTemplate: template.Name,
+						workspaceutil.LabelWorkspaceTemplate:          template.Name,
+						workspaceutil.LabelWorkspaceTemplateNamespace: template.Namespace,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Test Workspace",
-					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name},
+					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name, Namespace: template.Namespace},
 				},
 			}
 			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
@@ -94,7 +96,7 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 				Client: k8sClient,
 			}
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: template.Name},
+				NamespacedName: types.NamespacedName{Name: template.Name, Namespace: template.Namespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -112,12 +114,13 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 					Name:      fmt.Sprintf("test-workspace-%d", time.Now().UnixNano()),
 					Namespace: "default",
 					Labels: map[string]string{
-						workspaceutil.LabelWorkspaceTemplate: template.Name,
+						workspaceutil.LabelWorkspaceTemplate:          template.Name,
+						workspaceutil.LabelWorkspaceTemplateNamespace: template.Namespace,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Test Workspace",
-					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name},
+					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name, Namespace: template.Namespace},
 				},
 			}
 			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
@@ -127,7 +130,7 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 				Client: k8sClient,
 			}
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: template.Name},
+				NamespacedName: types.NamespacedName{Name: template.Name, Namespace: template.Namespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -141,7 +144,7 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 
 			// Trigger reconciliation again to remove finalizer
 			_, err = reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: template.Name},
+				NamespacedName: types.NamespacedName{Name: template.Name, Namespace: template.Namespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -158,12 +161,13 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 					Name:      fmt.Sprintf("test-workspace-%d", time.Now().UnixNano()),
 					Namespace: "default",
 					Labels: map[string]string{
-						workspaceutil.LabelWorkspaceTemplate: template.Name,
+						workspaceutil.LabelWorkspaceTemplate:          template.Name,
+						workspaceutil.LabelWorkspaceTemplateNamespace: template.Namespace,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Test Workspace",
-					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name},
+					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name, Namespace: template.Namespace},
 				},
 			}
 			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
@@ -173,7 +177,7 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 				Client: k8sClient,
 			}
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: template.Name},
+				NamespacedName: types.NamespacedName{Name: template.Name, Namespace: template.Namespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -187,7 +191,7 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 
 			// Trigger reconciliation during deletion - should NOT remove finalizer
 			_, err = reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: template.Name},
+				NamespacedName: types.NamespacedName{Name: template.Name, Namespace: template.Namespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -204,7 +208,7 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 
 			// Trigger final reconciliation to remove finalizer and allow deletion
 			_, err = reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: template.Name},
+				NamespacedName: types.NamespacedName{Name: template.Name, Namespace: template.Namespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -318,7 +322,8 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 		It("should return empty for non-workspace objects", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-template",
+					Name:      "test-template",
+					Namespace: "default",
 				},
 			}
 
@@ -345,7 +350,8 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 
 			template = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: fmt.Sprintf("deletion-test-template-%d", time.Now().UnixNano()),
+					Name:      fmt.Sprintf("deletion-test-template-%d", time.Now().UnixNano()),
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Deletion Test Template",
@@ -423,12 +429,13 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 					Name:      fmt.Sprintf("test-workspace-%d", time.Now().UnixNano()),
 					Namespace: "default",
 					Labels: map[string]string{
-						workspaceutil.LabelWorkspaceTemplate: template.Name,
+						workspaceutil.LabelWorkspaceTemplate:          template.Name,
+						workspaceutil.LabelWorkspaceTemplateNamespace: template.Namespace,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Test Workspace",
-					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name},
+					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name, Namespace: template.Namespace},
 				},
 			}
 			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
@@ -445,14 +452,14 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 
 			// Get the updated template with deletionTimestamp
 			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: template.Name}, updatedTemplate)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: template.Name, Namespace: template.Namespace}, updatedTemplate)).To(Succeed())
 
 			result, err := reconciler.handleDeletion(ctx, updatedTemplate)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(Equal(reconcile.Result{}))
 
 			// Verify finalizer was NOT removed (template should still exist)
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: template.Name}, updatedTemplate)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: template.Name, Namespace: template.Namespace}, updatedTemplate)).To(Succeed())
 			Expect(controllerutil.ContainsFinalizer(updatedTemplate, templateFinalizerName)).To(BeTrue(),
 				"finalizer should remain when workspaces are using the template")
 		})

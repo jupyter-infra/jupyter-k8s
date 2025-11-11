@@ -1,7 +1,8 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
-  name: mutability-base-template
+  name: base-template
+  namespace: default
 spec:
   displayName: "Original DisplayName"
   description: "Base template for mutability testing"
