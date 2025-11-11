@@ -71,7 +71,7 @@ webhooks:
         name: jupyter-k8s-webhook-service
         namespace: {{ .Release.Namespace }}
         path: /validate-workspace-jupyter-org-v1alpha1-workspacetemplate
-    failurePolicy: Fail
+    failurePolicy: Ignore
     sideEffects: None
     admissionReviewVersions:
       - v1

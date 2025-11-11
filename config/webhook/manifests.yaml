@@ -61,7 +61,7 @@ webhooks:
       namespace: system
       path: /validate-workspace-jupyter-org-v1alpha1-workspacetemplate
       port: 9443
-  failurePolicy: Fail
+  failurePolicy: Ignore
   name: vworkspacetemplate-v1alpha1.kb.io
   rules:
   - apiGroups:
