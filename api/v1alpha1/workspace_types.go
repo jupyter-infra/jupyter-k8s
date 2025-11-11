@@ -258,7 +258,7 @@ type WorkspaceStatus struct {
 // +kubebuilder:printcolumn:name="Degraded",type="string",JSONPath=".status.conditions[?(@.type==\"Degraded\")].status"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="CreatedBy",type="string",JSONPath=`.metadata.annotations['workspace\.jupyter\.org/created-by']`,priority=1
-// +kubebuilder:printcolumn:name="OwnershipType",type="string",JSONPath=".spec.ownershipType",priority=1
+// +kubebuilder:printcolumn:name="AccessType",type="string",JSONPath=".spec.accessType",priority=1
 
 // Workspace is the Schema for the workspaces API
 type Workspace struct {
