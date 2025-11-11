@@ -22,9 +22,7 @@ package e2e
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -334,18 +332,8 @@ var _ = Describe("Manager", Ordered, func() {
 // It uses the Kubernetes TokenRequest API to generate a token by directly sending a request
 // and parsing the resulting token from the API response.
 func serviceAccountToken() (string, error) {
-	const tokenRequestRawString = `{
-		"apiVersion": "authentication.k8s.io/v1",
-		"kind": "TokenRequest"
-	}`
-
-	// Temporary file to store the token request
-	secretName := fmt.Sprintf("%s-token-request", serviceAccountName)
-	tokenRequestFile := filepath.Join("/tmp", secretName)
-	err := os.WriteFile(tokenRequestFile, []byte(tokenRequestRawString), os.FileMode(0o644))
-	if err != nil {
-		return "", err
-	}
+	// Use static token request file
+	tokenRequestFile := "static/token-request.json"
 
 	var out string
 	verifyTokenCreation := func(g Gomega) {
@@ -368,7 +356,7 @@ func serviceAccountToken() (string, error) {
 	}
 	Eventually(verifyTokenCreation).Should(Succeed())
 
-	return out, err
+	return out, nil
 }
 
 // getMetricsOutput retrieves and returns the logs from the curl pod used to access the metrics endpoint.
