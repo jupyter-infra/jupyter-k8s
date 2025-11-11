@@ -42,6 +42,10 @@ controllerManager:
     seccompProfile:
       type: RuntimeDefault
   terminationGracePeriodSeconds: 10
+  # Controller pod scheduling configuration
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
   serviceAccountName: jupyter-k8s-controller-manager
 
 # [RBAC]: To enable RBAC (Permissions) configurations
@@ -91,15 +95,6 @@ application:
   imagesPullPolicy: IfNotPresent
   # Image registry for Workspaces controller
   imagesRegistry: "docker.io/library"
-
-# [CONTROLLER]: Controller pod scheduling configuration
-controller:
-  # Node selector for controller pod
-  nodeSelector: {}
-  # Tolerations for controller pod
-  tolerations: []
-  # Affinity for controller pod (if not specified, uses default arch/os affinity)
-  affinity: {}
 
 # [WORKSPACE POD WATCHING]: Configure workspace pod event watching
 workspacePodWatching:
