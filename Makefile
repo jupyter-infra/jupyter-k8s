@@ -599,6 +599,11 @@ deploy-aws-hyperpod-internal:
 deploy-aws-hyperpod: ## Deploy aws-hyperpod guided chart
 	$(MAKE) deploy-aws-hyperpod-internal CLOUD_PROVIDER=aws
 
+.PHONY: deploy-aws-hyperpod-all
+deploy-aws-hyperpod-all: ## Deploy all guided charts (aws-traefik-dex and aws-hyperpod)
+	$(MAKE) deploy-aws-traefik-dex CLOUD_PROVIDER=aws
+	$(MAKE) deploy-aws-hyperpod CLOUD_PROVIDER=aws
+
 .PHONY: undeploy-aws-hyperpod  
 undeploy-aws-hyperpod: ## Remove aws-hyperpod guided chart
 	helm uninstall aws-hyperpod --namespace jupyter-k8s-system
