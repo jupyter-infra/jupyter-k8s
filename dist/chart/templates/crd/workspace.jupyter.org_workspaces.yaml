@@ -37,8 +37,8 @@ spec:
       name: CreatedBy
       priority: 1
       type: string
-    - jsonPath: .spec.ownershipType
-      name: OwnershipType
+    - jsonPath: .spec.accessType
+      name: AccessType
       priority: 1
       type: string
     name: v1alpha1
