@@ -1,0 +1,11 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: mutability-test-template
+spec:
+  displayName: "Mutability Test Template"
+  description: "Original description"
+  defaultOwnershipType: Public
+  allowedImages:
+    - "jk8s-application-jupyter-uv:latest"
+  defaultImage: "jk8s-application-jupyter-uv:latest"

@@ -92,11 +92,9 @@ rules:
 - apiGroups:
   - workspace.jupyter.org
   resources:
-  - workspacetemplates
+  - workspacetemplates/status
   verbs:
   - get
-  - list
   - patch
   - update
-  - watch
 {{- end -}}

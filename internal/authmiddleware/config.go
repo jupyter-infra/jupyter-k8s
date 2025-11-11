@@ -27,6 +27,7 @@ const (
 	EnvEnableJwtRefresh  = "JWT_REFRESH_ENABLE"
 	EnvJwtRefreshWindow  = "JWT_REFRESH_WINDOW"
 	EnvJwtRefreshHorizon = "JWT_REFRESH_HORIZON"
+	EnvEnableOAuth       = "ENABLE_OAUTH"
 	EnvEnableBearerAuth  = "ENABLE_BEARER_URL_AUTH"
 	EnvKMSKeyId          = "KMS_KEY_ID"
 
@@ -87,6 +88,7 @@ const (
 	DefaultJwtRefreshEnable  = true
 	DefaultJwtRefreshWindow  = 15 * time.Minute // 25% of the default expiration
 	DefaultJwtRefreshHorizon = 12 * time.Hour
+	DefaultEnableOAuth       = true
 	DefaultEnableBearerAuth  = false
 
 	// Cookie defaults
@@ -139,6 +141,7 @@ type Config struct {
 	JWTRefreshEnable  bool
 	JWTRefreshWindow  time.Duration
 	JWTRefreshHorizon time.Duration
+	EnableOAuth       bool
 	EnableBearerAuth  bool
 	KMSKeyId          string
 
@@ -225,6 +228,7 @@ func createDefaultConfig() *Config {
 		JWTRefreshEnable:  DefaultJwtRefreshEnable,
 		JWTRefreshWindow:  DefaultJwtRefreshWindow,
 		JWTRefreshHorizon: DefaultJwtRefreshHorizon,
+		EnableOAuth:       DefaultEnableOAuth,
 		EnableBearerAuth:  DefaultEnableBearerAuth,
 
 		// Cookie defaults
@@ -354,6 +358,14 @@ func applyJWTConfig(config *Config) error {
 			return fmt.Errorf("invalid %s: %w", EnvJwtRefreshHorizon, err)
 		}
 		config.JWTRefreshHorizon = d
+	}
+
+	if enableOAuth := os.Getenv(EnvEnableOAuth); enableOAuth != "" {
+		enable, err := strconv.ParseBool(enableOAuth)
+		if err != nil {
+			return fmt.Errorf("invalid %s: %w", EnvEnableOAuth, err)
+		}
+		config.EnableOAuth = enable
 	}
 
 	if enableBearerAuth := os.Getenv(EnvEnableBearerAuth); enableBearerAuth != "" {

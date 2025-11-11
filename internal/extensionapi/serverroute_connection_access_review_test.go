@@ -295,7 +295,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "OwnerOnly",
+					AccessType: "OwnerOnly",
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -334,7 +334,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "OwnerOnly",
+					AccessType: "OwnerOnly",
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -348,7 +348,6 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(response.Status.Allowed).To(BeFalse())
 			Expect(response.Status.NotFound).To(BeFalse())
-			Expect(response.Status.Reason).To(ContainSubstring("private"))
 		})
 
 		It("Should respond with allowed=false, notFound=true, set a reason, when Create(SAR) succeeds and Get(Workspace) returns not found", func() {

@@ -192,7 +192,7 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "OwnerOnly",
+					AccessType: "OwnerOnly",
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -221,7 +221,7 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					OwnershipType: "OwnerOnly",
+					AccessType: "OwnerOnly",
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
