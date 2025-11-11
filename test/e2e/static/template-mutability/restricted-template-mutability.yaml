@@ -1,7 +1,7 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
-  name: restricted-template-mutability
+  namespace: default
 spec:
   displayName: "Restricted Template"
   description: "Restricted template for mutability testing"

@@ -1,7 +1,7 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
-  name: bounds-test-template
+  namespace: default
 spec:
   displayName: "Bounds Test V2"
   description: "Template with CPU max=4 (modified)"

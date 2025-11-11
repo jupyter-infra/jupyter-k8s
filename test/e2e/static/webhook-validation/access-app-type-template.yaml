@@ -1,7 +1,7 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
-  name: access-app-type-template
+  namespace: default
 spec:
   displayName: "Access and App Type Template"
   defaultImage: "jupyter/base-notebook:latest"

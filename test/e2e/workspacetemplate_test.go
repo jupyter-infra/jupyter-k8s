@@ -171,6 +171,10 @@ spec:
 		Eventually(verifyWebhookReady, 30*time.Second, 2*time.Second).Should(Succeed())
 
 		By("installing WorkspaceTemplate samples")
+		_, _ = fmt.Fprintf(GinkgoWriter, "Creating jupyter-k8s-shared namespace...\n")
+		cmd = exec.Command("kubectl", "create", "namespace", "jupyter-k8s-shared")
+		_, _ = utils.Run(cmd) // Ignore error if namespace already exists
+
 		_, _ = fmt.Fprintf(GinkgoWriter, "Applying production template...\n")
 		cmd = exec.Command("kubectl", "apply", "-f",
 			"config/samples/workspace_v1alpha1_workspacetemplate_production.yaml")
