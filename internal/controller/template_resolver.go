@@ -83,19 +83,27 @@ func (tr *TemplateResolver) ValidateAndResolveTemplate(ctx context.Context, work
 		}, nil
 	}
 
-	// Fetch the WorkspaceTemplate (cluster-scoped resource)
-	templateName := *workspace.Spec.TemplateRef
+	// Fetch the WorkspaceTemplate (namespace-scoped resource)
+	templateRef := *workspace.Spec.TemplateRef
 	template := &workspacev1alpha1.WorkspaceTemplate{}
-	templateKey := types.NamespacedName{
-		Name: templateName,
+
+	// Determine namespace for template lookup
+	templateNamespace := templateRef.Namespace
+	if templateNamespace == "" {
+		templateNamespace = workspace.Namespace
 	}
 
-	logger.Info("Fetching template for validation", "template", templateName)
+	templateKey := types.NamespacedName{
+		Name:      templateRef.Name,
+		Namespace: templateNamespace,
+	}
+
+	logger.Info("Fetching template for validation", "template", templateRef.Name, "namespace", templateNamespace)
 
 	if err := tr.client.Get(ctx, templateKey, template); err != nil {
 		// Template not found is a system error (not a user validation error)
 		// Return error to trigger controller error handling and Degraded condition
-		return nil, fmt.Errorf("failed to get WorkspaceTemplate %s: %w", *workspace.Spec.TemplateRef, err)
+		return nil, fmt.Errorf("failed to get WorkspaceTemplate %s in namespace %s: %w", templateRef.Name, templateNamespace, err)
 	}
 
 	logger.Info("Resolving template", "template", template.Name, "displayName", template.Spec.DisplayName)
@@ -462,12 +470,12 @@ func (tr *TemplateResolver) ListWorkspacesUsingTemplate(ctx context.Context, tem
 			continue
 		}
 
-		if *ws.Spec.TemplateRef != templateName {
+		if ws.Spec.TemplateRef.Name != templateName {
 			// This should never happen due to CEL immutability - log if it occurs
 			logger.Info("Workspace has template label but different templateRef",
 				"workspace", fmt.Sprintf("%s/%s", ws.Namespace, ws.Name),
 				"label", templateName,
-				"spec", *ws.Spec.TemplateRef)
+				"spec", ws.Spec.TemplateRef.Name)
 			continue
 		}
 

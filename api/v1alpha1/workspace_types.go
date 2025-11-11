@@ -74,6 +74,16 @@ type AccessStrategyRef struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
+// WorkspaceTemplateRef defines a reference to a WorkspaceTemplate
+type WorkspaceTemplateRef struct {
+	// Name of the WorkspaceTemplate
+	Name string `json:"name"`
+
+	// Namespace where the WorkspaceTemplate is located
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
 // IdleShutdownSpec defines idle shutdown configuration
 type IdleShutdownSpec struct {
 	// Enabled indicates if idle shutdown is enabled
@@ -159,7 +169,7 @@ type WorkspaceSpec struct {
 	// IMMUTABLE: Cannot be changed after workspace creation
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="templateRef is immutable"
 	// +optional
-	TemplateRef *string `json:"templateRef,omitempty"`
+	TemplateRef *WorkspaceTemplateRef `json:"templateRef,omitempty"`
 
 	// IdleShutdown specifies idle shutdown configuration
 	// +optional

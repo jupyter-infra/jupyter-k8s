@@ -54,7 +54,7 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		return nil
 	}
 
-	template, err := tv.fetchTemplate(ctx, *workspace.Spec.TemplateRef)
+	template, err := tv.fetchTemplate(ctx, workspace.Spec.TemplateRef.Name)
 	if err != nil {
 		return err
 	}
@@ -95,7 +95,7 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 		return nil
 	}
 
-	template, err := tv.fetchTemplate(ctx, *newWorkspace.Spec.TemplateRef)
+	template, err := tv.fetchTemplate(ctx, newWorkspace.Spec.TemplateRef.Name)
 	if err != nil {
 		return err
 	}

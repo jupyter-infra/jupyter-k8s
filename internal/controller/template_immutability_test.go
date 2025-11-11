@@ -42,7 +42,8 @@ var _ = Describe("Template Immutability", func() {
 
 			template1 = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "immutable-template-1",
+					Name:      "immutable-template-1",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Template 1",
@@ -53,7 +54,8 @@ var _ = Describe("Template Immutability", func() {
 
 			template2 = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "immutable-template-2",
+					Name:      "immutable-template-2",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Template 2",
@@ -72,7 +74,7 @@ var _ = Describe("Template Immutability", func() {
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Immutable Test",
-					TemplateRef: &template1.Name,
+					TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: template1.Name},
 				},
 			}
 			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
@@ -93,7 +95,7 @@ var _ = Describe("Template Immutability", func() {
 		It("should allow creating workspace with templateRef", func() {
 			updatedWorkspace := &workspacev1alpha1.Workspace{}
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), updatedWorkspace)).To(Succeed())
-			Expect(*updatedWorkspace.Spec.TemplateRef).To(Equal(template1.Name))
+			Expect(updatedWorkspace.Spec.TemplateRef.Name).To(Equal(template1.Name))
 		})
 
 		It("should reject changing templateRef via CEL validation", func() {
@@ -101,7 +103,7 @@ var _ = Describe("Template Immutability", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), updatedWorkspace)).To(Succeed())
 
 			// Try to change templateRef to template2
-			updatedWorkspace.Spec.TemplateRef = &template2.Name
+			updatedWorkspace.Spec.TemplateRef = &workspacev1alpha1.WorkspaceTemplateRef{Name: template2.Name}
 			err := k8sClient.Update(ctx, updatedWorkspace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("templateRef is immutable"))
@@ -118,7 +120,7 @@ var _ = Describe("Template Immutability", func() {
 
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), updatedWorkspace)).To(Succeed())
 			Expect(updatedWorkspace.Spec.DisplayName).To(Equal("Updated Display Name"))
-			Expect(*updatedWorkspace.Spec.TemplateRef).To(Equal(template1.Name))
+			Expect(updatedWorkspace.Spec.TemplateRef.Name).To(Equal(template1.Name))
 		})
 	})
 
@@ -136,7 +138,8 @@ var _ = Describe("Template Immutability", func() {
 
 			template = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "protected-template",
+					Name:      "protected-template",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Protected Template",
@@ -155,7 +158,7 @@ var _ = Describe("Template Immutability", func() {
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Protection Test",
-					TemplateRef: &template.Name,
+					TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: template.Name},
 				},
 			}
 			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
@@ -206,7 +209,8 @@ var _ = Describe("Template Immutability", func() {
 			// Create a template that no workspace uses
 			unusedTemplate := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "unused-template",
+					Name:      "unused-template",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Unused Template",

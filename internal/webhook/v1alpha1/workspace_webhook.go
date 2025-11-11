@@ -64,7 +64,7 @@ func isAdminUser(groups []string) bool {
 
 func fetchTemplateRef(workspace *workspacev1alpha1.Workspace) string {
 	if workspace.Spec.TemplateRef != nil {
-		return *workspace.Spec.TemplateRef
+		return workspace.Spec.TemplateRef.Name
 	}
 	return ""
 }
@@ -93,9 +93,9 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 }
 
 // SetupWorkspaceWebhookWithManager registers the webhook for Workspace in the manager.
-func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
+func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace string) error {
 	templateValidator := NewTemplateValidator(mgr.GetClient())
-	templateDefaulter := NewTemplateDefaulter(mgr.GetClient())
+	templateDefaulter := NewTemplateDefaulter(mgr.GetClient(), defaultTemplateNamespace)
 	templateGetter := NewTemplateGetter(mgr.GetClient())
 	serviceAccountValidator := NewServiceAccountValidator(mgr.GetClient())
 	serviceAccountDefaulter := NewServiceAccountDefaulter(mgr.GetClient())

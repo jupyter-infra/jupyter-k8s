@@ -69,7 +69,7 @@ var _ = Describe("Workspace Webhook", func() {
 
 		mockClient := &MockClient{}
 		defaulter = WorkspaceCustomDefaulter{
-			templateDefaulter:       NewTemplateDefaulter(mockClient),
+			templateDefaulter:       NewTemplateDefaulter(mockClient, ""),
 			serviceAccountDefaulter: NewServiceAccountDefaulter(mockClient),
 			templateGetter:          NewTemplateGetter(mockClient),
 		}

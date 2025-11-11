@@ -61,7 +61,7 @@ var _ = Describe("Event Recording", func() {
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Test Validation Failed",
-					TemplateRef: stringPtr("test-template"),
+					TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: "test-template"},
 					Image:       "disallowed-image:latest",
 				},
 			}
@@ -70,7 +70,8 @@ var _ = Describe("Event Recording", func() {
 			By("creating a template with image restrictions")
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-template",
+					Name:      "test-template",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Test Template",
@@ -132,7 +133,7 @@ var _ = Describe("Event Recording", func() {
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Test Validation Passed",
-					TemplateRef: stringPtr("test-template-valid"),
+					TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: "test-template-valid"},
 					Image:       "allowed-image:latest",
 				},
 			}
@@ -141,7 +142,8 @@ var _ = Describe("Event Recording", func() {
 			By("creating a template that allows the image")
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-template-valid",
+					Name:      "test-template-valid",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Test Template Valid",
@@ -205,7 +207,7 @@ var _ = Describe("Event Recording", func() {
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Test CPU Exceeded",
-					TemplateRef: stringPtr("bounded-template"),
+					TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: "bounded-template"},
 					Resources: &corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU: resource.MustParse("10"), // Exceeds max
@@ -218,7 +220,8 @@ var _ = Describe("Event Recording", func() {
 			By("creating a template with CPU bounds")
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "bounded-template",
+					Name:      "bounded-template",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Bounded Template",

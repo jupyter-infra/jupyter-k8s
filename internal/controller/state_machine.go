@@ -336,7 +336,7 @@ func (sm *StateMachine) handleTemplateValidation(
 	logger.Info("Validation passed")
 
 	// Record successful validation event
-	templateName := *workspace.Spec.TemplateRef
+	templateName := workspace.Spec.TemplateRef.Name
 	message := "Validation passed for " + templateName
 	sm.recorder.Event(workspace, corev1.EventTypeNormal, "Validated", message)
 

@@ -1666,7 +1666,16 @@ spec:
                   TemplateRef references a WorkspaceTemplate to use as base configuration
                   When set, template provides defaults and spec fields (Image, Resources, Storage.Size) act as overrides
                   IMMUTABLE: Cannot be changed after workspace creation
-                type: string
+                properties:
+                  name:
+                    description: Name of the WorkspaceTemplate
+                    type: string
+                  namespace:
+                    description: Namespace where the WorkspaceTemplate is located
+                    type: string
+                required:
+                - name
+                type: object
                 x-kubernetes-validations:
                 - message: templateRef is immutable
                   rule: self == oldSelf

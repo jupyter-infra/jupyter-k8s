@@ -7,6 +7,8 @@ metadata:
   name: workspace-with-template
 spec:
   displayName: "Workspace Using Template"
-  templateRef: "production-notebook-template"
+  templateRef:
+    name: "production-notebook-template"
+    namespace: "jupyter-k8s-shared"
   desiredStatus: Running
   ownershipType: Public

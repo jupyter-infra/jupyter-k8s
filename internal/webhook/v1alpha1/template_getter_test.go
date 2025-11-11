@@ -52,11 +52,11 @@ var _ = Describe("TemplateGetter", func() {
 	Context("ApplyTemplateName", func() {
 		It("should skip if workspace already has templateRef", func() {
 			templateRef := "existing-template"
-			workspace.Spec.TemplateRef = &templateRef
+			workspace.Spec.TemplateRef = &workspacev1alpha1.WorkspaceTemplateRef{Name: templateRef}
 
 			err := templateGetter.ApplyTemplateName(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(*workspace.Spec.TemplateRef).To(Equal("existing-template"))
+			Expect(workspace.Spec.TemplateRef.Name).To(Equal("existing-template"))
 		})
 
 		It("should continue without error if no default template exists", func() {
@@ -69,7 +69,8 @@ var _ = Describe("TemplateGetter", func() {
 			// Create a default template
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "default-template",
+					Name:      "default-template",
+					Namespace: "default",
 					Labels: map[string]string{
 						webhookconst.DefaultClusterTemplateLabel: "true",
 					},
@@ -84,7 +85,7 @@ var _ = Describe("TemplateGetter", func() {
 			err := templateGetter.ApplyTemplateName(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspace.Spec.TemplateRef).NotTo(BeNil())
-			Expect(*workspace.Spec.TemplateRef).To(Equal("default-template"))
+			Expect(workspace.Spec.TemplateRef.Name).To(Equal("default-template"))
 
 			// Cleanup
 			Expect(k8sClient.Delete(ctx, template)).To(Succeed())
@@ -94,7 +95,8 @@ var _ = Describe("TemplateGetter", func() {
 			// Create two default templates
 			template1 := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "default-template-1",
+					Name:      "default-template-1",
+					Namespace: "default",
 					Labels: map[string]string{
 						webhookconst.DefaultClusterTemplateLabel: "true",
 					},
@@ -106,7 +108,8 @@ var _ = Describe("TemplateGetter", func() {
 			}
 			template2 := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "default-template-2",
+					Name:      "default-template-2",
+					Namespace: "default",
 					Labels: map[string]string{
 						webhookconst.DefaultClusterTemplateLabel: "true",
 					},

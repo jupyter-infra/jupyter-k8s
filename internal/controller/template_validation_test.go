@@ -46,7 +46,8 @@ var _ = Describe("Template Validation", func() {
 			// Create a comprehensive test template
 			template = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: templateName,
+					Name:      templateName,
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Validation Test Template",
@@ -128,7 +129,7 @@ var _ = Describe("Template Validation", func() {
 					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					TemplateRef: &templateName,
+					TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 				},
 			}
 
@@ -145,7 +146,8 @@ var _ = Describe("Template Validation", func() {
 			minimalTemplateName := "minimal-template"
 			minimalTemplate := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: minimalTemplateName,
+					Name:      minimalTemplateName,
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Minimal Template",
@@ -171,7 +173,7 @@ var _ = Describe("Template Validation", func() {
 					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					TemplateRef: &minimalTemplateName,
+					TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: minimalTemplateName},
 				},
 			}
 
@@ -193,7 +195,7 @@ var _ = Describe("Template Validation", func() {
 					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					TemplateRef: &nonExistentTemplate,
+					TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: nonExistentTemplate},
 				},
 			}
 
@@ -213,7 +215,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 						Image:       "quay.io/jupyter/scipy-notebook:latest",
 					},
 				}
@@ -232,7 +234,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 						Image:       "malicious/image:latest",
 					},
 				}
@@ -254,7 +256,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 						Resources: &corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:    resource.MustParse("1"),
@@ -278,7 +280,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 						Resources: &corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU: resource.MustParse("8"), // Exceeds max of 4
@@ -302,7 +304,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 						Resources: &corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU: resource.MustParse("50m"), // Below min of 100m
@@ -326,7 +328,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 						Resources: &corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceMemory: resource.MustParse("16Gi"), // Exceeds max of 8Gi
@@ -350,7 +352,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 						Resources: &corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("1"),
@@ -372,7 +374,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 						Resources: &corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("4"), // Exceeds max of 2
@@ -398,7 +400,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 						Storage: &workspacev1alpha1.StorageSpec{
 							Size: resource.MustParse("50Gi"),
 						},
@@ -419,7 +421,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 						Storage: &workspacev1alpha1.StorageSpec{
 							Size: resource.MustParse("200Gi"), // Exceeds max of 100Gi
 						},
@@ -441,7 +443,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 						Storage: &workspacev1alpha1.StorageSpec{
 							Size: resource.MustParse("500Mi"), // Below min of 1Gi
 						},
@@ -466,7 +468,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 						Storage: &workspacev1alpha1.StorageSpec{
 							Size: resource.MustParse("1Gi"), // Valid size for test (invalid would fail parse)
 						},
@@ -487,7 +489,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 						Image:       "forbidden/image:latest",
 						Resources: &corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -524,7 +526,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 					},
 				}
 
@@ -549,7 +551,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &templateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: templateName},
 					},
 				}
 
@@ -565,7 +567,8 @@ var _ = Describe("Template Validation", func() {
 				restrictedTemplateName := "restricted-template"
 				restrictedTemplate := &workspacev1alpha1.WorkspaceTemplate{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: restrictedTemplateName,
+						Name:      restrictedTemplateName,
+						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 						DisplayName:            "Restricted Template",
@@ -584,7 +587,7 @@ var _ = Describe("Template Validation", func() {
 						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceSpec{
-						TemplateRef: &restrictedTemplateName,
+						TemplateRef: &workspacev1alpha1.WorkspaceTemplateRef{Name: restrictedTemplateName},
 					},
 				}
 
@@ -600,7 +603,8 @@ var _ = Describe("Template Validation", func() {
 			It("should reject template with empty DefaultImage at CRD level", func() {
 				emptyImageTemplate := &workspacev1alpha1.WorkspaceTemplate{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "empty-image-template",
+						Name:      "empty-image-template",
+						Namespace: "default",
 					},
 					Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 						DisplayName:  "Empty Image Template",

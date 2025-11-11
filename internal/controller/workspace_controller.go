@@ -61,6 +61,10 @@ type WorkspaceControllerOptions struct {
 
 	// EnableWorkspacePodWatching controls whether workspace pod events should be watched
 	EnableWorkspacePodWatching bool
+
+	// DefaultTemplateNamespace is the default namespace for WorkspaceTemplate resolution
+	// when templateRef.namespace is not specified
+	DefaultTemplateNamespace string
 }
 
 // WorkspaceReconciler reconciles a Workspace object
@@ -131,14 +135,14 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Ensure template label is set if workspace uses a template
-	if workspace.Spec.TemplateRef != nil && *workspace.Spec.TemplateRef != "" {
+	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
 		if workspace.Labels == nil {
 			workspace.Labels = make(map[string]string)
 		}
 		expectedLabel := "workspace.jupyter.org/template"
-		if workspace.Labels[expectedLabel] != *workspace.Spec.TemplateRef {
-			logger.Info("Adding template label to workspace", "template", *workspace.Spec.TemplateRef)
-			workspace.Labels[expectedLabel] = *workspace.Spec.TemplateRef
+		if workspace.Labels[expectedLabel] != workspace.Spec.TemplateRef.Name {
+			logger.Info("Adding template label to workspace", "template", workspace.Spec.TemplateRef.Name)
+			workspace.Labels[expectedLabel] = workspace.Spec.TemplateRef.Name
 			if err := r.Update(ctx, workspace); err != nil {
 				logger.Error(err, "Failed to update workspace with template label")
 				return ctrl.Result{}, err

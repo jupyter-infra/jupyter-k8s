@@ -213,19 +213,25 @@ func (r *WorkspaceTemplateReconciler) findTemplatesForWorkspace(ctx context.Cont
 		return nil
 	}
 
-	if workspace.Spec.TemplateRef == nil || *workspace.Spec.TemplateRef == "" {
+	if workspace.Spec.TemplateRef == nil || workspace.Spec.TemplateRef.Name == "" {
 		return nil
 	}
 
 	logger := logf.FromContext(ctx)
 	logger.V(1).Info("Workspace changed, enqueueing template reconciliation",
 		"workspace", fmt.Sprintf("%s/%s", workspace.Namespace, workspace.Name),
-		"template", *workspace.Spec.TemplateRef)
+		"template", workspace.Spec.TemplateRef.Name)
 
 	// Trigger reconciliation of the template when workspace changes
+	templateNamespace := workspace.Spec.TemplateRef.Namespace
+	if templateNamespace == "" {
+		templateNamespace = workspace.Namespace
+	}
+
 	return []reconcile.Request{
 		{NamespacedName: types.NamespacedName{
-			Name: *workspace.Spec.TemplateRef,
+			Name:      workspace.Spec.TemplateRef.Name,
+			Namespace: templateNamespace,
 		}},
 	}
 }
