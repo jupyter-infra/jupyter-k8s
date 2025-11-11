@@ -16,7 +16,6 @@ import (
 	"k8s.io/apiserver/pkg/server/mux"
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/kubernetes/typed/authorization/v1"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -790,25 +789,25 @@ var _ = Describe("Server", func() {
 })
 
 // mockSARServer starts a test HTTP server that can be used to test the SAR client
-func mockSARServer(clientErr error) (*httptest.Server, *rest.Config) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// If we want to simulate an error, return 500
-		if clientErr != nil {
-			http.Error(w, clientErr.Error(), http.StatusInternalServerError)
-			return
-		}
-		// Otherwise return success
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("{}")) // Empty JSON response
-	}))
-
-	// Create a rest config that points to our test server
-	config := &rest.Config{
-		Host: server.URL,
-	}
-
-	return server, config
-}
+// func mockSARServer(clientErr error) (*httptest.Server, *rest.Config) {
+//	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+//		// If we want to simulate an error, return 500
+//		if clientErr != nil {
+//			http.Error(w, clientErr.Error(), http.StatusInternalServerError)
+//			return
+//		}
+//		// Otherwise return success
+//		w.WriteHeader(http.StatusOK)
+//		_, _ = w.Write([]byte("{}")) // Empty JSON response
+//	}))
+//
+//	// Create a rest config that points to our test server
+//	config := &rest.Config{
+//		Host: server.URL,
+//	}
+//
+//	return server, config
+// }
 
 var _ = Describe("ServerWithManager", func() {
 

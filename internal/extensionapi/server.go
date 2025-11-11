@@ -26,8 +26,8 @@ import (
 
 var (
 	setupLog = log.Log.WithName("extension-api-server")
-	Scheme   = runtime.NewScheme()
-	Codecs   = serializer.NewCodecFactory(Scheme)
+	scheme   = runtime.NewScheme()
+	codecs   = serializer.NewCodecFactory(scheme)
 )
 
 // ExtensionServer represents the extension API HTTP server
@@ -149,7 +149,7 @@ func (s *ExtensionServer) registerNamespacedRoutes(resourceHandlers map[string]f
 	})
 
 	// Register the single wrapped handler for the namespaced path prefix
-	s.mux.HandlePrefix(namespacedPathPrefix, http.HandlerFunc(wrappedHandler))
+	s.mux.HandlePrefix(namespacedPathPrefix, wrappedHandler)
 	setupLog.Info("Registered namespaced routes handler", "pathPrefix", namespacedPathPrefix)
 }
 
@@ -233,7 +233,7 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	recommendedOptions.SecureServing.ServerCert.PairName = "tls"
 
 	// Create server config
-	serverConfig := genericapiserver.NewRecommendedConfig(Codecs)
+	serverConfig := genericapiserver.NewRecommendedConfig(codecs)
 	serverConfig.EffectiveVersion = compatibility.DefaultBuildEffectiveVersion()
 
 	// Apply options to configure authentication automatically
