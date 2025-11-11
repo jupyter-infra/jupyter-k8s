@@ -9,5 +9,6 @@ spec:
   displayName: "Workspace Using Template"
   templateRef:
     name: "production-notebook-template"
+    namespace: "jupyter-k8s-shared"
   desiredStatus: Running
   ownershipType: Public

@@ -156,9 +156,9 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 // SetupWorkspaceWebhookWithManager registers the webhook for Workspace in the manager.
 // RBAC Note: This webhook requires WorkspaceTemplate access (get, update, finalizers/update)
 // which is provided by the workspacetemplate controller RBAC markers.
-func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager) error {
-	templateValidator := NewTemplateValidator(mgr.GetClient())
-	templateDefaulter := NewTemplateDefaulter(mgr.GetClient())
+func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace string) error {
+	templateValidator := NewTemplateValidator(mgr.GetClient(), defaultTemplateNamespace)
+	templateDefaulter := NewTemplateDefaulter(mgr.GetClient(), defaultTemplateNamespace)
 	templateGetter := NewTemplateGetter(mgr.GetClient())
 	serviceAccountValidator := NewServiceAccountValidator(mgr.GetClient())
 	serviceAccountDefaulter := NewServiceAccountDefaulter(mgr.GetClient())

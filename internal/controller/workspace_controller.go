@@ -61,6 +61,10 @@ type WorkspaceControllerOptions struct {
 
 	// EnableWorkspacePodWatching controls whether workspace pod events should be watched
 	EnableWorkspacePodWatching bool
+
+	// DefaultTemplateNamespace is the default namespace for WorkspaceTemplate resolution
+	// when templateRef.namespace is not specified
+	DefaultTemplateNamespace string
 }
 
 // WorkspaceReconciler reconciles a Workspace object

@@ -171,6 +171,10 @@ spec:
 		Eventually(verifyWebhookReady, 30*time.Second, 2*time.Second).Should(Succeed())
 
 		By("installing WorkspaceTemplate samples")
+		_, _ = fmt.Fprintf(GinkgoWriter, "Creating jupyter-k8s-shared namespace...\n")
+		cmd = exec.Command("kubectl", "create", "namespace", "jupyter-k8s-shared")
+		_, _ = utils.Run(cmd) // Ignore error if namespace already exists
+
 		_, _ = fmt.Fprintf(GinkgoWriter, "Applying production template...\n")
 		cmd = exec.Command("kubectl", "apply", "-f",
 			"config/samples/workspace_v1alpha1_workspacetemplate_production.yaml")
@@ -244,7 +248,7 @@ spec:
 			By("verifying production template exists")
 			verifyTemplateExists := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "workspacetemplate",
-					"production-notebook-template", "-o", "jsonpath={.metadata.name}")
+					"production-notebook-template", "-n", "jupyter-k8s-shared", "-o", "jsonpath={.metadata.name}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("production-notebook-template"))
@@ -256,7 +260,7 @@ spec:
 
 			By("verifying template has correct spec fields")
 			cmd := exec.Command("kubectl", "get", "workspacetemplate",
-				"production-notebook-template", "-o", "jsonpath={.spec.displayName}")
+				"production-notebook-template", "-n", "jupyter-k8s-shared", "-o", "jsonpath={.spec.displayName}")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("Production Jupyter Notebook"))
@@ -401,7 +405,7 @@ spec:
 			By("waiting for finalizer to be added by controller")
 			verifyFinalizerAdded := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "workspacetemplate",
-					"production-notebook-template",
+					"production-notebook-template", "-n", "jupyter-k8s-shared",
 					"-o", "jsonpath={.metadata.finalizers[0]}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -414,14 +418,14 @@ spec:
 
 			By("attempting to delete the template")
 			cmd = exec.Command("kubectl", "delete", "workspacetemplate",
-				"production-notebook-template", "--wait=false")
+				"production-notebook-template", "-n", "jupyter-k8s-shared", "--wait=false")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying template still exists with deletionTimestamp set")
 			time.Sleep(2 * time.Second)
 			cmd = exec.Command("kubectl", "get", "workspacetemplate",
-				"production-notebook-template",
+				"production-notebook-template", "-n", "jupyter-k8s-shared",
 				"-o", "jsonpath={.metadata.deletionTimestamp}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -429,7 +433,7 @@ spec:
 
 			By("verifying finalizer is blocking deletion")
 			cmd = exec.Command("kubectl", "get", "workspacetemplate",
-				"production-notebook-template",
+				"production-notebook-template", "-n", "jupyter-k8s-shared",
 				"-o", "jsonpath={.metadata.finalizers[0]}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -452,7 +456,7 @@ spec:
 			By("verifying template can now be deleted")
 			verifyTemplateDeleted := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "workspacetemplate",
-					"production-notebook-template")
+					"production-notebook-template", "-n", "jupyter-k8s-shared")
 				_, err := utils.Run(cmd)
 				g.Expect(err).To(HaveOccurred(), "expected template to be deleted")
 			}

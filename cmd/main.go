@@ -109,6 +109,7 @@ func main() {
 	var enableExtensionAPI bool
 	var watchResourcesGVK string
 	var enableWorkspacePodWatching bool
+	var defaultTemplateNamespace string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -138,6 +139,8 @@ func main() {
 		"Comma-separated list of Group/Version/Kind to watch (format: group/version/kind,group/version/kind,...)")
 	flag.BoolVar(&enableWorkspacePodWatching, "enable-workspace-pod-watching", false,
 		"Enable workspace pod event watching for workspace lifecycle management")
+	flag.StringVar(&defaultTemplateNamespace, "default-template-namespace", "",
+		"Default namespace for WorkspaceTemplate resolution when templateRef.namespace is not specified")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -251,6 +254,7 @@ func main() {
 		WatchTraefik:                watchTraefik,
 		ResourceWatches:             make([]controller.GVKWatch, 0),
 		EnableWorkspacePodWatching:  enableWorkspacePodWatching,
+		DefaultTemplateNamespace:    defaultTemplateNamespace,
 	}
 
 	// Convert parsed GVKWatches to controller.GVKWatch format
@@ -274,7 +278,7 @@ func main() {
 	// Set up Workspace webhook (enabled by default, controlled by ENABLE_WORKSPACE_WEBHOOK)
 	// nolint:goconst
 	if os.Getenv("ENABLE_WORKSPACE_WEBHOOK") != "false" {
-		if err := webhookv1alpha1.SetupWorkspaceWebhookWithManager(mgr); err != nil {
+		if err := webhookv1alpha1.SetupWorkspaceWebhookWithManager(mgr, defaultTemplateNamespace); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Workspace")
 			os.Exit(1)
 		}
