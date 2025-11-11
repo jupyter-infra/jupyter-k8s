@@ -55,11 +55,11 @@ var defaultApplicators = []DefaultApplicator{
 
 // ApplyTemplateDefaults applies template defaults to workspace
 func (td *TemplateDefaulter) ApplyTemplateDefaults(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
-	if workspace.Spec.TemplateRef == nil {
+	if workspace.Spec.TemplateRef == nil || workspace.Spec.TemplateRef.Name == "" {
 		return nil
 	}
 
-	template, err := td.fetchTemplate(ctx, *workspace.Spec.TemplateRef)
+	template, err := td.fetchTemplate(ctx, workspace.Spec.TemplateRef.Name)
 	if err != nil {
 		return err
 	}

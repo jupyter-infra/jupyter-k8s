@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: webhook-defaults-test
+spec:
+  displayName: "Webhook Defaults Test"
+  templateRef:
+    name: "production-notebook-template"
+  ownershipType: Public

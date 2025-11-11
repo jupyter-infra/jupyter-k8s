@@ -271,10 +271,27 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "WorkspaceTemplate")
 		os.Exit(1)
 	}
+	// Set up Workspace webhook (enabled by default, controlled by ENABLE_WORKSPACE_WEBHOOK)
 	// nolint:goconst
-	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+	if os.Getenv("ENABLE_WORKSPACE_WEBHOOK") != "false" {
 		if err := webhookv1alpha1.SetupWorkspaceWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Workspace")
+			os.Exit(1)
+		}
+
+		// Setup pod exec webhook for security validation
+		if err := webhookv1alpha1.SetupPodExecWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "PodExec")
+			os.Exit(1)
+		}
+	}
+
+	// Set up WorkspaceTemplate webhook (enabled by default, controlled by ENABLE_WORKSPACE_TEMPLATE_WEBHOOK)
+	// This webhook manages lazy finalizers to prevent template deletion while in use
+	// nolint:goconst
+	if os.Getenv("ENABLE_WORKSPACE_TEMPLATE_WEBHOOK") != "false" {
+		if err := webhookv1alpha1.SetupWorkspaceTemplateWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "WorkspaceTemplate")
 			os.Exit(1)
 		}
 	}

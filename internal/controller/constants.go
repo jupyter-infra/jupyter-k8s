@@ -22,14 +22,18 @@ const (
 	// AppLabel is the label key for application identification
 	AppLabel = "app"
 
+	// LabelWorkspaceName is the label key for workspace name
+	LabelWorkspaceName = "workspace.jupyter.org/workspace-name"
 	// LabelWorkspaceNamespace is the label key for workspace namespace
-	LabelWorkspaceNamespace = "workspace.jupyter.org/workspaceNamespace"
+	LabelWorkspaceNamespace = "workspace.jupyter.org/workspace-namespace"
 	// LabelAccessStrategyName is the label key for access strategy name
-	LabelAccessStrategyName = "workspace.jupyter.org/accessStrategyName"
+	LabelAccessStrategyName = "workspace.jupyter.org/access-strategy-name"
 	// LabelAccessStrategyNamespace is the label key for access strategy namespace
-	LabelAccessStrategyNamespace = "workspace.jupyter.org/accessStrategyNamespace"
-	// LabelWorkspaceTemplate is the label key for workspace template
+	LabelAccessStrategyNamespace = "workspace.jupyter.org/access-strategy-namespace"
+	// LabelWorkspaceTemplate is the label key for workspace template name
 	LabelWorkspaceTemplate = "workspace.jupyter.org/template"
+	// LabelWorkspaceTemplateNamespace is the label key for workspace template namespace
+	LabelWorkspaceTemplateNamespace = "workspace.jupyter.org/template-namespace"
 
 	// AppLabelValue is the label value for app label
 	AppLabelValue = "jupyter"
@@ -81,6 +85,12 @@ const (
 
 	// WorkspaceFinalizerName is the finalizer name for workspace cleanup protection
 	WorkspaceFinalizerName = "workspace.jupyter.org/cleanup-protection"
+
+	// ControllerPodNamespaceEnv is the environment variable for the controller pod namespace
+	ControllerPodNamespaceEnv = "CONTROLLER_POD_NAMESPACE"
+
+	// ControllerPodServiceAccountEnv is the environment variable for the controller pod service account
+	ControllerPodServiceAccountEnv = "CONTROLLER_POD_SERVICE_ACCOUNT"
 )
 
 // GenerateDeploymentName creates a consistent deployment name

@@ -112,6 +112,31 @@ func validateResourceBounds(resources corev1.ResourceRequirements, template *wor
 		}
 	}
 
+	// Validate GPU bounds
+	if bounds.GPU != nil && resources.Requests != nil {
+		gpuResourceName := corev1.ResourceName("nvidia.com/gpu")
+		if gpuRequest, exists := resources.Requests[gpuResourceName]; exists {
+			if gpuRequest.Cmp(bounds.GPU.Min) < 0 {
+				violations = append(violations, controller.TemplateViolation{
+					Type:    controller.ViolationTypeResourceExceeded,
+					Field:   "spec.resources.requests.nvidia.com/gpu",
+					Message: fmt.Sprintf("GPU request %s is below minimum %s required by template '%s'", gpuRequest.String(), bounds.GPU.Min.String(), template.Name),
+					Allowed: fmt.Sprintf("min: %s", bounds.GPU.Min.String()),
+					Actual:  gpuRequest.String(),
+				})
+			}
+			if gpuRequest.Cmp(bounds.GPU.Max) > 0 {
+				violations = append(violations, controller.TemplateViolation{
+					Type:    controller.ViolationTypeResourceExceeded,
+					Field:   "spec.resources.requests.nvidia.com/gpu",
+					Message: fmt.Sprintf("GPU request %s exceeds maximum %s allowed by template '%s'", gpuRequest.String(), bounds.GPU.Max.String(), template.Name),
+					Allowed: fmt.Sprintf("max: %s", bounds.GPU.Max.String()),
+					Actual:  gpuRequest.String(),
+				})
+			}
+		}
+	}
+
 	return violations
 }
 

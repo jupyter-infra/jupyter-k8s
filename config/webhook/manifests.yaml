@@ -37,6 +37,26 @@ webhooks:
     service:
       name: jupyter-k8s-controller-manager
       namespace: system
+      path: /validate-pods-exec-workspace
+      port: 9443
+  failurePolicy: Fail
+  name: vpods-exec-workspace-v1.kb.io
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CONNECT
+    resources:
+    - pods/exec
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: jupyter-k8s-controller-manager
+      namespace: system
       path: /validate-workspace-jupyter-org-v1alpha1-workspace
       port: 9443
   failurePolicy: Fail
@@ -52,4 +72,24 @@ webhooks:
     - DELETE
     resources:
     - workspaces
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: jupyter-k8s-controller-manager
+      namespace: system
+      path: /validate-workspace-jupyter-org-v1alpha1-workspacetemplate
+      port: 9443
+  failurePolicy: Ignore
+  name: vworkspacetemplate-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - workspace.jupyter.org
+    apiVersions:
+    - v1alpha1
+    operations:
+    - UPDATE
+    resources:
+    - workspacetemplates
   sideEffects: None

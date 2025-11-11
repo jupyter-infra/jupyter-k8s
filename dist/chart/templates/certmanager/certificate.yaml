@@ -5,7 +5,7 @@ kind: Issuer
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: jupyter-k8s-selfsigned-issuer
+  name: selfsigned-issuer
   namespace: {{ .Release.Namespace }}
 spec:
   selfSigned: {}
@@ -30,7 +30,7 @@ spec:
     - jupyter-k8s-webhook-service.{{ .Release.Namespace }}.svc
   issuerRef:
     kind: Issuer
-    name: jupyter-k8s-selfsigned-issuer
+    name: selfsigned-issuer
   secretName: webhook-server-cert
 {{- end }}
 {{- if .Values.metrics.enable }}
@@ -54,7 +54,7 @@ spec:
     - jupyter-k8s-metrics-service.{{ .Release.Namespace }}.svc
   issuerRef:
     kind: Issuer
-    name: jupyter-k8s-selfsigned-issuer
+    name: selfsigned-issuer
   secretName: metrics-server-cert
 {{- end }}
 {{- end }}
