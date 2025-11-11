@@ -22,18 +22,20 @@ func ensureResourcesInitialized(ctx context.Context) error {
 		logger := log.FromContext(ctx).WithName("resource-init")
 		logger.Info("Initializing resources")
 
-		// Create KMS key
-		kmsClient, err := NewKMSClient(ctx)
-		if err != nil {
-			initError = fmt.Errorf("failed to create KMS client: %w", err)
-			return
-		}
+		// TODO: remove these comments in future change to use customer provided KMS key
 
-		_, err = kmsClient.CreateJWTKMSKey(ctx)
-		if err != nil {
-			initError = fmt.Errorf("failed to create KMS key: %w", err)
-			return
-		}
+		// Create KMS key
+		// kmsClient, err := NewKMSClient(ctx)
+		// if err != nil {
+		// 	initError = fmt.Errorf("failed to create KMS client: %w", err)
+		// 	return
+		// }
+
+		// _, err = kmsClient.CreateJWTKMSKey(ctx)
+		// if err != nil {
+		// 	initError = fmt.Errorf("failed to create KMS key: %w", err)
+		// 	return
+		// }
 
 		// Create SSH document
 		ssmClient, err := NewSSMClient(ctx)

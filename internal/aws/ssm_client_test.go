@@ -469,13 +469,12 @@ func TestSSMClient_CreateSSHDocument_Success(t *testing.T) {
 	client := NewSSMClientWithMock(mockClient, "us-west-2")
 
 	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
-	t.Setenv(SSHDocumentContentEnv, `{"test": "content"}`)
 
 	expectedOutput := &ssm.CreateDocumentOutput{}
 	mockClient.On("CreateDocument", ctx, mock.MatchedBy(func(input *ssm.CreateDocumentInput) bool {
 		return *input.Name == CustomSSHDocumentName &&
 			input.DocumentType == types.DocumentTypeSession &&
-			*input.Content == `{"test": "content"}` &&
+			*input.Content == SSHDocumentContent &&
 			len(input.Tags) == 2
 	})).Return(expectedOutput, nil)
 
@@ -494,7 +493,6 @@ func TestSSMClient_CreateSSHDocument_DocumentAlreadyExists(t *testing.T) {
 	client := NewSSMClientWithMock(mockClient, "us-west-2")
 
 	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
-	t.Setenv(SSHDocumentContentEnv, `{"test": "content"}`)
 
 	docExistsError := &types.DocumentAlreadyExists{}
 	mockClient.On("CreateDocument", ctx, mock.AnythingOfType("*ssm.CreateDocumentInput")).Return(nil, docExistsError)
@@ -513,29 +511,11 @@ func TestSSMClient_CreateSSHDocument_MissingClusterARN(t *testing.T) {
 	mockClient := &MockSSMClient{}
 	client := NewSSMClientWithMock(mockClient, "us-west-2")
 
-	t.Setenv(SSHDocumentContentEnv, `{"test": "content"}`)
 	err := client.CreateSSHDocument(ctx)
 
 	// Assert
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "environment variable is required")
-}
-
-func TestSSMClient_CreateSSHDocument_MissingDocumentContent(t *testing.T) {
-	// Setup
-	ctx := context.Background()
-	mockClient := &MockSSMClient{}
-	client := NewSSMClientWithMock(mockClient, "us-west-2")
-
-	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
-	// Don't set SSHDocumentContentEnv
-
-	// Execute
-	err := client.CreateSSHDocument(ctx)
-
-	// Assert
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "SSH_DOCUMENT_CONTENT environment variable is required")
 }
 
 func TestSSMClient_CreateSSHDocument_CreateError(t *testing.T) {
@@ -545,8 +525,6 @@ func TestSSMClient_CreateSSHDocument_CreateError(t *testing.T) {
 	client := NewSSMClientWithMock(mockClient, "us-west-2")
 
 	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
-	t.Setenv(SSHDocumentContentEnv, `{"test": "content"}`)
-	t.Setenv(SSHDocumentContentEnv, `{"test": "content"}`)
 
 	expectedError := errors.New("create document failed")
 	mockClient.On("CreateDocument", ctx, mock.AnythingOfType("*ssm.CreateDocumentInput")).Return(nil, expectedError)

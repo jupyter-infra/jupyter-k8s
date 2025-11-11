@@ -404,17 +404,12 @@ func (s *SSMClient) CreateSSHDocument(ctx context.Context) error {
 		return fmt.Errorf("%s environment variable is required", EKSClusterARNEnv)
 	}
 
-	sshDocumentContent := os.Getenv(SSHDocumentContentEnv)
-	if sshDocumentContent == "" {
-		return fmt.Errorf("%s environment variable is required", SSHDocumentContentEnv)
-	}
-
 	logger.Info("Creating SSH session document", "documentName", CustomSSHDocumentName)
 
 	input := &ssm.CreateDocumentInput{
 		Name:         aws.String(CustomSSHDocumentName),
 		DocumentType: types.DocumentTypeSession,
-		Content:      aws.String(sshDocumentContent),
+		Content:      aws.String(SSHDocumentContent),
 		Tags: []types.Tag{
 			{
 				Key:   aws.String(SageMakerManagedByTagKey),
