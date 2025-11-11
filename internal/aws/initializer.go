@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var (
@@ -16,12 +14,9 @@ var (
 // EnsureResourcesInitialized is a variable that holds the function to ensure resources are initialized
 var EnsureResourcesInitialized = ensureResourcesInitialized
 
-// ensureResourcesInitialized ensures KMS key and SSH document are created (only once)
+// ensureResourcesInitialized ensures SSH document is created (only once)
 func ensureResourcesInitialized(ctx context.Context) error {
 	initOnce.Do(func() {
-		logger := log.FromContext(ctx).WithName("resource-init")
-		logger.Info("Initializing resources")
-
 		// TODO: remove these comments in future change to use customer provided KMS key
 
 		// Create KMS key
@@ -44,13 +39,11 @@ func ensureResourcesInitialized(ctx context.Context) error {
 			return
 		}
 
-		err = ssmClient.CreateSSHDocument(ctx)
+		err = ssmClient.createSageMakerSpaceSSMDocument(ctx)
 		if err != nil {
 			initError = fmt.Errorf("failed to create SSH document: %w", err)
 			return
 		}
-
-		logger.Info("Resources initialized successfully")
 	})
 	return initError
 }

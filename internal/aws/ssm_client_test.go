@@ -462,7 +462,7 @@ func TestCleanupActivationsByPodUID_DeleteError(t *testing.T) {
 	mockClient.AssertExpectations(t)
 }
 
-func TestSSMClient_CreateSSHDocument_Success(t *testing.T) {
+func TestSSMClient_createSageMakerSpaceSSMDocument_Success(t *testing.T) {
 	// Setup
 	ctx := context.Background()
 	mockClient := &MockSSMClient{}
@@ -479,14 +479,14 @@ func TestSSMClient_CreateSSHDocument_Success(t *testing.T) {
 	})).Return(expectedOutput, nil)
 
 	// Execute
-	err := client.CreateSSHDocument(ctx)
+	err := client.createSageMakerSpaceSSMDocument(ctx)
 
 	// Assert
 	assert.NoError(t, err)
 	mockClient.AssertExpectations(t)
 }
 
-func TestSSMClient_CreateSSHDocument_DocumentAlreadyExists(t *testing.T) {
+func TestSSMClient_createSageMakerSpaceSSMDocument_DocumentAlreadyExists(t *testing.T) {
 	// Setup
 	ctx := context.Background()
 	mockClient := &MockSSMClient{}
@@ -498,27 +498,27 @@ func TestSSMClient_CreateSSHDocument_DocumentAlreadyExists(t *testing.T) {
 	mockClient.On("CreateDocument", ctx, mock.AnythingOfType("*ssm.CreateDocumentInput")).Return(nil, docExistsError)
 
 	// Execute
-	err := client.CreateSSHDocument(ctx)
+	err := client.createSageMakerSpaceSSMDocument(ctx)
 
 	// Assert
 	assert.NoError(t, err) // Should not return error when document already exists
 	mockClient.AssertExpectations(t)
 }
 
-func TestSSMClient_CreateSSHDocument_MissingClusterARN(t *testing.T) {
+func TestSSMClient_createSageMakerSpaceSSMDocument_MissingClusterARN(t *testing.T) {
 	// Setup
 	ctx := context.Background()
 	mockClient := &MockSSMClient{}
 	client := NewSSMClientWithMock(mockClient, "us-west-2")
 
-	err := client.CreateSSHDocument(ctx)
+	err := client.createSageMakerSpaceSSMDocument(ctx)
 
 	// Assert
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "environment variable is required")
 }
 
-func TestSSMClient_CreateSSHDocument_CreateError(t *testing.T) {
+func TestSSMClient_createSageMakerSpaceSSMDocument_CreateError(t *testing.T) {
 	// Setup
 	ctx := context.Background()
 	mockClient := &MockSSMClient{}
@@ -530,7 +530,7 @@ func TestSSMClient_CreateSSHDocument_CreateError(t *testing.T) {
 	mockClient.On("CreateDocument", ctx, mock.AnythingOfType("*ssm.CreateDocumentInput")).Return(nil, expectedError)
 
 	// Execute
-	err := client.CreateSSHDocument(ctx)
+	err := client.createSageMakerSpaceSSMDocument(ctx)
 
 	// Assert
 	assert.Error(t, err)

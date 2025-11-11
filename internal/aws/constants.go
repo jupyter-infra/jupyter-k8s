@@ -1,6 +1,10 @@
 // Package aws provides AWS-related constants for the workspace controller.
 package aws
 
+import (
+	_ "embed"
+)
+
 const (
 	// AWSSSMDocumentNameEnv is the environment variable for SSM document name
 	AWSSSMDocumentNameEnv = "AWS_SSM_DOCUMENT_NAME"
@@ -33,26 +37,7 @@ const (
 
 	// CustomSSHDocumentName is the name of the SSM document for SSH sessions
 	CustomSSHDocumentName = "SageMaker-SpaceSSHSessionDocument"
-
-	// SSHDocumentContent is the JSON content for the SSH session document
-	SSHDocumentContent = `{
- "schemaVersion": "1.0",
- "description": "Document to hold regional settings for Session Manager for SSH connections",
- "sessionType": "Port",
- "parameters": {
-  "portNumber": {
-   "type": "String",
-   "description": "(Optional) Port number of SSH server on the instance",
-   "allowedPattern": "^([1-9]|[1-9][0-9]{1,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$",
-   "default": "22"
-  }
- },
- "inputs": {
-  "idleSessionTimeout": 60,
-  "maxSessionDuration": 720
- },
- "properties": {
-  "portNumber": "{{ portNumber }}"
- }
-}`
 )
+
+//go:embed ssh-session-document.json
+var SSHDocumentContent string

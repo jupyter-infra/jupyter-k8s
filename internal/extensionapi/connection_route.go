@@ -80,7 +80,6 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 
 	// Ensure AWS resources are initialized (only happens once)
 	if err := aws.EnsureResourcesInitialized(r.Context()); err != nil {
-		logger.Error(err, "Failed to initialize resources")
 		WriteKubernetesError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to initialize resources: %v", err))
 		return
 	}
