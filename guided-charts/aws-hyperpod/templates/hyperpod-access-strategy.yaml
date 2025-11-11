@@ -5,11 +5,11 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   displayName: HyperPod Access Strategy
-  {{- if .Values.authMiddleware.enabled }}
+  {{- if .Values.authmiddleware.enabled }}
   accessResourceNamespace: {{ .Release.Namespace }}
   {{- end }}
 
-  {{- if .Values.authMiddleware.enabled }}
+  {{- if .Values.authmiddleware.enabled }}
   accessResourceTemplates:
     # The authorized route - tries token verification on already authenticated requests
     - kind: IngressRoute
@@ -60,7 +60,7 @@ spec:
   accessResourceTemplates: []
   {{- end }}
 
-  {{- if .Values.authMiddleware.enabled }}
+  {{- if .Values.authmiddleware.enabled }}
   accessURLTemplate: "https://{{ .Values.domain }}/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth"
   {{- end }}
 
