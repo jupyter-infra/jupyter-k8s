@@ -1,0 +1,42 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dex-network-policy
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: dex
+    component: oauth
+spec:
+  podSelector:
+    matchLabels:
+      app: dex
+      component: oauth
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from traefik pods in the same namespace only
+  - from:
+    - podSelector:
+        matchLabels:
+          app: traefik
+          component: router
+      namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ .Values.namespace }}
+    ports:
+    - port: 5556
+      protocol: TCP
+  egress:
+  # Allow DNS resolution
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+  # Allow HTTPS outbound connections
+  - ports:
+    - port: 443
+      protocol: TCP
+    - port: 80
+      protocol: TCP
