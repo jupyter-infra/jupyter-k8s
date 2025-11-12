@@ -34,7 +34,8 @@ var _ = Describe("LifecycleDefaulter", func() {
 	BeforeEach(func() {
 		template = &workspacev1alpha1.WorkspaceTemplate{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-template",
+				Name:      "test-template",
+				Namespace: "default",
 			},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{},
 		}

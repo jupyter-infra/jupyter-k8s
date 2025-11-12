@@ -70,7 +70,8 @@ var _ = Describe("TemplateGetter", func() {
 			// Create a default template
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "default-template",
+					Name:      "default-template",
+					Namespace: "default",
 					Labels: map[string]string{
 						webhookconst.DefaultClusterTemplateLabel: "true",
 					},
@@ -95,7 +96,8 @@ var _ = Describe("TemplateGetter", func() {
 			// Create two default templates
 			template1 := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "default-template-1",
+					Name:      "default-template-1",
+					Namespace: "default",
 					Labels: map[string]string{
 						webhookconst.DefaultClusterTemplateLabel: "true",
 					},
@@ -107,7 +109,8 @@ var _ = Describe("TemplateGetter", func() {
 			}
 			template2 := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "default-template-2",
+					Name:      "default-template-2",
+					Namespace: "default",
 					Labels: map[string]string{
 						webhookconst.DefaultClusterTemplateLabel: "true",
 					},

@@ -75,12 +75,12 @@ var _ = Describe("Workspace Webhook", func() {
 
 		mockClient := &MockClient{}
 		defaulter = WorkspaceCustomDefaulter{
-			templateDefaulter:       NewTemplateDefaulter(mockClient),
+			templateDefaulter:       NewTemplateDefaulter(mockClient, ""),
 			serviceAccountDefaulter: NewServiceAccountDefaulter(mockClient),
 			templateGetter:          NewTemplateGetter(mockClient),
 		}
 		validator = WorkspaceCustomValidator{
-			templateValidator:       NewTemplateValidator(mockClient),
+			templateValidator:       NewTemplateValidator(mockClient, ""),
 			serviceAccountValidator: NewServiceAccountValidator(mockClient),
 		}
 		ctx = context.Background()
@@ -471,7 +471,10 @@ var _ = Describe("Workspace Webhook", func() {
 
 		BeforeEach(func() {
 			template = &workspacev1alpha1.WorkspaceTemplate{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-template",
+					Namespace: "default",
+				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					AllowedImages: []string{"jupyter/base-notebook:latest", "jupyter/scipy-notebook:latest"},
 					DefaultImage:  "jupyter/base-notebook:latest",
@@ -939,7 +942,8 @@ var _ = Describe("Workspace Webhook", func() {
 			maxSize := resource.MustParse("100Gi")
 			template = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "strict-template",
+					Name:      "strict-template",
+					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:   "Strict Template",
@@ -961,9 +965,7 @@ var _ = Describe("Workspace Webhook", func() {
 
 			// Create validator with template validator initialized
 			validatorWithTemplate = &WorkspaceCustomValidator{
-				templateValidator: &TemplateValidator{
-					client: k8sClient,
-				},
+				templateValidator: NewTemplateValidator(k8sClient, "default"),
 			}
 		})
 
@@ -979,7 +981,8 @@ var _ = Describe("Workspace Webhook", func() {
 			oldWorkspace.Spec.Image = testValidBaseNotebook // Valid
 			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
-				Name: template.Name,
+				Name:      template.Name,
+				Namespace: template.Namespace,
 			}
 
 			// New workspace with invalid image AND stopping
@@ -987,7 +990,8 @@ var _ = Describe("Workspace Webhook", func() {
 			newWorkspace.Spec.Image = testInvalidImage                // Invalid - violates template
 			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
-				Name: template.Name,
+				Name:      template.Name,
+				Namespace: "default",
 			}
 
 			// Should reject because image changed to invalid value (not just stopping)
@@ -1008,7 +1012,8 @@ var _ = Describe("Workspace Webhook", func() {
 			}
 			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
-				Name: template.Name,
+				Name:      template.Name,
+				Namespace: template.Namespace,
 			}
 
 			// New workspace with invalid resources AND stopping
@@ -1020,7 +1025,8 @@ var _ = Describe("Workspace Webhook", func() {
 			}
 			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
-				Name: template.Name,
+				Name:      template.Name,
+				Namespace: template.Namespace,
 			}
 
 			// Should reject because resources changed to invalid value (not just stopping)
@@ -1037,7 +1043,8 @@ var _ = Describe("Workspace Webhook", func() {
 			oldWorkspace.Spec.Image = testValidBaseNotebook // Valid
 			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
-				Name: template.Name,
+				Name:      template.Name,
+				Namespace: template.Namespace,
 			}
 
 			// New workspace - ONLY changing status to Stopped
@@ -1045,7 +1052,8 @@ var _ = Describe("Workspace Webhook", func() {
 			newWorkspace.Spec.Image = testValidBaseNotebook           // Same valid image
 			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping (only change)
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
-				Name: template.Name,
+				Name:      template.Name,
+				Namespace: template.Namespace,
 			}
 
 			// Should allow stop without validation when only status changes
@@ -1062,7 +1070,8 @@ var _ = Describe("Workspace Webhook", func() {
 			oldWorkspace.Spec.Image = testInvalidImage // Invalid
 			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
-				Name: template.Name,
+				Name:      template.Name,
+				Namespace: template.Namespace,
 			}
 
 			// New workspace - ONLY changing status to Stopped, keeping same invalid image
@@ -1070,7 +1079,8 @@ var _ = Describe("Workspace Webhook", func() {
 			newWorkspace.Spec.Image = testInvalidImage                // Still invalid (unchanged)
 			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping (only change)
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
-				Name: template.Name,
+				Name:      template.Name,
+				Namespace: template.Namespace,
 			}
 
 			// Should allow stop because ONLY DesiredStatus changed (image stayed the same)
@@ -1089,7 +1099,8 @@ var _ = Describe("Workspace Webhook", func() {
 			}
 			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
-				Name: template.Name,
+				Name:      template.Name,
+				Namespace: template.Namespace,
 			}
 
 			// New workspace with invalid storage AND stopping
@@ -1099,7 +1110,8 @@ var _ = Describe("Workspace Webhook", func() {
 			}
 			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
-				Name: template.Name,
+				Name:      template.Name,
+				Namespace: template.Namespace,
 			}
 
 			// Should reject because storage changed to invalid value (not just stopping)
@@ -1116,7 +1128,8 @@ var _ = Describe("Workspace Webhook", func() {
 			oldWorkspace.Spec.Image = testValidBaseNotebook // Valid
 			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
-				Name: template.Name,
+				Name:      template.Name,
+				Namespace: template.Namespace,
 			}
 
 			// New workspace with invalid image and NOT stopping
@@ -1124,7 +1137,8 @@ var _ = Describe("Workspace Webhook", func() {
 			newWorkspace.Spec.Image = testInvalidImage                // Invalid
 			newWorkspace.Spec.DesiredStatus = controller.PhaseRunning // Still Running
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
-				Name: template.Name,
+				Name:      template.Name,
+				Namespace: template.Namespace,
 			}
 
 			// Should reject because not stopping

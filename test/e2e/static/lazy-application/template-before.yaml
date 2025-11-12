@@ -1,7 +1,8 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
-  name: lazy-app-template
+  name: template-before
+  namespace: default
 spec:
   displayName: "Lazy Application Test - Before"
   description: "Permissive bounds initially"
