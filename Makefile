@@ -503,6 +503,10 @@ deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remot
 deploy-aws:
 	$(MAKE) deploy-aws-internal CLOUD_PROVIDER=aws
 
+.PHONY: deploy-aws-with-traefik
+deploy-aws-with-traefik:
+	$(MAKE) deploy-aws-internal CLOUD_PROVIDER=aws ENABLE_TRAEFIK_ACCESS_RESOURCES=true
+
 # Load environment variables from .env file for guided deployment
 deploy-aws-traefik-dex-internal:
 	@if [ ! -f .env ]; then \

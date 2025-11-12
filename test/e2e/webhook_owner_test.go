@@ -27,6 +27,18 @@ var _ = Describe("Webhook Owner", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred())
 
+		// Set environment variables for e2e testing
+		By("setting controller environment variables")
+		envVars := []string{
+			"CONTROLLER_POD_SERVICE_ACCOUNT=jupyter-k8s-controller-manager",
+			"CONTROLLER_POD_NAMESPACE=jupyter-k8s-system",
+		}
+		for _, envVar := range envVars {
+			cmd = exec.Command("kubectl", "set", "env", "deployment/jupyter-k8s-controller-manager", envVar, "-n", namespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to set environment variable: %s", envVar))
+		}
+
 		By("waiting for controller-manager to be ready")
 		Eventually(func() error {
 			cmd := exec.Command("kubectl", "get", "pods", "-l", "control-plane=controller-manager",
