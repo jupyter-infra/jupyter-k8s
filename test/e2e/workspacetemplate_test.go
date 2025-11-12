@@ -157,7 +157,7 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			g.Expect(caBundle).NotTo(BeEmpty(), "webhook CA bundle should be injected by cert-manager")
 
 			// Verify webhook endpoint is reachable by attempting a dry-run resource creation
-			cmd = exec.Command("kubectl", "apply", "--dry-run=server", "-f", "static/webhook-validation/webhook-readiness-test.yaml")
+			cmd = exec.Command("kubectl", "apply", "--dry-run=server", "-f", "test/e2e/static/webhook-validation/webhook-readiness-test.yaml")
 			_, err = utils.Run(cmd)
 			g.Expect(err).NotTo(HaveOccurred(), "webhook server should respond to admission requests")
 		}
