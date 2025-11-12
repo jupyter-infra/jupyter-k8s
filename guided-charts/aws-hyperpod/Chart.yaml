@@ -6,10 +6,6 @@ version: 0.1.0
 appVersion: "0.1.0"
 
 dependencies:
-  - name: jupyter-k8s
-    version: "0.1.0"
-    repository: "file://../../dist/chart"
-    condition: jupyter-k8s.shouldInstall
   - name: traefik
     version: "32.1.1"
     repository: "https://traefik.github.io/charts"

@@ -1,6 +1,50 @@
 # [AWS HYPERPOD]: Configuration for aws-hyperpod deployment mode
 # This includes presigned URL and remote access setup
 
+# [JUPYTER-K8S]: Core jupyter-k8s chart configuration
+jupyter-k8s:
+  shouldInstall: true
+  application:
+    imagesPullPolicy: IfNotPresent
+    imagesRegistry: 632138803636.dkr.ecr.us-west-2.amazonaws.com
+  controllerManager:
+    replicas: 1
+    container:
+      args:
+        - "--default-template-namespace=jupyter-k8s-shared"
+      env:
+        CLUSTER_ADMIN_GROUP: "cluster-workspace-admin"
+        CLUSTER_ID: ""
+        DOMAIN: ""
+        KMS_KEY_ID: ""
+      image:
+        repository: 632138803636.dkr.ecr.us-west-2.amazonaws.com/jupyter-k8s-operator
+        tag: latest
+      imagePullPolicy: Always
+  rbac:
+    enable: true
+  crd:
+    enable: true
+    keep: true
+  metrics:
+    enable: true
+  webhook:
+    enable: true
+  prometheus:
+    enable: false
+  certmanager:
+    enable: true
+  networkPolicy:
+    enable: false
+  workspacePodWatching:
+    enable: true
+  accessResources:
+    traefik:
+      enable: false
+    additionalGvk: []
+  extensionApi:
+    enable: true
+
 namespace: jupyter-k8s-system
 
 # [CLUSTER WEB UI]: Web interface configuration
