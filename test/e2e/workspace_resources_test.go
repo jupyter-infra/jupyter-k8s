@@ -550,7 +550,7 @@ func verifyFinalizerAdded(workspaceName string) {
 		if err != nil {
 			return err
 		}
-		if !strings.Contains(output, "workspace.jupyter.org/finalizer") {
+		if !strings.Contains(output, controller.WorkspaceFinalizerName) {
 			return fmt.Errorf("finalizer not found, got: %s", output)
 		}
 		return nil
@@ -612,7 +612,7 @@ func waitForFinalizerRemoval(workspaceName string) {
 			}
 			return err
 		}
-		if strings.Contains(output, "workspace.jupyter.org/finalizer") {
+		if strings.Contains(output, controller.WorkspaceFinalizerName) {
 			return fmt.Errorf("finalizer still present: %s", output)
 		}
 		return nil
@@ -682,7 +682,7 @@ func verifyMultipleFinalizers(workspaceName string) {
 		"-o", "jsonpath={.metadata.finalizers}")
 	output, err := utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())
-	Expect(output).To(ContainSubstring("workspace.jupyter.org/finalizer"))
+	Expect(output).To(ContainSubstring(controller.WorkspaceFinalizerName))
 	Expect(output).To(ContainSubstring("test.finalizer/custom"))
 }
 
