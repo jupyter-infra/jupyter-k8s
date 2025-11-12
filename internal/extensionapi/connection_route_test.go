@@ -21,6 +21,9 @@ import (
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+// Store original function for restoration
+var originalEnsureResourcesInitialized = aws.EnsureResourcesInitialized
+
 func TestNoOpPodExec(t *testing.T) {
 	exec := &noOpPodExec{}
 	pod := &corev1.Pod{}
@@ -188,6 +191,12 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 }
 
 func TestHandleConnectionCreateValidation(t *testing.T) {
+	// Mock EnsureResourcesInitialized to succeed
+	aws.EnsureResourcesInitialized = func(ctx context.Context) error {
+		return nil
+	}
+	defer func() { aws.EnsureResourcesInitialized = originalEnsureResourcesInitialized }()
+
 	server := &ExtensionServer{
 		config: &ExtensionConfig{
 			ClusterId: "test-cluster",
@@ -259,6 +268,12 @@ func TestHandleConnectionCreateValidation(t *testing.T) {
 }
 
 func TestHandleConnectionCreateClusterIdValidation(t *testing.T) {
+	// Mock EnsureResourcesInitialized to succeed
+	aws.EnsureResourcesInitialized = func(ctx context.Context) error {
+		return nil
+	}
+	defer func() { aws.EnsureResourcesInitialized = originalEnsureResourcesInitialized }()
+
 	server := &ExtensionServer{
 		config: &ExtensionConfig{
 			ClusterId: "", // Empty cluster ID
@@ -336,6 +351,12 @@ func TestGenerateVSCodeURLWithPod(t *testing.T) {
 }
 
 func TestHandleConnectionCreateReadBodyError(t *testing.T) {
+	// Mock EnsureResourcesInitialized to succeed
+	aws.EnsureResourcesInitialized = func(ctx context.Context) error {
+		return nil
+	}
+	defer func() { aws.EnsureResourcesInitialized = originalEnsureResourcesInitialized }()
+
 	server := &ExtensionServer{
 		config: &ExtensionConfig{
 			ClusterId: "test-cluster",
@@ -367,6 +388,12 @@ func (e *badReader) Close() error {
 }
 
 func TestHandleConnectionCreateInvalidConnectionType(t *testing.T) {
+	// Mock EnsureResourcesInitialized to succeed
+	aws.EnsureResourcesInitialized = func(ctx context.Context) error {
+		return nil
+	}
+	defer func() { aws.EnsureResourcesInitialized = originalEnsureResourcesInitialized }()
+
 	server := &ExtensionServer{
 		config: &ExtensionConfig{
 			ClusterId: "test-cluster",
@@ -486,6 +513,12 @@ func TestGenerateVSCodeURLSSMSuccess(t *testing.T) {
 }
 
 func TestHandleConnectionCreateInvalidMethod(t *testing.T) {
+	// Mock EnsureResourcesInitialized to succeed
+	aws.EnsureResourcesInitialized = func(ctx context.Context) error {
+		return nil
+	}
+	defer func() { aws.EnsureResourcesInitialized = originalEnsureResourcesInitialized }()
+
 	server := &ExtensionServer{
 		config: &ExtensionConfig{
 			ClusterId: "test-cluster",
@@ -763,6 +796,37 @@ func TestGenerateWebUIBearerTokenURL_MissingTemplate(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "BearerAuthURLTemplate not configured") {
 		t.Errorf("expected template error, got: %v", err)
+	}
+}
+
+func TestHandleConnectionCreateResourceInitializationError(t *testing.T) {
+	// Mock EnsureResourcesInitialized to fail
+	aws.EnsureResourcesInitialized = func(ctx context.Context) error {
+		return fmt.Errorf("failed to initialize AWS resources")
+	}
+	defer func() { aws.EnsureResourcesInitialized = originalEnsureResourcesInitialized }()
+
+	server := &ExtensionServer{
+		config: &ExtensionConfig{
+			ClusterId: "test-cluster",
+		},
+	}
+
+	req := connectionv1alpha1.WorkspaceConnectionRequest{
+		Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
+			WorkspaceName:           "test-workspace",
+			WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeWebUI,
+		},
+	}
+
+	bodyBytes, _ := json.Marshal(req)
+	httpReq := httptest.NewRequest("POST", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", bytes.NewReader(bodyBytes))
+	w := httptest.NewRecorder()
+
+	server.HandleConnectionCreate(w, httpReq)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d for resource initialization error, got %d", http.StatusInternalServerError, w.Code)
 	}
 }
 

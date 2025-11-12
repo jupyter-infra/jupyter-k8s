@@ -396,17 +396,12 @@ func (s *SSMClient) deleteActivation(ctx context.Context, activationId string) e
 	return nil
 }
 
-// CreateSSHDocument creates the SSH session document if it doesn't exist
-func (s *SSMClient) CreateSSHDocument(ctx context.Context) error {
+// createSageMakerSpaceSSMDocument creates the SSH session document if it doesn't exist
+func (s *SSMClient) createSageMakerSpaceSSMDocument(ctx context.Context) error {
 	logger := log.FromContext(ctx).WithName("ssm-client")
 	clusterARN := os.Getenv(EKSClusterARNEnv)
 	if clusterARN == "" {
 		return fmt.Errorf("%s environment variable is required", EKSClusterARNEnv)
-	}
-
-	sshDocumentContent := os.Getenv(SSHDocumentContentEnv)
-	if sshDocumentContent == "" {
-		return fmt.Errorf("%s environment variable is required", SSHDocumentContentEnv)
 	}
 
 	logger.Info("Creating SSH session document", "documentName", CustomSSHDocumentName)
@@ -414,7 +409,7 @@ func (s *SSMClient) CreateSSHDocument(ctx context.Context) error {
 	input := &ssm.CreateDocumentInput{
 		Name:         aws.String(CustomSSHDocumentName),
 		DocumentType: types.DocumentTypeSession,
-		Content:      aws.String(sshDocumentContent),
+		Content:      aws.String(SageMakerSpaceSSHSessionDocumentContent),
 		Tags: []types.Tag{
 			{
 				Key:   aws.String(SageMakerManagedByTagKey),

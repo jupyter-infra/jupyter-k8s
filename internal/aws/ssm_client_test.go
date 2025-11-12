@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -462,97 +463,95 @@ func TestCleanupActivationsByPodUID_DeleteError(t *testing.T) {
 	mockClient.AssertExpectations(t)
 }
 
-func TestSSMClient_CreateSSHDocument_Success(t *testing.T) {
+func TestSSMClient_createSageMakerSpaceSSMDocument_Success(t *testing.T) {
 	// Setup
 	ctx := context.Background()
 	mockClient := &MockSSMClient{}
 	client := NewSSMClientWithMock(mockClient, "us-west-2")
 
 	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
-	t.Setenv(SSHDocumentContentEnv, `{"test": "content"}`)
 
 	expectedOutput := &ssm.CreateDocumentOutput{}
 	mockClient.On("CreateDocument", ctx, mock.MatchedBy(func(input *ssm.CreateDocumentInput) bool {
 		return *input.Name == CustomSSHDocumentName &&
 			input.DocumentType == types.DocumentTypeSession &&
-			*input.Content == `{"test": "content"}` &&
+			*input.Content == SageMakerSpaceSSHSessionDocumentContent &&
 			len(input.Tags) == 2
 	})).Return(expectedOutput, nil)
 
 	// Execute
-	err := client.CreateSSHDocument(ctx)
+	err := client.createSageMakerSpaceSSMDocument(ctx)
 
 	// Assert
 	assert.NoError(t, err)
 	mockClient.AssertExpectations(t)
 }
 
-func TestSSMClient_CreateSSHDocument_DocumentAlreadyExists(t *testing.T) {
+func TestSageMakerSpaceSSHSessionDocumentContent_EmbedWorking(t *testing.T) {
+	// Test that the embedded SSH document content is properly loaded
+	assert.NotEmpty(t, SageMakerSpaceSSHSessionDocumentContent, "SSH document content should not be empty")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "schemaVersion", "SSH document should contain schemaVersion")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "sessionType", "SSH document should contain sessionType")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "Port", "SSH document should contain Port sessionType")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "portNumber", "SSH document should contain portNumber parameter")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "idleSessionTimeout", "SSH document should contain idleSessionTimeout")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "maxSessionDuration", "SSH document should contain maxSessionDuration")
+
+	// Verify it's valid JSON by unmarshaling
+	var doc map[string]interface{}
+	err := json.Unmarshal([]byte(SageMakerSpaceSSHSessionDocumentContent), &doc)
+	assert.NoError(t, err, "SSH document content should be valid JSON")
+
+	// Verify specific structure
+	assert.Equal(t, "1.0", doc["schemaVersion"])
+	assert.Equal(t, "Port", doc["sessionType"])
+}
+
+func TestSSMClient_createSageMakerSpaceSSMDocument_DocumentAlreadyExists(t *testing.T) {
 	// Setup
 	ctx := context.Background()
 	mockClient := &MockSSMClient{}
 	client := NewSSMClientWithMock(mockClient, "us-west-2")
 
 	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
-	t.Setenv(SSHDocumentContentEnv, `{"test": "content"}`)
 
 	docExistsError := &types.DocumentAlreadyExists{}
 	mockClient.On("CreateDocument", ctx, mock.AnythingOfType("*ssm.CreateDocumentInput")).Return(nil, docExistsError)
 
 	// Execute
-	err := client.CreateSSHDocument(ctx)
+	err := client.createSageMakerSpaceSSMDocument(ctx)
 
 	// Assert
 	assert.NoError(t, err) // Should not return error when document already exists
 	mockClient.AssertExpectations(t)
 }
 
-func TestSSMClient_CreateSSHDocument_MissingClusterARN(t *testing.T) {
+func TestSSMClient_createSageMakerSpaceSSMDocument_MissingClusterARN(t *testing.T) {
 	// Setup
 	ctx := context.Background()
 	mockClient := &MockSSMClient{}
 	client := NewSSMClientWithMock(mockClient, "us-west-2")
 
-	t.Setenv(SSHDocumentContentEnv, `{"test": "content"}`)
-	err := client.CreateSSHDocument(ctx)
+	err := client.createSageMakerSpaceSSMDocument(ctx)
 
 	// Assert
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "environment variable is required")
 }
 
-func TestSSMClient_CreateSSHDocument_MissingDocumentContent(t *testing.T) {
+func TestSSMClient_createSageMakerSpaceSSMDocument_CreateError(t *testing.T) {
 	// Setup
 	ctx := context.Background()
 	mockClient := &MockSSMClient{}
 	client := NewSSMClientWithMock(mockClient, "us-west-2")
 
 	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
-	// Don't set SSHDocumentContentEnv
-
-	// Execute
-	err := client.CreateSSHDocument(ctx)
-
-	// Assert
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "SSH_DOCUMENT_CONTENT environment variable is required")
-}
-
-func TestSSMClient_CreateSSHDocument_CreateError(t *testing.T) {
-	// Setup
-	ctx := context.Background()
-	mockClient := &MockSSMClient{}
-	client := NewSSMClientWithMock(mockClient, "us-west-2")
-
-	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
-	t.Setenv(SSHDocumentContentEnv, `{"test": "content"}`)
-	t.Setenv(SSHDocumentContentEnv, `{"test": "content"}`)
 
 	expectedError := errors.New("create document failed")
 	mockClient.On("CreateDocument", ctx, mock.AnythingOfType("*ssm.CreateDocumentInput")).Return(nil, expectedError)
 
 	// Execute
-	err := client.CreateSSHDocument(ctx)
+	err := client.createSageMakerSpaceSSMDocument(ctx)
 
 	// Assert
 	assert.Error(t, err)

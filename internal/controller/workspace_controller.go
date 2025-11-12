@@ -24,6 +24,7 @@ import (
 	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -61,6 +62,10 @@ type WorkspaceControllerOptions struct {
 
 	// EnableWorkspacePodWatching controls whether workspace pod events should be watched
 	EnableWorkspacePodWatching bool
+
+	// DefaultTemplateNamespace is the default namespace for WorkspaceTemplate resolution
+	// when templateRef.namespace is not specified
+	DefaultTemplateNamespace string
 }
 
 // WorkspaceReconciler reconciles a Workspace object
@@ -88,6 +93,7 @@ func (r *WorkspaceReconciler) SetStateMachine(sm *StateMachine) {
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=traefik.io,resources=ingressroutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=traefik.io,resources=middlewares,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -246,7 +252,8 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		middlewareGVK.SetAPIVersion("traefik.io/v1alpha1")
 		middlewareGVK.SetKind("Middleware")
 
-		builder.Owns(ingressRouteGVK).Owns(middlewareGVK)
+		// Watch NetworkPolicy resources using typed API
+		builder.Owns(&networkingv1.NetworkPolicy{}).Owns(ingressRouteGVK).Owns(middlewareGVK)
 	}
 
 	// Add additional resource watches from ResourceWatches config

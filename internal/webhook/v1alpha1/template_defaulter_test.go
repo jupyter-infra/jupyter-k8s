@@ -47,7 +47,8 @@ var _ = Describe("TemplateDefaulter", func() {
 
 		template = &workspacev1alpha1.WorkspaceTemplate{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-template",
+				Name:      "test-template",
+				Namespace: "default",
 			},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 				DefaultImage:         "jupyter/base-notebook:latest",
@@ -83,7 +84,7 @@ var _ = Describe("TemplateDefaulter", func() {
 			WithObjects(template).
 			Build()
 
-		defaulter = NewTemplateDefaulter(fakeClient)
+		defaulter = NewTemplateDefaulter(fakeClient, "")
 	})
 
 	Context("ApplyTemplateDefaults", func() {

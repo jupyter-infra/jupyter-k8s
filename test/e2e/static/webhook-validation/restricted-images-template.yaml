@@ -2,6 +2,7 @@ apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
   name: restricted-images-template
+  namespace: default
 spec:
   displayName: "Restricted Images Template"
   description: "Template that restricts custom images"
