@@ -26,7 +26,7 @@ const (
 	exceedBoundsWorkspace    = "workspace-exceed-storage-bounds"
 )
 
-var _ = Describe("Primary Storage", Ordered, func() {
+var _ = Describe("Workspace Resources", Ordered, func() {
 	BeforeAll(func() {
 		setupController()
 		setupStorageClass()
@@ -67,12 +67,34 @@ var _ = Describe("Primary Storage", Ordered, func() {
 			createWorkspace(basicWorkspace)
 			waitForDeployment(basicWorkspace)
 			verifyVolumeMount(basicWorkspace, "/home/jovyan")
+			verifyDeploymentProperties(basicWorkspace)
 		})
 
 		It("should mount PVC with custom path", func() {
 			createWorkspace(customMountWorkspace)
 			waitForDeployment(customMountWorkspace)
 			verifyVolumeMount(customMountWorkspace, "/home/jovyan/data")
+			verifyDeploymentProperties(customMountWorkspace)
+		})
+
+		It("should create service for workspace access", func() {
+			createWorkspace(basicWorkspace)
+			waitForDeployment(basicWorkspace)
+			verifyServiceCreated(basicWorkspace)
+		})
+	})
+
+	Context("Resource Creation", func() {
+		AfterEach(func() {
+			cleanupWorkspaces(basicWorkspace)
+		})
+
+		It("should create all required resources", func() {
+			createWorkspace(basicWorkspace)
+			verifyPVCCreated(basicWorkspace, "2Gi")
+			waitForDeployment(basicWorkspace)
+			verifyServiceCreated(basicWorkspace)
+			verifyResourceOwnership(basicWorkspace)
 		})
 	})
 
@@ -119,6 +141,50 @@ var _ = Describe("Primary Storage", Ordered, func() {
 
 		It("should reject workspace exceeding template bounds", func() {
 			expectWorkspaceRejection(exceedBoundsWorkspace, "storage")
+		})
+	})
+
+	Context("Workspace Deletion", func() {
+		It("should add finalizer when workspace is created", func() {
+			createWorkspace(basicWorkspace)
+			verifyFinalizerAdded(basicWorkspace)
+			cleanupWorkspaces(basicWorkspace)
+		})
+
+		It("should handle finalizer removal during deletion", func() {
+			createWorkspace(basicWorkspace)
+			waitForDeployment(basicWorkspace)
+			verifyFinalizerAdded(basicWorkspace)
+			
+			deleteWorkspaceAsync(basicWorkspace)
+			verifyWorkspaceDeletionTimestamp(basicWorkspace)
+			verifyResourcesStillExist(basicWorkspace)
+			
+			waitForFinalizerRemoval(basicWorkspace)
+			verifyWorkspaceDeleted(basicWorkspace)
+		})
+
+		It("should cleanup all resources when finalizer is removed", func() {
+			createWorkspace(basicWorkspace)
+			verifyPVCCreated(basicWorkspace, "2Gi")
+			waitForDeployment(basicWorkspace)
+			verifyServiceCreated(basicWorkspace)
+			
+			deleteWorkspace(basicWorkspace)
+			verifyAllResourcesDeleted(basicWorkspace)
+		})
+
+		It("should handle deletion with multiple finalizers", func() {
+			createWorkspace(basicWorkspace)
+			addCustomFinalizer(basicWorkspace, "test.finalizer/custom")
+			verifyMultipleFinalizers(basicWorkspace)
+			
+			deleteWorkspaceAsync(basicWorkspace)
+			verifyWorkspaceDeletionTimestamp(basicWorkspace)
+			
+			removeCustomFinalizer(basicWorkspace, "test.finalizer/custom")
+			waitForFinalizerRemoval(basicWorkspace)
+			verifyWorkspaceDeleted(basicWorkspace)
 		})
 	})
 
@@ -377,6 +443,276 @@ func verifyWorkspaceErrorHandling(workspaceName string) {
 		}
 		return nil
 	}, 60*time.Second, 5*time.Second).Should(Succeed())
+}
+
+func verifyDeploymentProperties(workspaceName string) {
+	deploymentName := controller.GenerateDeploymentName(workspaceName)
+
+	By("verifying deployment has correct labels")
+	cmd := exec.Command("kubectl", "get", "deployment", deploymentName,
+		"-o", "jsonpath={.metadata.labels.app}")
+	output, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(output).To(Equal("jupyter"))
+
+	By("verifying deployment has workspace label")
+	cmd = exec.Command("kubectl", "get", "deployment", deploymentName,
+		"-o", "jsonpath={.metadata.labels['workspace\\.jupyter\\.org/workspace-name']}")
+	output, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(output).To(Equal(workspaceName))
+
+	By("verifying deployment has correct replicas")
+	cmd = exec.Command("kubectl", "get", "deployment", deploymentName,
+		"-o", "jsonpath={.spec.replicas}")
+	output, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(output).To(Equal("1"))
+
+	By("verifying deployment has owner reference")
+	cmd = exec.Command("kubectl", "get", "deployment", deploymentName,
+		"-o", "jsonpath={.metadata.ownerReferences[0].name}")
+	output, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(output).To(Equal(workspaceName))
+}
+
+func verifyServiceCreated(workspaceName string) {
+	serviceName := controller.GenerateServiceName(workspaceName)
+
+	By(fmt.Sprintf("verifying service %s is created", serviceName))
+	Eventually(func() error {
+		cmd := exec.Command("kubectl", "get", "service", serviceName)
+		_, err := utils.Run(cmd)
+		return err
+	}, 60*time.Second, 5*time.Second).Should(Succeed())
+
+	By("verifying service has correct selector")
+	cmd := exec.Command("kubectl", "get", "service", serviceName,
+		"-o", "jsonpath={.spec.selector.app}")
+	output, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(output).To(Equal("jupyter"))
+
+	By("verifying service has workspace selector")
+	cmd = exec.Command("kubectl", "get", "service", serviceName,
+		"-o", "jsonpath={.spec.selector['workspace\\.jupyter\\.org/workspace-name']}")
+	output, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(output).To(Equal(workspaceName))
+
+	By("verifying service has correct port")
+	cmd = exec.Command("kubectl", "get", "service", serviceName,
+		"-o", "jsonpath={.spec.ports[0].port}")
+	output, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(output).To(Equal("8888"))
+
+	By("verifying service has owner reference")
+	cmd = exec.Command("kubectl", "get", "service", serviceName,
+		"-o", "jsonpath={.metadata.ownerReferences[0].name}")
+	output, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(output).To(Equal(workspaceName))
+}
+
+func verifyResourceOwnership(workspaceName string) {
+	By("verifying all resources have correct owner references")
+	
+	// PVC ownership
+	pvcName := controller.GeneratePVCName(workspaceName)
+	err := utils.VerifyPVCOwnerReference(pvcName, "default", workspaceName)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Deployment ownership
+	deploymentName := controller.GenerateDeploymentName(workspaceName)
+	cmd := exec.Command("kubectl", "get", "deployment", deploymentName,
+		"-o", "jsonpath={.metadata.ownerReferences[0].name}")
+	output, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(output).To(Equal(workspaceName))
+
+	// Service ownership
+	serviceName := controller.GenerateServiceName(workspaceName)
+	cmd = exec.Command("kubectl", "get", "service", serviceName,
+		"-o", "jsonpath={.metadata.ownerReferences[0].name}")
+	output, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(output).To(Equal(workspaceName))
+}
+
+func verifyFinalizerAdded(workspaceName string) {
+	By(fmt.Sprintf("verifying finalizer added to workspace %s", workspaceName))
+	Eventually(func() error {
+		cmd := exec.Command("kubectl", "get", "workspace", workspaceName,
+			"-o", "jsonpath={.metadata.finalizers}")
+		output, err := utils.Run(cmd)
+		if err != nil {
+			return err
+		}
+		if !strings.Contains(output, "workspace.jupyter.org/finalizer") {
+			return fmt.Errorf("finalizer not found, got: %s", output)
+		}
+		return nil
+	}, 30*time.Second, 2*time.Second).Should(Succeed())
+}
+
+func deleteWorkspaceAsync(workspaceName string) {
+	By(fmt.Sprintf("deleting workspace %s asynchronously", workspaceName))
+	cmd := exec.Command("kubectl", "delete", "workspace", workspaceName, "--wait=false")
+	_, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+}
+
+func verifyWorkspaceDeletionTimestamp(workspaceName string) {
+	By(fmt.Sprintf("verifying workspace %s has deletion timestamp", workspaceName))
+	Eventually(func() error {
+		cmd := exec.Command("kubectl", "get", "workspace", workspaceName,
+			"-o", "jsonpath={.metadata.deletionTimestamp}")
+		output, err := utils.Run(cmd)
+		if err != nil {
+			return err
+		}
+		if output == "" {
+			return fmt.Errorf("deletion timestamp not set")
+		}
+		return nil
+	}, 30*time.Second, 2*time.Second).Should(Succeed())
+}
+
+func verifyResourcesStillExist(workspaceName string) {
+	By("verifying resources still exist while finalizer is present")
+	
+	// PVC should still exist
+	cmd := exec.Command("kubectl", "get", "pvc", controller.GeneratePVCName(workspaceName))
+	_, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "PVC should still exist with finalizer present")
+	
+	// Deployment should still exist
+	cmd = exec.Command("kubectl", "get", "deployment", controller.GenerateDeploymentName(workspaceName))
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Deployment should still exist with finalizer present")
+	
+	// Service should still exist
+	cmd = exec.Command("kubectl", "get", "service", controller.GenerateServiceName(workspaceName))
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Service should still exist with finalizer present")
+}
+
+func waitForFinalizerRemoval(workspaceName string) {
+	By(fmt.Sprintf("waiting for finalizer removal from workspace %s", workspaceName))
+	Eventually(func() error {
+		cmd := exec.Command("kubectl", "get", "workspace", workspaceName,
+			"-o", "jsonpath={.metadata.finalizers}")
+		output, err := utils.Run(cmd)
+		if err != nil {
+			// If workspace is deleted, that's what we want
+			if strings.Contains(err.Error(), "not found") {
+				return nil
+			}
+			return err
+		}
+		if strings.Contains(output, "workspace.jupyter.org/finalizer") {
+			return fmt.Errorf("finalizer still present: %s", output)
+		}
+		return nil
+	}, 120*time.Second, 5*time.Second).Should(Succeed())
+}
+
+func verifyWorkspaceDeleted(workspaceName string) {
+	By(fmt.Sprintf("verifying workspace %s is completely deleted", workspaceName))
+	Eventually(func() error {
+		cmd := exec.Command("kubectl", "get", "workspace", workspaceName)
+		_, err := utils.Run(cmd)
+		if err == nil {
+			return fmt.Errorf("workspace still exists")
+		}
+		if !strings.Contains(err.Error(), "not found") {
+			return err
+		}
+		return nil
+	}, 60*time.Second, 5*time.Second).Should(Succeed())
+}
+
+func verifyAllResourcesDeleted(workspaceName string) {
+	By("verifying all workspace resources are deleted")
+	
+	// Verify PVC is deleted
+	Eventually(func() error {
+		cmd := exec.Command("kubectl", "get", "pvc", controller.GeneratePVCName(workspaceName))
+		_, err := utils.Run(cmd)
+		if err == nil {
+			return fmt.Errorf("PVC still exists")
+		}
+		return nil
+	}, 60*time.Second, 5*time.Second).Should(Succeed())
+	
+	// Verify Deployment is deleted
+	Eventually(func() error {
+		cmd := exec.Command("kubectl", "get", "deployment", controller.GenerateDeploymentName(workspaceName))
+		_, err := utils.Run(cmd)
+		if err == nil {
+			return fmt.Errorf("Deployment still exists")
+		}
+		return nil
+	}, 60*time.Second, 5*time.Second).Should(Succeed())
+	
+	// Verify Service is deleted
+	Eventually(func() error {
+		cmd := exec.Command("kubectl", "get", "service", controller.GenerateServiceName(workspaceName))
+		_, err := utils.Run(cmd)
+		if err == nil {
+			return fmt.Errorf("Service still exists")
+		}
+		return nil
+	}, 60*time.Second, 5*time.Second).Should(Succeed())
+}
+
+func addCustomFinalizer(workspaceName, finalizer string) {
+	By(fmt.Sprintf("adding custom finalizer %s to workspace %s", finalizer, workspaceName))
+	cmd := exec.Command("kubectl", "patch", "workspace", workspaceName,
+		"--type=merge", "-p", fmt.Sprintf(`{"metadata":{"finalizers":["%s"]}}`, finalizer))
+	_, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+}
+
+func verifyMultipleFinalizers(workspaceName string) {
+	By(fmt.Sprintf("verifying workspace %s has multiple finalizers", workspaceName))
+	cmd := exec.Command("kubectl", "get", "workspace", workspaceName,
+		"-o", "jsonpath={.metadata.finalizers}")
+	output, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(output).To(ContainSubstring("workspace.jupyter.org/finalizer"))
+	Expect(output).To(ContainSubstring("test.finalizer/custom"))
+}
+
+func removeCustomFinalizer(workspaceName, finalizer string) {
+	By(fmt.Sprintf("removing custom finalizer %s from workspace %s", finalizer, workspaceName))
+	
+	// Get current finalizers
+	cmd := exec.Command("kubectl", "get", "workspace", workspaceName,
+		"-o", "jsonpath={.metadata.finalizers[*]}")
+	output, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	
+	// Remove the custom finalizer, keep others
+	finalizers := strings.Fields(output)
+	var remainingFinalizers []string
+	for _, f := range finalizers {
+		if f != finalizer {
+			remainingFinalizers = append(remainingFinalizers, f)
+		}
+	}
+	
+	finalizersJson := `[]`
+	if len(remainingFinalizers) > 0 {
+		finalizersJson = fmt.Sprintf(`["%s"]`, strings.Join(remainingFinalizers, `","`))
+	}
+	
+	cmd = exec.Command("kubectl", "patch", "workspace", workspaceName,
+		"--type=merge", "-p", fmt.Sprintf(`{"metadata":{"finalizers":%s}}`, finalizersJson))
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
 }
 
 func cleanupWorkspaces(names ...string) {
