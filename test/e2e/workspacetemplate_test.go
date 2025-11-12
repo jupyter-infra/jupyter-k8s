@@ -296,10 +296,10 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			By("attempting to create workspace with invalid image")
 			cmd := exec.Command("kubectl", "apply", "-f",
 				"test/e2e/static/template-validation/rejected-image-workspace.yaml")
-			
+
 			_, err := utils.Run(cmd)
 			Expect(err).To(HaveOccurred(), "Expected webhook to reject workspace with invalid image")
-			
+
 			By("verifying workspace was not created")
 			cmd = exec.Command("kubectl", "get", "workspace", "test-rejected-workspace", "--ignore-not-found")
 			output, err := utils.Run(cmd)
@@ -350,6 +350,48 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("False"))
+		})
+
+		It("should reject workspace update that violates template bounds", func() {
+			By("creating workspace with valid initial configuration")
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/template-validation/valid-overrides-workspace.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for workspace to be valid")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspace", "valid-overrides-test",
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}).WithTimeout(10 * time.Second).Should(Succeed())
+
+			By("attempting to update CPU beyond template max (2 cores)")
+			cmd = exec.Command("kubectl", "patch", "workspace", "valid-overrides-test",
+				"--type=merge", "-p", `{"spec":{"resources":{"requests":{"cpu":"3"}}}}`)
+			_, err = utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "Should reject CPU update beyond template max of 2 cores")
+
+			By("attempting to update memory beyond template max (4Gi)")
+			cmd = exec.Command("kubectl", "patch", "workspace", "valid-overrides-test",
+				"--type=merge", "-p", `{"spec":{"resources":{"requests":{"memory":"5Gi"}}}}`)
+			_, err = utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "Should reject memory update beyond template max of 4Gi")
+
+			By("attempting to update storage beyond template max (20Gi)")
+			cmd = exec.Command("kubectl", "patch", "workspace", "valid-overrides-test",
+				"--type=merge", "-p", `{"spec":{"storage":{"size":"25Gi"}}}`)
+			_, err = utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "Should reject storage update beyond template max of 20Gi")
+
+			By("verifying workspace remains valid after rejected updates")
+			cmd = exec.Command("kubectl", "get", "workspace", "valid-overrides-test",
+				"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("True"), "Workspace should remain valid after rejected updates")
 		})
 	})
 
