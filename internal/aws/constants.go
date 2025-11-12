@@ -1,15 +1,16 @@
 // Package aws provides AWS-related constants for the workspace controller.
 package aws
 
+import (
+	_ "embed"
+)
+
 const (
 	// AWSSSMDocumentNameEnv is the environment variable for SSM document name
 	AWSSSMDocumentNameEnv = "AWS_SSM_DOCUMENT_NAME"
 
 	// EKSClusterARNEnv is the environment variable key for EKS cluster ARN
 	EKSClusterARNEnv = "CLUSTER_ID"
-
-	// SSHDocumentContentEnv is the environment variable for SSH document content
-	SSHDocumentContentEnv = "SSH_DOCUMENT_CONTENT"
 
 	// WorkspacePodUIDTagKey is the tag key used to identify workspace pods in SSM
 	WorkspacePodUIDTagKey = "tag:workspace-pod-uid"
@@ -37,3 +38,8 @@ const (
 	// CustomSSHDocumentName is the name of the SSM document for SSH sessions
 	CustomSSHDocumentName = "SageMaker-SpaceSSHSessionDocument"
 )
+
+// SageMakerSpaceSSHSessionDocumentContent is the JSON content for the SSH session document
+//
+//go:embed sagemaker_space_ssh_document_content.json
+var SageMakerSpaceSSHSessionDocumentContent string
