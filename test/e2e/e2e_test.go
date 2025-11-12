@@ -333,7 +333,7 @@ var _ = Describe("Manager", Ordered, func() {
 // and parsing the resulting token from the API response.
 func serviceAccountToken() (string, error) {
 	// Use static token request file
-	tokenRequestFile := "static/token-request.json"
+	tokenRequestFile := "test/e2e/static/token-request.json"
 
 	var out string
 	verifyTokenCreation := func(g Gomega) {

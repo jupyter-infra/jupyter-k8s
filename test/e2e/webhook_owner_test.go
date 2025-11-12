@@ -125,7 +125,7 @@ var _ = Describe("Webhook Owner", Ordered, func() {
 
 		It("should preserve existing annotations when adding created-by", func() {
 			By("creating workspace with existing annotation")
-			cmd := exec.Command("kubectl", "apply", "-f", "static/webhook-validation/workspace-with-annotations.yaml")
+			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/static/webhook-validation/workspace-with-annotations.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 

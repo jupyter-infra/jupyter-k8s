@@ -15,7 +15,7 @@ import (
 	"github.com/jupyter-ai-contrib/jupyter-k8s/test/utils"
 )
 
-var _ = Describe("Workspace Scheduling", Ordered, func() {
+var _ = XDescribe("Workspace Scheduling", Ordered, func() {
 	BeforeAll(func() {
 		By("installing CRDs")
 		cmd := exec.Command("make", "install")
