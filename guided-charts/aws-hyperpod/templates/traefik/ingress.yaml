@@ -1,4 +1,4 @@
-{{- if .Values.traefik.enabled }}
+{{- if .Values.clusterWebUI.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -13,15 +13,15 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
-    {{- if .Values.awsCertificateArn }}
-    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.awsCertificateArn | quote }}
+    {{- if .Values.clusterWebUI.awsCertificateArn }}
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.clusterWebUI.awsCertificateArn | quote }}
     {{- end }}
-    {{- if .Values.externalDns.enabled }}
-    external-dns.alpha.kubernetes.io/hostname: "{{ .Values.domain }},*.{{ .Values.domain }}"
+    {{- if .Values.clusterWebUI.externalDns.enabled }}
+    external-dns.alpha.kubernetes.io/hostname: "{{ .Values.clusterWebUI.domain }},*.{{ .Values.clusterWebUI.domain }}"
     {{- end }}
 spec:
   rules:
-  - host: {{ .Values.domain }}
+  - host: {{ .Values.clusterWebUI.domain }}
     http:
       paths:
       - path: /
@@ -31,7 +31,7 @@ spec:
             name: traefik
             port:
               number: 443
-  - host: "*.{{ .Values.domain }}"
+  - host: "*.{{ .Values.clusterWebUI.domain }}"
     http:
       paths:
       - path: /

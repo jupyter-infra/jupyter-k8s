@@ -1,48 +1,133 @@
 # [AWS HYPERPOD]: Configuration for aws-hyperpod deployment mode
 # This includes presigned URL and remote access setup
 
-namespace: jupyter-k8s-system # TODO consider if we need seperate namespace
+# [JUPYTER-K8S]: Core jupyter-k8s chart configuration
+jupyter-k8s:
+  shouldInstall: true
+  application:
+    imagesPullPolicy: IfNotPresent
+    imagesRegistry: 632138803636.dkr.ecr.us-west-2.amazonaws.com
+  controllerManager:
+    replicas: 1
+    container:
+      args:
+        - "--default-template-namespace=jupyter-k8s-shared"
+      env:
+        CLUSTER_ADMIN_GROUP: "cluster-workspace-admin"
+        CLUSTER_ID: ""
+        DOMAIN: ""
+        KMS_KEY_ID: ""
+      image:
+        repository: 632138803636.dkr.ecr.us-west-2.amazonaws.com/jupyter-k8s-operator
+        tag: latest
+      imagePullPolicy: Always
+  rbac:
+    enable: true
+  crd:
+    enable: true
+    keep: true
+  metrics:
+    enable: true
+  webhook:
+    enable: true
+  prometheus:
+    enable: false
+  certmanager:
+    enable: true
+  networkPolicy:
+    enable: false
+  workspacePodWatching:
+    enable: true
+  accessResources:
+    traefik:
+      enable: false
+    additionalGvk: []
+  extensionApi:
+    enable: true
 
-# Full domain for the application (required)
-domain: ""
+namespace: jupyter-k8s-system
 
-# AWS Certificate Manager ARN for SSL/TLS termination at load balancer
-# If provided, enables SSL termination at the NLB level
-awsCertificateArn: ""
+# [CLUSTER WEB UI]: Web interface configuration
+clusterWebUI:
+  enabled: false
+  
+  # Full domain for the application (required)
+  domain: ""
 
-# External DNS configuration
-externalDns:
-  # Whether to enable external-dns annotations for automatic DNS record creation
-  enabled: true
+  # AWS Certificate Manager ARN for SSL/TLS termination at load balancer
+  awsCertificateArn: ""
 
-# Network policy configuration
-networkPolicy:
-  # Whether to enable network policies for enhanced security
-  # When enabled, restricts network access so only Traefik can communicate with:
-  # - Auth middleware service
-  # - Individual workspace services
-  enabled: true
+  # External DNS configuration
+  externalDns:
+    enabled: true
+
+  # Network policy configuration
+  networkPolicy:
+    enabled: true
+
+  # [TRAEFIK]: Reverse proxy configuration
+  traefik:
+    shouldInstall: false
+    repository: public.ecr.aws/docker/library
+    imageName: traefik
+    imageTag: latest
+    replicas: 2
+    redirectHttp: true
+    debug: false
+    allowCrossNamespace: true
+
+  # Authentication middleware configuration
+  auth:
+    replicas: 1
+    imagePullPolicy: Always
+    repository: docker.io
+    imageName: jupyter-k8s-auth
+    imageTag: latest
+    resources:
+      limits:
+        cpu: 200m
+        memory: 128Mi
+      requests:
+        cpu: 200m
+        memory: 128Mi
+    jwtSigningType: "kms"
+    kmsKeyId: ""
+    jwtIssuer: "jupyter-k8s-auth"
+    jwtAudience: "workspace-users"
+    jwtExpiration: "12h"
+    jwtRefreshWindow: "15m"
+    jwtRefreshHorizon: "12h"
+    cookieName: "workspace_auth"
+    cookieSecure: "true"
+    cookiePath: "/"
+    cookieMaxAge: "24h"
+    cookieHttpOnly: "true"
+    cookieSameSite: "lax"
+    pathRegexPattern: "^(/).*$"
+    routingMode: "subdomain"
+    workspaceNameSubdomainRegex: "^([^-]+)-.*$"
+    workspaceNamespaceSubdomainRegex: "^[^-]+-(.*)$"
+    maxCookiePaths: "20"
+    csrfAuthKey: ""
+    csrfCookieName: "workspace_csrf"
+    csrfCookieMaxAge: "1h"
+    csrfCookieSecure: "true"
+    readTimeout: "10s"
+    writeTimeout: "10s"
+    shutdownTimeout: "30s"
+    oauthEnabled: false
+    enableBearerAuth: true
+    enableRefresh: false
 
 # Remote access configuration
 remoteAccess:
   enabled: false
-  ssmManagedNodeRole: ""  # REQUIRED: IAM role for SSM managed instances - must be provided during installation
-  ssmSidecarImage: ""  # REQURIED: SSM sidecar container image
-  ssmDocumentName: "SageMaker-SpaceSSHSessionDocument"  # Custom SSM document name for SSH sessions
-
-# [TRAEFIK]: Configuration for Traefik (optional dependency)
-traefik:
-  # Whether to deploy Traefik as part of this chart
-  enabled: false
-  # Traefik configuration (only used when enabled: true)
-  # For full configuration options, see: https://github.com/traefik/traefik-helm-chart/blob/master/traefik/values.yaml
-  repository: public.ecr.aws/docker/library
-  imageName: traefik
-  imageTag: latest
-  replicas: 2
-  redirectHttp: true
-  debug: false
-  allowCrossNamespace: true
+  ssmManagedNodeRole: ""
+  ssmSidecarImage:
+    containerRegistry: "908061117754.dkr.ecr.us-west-2.amazonaws.com"
+    repository: "sagemaker/space-sidecar"
+    tag: "0.0.6"
+  ssmDocumentName: "SageMaker-SpaceSSHSessionDocument"
 
 # [STORAGE] StorageClasses for Workspaces
 storageClass:
@@ -57,63 +142,3 @@ storageClass:
       type: gp3
       fsType: ext4
       encrypted: "true"
-
-# Authmiddleware configuration
-authmiddleware:
-  # Whether to deploy the authmiddleware component
-  enabled: true
-  # Number of replicas
-  replicas: 1
-  # Authmiddleware image settings
-  imagePullPolicy: Always
-  repository: docker.io
-  imageName: jupyter-k8s-auth
-  imageTag: latest
-  # Resource limits and requests
-  resources:
-    limits:
-      cpu: 200m
-      memory: 128Mi
-    requests:
-      cpu: 200m
-      memory: 128Mi
-  # JWT configuration
-  # JWT signing type: "standard" or "kms"
-  jwtSigningType: "kms"
-  # KMS Key ID/ARN for JWT signing (required when jwtValidationType is "kms")
-  kmsKeyId: ""
-  jwtIssuer: "jupyter-k8s-auth"
-  jwtAudience: "workspace-users"
-  jwtExpiration: "12h"
-  jwtRefreshWindow: "15m"
-  jwtRefreshHorizon: "12h"
-  # Cookie configuration
-  cookieName: "workspace_auth"
-  cookieSecure: "true"
-  cookiePath: "/"
-  cookieMaxAge: "24h"
-  cookieHttpOnly: "true"
-  cookieSameSite: "lax"
-  # Path configuration
-  pathRegexPattern: "^(/).*$"
-  # Routing mode: "path" or "subdomain"
-  routingMode: "subdomain"
-  # Subdomain routing configuration (used when routingMode is "subdomain")
-  workspaceNameSubdomainRegex: "^([^-]+)-.*$"
-  workspaceNamespaceSubdomainRegex: "^[^-]+-(.*)$"
-  maxCookiePaths: "20"
-  # CSRF configuration
-  # Required: must be provided as base64 encoded string (generate with: openssl rand -base64 32)
-  csrfAuthKey: ""
-  csrfCookieName: "workspace_csrf"
-  csrfCookieMaxAge: "1h"
-  csrfCookieSecure: "true"
-  # Server configuration
-  readTimeout: "10s"
-  writeTimeout: "10s"
-  shutdownTimeout: "30s"
-  # Bearer auth configuration
-  oauthEnabled: false
-  enableBearerAuth: true
-  # JWT refresh configuration
-  enableRefresh: false
