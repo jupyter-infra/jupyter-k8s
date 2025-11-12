@@ -18,7 +18,7 @@ spec:
     listKind: WorkspaceTemplateList
     plural: workspacetemplates
     singular: workspacetemplate
-  scope: Cluster
+  scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.displayName
