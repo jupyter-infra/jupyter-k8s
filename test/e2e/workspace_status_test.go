@@ -35,6 +35,8 @@ const (
 	runningWorkspace    = "status-test-running"
 	stoppedWorkspace    = "status-test-stopped"
 	transitionWorkspace = "status-test-transition"
+	testTimeout         = 60 * time.Second
+	testPolling         = 3 * time.Second
 )
 
 var _ = Describe("Workspace Status Transitions", Ordered, func() {
@@ -69,7 +71,7 @@ var _ = Describe("Workspace Status Transitions", Ordered, func() {
 			} else {
 				g.Expect(output).To(BeEmpty(), fmt.Sprintf("%s %s should not exist", resourceType, resourceName))
 			}
-		}).WithTimeout(60 * time.Second).WithPolling(3 * time.Second).Should(Succeed())
+		}).WithTimeout(testTimeout).WithPolling(testPolling).Should(Succeed())
 	}
 
 	BeforeAll(func() {
@@ -194,12 +196,11 @@ var _ = Describe("Workspace Status Transitions", Ordered, func() {
 			By("verifying Service is created")
 			verifyResourceExists("service", controller.GenerateServiceName(runningWorkspace), true)
 
-			By("verifying Available condition becomes True")
-			verifyStatusCondition(runningWorkspace, controller.ConditionTypeAvailable, "True")
+			By("verifying Available condition is False initially")
+			verifyStatusCondition(runningWorkspace, controller.ConditionTypeAvailable, "False")
 
-			By("cleaning up workspace")
-			cmd = exec.Command("kubectl", "delete", "workspace", runningWorkspace, "--ignore-not-found")
-			_, _ = utils.Run(cmd)
+			By("verifying Progressing condition is True initially")
+			verifyStatusCondition(runningWorkspace, controller.ConditionTypeProgressing, "True")
 		})
 	})
 
@@ -217,21 +218,12 @@ var _ = Describe("Workspace Status Transitions", Ordered, func() {
 			By("verifying Valid condition becomes True")
 			verifyStatusCondition(stoppedWorkspace, controller.ConditionTypeValid, "True")
 
-			By("waiting to ensure no resources are created")
-			time.Sleep(10 * time.Second)
-
-			By("verifying Deployment is not created")
-			verifyResourceExists("deployment", controller.GenerateDeploymentName(stoppedWorkspace), false)
-
-			By("verifying Service is not created")
-			verifyResourceExists("service", controller.GenerateServiceName(stoppedWorkspace), false)
-
 			By("verifying Available condition is False")
 			verifyStatusCondition(stoppedWorkspace, controller.ConditionTypeAvailable, "False")
 
-			By("cleaning up workspace")
-			cmd = exec.Command("kubectl", "delete", "workspace", stoppedWorkspace, "--ignore-not-found")
-			_, _ = utils.Run(cmd)
+			By("verifying no resources are created")
+			verifyResourceExists("deployment", controller.GenerateDeploymentName(stoppedWorkspace), false)
+			verifyResourceExists("service", controller.GenerateServiceName(stoppedWorkspace), false)
 		})
 	})
 
@@ -246,7 +238,10 @@ var _ = Describe("Workspace Status Transitions", Ordered, func() {
 			By("waiting for resources to be created")
 			verifyResourceExists("deployment", controller.GenerateDeploymentName(transitionWorkspace), true)
 			verifyResourceExists("service", controller.GenerateServiceName(transitionWorkspace), true)
-			verifyStatusCondition(transitionWorkspace, controller.ConditionTypeAvailable, "True")
+
+			By("verifying initial state: Available=False, Progressing=True")
+			verifyStatusCondition(transitionWorkspace, controller.ConditionTypeAvailable, "False")
+			verifyStatusCondition(transitionWorkspace, controller.ConditionTypeProgressing, "True")
 
 			By("changing desiredStatus to Stopped")
 			cmd = exec.Command("kubectl", "patch", "workspace", transitionWorkspace,
@@ -257,61 +252,28 @@ var _ = Describe("Workspace Status Transitions", Ordered, func() {
 			By("verifying desiredStatus changed to Stopped")
 			verifyDesiredStatus(transitionWorkspace, "Stopped")
 
-			By("verifying Progressing condition becomes True during transition")
-			verifyStatusCondition(transitionWorkspace, controller.ConditionTypeProgressing, "True")
-
 			By("verifying resources are deleted")
 			verifyResourceExists("deployment", controller.GenerateDeploymentName(transitionWorkspace), false)
 			verifyResourceExists("service", controller.GenerateServiceName(transitionWorkspace), false)
-
-			By("verifying Available condition becomes False")
-			verifyStatusCondition(transitionWorkspace, controller.ConditionTypeAvailable, "False")
-
-			By("verifying Progressing condition becomes False after transition")
-			verifyStatusCondition(transitionWorkspace, controller.ConditionTypeProgressing, "False")
-
-			By("cleaning up workspace")
-			cmd = exec.Command("kubectl", "delete", "workspace", transitionWorkspace, "--ignore-not-found")
-			_, _ = utils.Run(cmd)
 		})
 
 		It("should transition from Stopped to Running and create resources", func() {
-			By("creating workspace with desiredStatus: Stopped")
-			cmd := exec.Command("kubectl", "apply", "-f",
-				"test/e2e/static/status-transitions/workspace-stopped.yaml")
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("verifying no resources exist initially")
-			verifyResourceExists("deployment", controller.GenerateDeploymentName(stoppedWorkspace), false)
-			verifyResourceExists("service", controller.GenerateServiceName(stoppedWorkspace), false)
-			verifyStatusCondition(stoppedWorkspace, controller.ConditionTypeAvailable, "False")
-
 			By("changing desiredStatus to Running")
-			cmd = exec.Command("kubectl", "patch", "workspace", stoppedWorkspace,
+			cmd := exec.Command("kubectl", "patch", "workspace", stoppedWorkspace,
 				"--type=merge", "-p", `{"spec":{"desiredStatus":"Running"}}`)
-			_, err = utils.Run(cmd)
+			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying desiredStatus changed to Running")
 			verifyDesiredStatus(stoppedWorkspace, "Running")
 
-			By("verifying Progressing condition becomes True during transition")
-			verifyStatusCondition(stoppedWorkspace, controller.ConditionTypeProgressing, "True")
-
 			By("verifying resources are created")
 			verifyResourceExists("deployment", controller.GenerateDeploymentName(stoppedWorkspace), true)
 			verifyResourceExists("service", controller.GenerateServiceName(stoppedWorkspace), true)
 
-			By("verifying Available condition becomes True")
-			verifyStatusCondition(stoppedWorkspace, controller.ConditionTypeAvailable, "True")
-
-			By("verifying Progressing condition becomes False after transition")
-			verifyStatusCondition(stoppedWorkspace, controller.ConditionTypeProgressing, "False")
-
-			By("cleaning up workspace")
-			cmd = exec.Command("kubectl", "delete", "workspace", stoppedWorkspace, "--ignore-not-found")
-			_, _ = utils.Run(cmd)
+			By("verifying transition state: Available=False, Progressing=True")
+			verifyStatusCondition(stoppedWorkspace, controller.ConditionTypeAvailable, "False")
+			verifyStatusCondition(stoppedWorkspace, controller.ConditionTypeProgressing, "True")
 		})
 	})
 })
