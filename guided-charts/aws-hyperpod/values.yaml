@@ -80,10 +80,10 @@ remoteAccess:
   enabled: false
   ssmManagedNodeRole: ""
   ssmSidecarImage:
-    containerRegistry: "908061117754.dkr.ecr.us-west-2.amazonaws.com"
-    repository: "sagemaker/space-sidecar"
-    tag: "0.0.6"
-  ssmDocumentName: "SageMaker-SpaceSSHSessionDocument"
+    containerRegistry: ""
+    repository: ""
+    tag: ""
+  ssmDocumentName: "AWS-StartSSHSession"
 
 # [STORAGE] StorageClasses for Workspaces
 storageClass:

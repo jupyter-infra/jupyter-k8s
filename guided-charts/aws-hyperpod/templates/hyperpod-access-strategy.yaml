@@ -114,8 +114,8 @@ spec:
   {{- if .Values.remoteAccess.enabled }}
   # Controller-specific configuration (not injected into workspace containers)
   controllerConfig:
-    SSM_MANAGED_NODE_ROLE: "sagemaker-space-ssm-managed-node-role"
-    AWS_SSM_DOCUMENT_NAME: "AWS-StartSSHSession"
+    SSM_MANAGED_NODE_ROLE: "{{ .Values.remoteAccess.ssmManagedNodeRole }}"
+    AWS_SSM_DOCUMENT_NAME: "{{ .Values.remoteAccess.ssmDocumentName }}"
   {{- end }}
   mergeEnv:
     - name: WORKSPACE_NAMESPACE
