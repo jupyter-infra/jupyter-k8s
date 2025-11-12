@@ -2,8 +2,11 @@ package aws
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -44,6 +47,10 @@ const (
 	TagWorkspacePodUID = "workspace-pod-uid"
 
 	// File paths
+	// State file in shared volume (survives container restarts)
+	SSMRegistrationStateFile = "/opt/amazon/sagemaker/workspace/.ssm-registration-state.json"
+
+	// TODO: Can be removed once readiness probe is updated to check state file
 	SSMRegistrationMarkerFile = "/tmp/ssm-registered"
 	SSMRegistrationScript     = "/usr/local/bin/register-ssm.sh"
 	RemoteAccessServerPath    = "/opt/amazon/sagemaker/workspace/remote-access-server"
@@ -53,6 +60,14 @@ const (
 type SSMRemoteAccessStrategy struct {
 	ssmClient   SSMRemoteAccessClientInterface
 	podExecUtil PodExecInterface
+}
+
+// RegistrationState tracks SSM registration state across container restarts
+type RegistrationState struct {
+	SidecarRestartCount   int32     `json:"sidecarRestartCount"`
+	WorkspaceRestartCount int32     `json:"workspaceRestartCount"`
+	SetupInProgress       bool      `json:"setupInProgress,omitempty"`
+	SetupStartedAt        time.Time `json:"setupStartedAt,omitempty"`
 }
 
 // NewSSMRemoteAccessStrategy creates a new SSMRemoteAccessStrategy with optional dependency injection
@@ -79,47 +94,131 @@ func NewSSMRemoteAccessStrategy(ssmClient SSMRemoteAccessClientInterface, podExe
 	}, nil
 }
 
-// InitSSMAgent initializes SSM agent for aws-ssm-remote-access strategy
-func (s *SSMRemoteAccessStrategy) InitSSMAgent(ctx context.Context, pod *corev1.Pod, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) error {
+// SetupContainers initializes SSM agent and remote access server for workspace containers.
+// Handles both first-time setup and recovery from container restarts.
+//
+// Container Restart Detection:
+// - Uses persistent state file (/opt/amazon/sagemaker/workspace/.ssm-registration-state.json)
+// - Compares stored restart counts with current pod status to detect restarts
+// - Selectively re-setups only affected containers (sidecar and/or workspace)
+//
+// Concurrency Protection:
+// - Random delay (0-2s) spreads out concurrent pod events
+// - SetupInProgress flag prevents duplicate setup attempts
+// - TODO: Consider using distributed mutex for stronger concurrency guarantees
+func (s *SSMRemoteAccessStrategy) SetupContainers(ctx context.Context, pod *corev1.Pod, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) error {
+	logger := logf.FromContext(ctx).WithValues("pod", pod.Name, "workspace", workspace.Name)
+
 	if s.ssmClient == nil {
 		return fmt.Errorf("SSM client not available")
 	}
 
-	logger := logf.FromContext(ctx).WithValues("pod", pod.Name, "workspace", workspace.Name)
+	// Early exit if sidecar not running yet
+	if !s.isContainerRunning(pod, SSMAgentSidecarContainerName) {
+		logger.V(1).Info("Sidecar container not running yet, waiting")
+		return nil
+	}
 
-	// Find the SSM sidecar container
-	var ssmSidecarStatus *corev1.ContainerStatus
-	for i, containerStatus := range pod.Status.ContainerStatuses {
-		if containerStatus.Name == SSMAgentSidecarContainerName {
-			ssmSidecarStatus = &pod.Status.ContainerStatuses[i]
-			break
+	// Random delay to spread out concurrent events
+	delay := time.Duration(rand.Intn(2000)) * time.Millisecond
+	logger.V(1).Info("Adding random delay before setup", "delay", delay)
+	time.Sleep(delay)
+
+	// Get current restart counts
+	currentSidecarRestarts, currentWorkspaceRestarts := s.getCurrentRestartCounts(pod)
+	logger.V(1).Info("Current restart counts",
+		"sidecar", currentSidecarRestarts,
+		"workspace", currentWorkspaceRestarts)
+
+	// Read state from shared volume
+	state, err := s.readRegistrationState(ctx, pod)
+
+	// Check if setup is already in progress
+	if state != nil && state.SetupInProgress {
+		logger.V(1).Info("Setup already in progress by another event, skipping")
+		return nil
+	}
+
+	// Determine what needs to be setup
+	var needSidecarSetup, needWorkspaceSetup, needCleanup bool
+
+	if state == nil {
+		if err != nil {
+			// File exists but is corrupted - need cleanup
+			logger.Info("State file was corrupted, will cleanup before setup")
+			needCleanup = true
+		} else {
+			// File doesn't exist - first time setup, no cleanup needed
+			logger.V(1).Info("No state file found, first time setup")
+			needCleanup = false
+		}
+		needSidecarSetup = true
+		needWorkspaceSetup = true
+	} else {
+		// Check for restarts
+		sidecarRestarted := currentSidecarRestarts > state.SidecarRestartCount
+		workspaceRestarted := currentWorkspaceRestarts > state.WorkspaceRestartCount
+
+		if !sidecarRestarted && !workspaceRestarted {
+			logger.V(1).Info("No restarts detected, already setup")
+			return nil
+		}
+
+		logger.Info("Container restart detected",
+			"sidecarRestarted", sidecarRestarted,
+			"workspaceRestarted", workspaceRestarted)
+
+		needSidecarSetup = sidecarRestarted
+		needWorkspaceSetup = workspaceRestarted
+		needCleanup = sidecarRestarted // Only cleanup if sidecar restarted
+	}
+
+	// Mark setup as in progress
+	inProgressState := &RegistrationState{
+		SidecarRestartCount:   currentSidecarRestarts,
+		WorkspaceRestartCount: currentWorkspaceRestarts,
+		SetupInProgress:       true,
+		SetupStartedAt:        time.Now(),
+	}
+	if err := s.writeRegistrationState(ctx, pod, inProgressState); err != nil {
+		logger.Error(err, "Failed to write in-progress state, continuing anyway")
+	} else {
+		logger.V(1).Info("Marked setup as in progress")
+	}
+
+	// Setup containers as needed
+	var setupErr error
+	if needSidecarSetup {
+		logger.V(1).Info("Setting up sidecar container")
+		if err := s.setupSidecarContainer(ctx, pod, workspace, accessStrategy, needCleanup); err != nil {
+			setupErr = err
 		}
 	}
 
-	if ssmSidecarStatus == nil {
-		logger.Info("SSM sidecar container not found in pod")
-		return nil
+	if setupErr == nil && needWorkspaceSetup {
+		logger.V(1).Info("Setting up workspace container")
+		if err := s.setupWorkspaceContainer(ctx, pod); err != nil {
+			setupErr = err
+		}
 	}
 
-	// Check if sidecar is running
-	if ssmSidecarStatus.State.Running == nil {
-		logger.Info("SSM sidecar container is not running yet", "ready", ssmSidecarStatus.Ready)
-		return nil
+	// Mark setup as complete (or failed)
+	finalState := &RegistrationState{
+		SidecarRestartCount:   currentSidecarRestarts,
+		WorkspaceRestartCount: currentWorkspaceRestarts,
+		SetupInProgress:       false, // Clear the flag
+	}
+	if err := s.writeRegistrationState(ctx, pod, finalState); err != nil {
+		logger.Error(err, "Failed to write final state")
+	} else {
+		logger.V(1).Info("Marked setup as complete")
 	}
 
-	// Check if SSM registration already completed
-	if s.isSSMRegistrationCompleted(ctx, pod) {
-		logger.Info("SSM registration already completed for this pod")
-		return nil
+	if setupErr != nil {
+		return setupErr
 	}
 
-	// Perform SSM registration
-	if err := s.performSSMRegistration(ctx, pod, workspace, accessStrategy); err != nil {
-		logger.Error(err, "Failed to perform SSM registration")
-		return err
-	}
-
-	logger.Info("SSM registration completed successfully")
+	logger.Info("Container setup completed")
 	return nil
 }
 
@@ -146,42 +245,105 @@ func (s *SSMRemoteAccessStrategy) CleanupSSMManagedNodes(ctx context.Context, po
 	return nil
 }
 
-// isSSMRegistrationCompleted checks if SSM registration is already done for this pod
-func (s *SSMRemoteAccessStrategy) isSSMRegistrationCompleted(ctx context.Context, pod *corev1.Pod) bool {
-	logger := logf.FromContext(ctx).WithValues("pod", pod.Name)
-	noStdin := "" // For commands that don't need stdin input
-
-	// TODO: improve race condition handling for rapid pod events
-
-	// Check for completion marker file in sidecar
-	cmd := []string{"test", "-f", SSMRegistrationMarkerFile}
-	_, err := s.podExecUtil.ExecInPod(ctx, pod, SSMAgentSidecarContainerName, cmd, noStdin)
-
-	completed := err == nil
-	logger.V(2).Info("SSM registration completion check", "completed", completed)
-	return completed
+// isContainerRunning checks if a container is in running state
+func (s *SSMRemoteAccessStrategy) isContainerRunning(pod *corev1.Pod, containerName string) bool {
+	for _, cs := range pod.Status.ContainerStatuses {
+		if cs.Name == containerName {
+			return cs.State.Running != nil
+		}
+	}
+	return false
 }
 
-// performSSMRegistration handles the SSM activation and registration process
-func (s *SSMRemoteAccessStrategy) performSSMRegistration(ctx context.Context, pod *corev1.Pod, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) error {
-	logger := logf.FromContext(ctx).WithValues("pod", pod.Name, "workspace", workspace.Name)
-	noStdin := "" // For commands that don't need stdin input
+// getCurrentRestartCounts extracts restart counts from pod status
+func (s *SSMRemoteAccessStrategy) getCurrentRestartCounts(pod *corev1.Pod) (sidecarCount, workspaceCount int32) {
+	for _, cs := range pod.Status.ContainerStatuses {
+		if cs.Name == SSMAgentSidecarContainerName {
+			sidecarCount = cs.RestartCount
+		}
+		if cs.Name == WorkspaceContainerName {
+			workspaceCount = cs.RestartCount
+		}
+	}
+	return sidecarCount, workspaceCount
+}
 
-	if s.ssmClient == nil {
-		return fmt.Errorf("SSM client not available")
+// readRegistrationState reads state from shared volume
+// Returns:
+//   - (*RegistrationState, nil) if state file exists and is valid
+//   - (nil, nil) if state file doesn't exist (first time setup)
+//   - (nil, error) if state file exists but is corrupted
+func (s *SSMRemoteAccessStrategy) readRegistrationState(ctx context.Context, pod *corev1.Pod) (*RegistrationState, error) {
+	logger := logf.FromContext(ctx).WithValues("pod", pod.Name)
+
+	cmd := []string{"cat", SSMRegistrationStateFile}
+	output, err := s.podExecUtil.ExecInPod(ctx, pod, SSMAgentSidecarContainerName, cmd, "")
+	if err != nil {
+		// File doesn't exist - this is first time setup
+		logger.V(1).Info("State file not found, treating as first registration")
+		return nil, nil
 	}
 
-	// Step 1: Create SSM activation
-	logger.Info("Creating SSM activation")
+	var state RegistrationState
+	if err := json.Unmarshal([]byte(output), &state); err != nil {
+		// File exists but is corrupted - need cleanup
+		logger.Error(err, "Failed to parse state file, corrupted state detected")
+		return nil, err
+	}
+
+	logger.V(1).Info("Read registration state",
+		"sidecarRestartCount", state.SidecarRestartCount,
+		"workspaceRestartCount", state.WorkspaceRestartCount)
+	return &state, nil
+}
+
+// writeRegistrationState writes state to shared volume
+func (s *SSMRemoteAccessStrategy) writeRegistrationState(ctx context.Context, pod *corev1.Pod, state *RegistrationState) error {
+	logger := logf.FromContext(ctx).WithValues("pod", pod.Name)
+
+	stateJSON, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("failed to marshal state: %w", err)
+	}
+
+	// Write to temp file then move (atomic operation)
+	cmd := []string{"bash", "-c", fmt.Sprintf("echo '%s' > %s.tmp && mv %s.tmp %s",
+		string(stateJSON), SSMRegistrationStateFile, SSMRegistrationStateFile, SSMRegistrationStateFile)}
+
+	if _, err := s.podExecUtil.ExecInPod(ctx, pod, SSMAgentSidecarContainerName, cmd, ""); err != nil {
+		return fmt.Errorf("failed to write state file: %w", err)
+	}
+
+	logger.V(1).Info("Wrote registration state",
+		"sidecarRestartCount", state.SidecarRestartCount,
+		"workspaceRestartCount", state.WorkspaceRestartCount)
+	return nil
+}
+
+// setupSidecarContainer handles SSM agent registration
+func (s *SSMRemoteAccessStrategy) setupSidecarContainer(ctx context.Context, pod *corev1.Pod, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy, cleanupNeeded bool) error {
+	logger := logf.FromContext(ctx).WithValues("pod", pod.Name, "workspace", workspace.Name)
+	noStdin := ""
+
+	// Cleanup old resources if needed
+	if cleanupNeeded {
+		logger.V(1).Info("Cleaning up old SSM resources before registration")
+		if err := s.CleanupSSMManagedNodes(ctx, pod); err != nil {
+			logger.Error(err, "Failed to cleanup old SSM resources, continuing with registration anyway")
+		}
+	}
+
+	// Create SSM activation
+	logger.V(1).Info("Creating SSM activation")
 	activationCode, activationId, err := s.createSSMActivation(ctx, pod, workspace, accessStrategy)
 	if err != nil {
 		return fmt.Errorf("failed to create SSM activation: %w", err)
 	}
+	logger.Info("SSM activation created", "activationId", activationId)
 
-	// Step 2: Run register-ssm.sh with sensitive values passed via stdin
-	logger.Info("Running SSM registration script in sidecar")
+	// Run registration script
+	logger.V(1).Info("Running SSM registration script in sidecar")
 	region := s.ssmClient.GetRegion()
-
 	// Use stdin to pass only sensitive values securely
 	cmd := []string{"bash", "-c", fmt.Sprintf("read ACTIVATION_ID && read ACTIVATION_CODE && env ACTIVATION_ID=\"$ACTIVATION_ID\" ACTIVATION_CODE=\"$ACTIVATION_CODE\" REGION=%s %s", region, SSMRegistrationScript)}
 	stdinData := fmt.Sprintf("%s\n%s\n", activationId, activationCode)
@@ -189,21 +351,38 @@ func (s *SSMRemoteAccessStrategy) performSSMRegistration(ctx context.Context, po
 	if _, err := s.podExecUtil.ExecInPod(ctx, pod, SSMAgentSidecarContainerName, cmd, stdinData); err != nil {
 		return fmt.Errorf("failed to execute SSM registration script: %w", err)
 	}
+	logger.Info("SSM registration completed successfully")
 
-	// Step 3: Start remote access server in main container
-	logger.Info("Starting remote access server in main container")
+	// TODO: Remove this once all deployments migrate to state-file-based readiness checks
+	logger.V(1).Info("Creating marker file for backward compatibility")
+	markerCmd := []string{"touch", SSMRegistrationMarkerFile}
+	if _, err := s.podExecUtil.ExecInPod(ctx, pod, SSMAgentSidecarContainerName, markerCmd, noStdin); err != nil {
+		return fmt.Errorf("failed to create marker file: %w", err)
+	}
+
+	logger.Info("Sidecar container setup completed")
+	return nil
+}
+
+// setupWorkspaceContainer starts the remote access server
+func (s *SSMRemoteAccessStrategy) setupWorkspaceContainer(ctx context.Context, pod *corev1.Pod) error {
+	logger := logf.FromContext(ctx).WithValues("pod", pod.Name)
+
+	// Check workspace is running
+	if !s.isContainerRunning(pod, WorkspaceContainerName) {
+		logger.V(1).Info("Workspace container not running yet, waiting")
+		return nil
+	}
+
+	// TODO: Make this script idempotent
+	// For now, only called on container restart so should be fine
+	logger.V(1).Info("Starting remote access server in workspace container")
 	serverCmd := []string{"bash", "-c", fmt.Sprintf("sudo %s > /dev/null 2>&1 &", RemoteAccessServerPath)}
-	if _, err := s.podExecUtil.ExecInPod(ctx, pod, WorkspaceContainerName, serverCmd, noStdin); err != nil {
+	if _, err := s.podExecUtil.ExecInPod(ctx, pod, WorkspaceContainerName, serverCmd, ""); err != nil {
 		return fmt.Errorf("failed to start remote access server: %w", err)
 	}
 
-	// Step 4: Create completion marker file
-	logger.Info("Creating SSM registration completion marker")
-	markerCmd := []string{"touch", SSMRegistrationMarkerFile}
-	if _, err := s.podExecUtil.ExecInPod(ctx, pod, SSMAgentSidecarContainerName, markerCmd, noStdin); err != nil {
-		return fmt.Errorf("failed to create completion marker: %w", err)
-	}
-
+	logger.Info("Workspace container setup completed")
 	return nil
 }
 
