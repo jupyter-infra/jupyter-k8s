@@ -95,17 +95,17 @@ const (
 
 // GenerateDeploymentName creates a consistent deployment name
 func GenerateDeploymentName(workspaceName string) string {
-	return fmt.Sprintf("jupyter-%s", workspaceName)
+	return fmt.Sprintf("workspace-%s", workspaceName)
 }
 
 // GenerateServiceName creates a consistent service name
 func GenerateServiceName(workspaceName string) string {
-	return fmt.Sprintf("jupyter-%s-service", workspaceName)
+	return fmt.Sprintf("workspace-%s-service", workspaceName)
 }
 
 // GeneratePVCName creates a consistent PVC name
 func GeneratePVCName(workspaceName string) string {
-	return fmt.Sprintf("jupyter-%s-pvc", workspaceName)
+	return fmt.Sprintf("workspace-%s-pvc", workspaceName)
 }
 
 // GenerateLabels creates consistent labels for resources
