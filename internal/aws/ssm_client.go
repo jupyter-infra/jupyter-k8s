@@ -409,7 +409,7 @@ func (s *SSMClient) createSageMakerSpaceSSMDocument(ctx context.Context) error {
 	input := &ssm.CreateDocumentInput{
 		Name:         aws.String(CustomSSHDocumentName),
 		DocumentType: types.DocumentTypeSession,
-		Content:      aws.String(SSHDocumentContent),
+		Content:      aws.String(SageMakerSpaceSSHSessionDocumentContent),
 		Tags: []types.Tag{
 			{
 				Key:   aws.String(SageMakerManagedByTagKey),

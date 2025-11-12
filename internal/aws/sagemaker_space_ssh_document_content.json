@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0",
-  "description": "Document to hold regional settings for Session Manager for SSH connections",
+  "description": "SSM document used for remote access to SageMaker Spaces",
   "sessionType": "Port",
   "parameters": {
     "portNumber": {

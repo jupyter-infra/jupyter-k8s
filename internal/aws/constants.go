@@ -39,7 +39,7 @@ const (
 	CustomSSHDocumentName = "SageMaker-SpaceSSHSessionDocument"
 )
 
-// SSHDocumentContent is the JSON content for the SSH session document
+// SageMakerSpaceSSHSessionDocumentContent is the JSON content for the SSH session document
 //
-//go:embed ssh-session-document.json
-var SSHDocumentContent string
+//go:embed sagemaker_space_ssh_document_content.json
+var SageMakerSpaceSSHSessionDocumentContent string

@@ -475,7 +475,7 @@ func TestSSMClient_createSageMakerSpaceSSMDocument_Success(t *testing.T) {
 	mockClient.On("CreateDocument", ctx, mock.MatchedBy(func(input *ssm.CreateDocumentInput) bool {
 		return *input.Name == CustomSSHDocumentName &&
 			input.DocumentType == types.DocumentTypeSession &&
-			*input.Content == SSHDocumentContent &&
+			*input.Content == SageMakerSpaceSSHSessionDocumentContent &&
 			len(input.Tags) == 2
 	})).Return(expectedOutput, nil)
 
@@ -487,19 +487,19 @@ func TestSSMClient_createSageMakerSpaceSSMDocument_Success(t *testing.T) {
 	mockClient.AssertExpectations(t)
 }
 
-func TestSSHDocumentContent_EmbedWorking(t *testing.T) {
+func TestSageMakerSpaceSSHSessionDocumentContent_EmbedWorking(t *testing.T) {
 	// Test that the embedded SSH document content is properly loaded
-	assert.NotEmpty(t, SSHDocumentContent, "SSH document content should not be empty")
-	assert.Contains(t, SSHDocumentContent, "schemaVersion", "SSH document should contain schemaVersion")
-	assert.Contains(t, SSHDocumentContent, "sessionType", "SSH document should contain sessionType")
-	assert.Contains(t, SSHDocumentContent, "Port", "SSH document should contain Port sessionType")
-	assert.Contains(t, SSHDocumentContent, "portNumber", "SSH document should contain portNumber parameter")
-	assert.Contains(t, SSHDocumentContent, "idleSessionTimeout", "SSH document should contain idleSessionTimeout")
-	assert.Contains(t, SSHDocumentContent, "maxSessionDuration", "SSH document should contain maxSessionDuration")
+	assert.NotEmpty(t, SageMakerSpaceSSHSessionDocumentContent, "SSH document content should not be empty")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "schemaVersion", "SSH document should contain schemaVersion")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "sessionType", "SSH document should contain sessionType")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "Port", "SSH document should contain Port sessionType")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "portNumber", "SSH document should contain portNumber parameter")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "idleSessionTimeout", "SSH document should contain idleSessionTimeout")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "maxSessionDuration", "SSH document should contain maxSessionDuration")
 
 	// Verify it's valid JSON by unmarshaling
 	var doc map[string]interface{}
-	err := json.Unmarshal([]byte(SSHDocumentContent), &doc)
+	err := json.Unmarshal([]byte(SageMakerSpaceSSHSessionDocumentContent), &doc)
 	assert.NoError(t, err, "SSH document content should be valid JSON")
 
 	// Verify specific structure
