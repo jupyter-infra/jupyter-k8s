@@ -12,7 +12,18 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/test/utils"
+)
+
+const (
+	basicWorkspace           = "workspace-with-storage"
+	largeWorkspace           = "workspace-large-storage"
+	noStorageWorkspace       = "workspace-no-storage"
+	customMountWorkspace     = "workspace-custom-mountpath"
+	templateWorkspace        = "workspace-with-template-storage"
+	templateDefaultWorkspace = "workspace-template-default-storage"
+	exceedBoundsWorkspace    = "workspace-exceed-storage-bounds"
 )
 
 var _ = Describe("Primary Storage", Ordered, func() {
@@ -72,8 +83,7 @@ var _ = Describe("Primary Storage", Ordered, func() {
 	AfterAll(func() {
 		By("cleaning up test workspaces")
 		cmd := exec.Command("kubectl", "delete", "workspace",
-			"workspace-with-storage",
-			"workspace-large-storage", "workspace-no-storage",
+			basicWorkspace, largeWorkspace, noStorageWorkspace,
 			"--ignore-not-found", "--wait=true", "--timeout=180s")
 		_, _ = utils.Run(cmd)
 
@@ -99,14 +109,14 @@ var _ = Describe("Primary Storage", Ordered, func() {
 
 			By("waiting for workspace to be created")
 			Eventually(func() error {
-				cmd := exec.Command("kubectl", "get", "workspace", "workspace-with-storage")
+				cmd := exec.Command("kubectl", "get", "workspace", basicWorkspace)
 				_, err := utils.Run(cmd)
 				return err
 			}, 30*time.Second, 2*time.Second).Should(Succeed())
 
 			By("verifying PVC is created with correct size")
 			Eventually(func() error {
-				cmd := exec.Command("kubectl", "get", "pvc", "workspace-workspace-with-storage-pvc",
+				cmd := exec.Command("kubectl", "get", "pvc", controller.GeneratePVCName(basicWorkspace),
 					"-o", "jsonpath={.spec.resources.requests.storage}")
 				output, err := utils.Run(cmd)
 				if err != nil {
@@ -119,18 +129,18 @@ var _ = Describe("Primary Storage", Ordered, func() {
 			}, 60*time.Second, 5*time.Second).Should(Succeed())
 
 			By("verifying PVC has correct access mode")
-			cmd = exec.Command("kubectl", "get", "pvc", "workspace-workspace-with-storage-pvc",
+			cmd = exec.Command("kubectl", "get", "pvc", controller.GeneratePVCName(basicWorkspace),
 				"-o", "jsonpath={.spec.accessModes[0]}")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("ReadWriteOnce"))
 
 			By("verifying PVC has OwnerReference to workspace")
-			err = utils.VerifyPVCOwnerReference("workspace-workspace-with-storage-pvc", "default", "workspace-with-storage")
+			err = utils.VerifyPVCOwnerReference(controller.GeneratePVCName(basicWorkspace), "default", basicWorkspace)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying PVC binding status")
-			err = utils.WaitForPVCBinding("workspace-workspace-with-storage-pvc", "default", 120*time.Second)
+			err = utils.WaitForPVCBinding(controller.GeneratePVCName(basicWorkspace), "default", 120*time.Second)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -142,7 +152,7 @@ var _ = Describe("Primary Storage", Ordered, func() {
 
 			By("verifying large PVC is created")
 			Eventually(func() error {
-				cmd := exec.Command("kubectl", "get", "pvc", "workspace-workspace-large-storage-pvc",
+				cmd := exec.Command("kubectl", "get", "pvc", controller.GeneratePVCName(largeWorkspace),
 					"-o", "jsonpath={.spec.resources.requests.storage}")
 				output, err := utils.Run(cmd)
 				if err != nil {
@@ -165,7 +175,7 @@ var _ = Describe("Primary Storage", Ordered, func() {
 			time.Sleep(10 * time.Second)
 
 			By("verifying no PVC is created")
-			cmd = exec.Command("kubectl", "get", "pvc", "workspace-workspace-no-storage-pvc")
+			cmd = exec.Command("kubectl", "get", "pvc", controller.GeneratePVCName(noStorageWorkspace))
 			_, err = utils.Run(cmd)
 			Expect(err).To(HaveOccurred(), "PVC should not exist when storage is not specified")
 		})
@@ -175,21 +185,21 @@ var _ = Describe("Primary Storage", Ordered, func() {
 		It("should mount PVC in deployment when storage is specified", func() {
 			By("waiting for deployment to be created")
 			Eventually(func() error {
-				cmd := exec.Command("kubectl", "get", "deployment", "workspace-workspace-with-storage")
+				cmd := exec.Command("kubectl", "get", "deployment", controller.GenerateDeploymentName(basicWorkspace))
 				_, err := utils.Run(cmd)
 				return err
 			}, 120*time.Second, 5*time.Second).Should(Succeed())
 
 			By("verifying deployment has volume mount for PVC")
-			err := utils.VerifyVolumeMount("workspace-workspace-with-storage", "default", "workspace-storage", "")
+			err := utils.VerifyVolumeMount(controller.GenerateDeploymentName(basicWorkspace), "default", "workspace-storage", "")
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying deployment has volume definition")
-			err = utils.VerifyVolumeDefinition("workspace-workspace-with-storage", "default", "workspace-storage", "workspace-workspace-with-storage-pvc")
+			err = utils.VerifyVolumeDefinition(controller.GenerateDeploymentName(basicWorkspace), "default", "workspace-storage", controller.GeneratePVCName(basicWorkspace))
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying volume mount path is correct")
-			cmd := exec.Command("kubectl", "get", "deployment", "workspace-workspace-with-storage",
+			cmd := exec.Command("kubectl", "get", "deployment", controller.GenerateDeploymentName(basicWorkspace),
 				"-o", "jsonpath={.spec.template.spec.containers[0].volumeMounts[?(@.name=='workspace-storage')].mountPath}")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -204,27 +214,27 @@ var _ = Describe("Primary Storage", Ordered, func() {
 
 			By("waiting for deployment to be created")
 			Eventually(func() error {
-				cmd := exec.Command("kubectl", "get", "deployment", "workspace-workspace-custom-mountpath")
+				cmd := exec.Command("kubectl", "get", "deployment", controller.GenerateDeploymentName(customMountWorkspace))
 				_, err := utils.Run(cmd)
 				return err
 			}, 120*time.Second, 5*time.Second).Should(Succeed())
 
 			By("verifying custom mount path is used")
-			cmd = exec.Command("kubectl", "get", "deployment", "workspace-workspace-custom-mountpath",
+			cmd = exec.Command("kubectl", "get", "deployment", controller.GenerateDeploymentName(customMountWorkspace),
 				"-o", "jsonpath={.spec.template.spec.containers[0].volumeMounts[?(@.name=='workspace-storage')].mountPath}")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("/home/jovyan/data"))
 
 			By("cleaning up custom mountpath workspace")
-			cmd = exec.Command("kubectl", "delete", "workspace", "workspace-custom-mountpath", "--ignore-not-found")
+			cmd = exec.Command("kubectl", "delete", "workspace", customMountWorkspace, "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 		})
 
 		It("should verify pod can write to mounted volume", func() {
 			By("checking PVC status first")
 			Eventually(func() error {
-				cmd := exec.Command("kubectl", "get", "pvc", "workspace-workspace-with-storage-pvc", "-o", "jsonpath={.status.phase}")
+				cmd := exec.Command("kubectl", "get", "pvc", controller.GeneratePVCName(basicWorkspace), "-o", "jsonpath={.status.phase}")
 				output, err := utils.Run(cmd)
 				if err != nil {
 					return err
@@ -269,13 +279,13 @@ var _ = Describe("Primary Storage", Ordered, func() {
 	Context("Storage Cleanup", func() {
 		It("should clean up PVC when workspace is deleted", func() {
 			By("deleting workspace")
-			cmd := exec.Command("kubectl", "delete", "workspace", "workspace-with-storage", "--wait=true")
+			cmd := exec.Command("kubectl", "delete", "workspace", basicWorkspace, "--wait=true")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying PVC is deleted")
 			Eventually(func() error {
-				cmd := exec.Command("kubectl", "get", "pvc", "workspace-workspace-with-storage-pvc")
+				cmd := exec.Command("kubectl", "get", "pvc", controller.GeneratePVCName(basicWorkspace))
 				_, err := utils.Run(cmd)
 				if err == nil {
 					return fmt.Errorf("PVC still exists")
@@ -296,7 +306,7 @@ var _ = Describe("Primary Storage", Ordered, func() {
 
 			By("checking workspace status for any storage-related errors")
 			Eventually(func() error {
-				cmd := exec.Command("kubectl", "get", "workspace", "workspace-large-storage",
+				cmd := exec.Command("kubectl", "get", "workspace", largeWorkspace,
 					"-o", "jsonpath={.status.conditions}")
 				output, err := utils.Run(cmd)
 				if err != nil {
@@ -322,7 +332,7 @@ var _ = Describe("Primary Storage", Ordered, func() {
 		AfterAll(func() {
 			By("cleaning up template-based test resources")
 			cmd := exec.Command("kubectl", "delete", "workspace",
-				"workspace-with-template-storage", "workspace-exceed-storage-bounds",
+				templateWorkspace, exceedBoundsWorkspace, templateDefaultWorkspace,
 				"--ignore-not-found", "--wait=true")
 			_, _ = utils.Run(cmd)
 
@@ -336,14 +346,21 @@ var _ = Describe("Primary Storage", Ordered, func() {
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
+			By("waiting for deployment to be created")
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "deployment", controller.GenerateDeploymentName(templateWorkspace))
+				_, err := utils.Run(cmd)
+				return err
+			}, 120*time.Second, 5*time.Second).Should(Succeed())
+
 			By("verifying PVC is created with specified size")
 			Eventually(func() error {
-				return utils.VerifyPVCSize("workspace-workspace-with-template-storage-pvc", "default", "2Gi")
+				return utils.VerifyPVCSize(controller.GeneratePVCName(templateWorkspace), "default", "2Gi")
 			}, 60*time.Second, 5*time.Second).Should(Succeed())
 
 			By("verifying workspace has Valid=True condition")
 			Eventually(func() error {
-				cmd := exec.Command("kubectl", "get", "workspace", "workspace-with-template-storage",
+				cmd := exec.Command("kubectl", "get", "workspace", templateWorkspace,
 					"-o", "jsonpath={.status.conditions[?(@.type=='Valid')].status}")
 				output, err := utils.Run(cmd)
 				if err != nil {
@@ -371,14 +388,17 @@ var _ = Describe("Primary Storage", Ordered, func() {
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
+			By("waiting for deployment to be created")
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "deployment", controller.GenerateDeploymentName(templateDefaultWorkspace))
+				_, err := utils.Run(cmd)
+				return err
+			}, 120*time.Second, 5*time.Second).Should(Succeed())
+
 			By("verifying PVC is created with template default size")
 			Eventually(func() error {
-				return utils.VerifyPVCSize("workspace-workspace-template-default-storage-pvc", "default", "1Gi")
+				return utils.VerifyPVCSize(controller.GeneratePVCName(templateDefaultWorkspace), "default", "1Gi")
 			}, 60*time.Second, 5*time.Second).Should(Succeed())
-
-			By("cleaning up test workspace")
-			cmd = exec.Command("kubectl", "delete", "workspace", "workspace-template-default-storage", "--ignore-not-found")
-			_, _ = utils.Run(cmd)
 		})
 	})
 })
