@@ -14,15 +14,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// GetSSMDocumentName returns the SSM document name from environment
-func GetSSMDocumentName() (string, error) {
-	name := os.Getenv(AWSSSMDocumentNameEnv)
-	if name == "" {
-		return "", fmt.Errorf("%s environment variable is required", AWSSSMDocumentNameEnv)
-	}
-	return name, nil
-}
-
 // SSMClientInterface defines the interface for SSM operations we need
 type SSMClientInterface interface {
 	CreateActivation(ctx context.Context, params *ssm.CreateActivationInput, optFns ...func(*ssm.Options)) (*ssm.CreateActivationOutput, error)

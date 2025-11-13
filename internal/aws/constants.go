@@ -6,9 +6,6 @@ import (
 )
 
 const (
-	// AWSSSMDocumentNameEnv is the environment variable for SSM document name
-	AWSSSMDocumentNameEnv = "AWS_SSM_DOCUMENT_NAME"
-
 	// EKSClusterARNEnv is the environment variable key for EKS cluster ARN
 	EKSClusterARNEnv = "CLUSTER_ID"
 
