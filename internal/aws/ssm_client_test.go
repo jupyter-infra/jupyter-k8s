@@ -171,7 +171,9 @@ func TestSSMClient_StartSession(t *testing.T) {
 				streamURL := "wss://test-stream-url"
 				// Mock DescribeSessions to return fewer than max sessions
 				m.On("DescribeSessions", mock.Anything, mock.MatchedBy(func(input *ssm.DescribeSessionsInput) bool {
-					return input.State == types.SessionStateActive
+					return input.State == types.SessionStateActive &&
+						input.MaxResults != nil &&
+						*input.MaxResults == int32(MaxConcurrentSSMSessionsPerInstance)
 				})).Return(
 					&ssm.DescribeSessionsOutput{
 						Sessions: []types.Session{}, // No active sessions
@@ -200,7 +202,9 @@ func TestSSMClient_StartSession(t *testing.T) {
 			mockSetup: func(m *MockSSMClient) {
 				// Mock DescribeSessions to return fewer than max sessions
 				m.On("DescribeSessions", mock.Anything, mock.MatchedBy(func(input *ssm.DescribeSessionsInput) bool {
-					return input.State == types.SessionStateActive
+					return input.State == types.SessionStateActive &&
+						input.MaxResults != nil &&
+						*input.MaxResults == int32(MaxConcurrentSSMSessionsPerInstance)
 				})).Return(
 					&ssm.DescribeSessionsOutput{
 						Sessions: []types.Session{}, // No active sessions
@@ -220,8 +224,8 @@ func TestSSMClient_StartSession(t *testing.T) {
 			documentName: "test-document",
 			mockSetup: func(m *MockSSMClient) {
 				// Mock DescribeSessions to return max sessions (10)
-				sessions := make([]types.Session, MaxConcurrentSessionsPerInstance)
-				for i := 0; i < MaxConcurrentSessionsPerInstance; i++ {
+				sessions := make([]types.Session, MaxConcurrentSSMSessionsPerInstance)
+				for i := 0; i < MaxConcurrentSSMSessionsPerInstance; i++ {
 					sessionID := fmt.Sprintf("sess-%d", i)
 					sessions[i] = types.Session{
 						SessionId: &sessionID,
@@ -229,7 +233,9 @@ func TestSSMClient_StartSession(t *testing.T) {
 					}
 				}
 				m.On("DescribeSessions", mock.Anything, mock.MatchedBy(func(input *ssm.DescribeSessionsInput) bool {
-					return input.State == types.SessionStateActive
+					return input.State == types.SessionStateActive &&
+						input.MaxResults != nil &&
+						*input.MaxResults == int32(MaxConcurrentSSMSessionsPerInstance)
 				})).Return(
 					&ssm.DescribeSessionsOutput{
 						Sessions: sessions,
@@ -254,7 +260,7 @@ func TestSSMClient_StartSession(t *testing.T) {
 				// For the session limit test, verify the error message
 				if tt.name == "too many active sessions" {
 					assert.Contains(t, err.Error(), "exceeds active sessions limit")
-					assert.Contains(t, err.Error(), fmt.Sprintf("(%d/%d)", MaxConcurrentSessionsPerInstance, MaxConcurrentSessionsPerInstance))
+					assert.Contains(t, err.Error(), fmt.Sprintf("(%d/%d)", MaxConcurrentSSMSessionsPerInstance, MaxConcurrentSSMSessionsPerInstance))
 				}
 			} else {
 				assert.NoError(t, err)

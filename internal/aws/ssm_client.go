@@ -160,8 +160,12 @@ func (c *SSMClient) checkNumActiveSessions(ctx context.Context, instanceID strin
 	logger := log.FromContext(ctx).WithName("ssm-client")
 
 	// Describe active sessions for this instance
+	// Set MaxResults to ensure we get enough sessions to check the limit
+	// We only need to know if there are >= MaxConcurrentSSMSessionsPerInstance sessions
+	maxResults := int32(MaxConcurrentSSMSessionsPerInstance)
 	input := &ssm.DescribeSessionsInput{
-		State: types.SessionStateActive,
+		State:      types.SessionStateActive,
+		MaxResults: &maxResults,
 		Filters: []types.SessionFilter{
 			{
 				Key:   types.SessionFilterKeyTargetId,
@@ -181,13 +185,13 @@ func (c *SSMClient) checkNumActiveSessions(ctx context.Context, instanceID strin
 		"numActiveSessions", numActiveSessions,
 		"instanceId", instanceID)
 
-	if numActiveSessions >= MaxConcurrentSessionsPerInstance {
+	if numActiveSessions >= MaxConcurrentSSMSessionsPerInstance {
 		logger.Error(nil, "Too many sessions running on instance",
 			"instanceId", instanceID,
 			"activeSessions", numActiveSessions,
-			"maxSessions", MaxConcurrentSessionsPerInstance)
+			"maxSessions", MaxConcurrentSSMSessionsPerInstance)
 		return fmt.Errorf("instance %s exceeds active sessions limit (%d/%d)",
-			instanceID, numActiveSessions, MaxConcurrentSessionsPerInstance)
+			instanceID, numActiveSessions, MaxConcurrentSSMSessionsPerInstance)
 	}
 
 	return nil

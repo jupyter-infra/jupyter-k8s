@@ -38,8 +38,8 @@ const (
 	// CustomSSHDocumentName is the name of the SSM document for SSH sessions
 	CustomSSHDocumentName = "SageMaker-SpaceSSHSessionDocument"
 
-	// MaxConcurrentSessionsPerInstance is the maximum number of concurrent SSM sessions allowed per managed instance
-	MaxConcurrentSessionsPerInstance = 10
+	// MaxConcurrentSSMSessionsPerInstance is the maximum number of concurrent SSM sessions allowed per managed instance
+	MaxConcurrentSSMSessionsPerInstance = 10
 )
 
 // SageMakerSpaceSSHSessionDocumentContent is the JSON content for the SSH session document
