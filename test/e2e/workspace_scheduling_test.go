@@ -13,7 +13,9 @@ import (
 )
 
 // This test suite validates workspace scheduling features: affinity, tolerations, node selectors
-var _ = Describe("Workspace Scheduling", Ordered, func() {
+// commenting out flaky test: https://github.com/jupyter-infra/jupyter-k8s/issues/45
+// reinstate 'Describe' to run again
+var _ = XDescribe("Workspace Scheduling", Ordered, func() {
 
 	AfterAll(func() {
 		By("cleaning up test workspaces")

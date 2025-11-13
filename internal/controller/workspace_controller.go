@@ -21,8 +21,10 @@ import (
 	"strings"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -60,6 +62,10 @@ type WorkspaceControllerOptions struct {
 
 	// EnableWorkspacePodWatching controls whether workspace pod events should be watched
 	EnableWorkspacePodWatching bool
+
+	// DefaultTemplateNamespace is the default namespace for WorkspaceTemplate resolution
+	// when templateRef.namespace is not specified
+	DefaultTemplateNamespace string
 }
 
 // WorkspaceReconciler reconciles a Workspace object
@@ -87,15 +93,11 @@ func (r *WorkspaceReconciler) SetStateMachine(sm *StateMachine) {
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=traefik.io,resources=ingressroutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=traefik.io,resources=middlewares,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Workspace object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -129,22 +131,61 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// Ensure template label is set if workspace uses a template
-	if workspace.Spec.TemplateRef != nil && *workspace.Spec.TemplateRef != "" {
+	// Ensure template labels are set or removed based on templateRef
+	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
+		// Template is referenced - ensure both labels are set
 		if workspace.Labels == nil {
 			workspace.Labels = make(map[string]string)
 		}
-		expectedLabel := "workspace.jupyter.org/template"
-		if workspace.Labels[expectedLabel] != *workspace.Spec.TemplateRef {
-			logger.Info("Adding template label to workspace", "template", *workspace.Spec.TemplateRef)
-			workspace.Labels[expectedLabel] = *workspace.Spec.TemplateRef
+
+		templateName := workspace.Spec.TemplateRef.Name
+		templateNamespace := workspaceutil.GetTemplateRefNamespace(workspace)
+
+		needsUpdate := false
+		if workspace.Labels[workspaceutil.LabelWorkspaceTemplate] != templateName {
+			workspace.Labels[workspaceutil.LabelWorkspaceTemplate] = templateName
+			needsUpdate = true
+		}
+		if workspace.Labels[workspaceutil.LabelWorkspaceTemplateNamespace] != templateNamespace {
+			workspace.Labels[workspaceutil.LabelWorkspaceTemplateNamespace] = templateNamespace
+			needsUpdate = true
+		}
+
+		if needsUpdate {
+			logger.Info("Adding/updating template labels",
+				"template", templateName,
+				"templateNamespace", templateNamespace)
 			if err := r.Update(ctx, workspace); err != nil {
-				logger.Error(err, "Failed to update workspace with template label")
+				logger.Error(err, "Failed to update workspace with template labels")
 				return ctrl.Result{}, err
 			}
-			logger.Info("Successfully added template label to workspace")
+			logger.Info("Successfully updated template labels")
 			// Requeue to process with updated labels
 			return ctrl.Result{Requeue: true}, nil
+		}
+	} else {
+		// Template is not referenced - ensure labels are removed
+		if workspace.Labels != nil {
+			needsUpdate := false
+			if _, hasTemplateLabel := workspace.Labels[workspaceutil.LabelWorkspaceTemplate]; hasTemplateLabel {
+				delete(workspace.Labels, workspaceutil.LabelWorkspaceTemplate)
+				needsUpdate = true
+			}
+			if _, hasNamespaceLabel := workspace.Labels[workspaceutil.LabelWorkspaceTemplateNamespace]; hasNamespaceLabel {
+				delete(workspace.Labels, workspaceutil.LabelWorkspaceTemplateNamespace)
+				needsUpdate = true
+			}
+
+			if needsUpdate {
+				logger.Info("Removing template labels (no template reference)")
+				if err := r.Update(ctx, workspace); err != nil {
+					logger.Error(err, "Failed to remove template labels")
+					return ctrl.Result{}, err
+				}
+				logger.Info("Successfully removed template labels")
+				// Requeue to process with updated labels
+				return ctrl.Result{Requeue: true}, nil
+			}
 		}
 	}
 
@@ -175,7 +216,7 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.podEventHandler.HandleWorkspacePodEvents),
 			builderPkg.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 				// Only watch pods with workspace labels
-				_, hasWorkspace := obj.GetLabels()[LabelWorkspaceName]
+				_, hasWorkspace := obj.GetLabels()[workspaceutil.LabelWorkspaceName]
 				return hasWorkspace
 			})),
 		)
@@ -211,7 +252,8 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		middlewareGVK.SetAPIVersion("traefik.io/v1alpha1")
 		middlewareGVK.SetKind("Middleware")
 
-		builder.Owns(ingressRouteGVK).Owns(middlewareGVK)
+		// Watch NetworkPolicy resources using typed API
+		builder.Owns(&networkingv1.NetworkPolicy{}).Owns(ingressRouteGVK).Owns(middlewareGVK)
 	}
 
 	// Add additional resource watches from ResourceWatches config
@@ -252,10 +294,9 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	)
 
 	// Create state machine
-	templateResolver := NewTemplateResolver(k8sClient)
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
 	idleChecker := NewWorkspaceIdleChecker(k8sClient)
-	stateMachine := NewStateMachine(resourceManager, statusManager, templateResolver, eventRecorder, idleChecker)
+	stateMachine := NewStateMachine(resourceManager, statusManager, eventRecorder, idleChecker)
 
 	// Create pod event handler
 	podEventHandler := NewPodEventHandler(k8sClient, resourceManager)

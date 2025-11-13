@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 )
 
@@ -73,4 +74,19 @@ func TestKMSClient_GetRegion(t *testing.T) {
 	if region != "us-west-2" {
 		t.Errorf("Expected region %q, got %q", "us-west-2", region)
 	}
+}
+
+// MockKMSClientWithError simulates CreateAlias returning a generic error
+type MockKMSClientWithError struct{}
+
+func (m *MockKMSClientWithError) GenerateDataKey(ctx context.Context, params *kms.GenerateDataKeyInput, optFns ...func(*kms.Options)) (*kms.GenerateDataKeyOutput, error) {
+	return &kms.GenerateDataKeyOutput{}, nil
+}
+
+func (m *MockKMSClientWithError) Decrypt(ctx context.Context, params *kms.DecryptInput, optFns ...func(*kms.Options)) (*kms.DecryptOutput, error) {
+	return &kms.DecryptOutput{}, nil
+}
+
+func (m *MockKMSClientWithError) DescribeKey(ctx context.Context, params *kms.DescribeKeyInput, optFns ...func(*kms.Options)) (*kms.DescribeKeyOutput, error) {
+	return &kms.DescribeKeyOutput{}, nil
 }

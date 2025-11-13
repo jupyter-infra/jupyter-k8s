@@ -47,7 +47,8 @@ var _ = Describe("TemplateDefaulter", func() {
 
 		template = &workspacev1alpha1.WorkspaceTemplate{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-template",
+				Name:      "test-template",
+				Namespace: "default",
 			},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 				DefaultImage:         "jupyter/base-notebook:latest",
@@ -74,7 +75,7 @@ var _ = Describe("TemplateDefaulter", func() {
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
 				DisplayName: "Test Workspace",
-				TemplateRef: &template.Name,
+				TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name},
 			},
 		}
 
@@ -83,7 +84,7 @@ var _ = Describe("TemplateDefaulter", func() {
 			WithObjects(template).
 			Build()
 
-		defaulter = NewTemplateDefaulter(fakeClient)
+		defaulter = NewTemplateDefaulter(fakeClient, "")
 	})
 
 	Context("ApplyTemplateDefaults", func() {
@@ -142,8 +143,7 @@ var _ = Describe("TemplateDefaulter", func() {
 		})
 
 		It("should return error when template not found", func() {
-			nonExistentTemplate := "non-existent-template"
-			workspace.Spec.TemplateRef = &nonExistentTemplate
+			workspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{Name: "non-existent-template"}
 
 			err := defaulter.ApplyTemplateDefaults(ctx, workspace)
 			Expect(err).To(HaveOccurred())

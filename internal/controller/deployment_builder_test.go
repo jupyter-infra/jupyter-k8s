@@ -35,138 +35,24 @@ var _ = Describe("DeploymentBuilder", func() {
 		deploymentBuilder = NewDeploymentBuilder(scheme, options, k8sClient)
 	})
 
-	Context("Environment Variables", func() {
-		It("should pass environment variables from template to container", func() {
-			// Create workspace
-			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceSpec{},
-			}
-
-			// Create resolved template with environment variables
-			resolvedTemplate := &ResolvedTemplate{
-				Image: "quay.io/jupyter/minimal-notebook:latest",
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("1Gi"),
-					},
-				},
-				EnvironmentVariables: []corev1.EnvVar{
-					{Name: "JUPYTER_ENABLE_LAB", Value: "yes"},
-					{Name: "CUSTOM_ENV", Value: "test-value"},
-					{Name: "DEBUG_MODE", Value: "false"},
-				},
-			}
-
-			// Build deployment
-			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, resolvedTemplate)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(deployment).NotTo(BeNil())
-
-			// Verify deployment has correct structure
-			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
-			container := deployment.Spec.Template.Spec.Containers[0]
-
-			// Verify all environment variables are passed to the container
-			Expect(container.Env).To(HaveLen(3))
-
-			// Check each environment variable
-			envMap := make(map[string]string)
-			for _, env := range container.Env {
-				envMap[env.Name] = env.Value
-			}
-
-			Expect(envMap["JUPYTER_ENABLE_LAB"]).To(Equal("yes"))
-			Expect(envMap["CUSTOM_ENV"]).To(Equal("test-value"))
-			Expect(envMap["DEBUG_MODE"]).To(Equal("false"))
-		})
-
-		It("should not add environment variables when template has none", func() {
-			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace-no-env",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceSpec{},
-			}
-
-			// Create resolved template without environment variables
-			resolvedTemplate := &ResolvedTemplate{
-				Image: "quay.io/jupyter/minimal-notebook:latest",
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("1Gi"),
-					},
-				},
-				EnvironmentVariables: []corev1.EnvVar{}, // Empty
-			}
-
-			// Build deployment
-			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, resolvedTemplate)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(deployment).NotTo(BeNil())
-
-			// Verify no environment variables are added to container
-			container := deployment.Spec.Template.Spec.Containers[0]
-			Expect(container.Env).To(BeEmpty())
-		})
-
-		It("should handle nil resolved template gracefully", func() {
-			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace-nil-template",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceSpec{
-					Resources: &corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("500m"),
-							corev1.ResourceMemory: resource.MustParse("1Gi"),
-						},
-					},
-				},
-			}
-
-			// Build deployment with nil template
-			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, nil)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(deployment).NotTo(BeNil())
-
-			// Verify container has no environment variables
-			container := deployment.Spec.Template.Spec.Containers[0]
-			Expect(container.Env).To(BeEmpty())
-		})
-	})
+	// Note: Environment variables tests removed as they are now applied by webhooks
+	// during admission from WorkspaceTemplate, not part of Workspace spec
 
 	Context("Storage Configuration", func() {
-		It("should mount volume when storage is configured in template", func() {
+		It("should mount volume when storage is configured in workspace", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-storage",
 					Namespace: "default",
 				},
-				Spec: workspacev1alpha1.WorkspaceSpec{},
-			}
-
-			resolvedTemplate := &ResolvedTemplate{
-				Image: "quay.io/jupyter/minimal-notebook:latest",
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("1Gi"),
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					Storage: &workspacev1alpha1.StorageSpec{
+						Size: resource.MustParse("10Gi"),
 					},
 				},
-				StorageConfiguration: &workspacev1alpha1.StorageConfig{
-					DefaultSize: resource.MustParse("10Gi"),
-				},
 			}
 
-			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, resolvedTemplate)
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify volume is added
@@ -181,7 +67,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(container.VolumeMounts[0].MountPath).To(Equal(DefaultMountPath))
 		})
 
-		It("should handle workspace storage override", func() {
+		It("should handle workspace storage configuration", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-storage-override",
@@ -189,28 +75,15 @@ var _ = Describe("DeploymentBuilder", func() {
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					Storage: &workspacev1alpha1.StorageSpec{
-						Size: resource.MustParse("20Gi"), // Workspace storage takes precedence
+						Size: resource.MustParse("20Gi"),
 					},
 				},
 			}
 
-			resolvedTemplate := &ResolvedTemplate{
-				Image: "quay.io/jupyter/minimal-notebook:latest",
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("1Gi"),
-					},
-				},
-				StorageConfiguration: &workspacev1alpha1.StorageConfig{
-					DefaultSize: resource.MustParse("10Gi"),
-				},
-			}
-
-			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, resolvedTemplate)
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Verify volume is still added (workspace storage takes precedence in getStorageConfig)
+			// Verify volume is added from workspace spec
 			Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(1))
 			container := deployment.Spec.Template.Spec.Containers[0]
 			Expect(container.VolumeMounts).To(HaveLen(1))
@@ -243,20 +116,7 @@ var _ = Describe("DeploymentBuilder", func() {
 				},
 			}
 
-			resolvedTemplate := &ResolvedTemplate{
-				Image: "quay.io/jupyter/minimal-notebook:latest",
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-				},
-				StorageConfiguration: &workspacev1alpha1.StorageConfig{
-					DefaultSize: resource.MustParse("1Gi"),
-				},
-			}
-
-			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, resolvedTemplate)
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deployment).NotTo(BeNil())
 
@@ -303,17 +163,7 @@ var _ = Describe("DeploymentBuilder", func() {
 				},
 			}
 
-			resolvedTemplate := &ResolvedTemplate{
-				Image: "quay.io/jupyter/minimal-notebook:latest",
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-				},
-			}
-
-			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, resolvedTemplate)
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deployment).NotTo(BeNil())
 
@@ -339,17 +189,7 @@ var _ = Describe("DeploymentBuilder", func() {
 				},
 			}
 
-			resolvedTemplate := &ResolvedTemplate{
-				Image: "quay.io/jupyter/minimal-notebook:latest",
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-				},
-			}
-
-			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, resolvedTemplate)
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deployment).NotTo(BeNil())
 
@@ -388,7 +228,7 @@ var _ = Describe("DeploymentBuilder", func() {
 				},
 			}
 
-			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, nil)
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deployment).NotTo(BeNil())
 
@@ -399,28 +239,27 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(HaveLen(1))
 		})
 
-		It("should use template affinity when workspace doesn't specify", func() {
+		It("should handle workspace with affinity from template defaults", func() {
+			// Note: Template defaults are applied via webhooks during admission
+			// This test verifies the deployment builder respects workspace spec affinity
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-template-affinity",
 					Namespace: "default",
 				},
-				Spec: workspacev1alpha1.WorkspaceSpec{},
-			}
-
-			resolvedTemplate := &ResolvedTemplate{
-				Image: "quay.io/jupyter/minimal-notebook:latest",
-				Affinity: &corev1.Affinity{
-					NodeAffinity: &corev1.NodeAffinity{
-						PreferredDuringSchedulingIgnoredDuringExecution: []corev1.PreferredSchedulingTerm{
-							{
-								Weight: 100,
-								Preference: corev1.NodeSelectorTerm{
-									MatchExpressions: []corev1.NodeSelectorRequirement{
-										{
-											Key:      "kubernetes.io/arch",
-											Operator: corev1.NodeSelectorOpIn,
-											Values:   []string{"amd64"},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					Affinity: &corev1.Affinity{
+						NodeAffinity: &corev1.NodeAffinity{
+							PreferredDuringSchedulingIgnoredDuringExecution: []corev1.PreferredSchedulingTerm{
+								{
+									Weight: 100,
+									Preference: corev1.NodeSelectorTerm{
+										MatchExpressions: []corev1.NodeSelectorRequirement{
+											{
+												Key:      "kubernetes.io/arch",
+												Operator: corev1.NodeSelectorOpIn,
+												Values:   []string{"amd64"},
+											},
 										},
 									},
 								},
@@ -430,7 +269,7 @@ var _ = Describe("DeploymentBuilder", func() {
 				},
 			}
 
-			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, resolvedTemplate)
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 
 			affinity := deployment.Spec.Template.Spec.Affinity
@@ -463,7 +302,7 @@ var _ = Describe("DeploymentBuilder", func() {
 				},
 			}
 
-			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, nil)
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deployment).NotTo(BeNil())
 
@@ -477,27 +316,26 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(tolerations[1].Operator).To(Equal(corev1.TolerationOpExists))
 		})
 
-		It("should use template tolerations when workspace doesn't specify", func() {
+		It("should handle workspace with tolerations from template defaults", func() {
+			// Note: Template defaults are applied via webhooks during admission
+			// This test verifies the deployment builder respects workspace spec tolerations
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-template-tolerations",
 					Namespace: "default",
 				},
-				Spec: workspacev1alpha1.WorkspaceSpec{},
-			}
-
-			resolvedTemplate := &ResolvedTemplate{
-				Image: "quay.io/jupyter/minimal-notebook:latest",
-				Tolerations: []corev1.Toleration{
-					{
-						Key:      "spot-instance",
-						Operator: corev1.TolerationOpExists,
-						Effect:   corev1.TaintEffectNoSchedule,
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					Tolerations: []corev1.Toleration{
+						{
+							Key:      "spot-instance",
+							Operator: corev1.TolerationOpExists,
+							Effect:   corev1.TaintEffectNoSchedule,
+						},
 					},
 				},
 			}
 
-			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, resolvedTemplate)
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 
 			tolerations := deployment.Spec.Template.Spec.Tolerations
@@ -529,17 +367,7 @@ var _ = Describe("DeploymentBuilder", func() {
 				},
 			}
 
-			resolvedTemplate := &ResolvedTemplate{
-				Image: "quay.io/jupyter/minimal-notebook:latest",
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-				},
-			}
-
-			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace, resolvedTemplate)
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deployment).NotTo(BeNil())
 
@@ -581,7 +409,7 @@ var _ = Describe("DeploymentBuilder", func() {
 
 			// Create existing deployment
 			var err error
-			existingDeployment, err = deploymentBuilder.BuildDeployment(ctx, workspace, nil)
+			existingDeployment, err = deploymentBuilder.BuildDeployment(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -589,7 +417,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			// Change workspace image
 			workspace.Spec.Image = "jupyter/base-notebook:v2"
 
-			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil, nil)
+			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(needsUpdate).To(BeTrue())
 		})
@@ -602,15 +430,38 @@ var _ = Describe("DeploymentBuilder", func() {
 				corev1.ResourceMemory: resource.MustParse("512Mi"),
 			}
 
-			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil, nil)
+			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(needsUpdate).To(BeTrue())
 		})
 
 		It("should not detect update when nothing changed", func() {
-			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil, nil)
+			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(needsUpdate).To(BeFalse())
+		})
+		It("should apply pod security context when specified", func() {
+			fsGroup := int64(1000)
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					DisplayName: "Test Workspace",
+					PodSecurityContext: &corev1.PodSecurityContext{
+						FSGroup: &fsGroup,
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			podSpec := deployment.Spec.Template.Spec
+			Expect(podSpec.SecurityContext).NotTo(BeNil())
+			Expect(podSpec.SecurityContext.FSGroup).NotTo(BeNil())
+			Expect(*podSpec.SecurityContext.FSGroup).To(Equal(int64(1000)))
 		})
 	})
 })

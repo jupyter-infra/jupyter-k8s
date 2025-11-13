@@ -109,4 +109,52 @@ var _ = Describe("Workspace Controller", func() {
 			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
 	})
+
+	Describe("TemplateRef Label Setting", func() {
+		var (
+			ctx       context.Context
+			workspace *workspacev1alpha1.Workspace
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+		})
+
+		AfterEach(func() {
+			if workspace != nil {
+				_ = k8sClient.Delete(ctx, workspace)
+			}
+		})
+
+		It("should extract template name from TemplateRef struct", func() {
+			templateRef := &workspacev1alpha1.TemplateRef{
+				Name: "test-template",
+			}
+			Expect(templateRef.Name).To(Equal("test-template"))
+		})
+
+		It("should handle TemplateRef with namespace specified", func() {
+			templateRef := &workspacev1alpha1.TemplateRef{
+				Name:      "test-template",
+				Namespace: "custom-namespace",
+			}
+			Expect(templateRef.Name).To(Equal("test-template"))
+			Expect(templateRef.Namespace).To(Equal("custom-namespace"))
+		})
+
+		It("should handle nil TemplateRef gracefully", func() {
+			workspace = &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "workspace-without-templateref",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					DisplayName: "Test Workspace",
+					TemplateRef: nil,
+				},
+			}
+			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())
+			Expect(workspace.Spec.TemplateRef).To(BeNil())
+		})
+	})
 })

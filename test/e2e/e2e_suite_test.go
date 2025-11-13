@@ -114,6 +114,25 @@ var _ = BeforeSuite(func() {
 		}
 	}
 
+	By("creating shared test namespace")
+	// Delete first to ensure clean state (idempotent)
+	cmd = exec.Command("kubectl", "delete", "ns", controllerNamespace, "--ignore-not-found", "--wait=true", "--timeout=300s")
+	_, _ = utils.Run(cmd)
+	// Create namespace for all test suites
+	cmd = exec.Command("kubectl", "create", "ns", controllerNamespace)
+	_, setupErr = utils.Run(cmd)
+	if setupErr != nil {
+		return
+	}
+
+	By("labeling the namespace to enforce the restricted security policy")
+	cmd = exec.Command("kubectl", "label", "--overwrite", "ns", controllerNamespace,
+		"pod-security.kubernetes.io/enforce=restricted")
+	_, setupErr = utils.Run(cmd)
+	if setupErr != nil {
+		return
+	}
+
 	// Consolidated controller deployment for all E2E tests
 	// This eliminates race conditions from multiple test suites deploying separate controllers
 	By("installing CRDs")
@@ -309,13 +328,9 @@ var _ = AfterSuite(func() {
 		_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: CRD uninstall failed: %v\nOutput: %s\n", err, output)
 	}
 
-	By("deleting jupyter-k8s-system namespace")
-	// Clean up the controller namespace to ensure no resources leak
-	cmd = exec.Command("kubectl", "delete", "namespace", "jupyter-k8s-system",
-		"--ignore-not-found", "--timeout=180s")
-	if output, err := utils.Run(cmd); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Namespace deletion failed: %v\nOutput: %s\n", err, output)
-	}
+	By("removing shared test namespace")
+	cmd = exec.Command("kubectl", "delete", "ns", controllerNamespace, "--wait=true", "--timeout=300s")
+	_, _ = utils.Run(cmd)
 
 	// Teardown CertManager after the suite if not skipped and if it was not already installed
 	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {

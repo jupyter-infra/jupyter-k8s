@@ -74,6 +74,17 @@ type AccessStrategyRef struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
+// TemplateRef defines a reference to a WorkspaceTemplate
+type TemplateRef struct {
+	// Name of the WorkspaceTemplate
+	Name string `json:"name"`
+
+	// Namespace where the WorkspaceTemplate is located
+	// When omitted, defaults to the workspace's namespace
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
 // IdleShutdownSpec defines idle shutdown configuration
 type IdleShutdownSpec struct {
 	// Enabled indicates if idle shutdown is enabled
@@ -155,11 +166,9 @@ type WorkspaceSpec struct {
 	AccessStrategy *AccessStrategyRef `json:"accessStrategy,omitempty"`
 
 	// TemplateRef references a WorkspaceTemplate to use as base configuration
-	// When set, template provides defaults and spec fields (Image, Resources, Storage.Size) act as overrides
-	// IMMUTABLE: Cannot be changed after workspace creation
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="templateRef is immutable"
+	// When set, template provides defaults and workspace spec fields act as overrides
 	// +optional
-	TemplateRef *string `json:"templateRef,omitempty"`
+	TemplateRef *TemplateRef `json:"templateRef,omitempty"`
 
 	// IdleShutdown specifies idle shutdown configuration
 	// +optional
@@ -172,6 +181,11 @@ type WorkspaceSpec struct {
 	// ServiceAccountName specifies the name of the ServiceAccount to use for the workspace pod
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
+	// PodSecurityContext specifies pod-level security context
+	// Overrides template defaults when specified
+	// +optional
+	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 }
 
 // AccessResourceStatus defines the status of a resource created from a template
@@ -243,8 +257,8 @@ type WorkspaceStatus struct {
 // +kubebuilder:printcolumn:name="Progressing",type="string",JSONPath=".status.conditions[?(@.type==\"Progressing\")].status"
 // +kubebuilder:printcolumn:name="Degraded",type="string",JSONPath=".status.conditions[?(@.type==\"Degraded\")].status"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:printcolumn:name="CreatedBy",type="string",JSONPath=`.metadata.annotations['workspace\.jupyter\.org/created-by']`
-// +kubebuilder:printcolumn:name="OwnershipType",type="string",JSONPath=".spec.ownershipType"
+// +kubebuilder:printcolumn:name="CreatedBy",type="string",JSONPath=`.metadata.annotations['workspace\.jupyter\.org/created-by']`,priority=1
+// +kubebuilder:printcolumn:name="AccessType",type="string",JSONPath=".spec.accessType",priority=1
 
 // Workspace is the Schema for the workspaces API
 type Workspace struct {

@@ -1,0 +1,21 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: template-bounds-v2
+  namespace: default
+spec:
+  displayName: "Bounds Test V2"
+  description: "Template with CPU max=4 (modified)"
+  defaultOwnershipType: Public
+  defaultImage: "jk8s-application-jupyter-uv:latest"
+  allowedImages:
+    - "jk8s-application-jupyter-uv:latest"
+  resourceBounds:
+    cpu:
+      min: "100m"
+      max: "4"  # Changed from 2 to 4
+    memory:
+      min: "128Mi"
+      max: "2Gi"
+  primaryStorage:
+    defaultSize: 1Gi

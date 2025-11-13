@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jupyter-k8s-shared
+  labels:
+    app.kubernetes.io/name: jupyter-k8s-aws-hyperpod
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}

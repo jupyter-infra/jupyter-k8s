@@ -2,6 +2,7 @@ apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
   name: sagemaker-code-editor-template
+  namespace: jupyter-k8s-shared
   labels:
     app.kubernetes.io/name: jupyter-k8s-aws-hyperpod
     app.kubernetes.io/instance: {{ .Release.Name }}
@@ -36,9 +37,16 @@ spec:
   # Container configuration
   defaultContainerConfig:
     command: ["/opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-code-editor"]
-  
+
+  # Pod security context for SageMaker user access
+  defaultPodSecurityContext:
+    fsGroup: 1000  # sagemaker-user group ID
+
   # Access configuration
   defaultOwnershipType: "Public"
+  defaultAccessStrategy:
+    name: "hyperpod-access-strategy"
+    namespace: {{ .Release.Namespace }}
   allowSecondaryStorages: true
   
   # Application type

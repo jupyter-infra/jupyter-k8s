@@ -15,6 +15,14 @@ externalDns:
   # Whether to enable external-dns annotations for automatic DNS record creation
   enabled: true
 
+# Network policy configuration
+networkPolicy:
+  # Whether to enable network policies for enhanced security
+  # When enabled, restricts network access so only Traefik can communicate with:
+  # - Auth middleware service
+  # - Individual workspace services
+  enabled: true
+
 # Remote access configuration
 remoteAccess:
   enabled: false
@@ -76,7 +84,7 @@ authmiddleware:
   kmsKeyId: ""
   jwtIssuer: "jupyter-k8s-auth"
   jwtAudience: "workspace-users"
-  jwtExpiration: "1h"
+  jwtExpiration: "12h"
   jwtRefreshWindow: "15m"
   jwtRefreshHorizon: "12h"
   # Cookie configuration
@@ -87,7 +95,12 @@ authmiddleware:
   cookieHttpOnly: "true"
   cookieSameSite: "lax"
   # Path configuration
-  pathRegexPattern: "^(/workspaces/[^/]+/[^/]+)(?:/.*)?$"
+  pathRegexPattern: "^(/).*$"
+  # Routing mode: "path" or "subdomain"
+  routingMode: "subdomain"
+  # Subdomain routing configuration (used when routingMode is "subdomain")
+  workspaceNameSubdomainRegex: "^([^-]+)-.*$"
+  workspaceNamespaceSubdomainRegex: "^[^-]+-(.*)$"
   maxCookiePaths: "20"
   # CSRF configuration
   # Required: must be provided as base64 encoded string (generate with: openssl rand -base64 32)
@@ -100,4 +113,7 @@ authmiddleware:
   writeTimeout: "10s"
   shutdownTimeout: "30s"
   # Bearer auth configuration
+  oauthEnabled: false
   enableBearerAuth: true
+  # JWT refresh configuration
+  enableRefresh: false

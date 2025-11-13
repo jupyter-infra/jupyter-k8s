@@ -18,12 +18,11 @@ package v1alpha1
 
 import (
 	"context"
-	"fmt"
 
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
 // DefaultApplicator applies defaults for a specific field or group of fields
@@ -31,13 +30,13 @@ type DefaultApplicator func(workspace *workspacev1alpha1.Workspace, template *wo
 
 // TemplateDefaulter handles applying template defaults to workspaces
 type TemplateDefaulter struct {
-	client client.Client
+	resolver *workspaceutil.TemplateResolver
 }
 
 // NewTemplateDefaulter creates a new TemplateDefaulter
-func NewTemplateDefaulter(k8sClient client.Client) *TemplateDefaulter {
+func NewTemplateDefaulter(k8sClient client.Client, defaultTemplateNamespace string) *TemplateDefaulter {
 	return &TemplateDefaulter{
-		client: k8sClient,
+		resolver: workspaceutil.NewTemplateResolver(k8sClient, defaultTemplateNamespace),
 	}
 }
 
@@ -50,15 +49,16 @@ var defaultApplicators = []DefaultApplicator{
 	applyMetadataDefaults,
 	applyAccessStrategyDefaults,
 	applyLifecycleDefaults,
+	applySecurityDefaults,
 }
 
 // ApplyTemplateDefaults applies template defaults to workspace
 func (td *TemplateDefaulter) ApplyTemplateDefaults(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
-	if workspace.Spec.TemplateRef == nil {
+	if workspace.Spec.TemplateRef == nil || workspace.Spec.TemplateRef.Name == "" {
 		return nil
 	}
 
-	template, err := td.fetchTemplate(ctx, *workspace.Spec.TemplateRef)
+	template, err := td.fetchTemplate(ctx, *workspace.Spec.TemplateRef, workspace.Namespace)
 	if err != nil {
 		return err
 	}
@@ -71,11 +71,7 @@ func (td *TemplateDefaulter) ApplyTemplateDefaults(ctx context.Context, workspac
 	return nil
 }
 
-// fetchTemplate retrieves a template by name
-func (td *TemplateDefaulter) fetchTemplate(ctx context.Context, templateName string) (*workspacev1alpha1.WorkspaceTemplate, error) {
-	template := &workspacev1alpha1.WorkspaceTemplate{}
-	if err := td.client.Get(ctx, types.NamespacedName{Name: templateName}, template); err != nil {
-		return nil, fmt.Errorf("failed to get template %s: %w", templateName, err)
-	}
-	return template, nil
+// fetchTemplate retrieves a template using centralized resolver
+func (td *TemplateDefaulter) fetchTemplate(ctx context.Context, templateRef workspacev1alpha1.TemplateRef, workspaceNamespace string) (*workspacev1alpha1.WorkspaceTemplate, error) {
+	return td.resolver.ResolveTemplate(ctx, &templateRef, workspaceNamespace)
 }

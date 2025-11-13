@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -70,6 +71,22 @@ func (m *MockSSMClient) StartSession(ctx context.Context, params *ssm.StartSessi
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*ssm.StartSessionOutput), args.Error(1)
+}
+
+func (m *MockSSMClient) DescribeSessions(ctx context.Context, params *ssm.DescribeSessionsInput, optFns ...func(*ssm.Options)) (*ssm.DescribeSessionsOutput, error) {
+	args := m.Called(ctx, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ssm.DescribeSessionsOutput), args.Error(1)
+}
+
+func (m *MockSSMClient) CreateDocument(ctx context.Context, params *ssm.CreateDocumentInput, optFns ...func(*ssm.Options)) (*ssm.CreateDocumentOutput, error) {
+	args := m.Called(ctx, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ssm.CreateDocumentOutput), args.Error(1)
 }
 
 func TestSSMClient_FindInstanceByPodUID(t *testing.T) {
@@ -152,6 +169,15 @@ func TestSSMClient_StartSession(t *testing.T) {
 				sessionID := testSessionID
 				tokenValue := "test-token"
 				streamURL := "wss://test-stream-url"
+				// Mock DescribeSessions to return fewer than max sessions
+				m.On("DescribeSessions", mock.Anything, mock.MatchedBy(func(input *ssm.DescribeSessionsInput) bool {
+					return input.State == types.SessionStateActive &&
+						input.MaxResults != nil &&
+						*input.MaxResults == int32(MaxConcurrentSSMSessionsPerInstance)
+				})).Return(
+					&ssm.DescribeSessionsOutput{
+						Sessions: []types.Session{}, // No active sessions
+					}, nil)
 				m.On("StartSession", mock.Anything, mock.MatchedBy(func(input *ssm.StartSessionInput) bool {
 					return *input.Target == testInstanceID && *input.DocumentName == "test-document"
 				})).Return(
@@ -174,11 +200,47 @@ func TestSSMClient_StartSession(t *testing.T) {
 			instanceID:   testInstanceID,
 			documentName: "invalid-document",
 			mockSetup: func(m *MockSSMClient) {
+				// Mock DescribeSessions to return fewer than max sessions
+				m.On("DescribeSessions", mock.Anything, mock.MatchedBy(func(input *ssm.DescribeSessionsInput) bool {
+					return input.State == types.SessionStateActive &&
+						input.MaxResults != nil &&
+						*input.MaxResults == int32(MaxConcurrentSSMSessionsPerInstance)
+				})).Return(
+					&ssm.DescribeSessionsOutput{
+						Sessions: []types.Session{}, // No active sessions
+					}, nil)
 				m.On("StartSession", mock.Anything, mock.MatchedBy(func(input *ssm.StartSessionInput) bool {
 					return *input.Target == testInstanceID && *input.DocumentName == "invalid-document"
 				})).Return(
 					(*ssm.StartSessionOutput)(nil),
 					&types.InvalidDocument{Message: aws.String("Document not found")})
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:         "too many active sessions",
+			instanceID:   testInstanceID,
+			documentName: "test-document",
+			mockSetup: func(m *MockSSMClient) {
+				// Mock DescribeSessions to return max sessions (10)
+				sessions := make([]types.Session, MaxConcurrentSSMSessionsPerInstance)
+				for i := 0; i < MaxConcurrentSSMSessionsPerInstance; i++ {
+					sessionID := fmt.Sprintf("sess-%d", i)
+					sessions[i] = types.Session{
+						SessionId: &sessionID,
+						Status:    types.SessionStatusConnected,
+					}
+				}
+				m.On("DescribeSessions", mock.Anything, mock.MatchedBy(func(input *ssm.DescribeSessionsInput) bool {
+					return input.State == types.SessionStateActive &&
+						input.MaxResults != nil &&
+						*input.MaxResults == int32(MaxConcurrentSSMSessionsPerInstance)
+				})).Return(
+					&ssm.DescribeSessionsOutput{
+						Sessions: sessions,
+					}, nil)
+				// StartSession should not be called when limit is reached
 			},
 			want:    nil,
 			wantErr: true,
@@ -195,6 +257,11 @@ func TestSSMClient_StartSession(t *testing.T) {
 			got, err := client.StartSession(context.Background(), tt.instanceID, tt.documentName)
 			if tt.wantErr {
 				assert.Error(t, err)
+				// For the session limit test, verify the error message
+				if tt.name == "too many active sessions" {
+					assert.Contains(t, err.Error(), "exceeds active sessions limit")
+					assert.Contains(t, err.Error(), fmt.Sprintf("(%d/%d)", MaxConcurrentSSMSessionsPerInstance, MaxConcurrentSSMSessionsPerInstance))
+				}
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.want, got)
@@ -451,5 +518,101 @@ func TestCleanupActivationsByPodUID_DeleteError(t *testing.T) {
 	// Assert
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to delete 1 out of 1 activations for pod")
+	mockClient.AssertExpectations(t)
+}
+
+func TestSSMClient_createSageMakerSpaceSSMDocument_Success(t *testing.T) {
+	// Setup
+	ctx := context.Background()
+	mockClient := &MockSSMClient{}
+	client := NewSSMClientWithMock(mockClient, "us-west-2")
+
+	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+
+	expectedOutput := &ssm.CreateDocumentOutput{}
+	mockClient.On("CreateDocument", ctx, mock.MatchedBy(func(input *ssm.CreateDocumentInput) bool {
+		return *input.Name == CustomSSHDocumentName &&
+			input.DocumentType == types.DocumentTypeSession &&
+			*input.Content == SageMakerSpaceSSHSessionDocumentContent &&
+			len(input.Tags) == 2
+	})).Return(expectedOutput, nil)
+
+	// Execute
+	err := client.createSageMakerSpaceSSMDocument(ctx)
+
+	// Assert
+	assert.NoError(t, err)
+	mockClient.AssertExpectations(t)
+}
+
+func TestSageMakerSpaceSSHSessionDocumentContent_EmbedWorking(t *testing.T) {
+	// Test that the embedded SSH document content is properly loaded
+	assert.NotEmpty(t, SageMakerSpaceSSHSessionDocumentContent, "SSH document content should not be empty")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "schemaVersion", "SSH document should contain schemaVersion")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "sessionType", "SSH document should contain sessionType")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "Port", "SSH document should contain Port sessionType")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "portNumber", "SSH document should contain portNumber parameter")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "idleSessionTimeout", "SSH document should contain idleSessionTimeout")
+	assert.Contains(t, SageMakerSpaceSSHSessionDocumentContent, "maxSessionDuration", "SSH document should contain maxSessionDuration")
+
+	// Verify it's valid JSON by unmarshaling
+	var doc map[string]interface{}
+	err := json.Unmarshal([]byte(SageMakerSpaceSSHSessionDocumentContent), &doc)
+	assert.NoError(t, err, "SSH document content should be valid JSON")
+
+	// Verify specific structure
+	assert.Equal(t, "1.0", doc["schemaVersion"])
+	assert.Equal(t, "Port", doc["sessionType"])
+}
+
+func TestSSMClient_createSageMakerSpaceSSMDocument_DocumentAlreadyExists(t *testing.T) {
+	// Setup
+	ctx := context.Background()
+	mockClient := &MockSSMClient{}
+	client := NewSSMClientWithMock(mockClient, "us-west-2")
+
+	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+
+	docExistsError := &types.DocumentAlreadyExists{}
+	mockClient.On("CreateDocument", ctx, mock.AnythingOfType("*ssm.CreateDocumentInput")).Return(nil, docExistsError)
+
+	// Execute
+	err := client.createSageMakerSpaceSSMDocument(ctx)
+
+	// Assert
+	assert.NoError(t, err) // Should not return error when document already exists
+	mockClient.AssertExpectations(t)
+}
+
+func TestSSMClient_createSageMakerSpaceSSMDocument_MissingClusterARN(t *testing.T) {
+	// Setup
+	ctx := context.Background()
+	mockClient := &MockSSMClient{}
+	client := NewSSMClientWithMock(mockClient, "us-west-2")
+
+	err := client.createSageMakerSpaceSSMDocument(ctx)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "environment variable is required")
+}
+
+func TestSSMClient_createSageMakerSpaceSSMDocument_CreateError(t *testing.T) {
+	// Setup
+	ctx := context.Background()
+	mockClient := &MockSSMClient{}
+	client := NewSSMClientWithMock(mockClient, "us-west-2")
+
+	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+
+	expectedError := errors.New("create document failed")
+	mockClient.On("CreateDocument", ctx, mock.AnythingOfType("*ssm.CreateDocumentInput")).Return(nil, expectedError)
+
+	// Execute
+	err := client.createSageMakerSpaceSSMDocument(ctx)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create SSH document")
 	mockClient.AssertExpectations(t)
 }

@@ -55,6 +55,18 @@ rules:
   - update
   - watch
 - apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - traefik.io
   resources:
   - ingressroutes
@@ -89,10 +101,8 @@ rules:
 - apiGroups:
   - workspace.jupyter.org
   resources:
-  - workspacetemplates
+  - workspacetemplates/status
   verbs:
   - get
-  - list
   - patch
   - update
-  - watch

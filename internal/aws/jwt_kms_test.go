@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 	jwt5 "github.com/golang-jwt/jwt/v5"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 )
@@ -32,6 +33,14 @@ func (m *MockKMSClient) Decrypt(ctx context.Context, params *kms.DecryptInput, o
 	return &kms.DecryptOutput{
 		Plaintext: m.dataKey,
 		KeyId:     aws.String("test-key-id"),
+	}, nil
+}
+
+func (m *MockKMSClient) DescribeKey(ctx context.Context, params *kms.DescribeKeyInput, optFns ...func(*kms.Options)) (*kms.DescribeKeyOutput, error) {
+	return &kms.DescribeKeyOutput{
+		KeyMetadata: &types.KeyMetadata{
+			KeyId: aws.String("test-key-id"),
+		},
 	}, nil
 }
 
@@ -79,12 +88,14 @@ func TestKMSJWTManager_EnvelopeEncryption(t *testing.T) {
 
 	// Create KMS JWT manager
 	manager := &KMSJWTManager{
-		kmsClient:  NewKMSWrapper(mockKMS, "us-east-1"),
-		keyId:      "test-key-id",
-		issuer:     "test-issuer",
-		audience:   "test-audience",
-		expiration: 30 * time.Minute,
-		keyCache:   make(map[string][]byte),
+		kmsClient:   NewKMSWrapper(mockKMS, "us-east-1"),
+		keyId:       "test-key-id",
+		issuer:      "test-issuer",
+		audience:    "test-audience",
+		expiration:  30 * time.Minute,
+		keyCache:    make(map[string][]byte),
+		cacheExpiry: make(map[string]time.Time),
+		lastCleanup: time.Now(),
 	}
 
 	// Test data
@@ -155,12 +166,14 @@ func TestKMSJWTManager_CacheMiss(t *testing.T) {
 
 	// Create KMS JWT manager
 	manager := &KMSJWTManager{
-		kmsClient:  NewKMSWrapper(mockKMS, "us-east-1"),
-		keyId:      "test-key-id",
-		issuer:     "test-issuer",
-		audience:   "test-audience",
-		expiration: 30 * time.Minute,
-		keyCache:   make(map[string][]byte),
+		kmsClient:   NewKMSWrapper(mockKMS, "us-east-1"),
+		keyId:       "test-key-id",
+		issuer:      "test-issuer",
+		audience:    "test-audience",
+		expiration:  30 * time.Minute,
+		keyCache:    make(map[string][]byte),
+		cacheExpiry: make(map[string]time.Time),
+		lastCleanup: time.Now(),
 	}
 
 	// Generate token
@@ -171,6 +184,7 @@ func TestKMSJWTManager_CacheMiss(t *testing.T) {
 
 	// Clear cache to force KMS decrypt call
 	manager.keyCache = make(map[string][]byte)
+	manager.cacheExpiry = make(map[string]time.Time)
 	mockKMS.decryptCalled = false
 
 	// Validate token (should call KMS decrypt due to cache miss)
@@ -185,6 +199,60 @@ func TestKMSJWTManager_CacheMiss(t *testing.T) {
 	}
 }
 
+func TestKMSJWTManager_CacheExpiry(t *testing.T) {
+	manager := &KMSJWTManager{
+		keyCache:    make(map[string][]byte),
+		cacheExpiry: make(map[string]time.Time),
+		lastCleanup: time.Now(),
+		expiration:  1 * time.Millisecond, // Very short for testing
+	}
+
+	// Manually add an entry that will expire
+	manager.setCachedKey("test-hash", []byte("test-key"))
+
+	// Verify key is cached
+	if len(manager.keyCache) != 1 {
+		t.Errorf("Expected 1 cached key, got %d", len(manager.keyCache))
+	}
+
+	// Wait for expiry and force cleanup
+	time.Sleep(5 * time.Millisecond)
+	manager.lastCleanup = time.Time{} // Force cleanup on next call
+	manager.cleanupExpiredKeys()
+
+	// Verify expired entries are cleaned up
+	if len(manager.keyCache) != 0 {
+		t.Errorf("Expected 0 cached keys after cleanup, got %d", len(manager.keyCache))
+	}
+}
+
+func TestKMSJWTManager_CleanupTiming(t *testing.T) {
+	manager := &KMSJWTManager{
+		keyCache:    make(map[string][]byte),
+		cacheExpiry: make(map[string]time.Time),
+		lastCleanup: time.Now(),
+		expiration:  30 * time.Minute,
+	}
+
+	// Add some expired entries
+	manager.keyCache["key1"] = []byte("value1")
+	manager.cacheExpiry["key1"] = time.Now().Add(-1 * time.Hour) // Expired
+
+	// Cleanup should not run (too recent)
+	manager.cleanupExpiredKeys()
+	if len(manager.keyCache) != 1 {
+		t.Error("Cleanup should not have run yet")
+	}
+
+	// Force cleanup by setting old lastCleanup
+	manager.lastCleanup = time.Now().Add(-20 * time.Minute)
+	manager.cleanupExpiredKeys()
+
+	if len(manager.keyCache) != 0 {
+		t.Error("Cleanup should have removed expired entries")
+	}
+}
+
 func TestKMSJWTManager_RejectsWrongSigningMethod(t *testing.T) {
 	mockKMS := &MockKMSClient{
 		dataKey:      []byte("test-data-key-32-bytes-long-key"),
@@ -192,12 +260,14 @@ func TestKMSJWTManager_RejectsWrongSigningMethod(t *testing.T) {
 	}
 
 	manager := &KMSJWTManager{
-		kmsClient:  NewKMSWrapper(mockKMS, "us-east-1"),
-		keyId:      "test-key-id",
-		issuer:     "test-issuer",
-		audience:   "test-audience",
-		expiration: 30 * time.Minute,
-		keyCache:   make(map[string][]byte),
+		kmsClient:   NewKMSWrapper(mockKMS, "us-east-1"),
+		keyId:       "test-key-id",
+		issuer:      "test-issuer",
+		audience:    "test-audience",
+		expiration:  30 * time.Minute,
+		keyCache:    make(map[string][]byte),
+		cacheExpiry: make(map[string]time.Time),
+		lastCleanup: time.Now(),
 	}
 
 	// Create a token with HS256 (wrong algorithm)

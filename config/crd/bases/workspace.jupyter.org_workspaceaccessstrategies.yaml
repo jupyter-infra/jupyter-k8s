@@ -81,6 +81,12 @@ spec:
                   If not provided, the AccessURL will not be set in the workspace status
                   Example: "https://example.com/workspace-path/"
                 type: string
+              bearerAuthURLTemplate:
+                description: |-
+                  BearerAuthURLTemplate is a template string for constructing the bearer auth URL
+                  Template variables include .Workspace and .AccessStrategy objects
+                  Used by the extension API to generate initial authentication URLs
+                type: string
               controllerConfig:
                 additionalProperties:
                   type: string
