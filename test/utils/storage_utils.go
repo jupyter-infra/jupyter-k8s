@@ -66,8 +66,9 @@ func VerifyVolumeMount(deploymentName, namespace, volumeName, mountPath string) 
 
 	// Check mount path if specified
 	if mountPath != "" {
-		cmd = exec.Command("kubectl", "get", "deployment", deploymentName, "-n", namespace,
-			"-o", fmt.Sprintf("jsonpath={.spec.template.spec.containers[0].volumeMounts[?(@.name=='%s')].mountPath}", volumeName))
+		jsonPath := fmt.Sprintf("jsonpath={.spec.template.spec.containers[0].volumeMounts[?(@.name=='%s')].mountPath}",
+			volumeName)
+		cmd = exec.Command("kubectl", "get", "deployment", deploymentName, "-n", namespace, "-o", jsonPath)
 		pathOutput, err := Run(cmd)
 		if err != nil {
 			return err
@@ -89,7 +90,8 @@ func VerifyVolumeDefinition(deploymentName, namespace, volumeName, pvcName strin
 		return err
 	}
 	if !strings.Contains(output, volumeName) || !strings.Contains(output, pvcName) {
-		return fmt.Errorf("volume definition for %s with PVC %s not found in deployment %s", volumeName, pvcName, deploymentName)
+		return fmt.Errorf("volume definition for %s with PVC %s not found in deployment %s",
+			volumeName, pvcName, deploymentName)
 	}
 	return nil
 }
