@@ -33,7 +33,7 @@ import (
 	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
-// +kubebuilder:webhook:path=/validate-pods-exec-workspace,mutating=false,failurePolicy=fail,sideEffects=None,groups="",resources=pods/exec,verbs=connect,versions=v1,name=vpods-exec-workspace-v1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
+// +kubebuilder:webhook:path=/validate-pods-exec-workspace,mutating=false,failurePolicy=ignore,sideEffects=None,groups="",resources=pods/exec,verbs=connect,versions=v1,name=vpods-exec-workspace-v1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
 
 var podexeclog = logf.Log.WithName("pod-exec-webhook")
 
