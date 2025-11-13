@@ -113,10 +113,13 @@ func (c *SSMClient) FindInstanceByPodUID(ctx context.Context, podUID string) (st
 }
 
 // StartSession starts an SSM session for the given instance with specified document
-func (c *SSMClient) StartSession(ctx context.Context, instanceID, documentName string) (*SessionInfo, error) {
+func (c *SSMClient) StartSession(ctx context.Context, instanceID, documentName, port string) (*SessionInfo, error) {
 	input := &ssm.StartSessionInput{
 		Target:       &instanceID,
 		DocumentName: aws.String(documentName),
+		Parameters: map[string][]string{
+			"portNumber": {port},
+		},
 	}
 
 	result, err := c.client.StartSession(ctx, input)

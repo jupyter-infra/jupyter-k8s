@@ -23,7 +23,7 @@ type SSMRemoteAccessClientInterface interface {
 	CleanupManagedInstancesByPodUID(ctx context.Context, podUID string) error
 	CleanupActivationsByPodUID(ctx context.Context, podUID string) error
 	FindInstanceByPodUID(ctx context.Context, podUID string) (string, error)
-	StartSession(ctx context.Context, instanceID, documentName string) (*SessionInfo, error)
+	StartSession(ctx context.Context, instanceID, documentName, port string) (*SessionInfo, error)
 }
 
 // PodExecInterface defines the interface for executing commands in pods.
@@ -47,6 +47,9 @@ const (
 	SSMRegistrationMarkerFile = "/tmp/ssm-registered"
 	SSMRegistrationScript     = "/usr/local/bin/register-ssm.sh"
 	RemoteAccessServerPath    = "/opt/amazon/sagemaker/workspace/remote-access-server"
+
+	// Remote access server configuration
+	RemoteAccessServerPort = "2222"
 )
 
 // SSMRemoteAccessStrategy handles SSM remote access strategy operations
@@ -192,7 +195,7 @@ func (s *SSMRemoteAccessStrategy) performSSMRegistration(ctx context.Context, po
 
 	// Step 3: Start remote access server in main container
 	logger.Info("Starting remote access server in main container")
-	serverCmd := []string{"bash", "-c", fmt.Sprintf("sudo %s > /dev/null 2>&1 &", RemoteAccessServerPath)}
+	serverCmd := []string{"bash", "-c", fmt.Sprintf("%s -port %s > /dev/null 2>&1 &", RemoteAccessServerPath, RemoteAccessServerPort)}
 	if _, err := s.podExecUtil.ExecInPod(ctx, pod, WorkspaceContainerName, serverCmd, noStdin); err != nil {
 		return fmt.Errorf("failed to start remote access server: %w", err)
 	}
@@ -277,7 +280,7 @@ func (s *SSMRemoteAccessStrategy) GenerateVSCodeConnectionURL(ctx context.Contex
 	}
 
 	// Start SSM session
-	sessionInfo, err := s.ssmClient.StartSession(ctx, instanceID, documentName)
+	sessionInfo, err := s.ssmClient.StartSession(ctx, instanceID, documentName, RemoteAccessServerPort)
 	if err != nil {
 		return "", fmt.Errorf("failed to start SSM session: %w", err)
 	}
