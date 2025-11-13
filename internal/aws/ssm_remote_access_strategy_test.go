@@ -54,8 +54,8 @@ func (m *MockSSMRemoteAccessClient) FindInstanceByPodUID(ctx context.Context, po
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockSSMRemoteAccessClient) StartSession(ctx context.Context, instanceID, documentName string) (*SessionInfo, error) {
-	args := m.Called(ctx, instanceID, documentName)
+func (m *MockSSMRemoteAccessClient) StartSession(ctx context.Context, instanceID, documentName, port string) (*SessionInfo, error) {
+	args := m.Called(ctx, instanceID, documentName, port)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -522,7 +522,7 @@ func TestGenerateVSCodeConnectionURL_Success(t *testing.T) {
 	mockSSMClient.On("FindInstanceByPodUID", mock.Anything, "test-pod-uid").Return("i-1234567890abcdef0", nil)
 
 	// Mock StartSession
-	mockSSMClient.On("StartSession", mock.Anything, "i-1234567890abcdef0", "test-document").Return(
+	mockSSMClient.On("StartSession", mock.Anything, "i-1234567890abcdef0", "test-document", RemoteAccessServerPort).Return(
 		&SessionInfo{
 			SessionID:  "sess-123",
 			TokenValue: "token-456",
@@ -555,7 +555,7 @@ func TestGenerateVSCodeConnectionURL_StartSessionError(t *testing.T) {
 	mockSSMClient.On("FindInstanceByPodUID", mock.Anything, "test-pod-uid").Return("i-1234567890abcdef0", nil)
 
 	// Mock StartSession failure
-	mockSSMClient.On("StartSession", mock.Anything, "i-1234567890abcdef0", "test-document").Return(nil, errors.New("session start failed"))
+	mockSSMClient.On("StartSession", mock.Anything, "i-1234567890abcdef0", "test-document", RemoteAccessServerPort).Return(nil, errors.New("session start failed"))
 
 	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
 	assert.NoError(t, err)
