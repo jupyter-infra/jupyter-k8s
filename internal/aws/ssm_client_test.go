@@ -73,6 +73,14 @@ func (m *MockSSMClient) StartSession(ctx context.Context, params *ssm.StartSessi
 	return args.Get(0).(*ssm.StartSessionOutput), args.Error(1)
 }
 
+func (m *MockSSMClient) DescribeSessions(ctx context.Context, params *ssm.DescribeSessionsInput, optFns ...func(*ssm.Options)) (*ssm.DescribeSessionsOutput, error) {
+	args := m.Called(ctx, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ssm.DescribeSessionsOutput), args.Error(1)
+}
+
 func (m *MockSSMClient) CreateDocument(ctx context.Context, params *ssm.CreateDocumentInput, optFns ...func(*ssm.Options)) (*ssm.CreateDocumentOutput, error) {
 	args := m.Called(ctx, params)
 	if args.Get(0) == nil {
@@ -161,6 +169,15 @@ func TestSSMClient_StartSession(t *testing.T) {
 				sessionID := testSessionID
 				tokenValue := "test-token"
 				streamURL := "wss://test-stream-url"
+				// Mock DescribeSessions to return fewer than max sessions
+				m.On("DescribeSessions", mock.Anything, mock.MatchedBy(func(input *ssm.DescribeSessionsInput) bool {
+					return input.State == types.SessionStateActive &&
+						input.MaxResults != nil &&
+						*input.MaxResults == int32(MaxConcurrentSSMSessionsPerInstance)
+				})).Return(
+					&ssm.DescribeSessionsOutput{
+						Sessions: []types.Session{}, // No active sessions
+					}, nil)
 				m.On("StartSession", mock.Anything, mock.MatchedBy(func(input *ssm.StartSessionInput) bool {
 					return *input.Target == testInstanceID &&
 						*input.DocumentName == "test-document" &&
@@ -187,6 +204,15 @@ func TestSSMClient_StartSession(t *testing.T) {
 			instanceID:   testInstanceID,
 			documentName: "invalid-document",
 			mockSetup: func(m *MockSSMClient) {
+				// Mock DescribeSessions to return fewer than max sessions
+				m.On("DescribeSessions", mock.Anything, mock.MatchedBy(func(input *ssm.DescribeSessionsInput) bool {
+					return input.State == types.SessionStateActive &&
+						input.MaxResults != nil &&
+						*input.MaxResults == int32(MaxConcurrentSSMSessionsPerInstance)
+				})).Return(
+					&ssm.DescribeSessionsOutput{
+						Sessions: []types.Session{}, // No active sessions
+					}, nil)
 				m.On("StartSession", mock.Anything, mock.MatchedBy(func(input *ssm.StartSessionInput) bool {
 					return *input.Target == testInstanceID &&
 						*input.DocumentName == "invalid-document" &&
@@ -196,6 +222,33 @@ func TestSSMClient_StartSession(t *testing.T) {
 				})).Return(
 					(*ssm.StartSessionOutput)(nil),
 					&types.InvalidDocument{Message: aws.String("Document not found")})
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:         "too many active sessions",
+			instanceID:   testInstanceID,
+			documentName: "test-document",
+			mockSetup: func(m *MockSSMClient) {
+				// Mock DescribeSessions to return max sessions (10)
+				sessions := make([]types.Session, MaxConcurrentSSMSessionsPerInstance)
+				for i := 0; i < MaxConcurrentSSMSessionsPerInstance; i++ {
+					sessionID := fmt.Sprintf("sess-%d", i)
+					sessions[i] = types.Session{
+						SessionId: &sessionID,
+						Status:    types.SessionStatusConnected,
+					}
+				}
+				m.On("DescribeSessions", mock.Anything, mock.MatchedBy(func(input *ssm.DescribeSessionsInput) bool {
+					return input.State == types.SessionStateActive &&
+						input.MaxResults != nil &&
+						*input.MaxResults == int32(MaxConcurrentSSMSessionsPerInstance)
+				})).Return(
+					&ssm.DescribeSessionsOutput{
+						Sessions: sessions,
+					}, nil)
+				// StartSession should not be called when limit is reached
 			},
 			want:    nil,
 			wantErr: true,
@@ -212,6 +265,11 @@ func TestSSMClient_StartSession(t *testing.T) {
 			got, err := client.StartSession(context.Background(), tt.instanceID, tt.documentName, "2222")
 			if tt.wantErr {
 				assert.Error(t, err)
+				// For the session limit test, verify the error message
+				if tt.name == "too many active sessions" {
+					assert.Contains(t, err.Error(), "exceeds active sessions limit")
+					assert.Contains(t, err.Error(), fmt.Sprintf("(%d/%d)", MaxConcurrentSSMSessionsPerInstance, MaxConcurrentSSMSessionsPerInstance))
+				}
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.want, got)
