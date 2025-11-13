@@ -39,22 +39,27 @@ const (
 	// AppLabelValue is the label value for app label
 	AppLabelValue = "jupyter"
 
-	// Kubernetes recommended labels
-	// See: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
-	KubernetesAppNameLabel      = "app.kubernetes.io/name"
-	KubernetesAppInstanceLabel  = "app.kubernetes.io/instance"
-	KubernetesAppVersionLabel   = "app.kubernetes.io/version"
+	// KubernetesAppNameLabel is the Kubernetes recommended label for application name
+	KubernetesAppNameLabel = "app.kubernetes.io/name"
+	// KubernetesAppInstanceLabel is the Kubernetes recommended label for application instance
+	KubernetesAppInstanceLabel = "app.kubernetes.io/instance"
+	// KubernetesAppVersionLabel is the Kubernetes recommended label for application version
+	KubernetesAppVersionLabel = "app.kubernetes.io/version"
+	// KubernetesAppComponentLabel is the Kubernetes recommended label for application component
 	KubernetesAppComponentLabel = "app.kubernetes.io/component"
-	KubernetesAppPartOfLabel    = "app.kubernetes.io/part-of"
+	// KubernetesAppPartOfLabel is the Kubernetes recommended label for application part-of
+	KubernetesAppPartOfLabel = "app.kubernetes.io/part-of"
+	// KubernetesAppManagedByLabel is the Kubernetes recommended label for application managed-by
 	KubernetesAppManagedByLabel = "app.kubernetes.io/managed-by"
 
-	// Kubernetes recommended label values
+	// KubernetesAppNameValue is the value for the Kubernetes app name label
+	KubernetesAppNameValue = "jupyter"
+	// KubernetesAppComponentValue is the value for the Kubernetes app component label
 	KubernetesAppComponentValue = "workspace"
-	KubernetesAppPartOfValue    = "jupyter-k8s"
-	KubernetesAppManagedByValue = "jupyter-k8s-operator"
-
-	// Version should be passed from build/schema
-	KubernetesAppVersionValue = workspacev1alpha1.GroupVersion.Version
+	// KubernetesAppPartOfValue is the value for the Kubernetes app part-of label
+	KubernetesAppPartOfValue = "jupyter-k8s"
+	// KubernetesAppManagedByValue is the value for the Kubernetes app managed-by label
+	KubernetesAppManagedByValue = "jupyter-k8s"
 
 	// AnnotationCreatedBy is the annotation key for tracking resource creator
 	AnnotationCreatedBy = "workspace.jupyter.org/created-by"
@@ -148,7 +153,7 @@ func GenerateKubernetesRecommendedLabels(workspaceName string) map[string]string
 	return map[string]string{
 		KubernetesAppNameLabel:      AppLabelValue,
 		KubernetesAppInstanceLabel:  workspaceName,
-		KubernetesAppVersionLabel:   KubernetesAppVersionValue,
+		KubernetesAppVersionLabel:   workspacev1alpha1.GroupVersion.Version,
 		KubernetesAppComponentLabel: KubernetesAppComponentValue,
 		KubernetesAppPartOfLabel:    KubernetesAppPartOfValue,
 		KubernetesAppManagedByLabel: KubernetesAppManagedByValue,
