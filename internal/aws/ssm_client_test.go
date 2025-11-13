@@ -162,7 +162,11 @@ func TestSSMClient_StartSession(t *testing.T) {
 				tokenValue := "test-token"
 				streamURL := "wss://test-stream-url"
 				m.On("StartSession", mock.Anything, mock.MatchedBy(func(input *ssm.StartSessionInput) bool {
-					return *input.Target == testInstanceID && *input.DocumentName == "test-document"
+					return *input.Target == testInstanceID &&
+						*input.DocumentName == "test-document" &&
+						input.Parameters != nil &&
+						len(input.Parameters["portNumber"]) == 1 &&
+						input.Parameters["portNumber"][0] == "2222"
 				})).Return(
 					&ssm.StartSessionOutput{
 						SessionId:  &sessionID,
@@ -184,7 +188,11 @@ func TestSSMClient_StartSession(t *testing.T) {
 			documentName: "invalid-document",
 			mockSetup: func(m *MockSSMClient) {
 				m.On("StartSession", mock.Anything, mock.MatchedBy(func(input *ssm.StartSessionInput) bool {
-					return *input.Target == testInstanceID && *input.DocumentName == "invalid-document"
+					return *input.Target == testInstanceID &&
+						*input.DocumentName == "invalid-document" &&
+						input.Parameters != nil &&
+						len(input.Parameters["portNumber"]) == 1 &&
+						input.Parameters["portNumber"][0] == "2222"
 				})).Return(
 					(*ssm.StartSessionOutput)(nil),
 					&types.InvalidDocument{Message: aws.String("Document not found")})
@@ -201,7 +209,7 @@ func TestSSMClient_StartSession(t *testing.T) {
 
 			client := NewSSMClientWithMock(mockClient, "us-east-1")
 
-			got, err := client.StartSession(context.Background(), tt.instanceID, tt.documentName)
+			got, err := client.StartSession(context.Background(), tt.instanceID, tt.documentName, "2222")
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
