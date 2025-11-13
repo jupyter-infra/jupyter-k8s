@@ -28,12 +28,16 @@ const (
 
 var _ = Describe("Workspace Resources", Ordered, func() {
 	BeforeAll(func() {
-		setupController()
+		By("installing CRDs")
+		cmd := exec.Command("make", "install")
+		_, err := utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred())
+
 		setupStorageClass()
 	})
 
 	AfterAll(func() {
-		cleanupController()
+		cleanupStorageClass()
 	})
 
 	Context("PVC Creation", func() {
@@ -226,46 +230,6 @@ var _ = Describe("Workspace Resources", Ordered, func() {
 })
 
 // Helper functions for cleaner test code
-func setupController() {
-	By("installing CRDs")
-	cmd := exec.Command("make", "install")
-	_, err := utils.Run(cmd)
-	Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
-
-	By("deploying controller-manager")
-	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
-	_, err = utils.Run(cmd)
-	Expect(err).NotTo(HaveOccurred(), "Failed to deploy controller")
-
-	By("setting controller environment variables")
-	envVars := []string{
-		"CONTROLLER_POD_SERVICE_ACCOUNT=jupyter-k8s-controller-manager",
-		"CONTROLLER_POD_NAMESPACE=jupyter-k8s-system",
-	}
-	for _, envVar := range envVars {
-		cmd = exec.Command("kubectl", "set", "env", "deployment/jupyter-k8s-controller-manager", envVar, "-n", "jupyter-k8s-system")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to set environment variable: %s", envVar))
-	}
-
-	By("waiting for controller to be ready")
-	Eventually(func(g Gomega) {
-		cmd := exec.Command("kubectl", "get", "pods", "-l", "control-plane=controller-manager",
-			"-o", "go-template={{ range .items }}{{ if not .metadata.deletionTimestamp }}{{ .metadata.name }}{{ \"\\n\" }}{{ end }}{{ end }}",
-			"-n", "jupyter-k8s-system")
-		podNames, err := utils.Run(cmd)
-		g.Expect(err).NotTo(HaveOccurred())
-		podNamesList := strings.Fields(strings.TrimSpace(podNames))
-		g.Expect(podNamesList).To(HaveLen(1), "expected 1 controller pod running")
-
-		cmd = exec.Command("kubectl", "get", "pods", podNamesList[0],
-			"-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}", "-n", "jupyter-k8s-system")
-		readyStatus, err := utils.Run(cmd)
-		g.Expect(err).NotTo(HaveOccurred())
-		g.Expect(readyStatus).To(Equal("True"), "expected controller pod to be Ready")
-	}, 5*time.Minute, 10*time.Second).Should(Succeed())
-}
-
 func setupStorageClass() {
 	By("creating test storage class")
 	cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/static/storage/test-storage-class.yaml")
@@ -273,17 +237,9 @@ func setupStorageClass() {
 	Expect(err).NotTo(HaveOccurred())
 }
 
-func cleanupController() {
+func cleanupStorageClass() {
 	By("cleaning up test storage class")
 	cmd := exec.Command("kubectl", "delete", "storageclass", "test-storage", "--ignore-not-found")
-	_, _ = utils.Run(cmd)
-
-	By("undeploying controller-manager")
-	cmd = exec.Command("make", "undeploy")
-	_, _ = utils.Run(cmd)
-
-	By("uninstalling CRDs")
-	cmd = exec.Command("make", "uninstall")
 	_, _ = utils.Run(cmd)
 }
 
