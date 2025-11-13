@@ -22,6 +22,7 @@ type Server struct {
 	logger        *slog.Logger
 	httpServer    *http.Server
 	restClient    rest.Interface
+	oidcVerifier  OIDCVerifierInterface
 }
 
 // NewServer creates a new server instance
@@ -46,17 +47,42 @@ func NewServer(config *Config, jwtManager jwt.Handler, cookieManager CookieHandl
 		}
 	}
 
+	// Initialize OIDC verifier structure (without making HTTP calls) if /auth endpoint is enabled
+	var oidcVerifier OIDCVerifierInterface
+	if config.EnableOAuth {
+		v, err := NewOIDCVerifier(config, logger)
+		if err != nil {
+			logger.Error("Failed to create OIDC verifier", "error", err)
+			oidcVerifier = nil
+		} else {
+			oidcVerifier = v
+		}
+	}
+
 	return &Server{
 		config:        config,
 		jwtManager:    jwtManager,
 		cookieManager: cookieManager,
 		logger:        logger,
 		restClient:    restClient,
+		oidcVerifier:  oidcVerifier,
 	}
 }
 
 // Start initializes and starts the HTTP server
 func (s *Server) Start() error {
+	// Initialize OIDC verifier if enabled
+	if s.config.EnableOAuth && s.oidcVerifier != nil {
+		s.logger.Info("Initializing OIDC verifier connection")
+		if err := s.oidcVerifier.Start(context.Background()); err != nil {
+			s.logger.Error("Failed to start OIDC verifier", "error", err)
+			return fmt.Errorf("failed to start OIDC verifier: %w", err)
+		}
+		s.logger.Info("OIDC verifier initialized successfully")
+	} else {
+		s.logger.Info("OAuth disabled, skipping OIDC initialization")
+	}
+
 	// Create router
 	router := http.NewServeMux()
 

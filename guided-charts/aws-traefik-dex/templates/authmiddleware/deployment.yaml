@@ -118,10 +118,25 @@ spec:
             value: "{{ .Values.authmiddleware.csrfCookieMaxAge }}"
           - name: CSRF_COOKIE_SECURE
             value: "{{ .Values.authmiddleware.csrfCookieSecure }}"
+          - name: ENABLE_OAUTH
+            value: "{{ .Values.authmiddleware.enableOauth}}"
+          - name: ENABLE_BEARER_URL_AUTH
+            value: "{{ .Values.authmiddleware.enableBearerAuth}}"
           - name: OIDC_USERNAME_PREFIX
             value: "{{ .Values.dex.oidcUsernamePrefix }}"
           - name: OIDC_GROUPS_PREFIX
             value: "{{ .Values.dex.oidcGroupPrefix }}"
+          - name: OIDC_ISSUER_URL
+            value: "https://{{ .Values.domain }}/dex"
+          - name: OIDC_CLIENT_ID
+            value: "{{ .Values.dex.authmiddlewareClientId }}"
+          - name: OIDC_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: authmiddleware-secrets
+                key: oidc-client-secret
+          - name: OIDC_INIT_TIMEOUT_SECONDS
+            value: "{{ .Values.authmiddleware.oidcInitTimeoutSecs }}"
         volumeMounts:
           - name: tmp
             mountPath: /tmp

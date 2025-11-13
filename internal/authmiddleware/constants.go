@@ -20,4 +20,7 @@ const (
 	// Routing modes
 	RoutingModeSubdomain = "subdomain"
 	RoutingModePath      = "path"
+
+	// OIDC constants
+	OIDCAuthHeaderPrefix = "Bearer "
 )

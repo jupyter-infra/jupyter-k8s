@@ -61,8 +61,12 @@ const (
 	EnvCsrfTrustedOrigins = "CSRF_TRUSTED_ORIGINS"
 
 	// OIDC configuration
-	EnvOidcUsernamePrefix = "OIDC_USERNAME_PREFIX"
-	EnvOidcGroupsPrefix   = "OIDC_GROUPS_PREFIX"
+	EnvOidcUsernamePrefix  = "OIDC_USERNAME_PREFIX"
+	EnvOidcGroupsPrefix    = "OIDC_GROUPS_PREFIX"
+	EnvOIDCIssuerURL       = "OIDC_ISSUER_URL"
+	EnvOIDCClientID        = "OIDC_CLIENT_ID"
+	EnvOIDCClientSecret    = "OIDC_CLIENT_SECRET"
+	EnvOIDCInitTimeoutSecs = "OIDC_INIT_TIMEOUT_SECONDS"
 )
 
 // JWT signing types
@@ -119,8 +123,9 @@ const (
 	// DefaultCsrfTrustedOrigins is a slice, defined in createDefaultConfig
 
 	// OIDC configuration
-	DefaultOidcUsernamePrefix = "github:"
-	DefaultOidcGroupsPrefix   = "github:"
+	DefaultOidcUsernamePrefix  = "github:"
+	DefaultOidcGroupsPrefix    = "github:"
+	DefaultOIDCInitTimeoutSecs = 30
 )
 
 // Config holds all configuration for the workspaces-auth service
@@ -175,8 +180,12 @@ type Config struct {
 	CSRFTrustedOrigins []string
 
 	// OIDC configuration
-	OidcUsernamePrefix string
-	OidcGroupsPrefix   string
+	OidcUsernamePrefix  string
+	OidcGroupsPrefix    string
+	OIDCIssuerURL       string
+	OIDCClientID        string
+	OIDCClientSecret    string
+	OIDCInitTimeoutSecs int
 }
 
 // NewConfig creates a Config with values from environment variables
@@ -205,7 +214,9 @@ func NewConfig() (*Config, error) {
 		return nil, err
 	}
 
-	applyOidcConfig(config)
+	if err := applyOidcConfig(config); err != nil {
+		return nil, err
+	}
 
 	return config, nil
 }
@@ -260,8 +271,9 @@ func createDefaultConfig() *Config {
 		CSRFHeaderName:   DefaultCsrfHeaderName,
 
 		// OIDC defaults
-		OidcUsernamePrefix: DefaultOidcUsernamePrefix,
-		OidcGroupsPrefix:   DefaultOidcGroupsPrefix,
+		OidcUsernamePrefix:  DefaultOidcUsernamePrefix,
+		OidcGroupsPrefix:    DefaultOidcGroupsPrefix,
+		OIDCInitTimeoutSecs: DefaultOIDCInitTimeoutSecs,
 	}
 }
 
@@ -497,7 +509,7 @@ func applyCSRFConfig(config *Config) error {
 }
 
 // applyOidcConfig applies OIDC-related environment variable overrides
-func applyOidcConfig(config *Config) {
+func applyOidcConfig(config *Config) error {
 	if oidcUsernamePrefix := os.Getenv(EnvOidcUsernamePrefix); oidcUsernamePrefix != "" {
 		config.OidcUsernamePrefix = oidcUsernamePrefix
 	}
@@ -505,4 +517,34 @@ func applyOidcConfig(config *Config) {
 	if oidcGroupsPrefix := os.Getenv(EnvOidcGroupsPrefix); oidcGroupsPrefix != "" {
 		config.OidcGroupsPrefix = oidcGroupsPrefix
 	}
+
+	if oidcIssuerURL := os.Getenv(EnvOIDCIssuerURL); oidcIssuerURL != "" {
+		config.OIDCIssuerURL = oidcIssuerURL
+	}
+
+	if oidcClientID := os.Getenv(EnvOIDCClientID); oidcClientID != "" {
+		config.OIDCClientID = oidcClientID
+	}
+
+	if oidcClientSecret := os.Getenv(EnvOIDCClientSecret); oidcClientSecret != "" {
+		config.OIDCClientSecret = oidcClientSecret
+	}
+
+	if oidcInitTimeoutSecs := os.Getenv(EnvOIDCInitTimeoutSecs); oidcInitTimeoutSecs != "" {
+		timeoutSecs, err := strconv.Atoi(oidcInitTimeoutSecs)
+		if err != nil {
+			return fmt.Errorf("invalid %s: %w", EnvOIDCInitTimeoutSecs, err)
+		}
+		if timeoutSecs <= 0 {
+			return fmt.Errorf("%s must be a positive integer, got %d", EnvOIDCInitTimeoutSecs, timeoutSecs)
+		}
+		config.OIDCInitTimeoutSecs = timeoutSecs
+	}
+
+	// Ensure OIDCInitTimeoutSecs is always positive, even if using the default
+	if config.OIDCInitTimeoutSecs <= 0 {
+		config.OIDCInitTimeoutSecs = 30 // Fallback to a reasonable default
+	}
+
+	return nil
 }

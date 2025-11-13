@@ -2,6 +2,7 @@ package authmiddleware
 
 import (
 	"reflect"
+	"sort"
 	"testing"
 )
 
@@ -174,6 +175,96 @@ func TestSplitAndTrim(t *testing.T) {
 			result := splitAndTrim(tc.input, tc.sep)
 			if !reflect.DeepEqual(result, tc.expected) {
 				t.Errorf("splitAndTrim(%q, %q) = %v, want %v", tc.input, tc.sep, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestEnsureSubsetOf(t *testing.T) {
+	testCases := []struct {
+		name         string
+		smallArray   []string
+		largeArray   []string
+		isSubset     bool
+		missingElems []string
+	}{
+		{
+			name:         "Both arrays empty",
+			smallArray:   []string{},
+			largeArray:   []string{},
+			isSubset:     true,
+			missingElems: []string{},
+		},
+		{
+			name:         "Small array empty",
+			smallArray:   []string{},
+			largeArray:   []string{"a", "b", "c"},
+			isSubset:     true,
+			missingElems: []string{},
+		},
+		{
+			name:         "Large array empty",
+			smallArray:   []string{"a", "b"},
+			largeArray:   []string{},
+			isSubset:     false,
+			missingElems: []string{"a", "b"},
+		},
+		{
+			name:         "Small array is subset",
+			smallArray:   []string{"a", "b"},
+			largeArray:   []string{"a", "b", "c", "d"},
+			isSubset:     true,
+			missingElems: []string{},
+		},
+		{
+			name:         "Arrays are equal",
+			smallArray:   []string{"a", "b", "c"},
+			largeArray:   []string{"a", "b", "c"},
+			isSubset:     true,
+			missingElems: []string{},
+		},
+		{
+			name:         "Small array not subset",
+			smallArray:   []string{"a", "b", "x"},
+			largeArray:   []string{"a", "b", "c"},
+			isSubset:     false,
+			missingElems: []string{"x"},
+		},
+		{
+			name:         "Multiple missing elements",
+			smallArray:   []string{"a", "x", "y", "c"},
+			largeArray:   []string{"a", "b", "c", "d"},
+			isSubset:     false,
+			missingElems: []string{"x", "y"},
+		},
+		{
+			name:         "Duplicate elements in small array",
+			smallArray:   []string{"a", "b", "b", "a"},
+			largeArray:   []string{"a", "b", "c"},
+			isSubset:     true,
+			missingElems: []string{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			isSubset, missingElems := EnsureSubsetOf(tc.smallArray, tc.largeArray)
+
+			if isSubset != tc.isSubset {
+				t.Errorf("Expected isSubset=%v, got %v", tc.isSubset, isSubset)
+			}
+
+			// Sort the slices to ensure deterministic comparison
+			sortedActual := make([]string, len(missingElems))
+			copy(sortedActual, missingElems)
+			sort.Strings(sortedActual)
+
+			sortedExpected := make([]string, len(tc.missingElems))
+			copy(sortedExpected, tc.missingElems)
+			sort.Strings(sortedExpected)
+
+			if !reflect.DeepEqual(sortedActual, sortedExpected) {
+				t.Errorf("Expected missing elements %v, got %v", tc.missingElems, missingElems)
 			}
 		})
 	}

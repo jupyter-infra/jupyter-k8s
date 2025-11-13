@@ -29,6 +29,9 @@ data:
       {{- else }}
       public: true
       {{- end }}
+    - id: {{ .Values.dex.authmiddlewareClientId }}
+      name: 'Auth Middleware'
+      secret: {{ .Values.dex.authmiddlewareClientSecret }}
     connectors:
     - type: github
       id: github
