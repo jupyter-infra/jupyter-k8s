@@ -50,7 +50,7 @@ webhooks:
         name: jupyter-k8s-webhook-service
         namespace: {{ .Release.Namespace }}
         path: /validate-pods-exec-workspace
-    failurePolicy: Fail
+    failurePolicy: Ignore
     sideEffects: None
     admissionReviewVersions:
       - v1
