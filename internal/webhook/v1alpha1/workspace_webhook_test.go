@@ -880,6 +880,109 @@ var _ = Describe("Workspace Webhook", func() {
 		})
 	})
 
+	Context("setWorkspaceDefaults", func() {
+		It("should set Public AccessType when OwnershipType is Public and AccessType is not populated", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					OwnershipType: "Public",
+				},
+			}
+			setWorkspaceDefaults(workspace)
+			Expect(workspace.Spec.OwnershipType).To(Equal("Public"))
+			Expect(workspace.Spec.AccessType).To(Equal("Public"))
+		})
+
+		It("should keep OwnerOnly AccessType when OwnershipType is Public and AccessType is OwnerOnly", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					OwnershipType: "Public",
+					AccessType:    "OwnerOnly",
+				},
+			}
+			setWorkspaceDefaults(workspace)
+			Expect(workspace.Spec.OwnershipType).To(Equal("Public"))
+			Expect(workspace.Spec.AccessType).To(Equal("OwnerOnly"))
+		})
+
+		It("should keep Public AccessType when OwnershipType is Public and AccessType is Public", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					OwnershipType: "Public",
+					AccessType:    "Public",
+				},
+			}
+			setWorkspaceDefaults(workspace)
+			Expect(workspace.Spec.OwnershipType).To(Equal("Public"))
+			Expect(workspace.Spec.AccessType).To(Equal("Public"))
+		})
+
+		It("should set OwnerOnly AccessType when OwnershipType is OwnerOnly and AccessType is not populated", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					OwnershipType: "OwnerOnly",
+				},
+			}
+			setWorkspaceDefaults(workspace)
+			Expect(workspace.Spec.OwnershipType).To(Equal("OwnerOnly"))
+			Expect(workspace.Spec.AccessType).To(Equal("OwnerOnly"))
+		})
+
+		It("should keep OwnerOnly AccessType when OwnershipType is OwnerOnly and AccessType is OwnerOnly", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					OwnershipType: "OwnerOnly",
+					AccessType:    "OwnerOnly",
+				},
+			}
+			setWorkspaceDefaults(workspace)
+			Expect(workspace.Spec.OwnershipType).To(Equal("OwnerOnly"))
+			Expect(workspace.Spec.AccessType).To(Equal("OwnerOnly"))
+		})
+
+		It("should keep Public AccessType when OwnershipType is OwnerOnly and AccessType is Public", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					OwnershipType: "OwnerOnly",
+					AccessType:    "Public",
+				},
+			}
+			setWorkspaceDefaults(workspace)
+			Expect(workspace.Spec.OwnershipType).To(Equal("OwnerOnly"))
+			Expect(workspace.Spec.AccessType).To(Equal("Public"))
+		})
+
+		It("should set Public OwnershipType and AccessType when both are not populated", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				Spec: workspacev1alpha1.WorkspaceSpec{},
+			}
+			setWorkspaceDefaults(workspace)
+			Expect(workspace.Spec.OwnershipType).To(Equal("Public"))
+			Expect(workspace.Spec.AccessType).To(Equal("Public"))
+		})
+
+		It("should set OwnerOnly AccessType when OwnershipType is not populated and AccessType is OwnerOnly", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					AccessType: "OwnerOnly",
+				},
+			}
+			setWorkspaceDefaults(workspace)
+			Expect(workspace.Spec.OwnershipType).To(Equal("Public"))
+			Expect(workspace.Spec.AccessType).To(Equal("OwnerOnly"))
+		})
+
+		It("should set Public AccessType when OwnershipType is not populated and AccessType is Public", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					AccessType: "Public",
+				},
+			}
+			setWorkspaceDefaults(workspace)
+			Expect(workspace.Spec.OwnershipType).To(Equal("Public"))
+			Expect(workspace.Spec.AccessType).To(Equal("Public"))
+		})
+	})
+
 	Context("Metadata-Only Updates (GAP-7)", func() {
 		It("should skip validation for metadata-only updates (labels)", func() {
 			userCtx := createUserContext(ctx, "UPDATE", "test-user")

@@ -153,6 +153,19 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 	return fmt.Errorf("access denied: only workspace owner can modify OwnerOnly workspaces")
 }
 
+// setWorkspaceDefaults sets default values for OwnershipType and AccessType
+// If OwnershipType is not set, we default to Public.
+// If AccessType is not set, we default to OwnershipType value
+func setWorkspaceDefaults(workspace *workspacev1alpha1.Workspace) {
+	if workspace.Spec.OwnershipType == "" {
+		workspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
+	}
+
+	if workspace.Spec.AccessType == "" {
+		workspace.Spec.AccessType = workspace.Spec.OwnershipType
+	}
+}
+
 // SetupWorkspaceWebhookWithManager registers the webhook for Workspace in the manager.
 // RBAC Note: This webhook requires WorkspaceTemplate access (get, update, finalizers/update)
 // which is provided by the workspacetemplate controller RBAC markers.
@@ -244,6 +257,9 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 		workspacelog.Error(err, "Failed to apply service account defaults", "workspace", workspace.GetName())
 		return fmt.Errorf("failed to apply service account defaults: %w", err)
 	}
+
+	// Set workspace defaults for OwnershipType and AccessType
+	setWorkspaceDefaults(workspace)
 
 	// Ensure template has finalizer to prevent deletion while in use
 	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
