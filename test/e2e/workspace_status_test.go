@@ -174,6 +174,17 @@ var _ = Describe("Workspace Status Transitions", Ordered, func() {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Undeploying controller manager...\n")
 		cmd = exec.Command("make", "undeploy")
 		_, _ = utils.Run(cmd)
+
+		By("waiting for namespace to be fully terminated")
+		Eventually(func() error {
+			cmd := exec.Command("kubectl", "get", "namespace", "jupyter-k8s-system")
+			_, err := utils.Run(cmd)
+			if err != nil {
+				return nil // namespace doesn't exist, cleanup complete
+			}
+			return fmt.Errorf("namespace still exists")
+		}, 120*time.Second, 2*time.Second).Should(Succeed())
+		_, _ = utils.Run(cmd)
 	})
 
 	Context("Running State", func() {

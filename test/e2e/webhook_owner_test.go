@@ -17,8 +17,13 @@ import (
 
 var _ = Describe("Webhook Owner", Ordered, func() {
 	BeforeAll(func() {
+		By("ensuring clean state for controller deployment")
+		// Clean up any existing workspaces first
+		cmd := exec.Command("kubectl", "delete", "workspace", "--all", "--ignore-not-found", "--wait=false")
+		_, _ = utils.Run(cmd)
+
 		By("installing CRDs")
-		cmd := exec.Command("make", "install")
+		cmd = exec.Command("make", "install")
 		_, err := utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred())
 
