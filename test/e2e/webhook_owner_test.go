@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -16,93 +15,6 @@ import (
 )
 
 var _ = Describe("Webhook Owner", Ordered, func() {
-	BeforeAll(func() {
-		By("installing CRDs")
-		cmd := exec.Command("make", "install")
-		_, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
-
-		By("deploying the controller-manager with webhook enabled")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
-
-		// Set environment variables for e2e testing
-		By("setting controller environment variables")
-		envVars := []string{
-			"CONTROLLER_POD_SERVICE_ACCOUNT=jupyter-k8s-controller-manager",
-			"CONTROLLER_POD_NAMESPACE=jupyter-k8s-system",
-		}
-		for _, envVar := range envVars {
-			cmd = exec.Command("kubectl", "set", "env", "deployment/jupyter-k8s-controller-manager", envVar, "-n", namespace)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to set environment variable: %s", envVar))
-		}
-
-		By("waiting for controller-manager to be ready")
-		Eventually(func() error {
-			cmd := exec.Command("kubectl", "get", "pods", "-l", "control-plane=controller-manager",
-				"-o", "go-template={{ range .items }}{{ if not .metadata.deletionTimestamp }}{{ .metadata.name }}{{ \"\\n\" }}{{ end }}{{ end }}",
-				"-n", "jupyter-k8s-system")
-			output, err := utils.Run(cmd)
-			if err != nil {
-				return err
-			}
-			podName := strings.TrimSpace(string(output))
-			if podName == "" {
-				return fmt.Errorf("no controller pod found")
-			}
-
-			cmd = exec.Command("kubectl", "get", "pods", podName,
-				"-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}",
-				"-n", "jupyter-k8s-system")
-			output, err = utils.Run(cmd)
-			if err != nil {
-				return err
-			}
-			if strings.TrimSpace(string(output)) != "True" {
-				return fmt.Errorf("pod not ready")
-			}
-			return nil
-		}, 2*time.Minute, 5*time.Second).Should(Succeed())
-
-		By("verifying webhook service exists")
-		cmd = exec.Command("kubectl", "get", "service", "jupyter-k8s-controller-manager",
-			"-n", "jupyter-k8s-system")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	AfterAll(func() {
-		By("cleaning up test workspaces")
-		// Use --wait=true for synchronous deletion to ensure finalizers are processed
-		cmd := exec.Command("kubectl", "delete", "workspace", "--all", "--ignore-not-found", "--wait=true", "--timeout=180s")
-		_, _ = utils.Run(cmd)
-
-		By("undeploying the controller-manager")
-		// Undeploy controller BEFORE uninstalling CRDs to allow controller to process finalizers
-		// This follows K8s best practice: delete resources in reverse order of creation
-		cmd = exec.Command("make", "undeploy")
-		_, _ = utils.Run(cmd)
-
-		By("waiting for controller pod to be fully terminated")
-		// Ensure controller is completely stopped before deleting CRDs
-		Eventually(func(g Gomega) {
-			cmd := exec.Command("kubectl", "get", "pods",
-				"-n", "jupyter-k8s-system",
-				"-l", "control-plane=controller-manager",
-				"-o", "name")
-			output, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(strings.TrimSpace(string(output))).To(BeEmpty())
-		}).WithTimeout(60 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
-
-		By("uninstalling CRDs")
-		// Delete CRDs last to avoid race conditions with controller finalizer processing
-		cmd = exec.Command("make", "uninstall")
-		_, _ = utils.Run(cmd)
-	})
-
 	Context("Ownership Annotation", func() {
 		It("should add created-by annotation to new workspace", func() {
 			By("creating a workspace")

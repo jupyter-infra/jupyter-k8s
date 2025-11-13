@@ -90,7 +90,8 @@ func kubectlWait(resource, name, namespace, condition, timeout string) error {
 	}
 	args = append(args, "--for="+condition, "--timeout="+timeout)
 	cmd := exec.Command("kubectl", args...)
-	return cmd.Run()
+	_, err := utils.Run(cmd)
+	return err
 }
 
 // kubectlPatch patches a Kubernetes resource
