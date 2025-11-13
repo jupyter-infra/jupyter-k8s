@@ -129,24 +129,6 @@ func (v *OIDCVerifier) Start(ctx context.Context) error {
 	return nil
 }
 
-// ExtractBearerToken extracts a bearer token from an Authorization header
-func ExtractBearerToken(authHeader string) (string, error) {
-	if authHeader == "" {
-		return "", errors.New("authorization header is empty")
-	}
-
-	if !strings.HasPrefix(authHeader, OIDCAuthHeaderPrefix) {
-		return "", errors.New("authorization header is not a bearer token")
-	}
-
-	token := strings.TrimPrefix(authHeader, OIDCAuthHeaderPrefix)
-	if token == "" {
-		return "", errors.New("bearer token is empty")
-	}
-
-	return token, nil
-}
-
 // VerifyToken verifies an OIDC token and returns Claims, isFault, error.
 // It may call the provider to refresh the public keySet if not cached
 func (v *OIDCVerifier) VerifyToken(ctx context.Context, tokenString string, logger *slog.Logger) (*OIDCClaims, bool, error) {

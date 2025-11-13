@@ -17,7 +17,7 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	// Get headers from request
 	fullPath := r.Header.Get(HeaderForwardedURI)
 	host := r.Header.Get(HeaderForwardedHost)
-	authHeader := r.Header.Get("Authorization")
+	authHeader := r.Header.Get(HeaderAuthorization)
 
 	// Get headers for verification with OIDC claims
 	headerUID := r.Header.Get(HeaderAuthRequestUser)
