@@ -50,6 +50,8 @@ const (
 	ViolationTypeImageNotAllowed                = "ImageNotAllowed"
 	ViolationTypeResourceExceeded               = "ResourceExceeded"
 	ViolationTypeStorageExceeded                = "StorageExceeded"
+	ViolationTypeSecondaryStorageNotAllowed     = "SecondaryStorageNotAllowed"
+	ViolationTypeVolumeOwnedByAnotherWorkspace  = "VolumeOwnedByAnotherWorkspace"
 	ViolationTypeInvalidTemplate                = "InvalidTemplate"
 	ViolationTypeIdleShutdownOverrideNotAllowed = "IdleShutdownOverrideNotAllowed"
 	ViolationTypeIdleShutdownTimeoutOutOfBounds = "IdleShutdownTimeoutOutOfBounds"
