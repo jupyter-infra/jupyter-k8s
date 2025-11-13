@@ -14,15 +14,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// GetSSMDocumentName returns the SSM document name from environment
-func GetSSMDocumentName() (string, error) {
-	name := os.Getenv(AWSSSMDocumentNameEnv)
-	if name == "" {
-		return "", fmt.Errorf("%s environment variable is required", AWSSSMDocumentNameEnv)
-	}
-	return name, nil
-}
-
 // SSMClientInterface defines the interface for SSM operations we need
 type SSMClientInterface interface {
 	CreateActivation(ctx context.Context, params *ssm.CreateActivationInput, optFns ...func(*ssm.Options)) (*ssm.CreateActivationOutput, error)
@@ -31,6 +22,7 @@ type SSMClientInterface interface {
 	DescribeInstanceInformation(ctx context.Context, params *ssm.DescribeInstanceInformationInput, optFns ...func(*ssm.Options)) (*ssm.DescribeInstanceInformationOutput, error)
 	DeregisterManagedInstance(ctx context.Context, params *ssm.DeregisterManagedInstanceInput, optFns ...func(*ssm.Options)) (*ssm.DeregisterManagedInstanceOutput, error)
 	StartSession(ctx context.Context, params *ssm.StartSessionInput, optFns ...func(*ssm.Options)) (*ssm.StartSessionOutput, error)
+	DescribeSessions(ctx context.Context, params *ssm.DescribeSessionsInput, optFns ...func(*ssm.Options)) (*ssm.DescribeSessionsOutput, error)
 	CreateDocument(ctx context.Context, params *ssm.CreateDocumentInput, optFns ...func(*ssm.Options)) (*ssm.CreateDocumentOutput, error)
 }
 
@@ -113,10 +105,18 @@ func (c *SSMClient) FindInstanceByPodUID(ctx context.Context, podUID string) (st
 }
 
 // StartSession starts an SSM session for the given instance with specified document
-func (c *SSMClient) StartSession(ctx context.Context, instanceID, documentName string) (*SessionInfo, error) {
+func (c *SSMClient) StartSession(ctx context.Context, instanceID, documentName, port string) (*SessionInfo, error) {
+	// Check active session count before starting new session
+	if err := c.checkNumActiveSessions(ctx, instanceID); err != nil {
+		return nil, err
+	}
+
 	input := &ssm.StartSessionInput{
 		Target:       &instanceID,
 		DocumentName: aws.String(documentName),
+		Parameters: map[string][]string{
+			"portNumber": {port},
+		},
 	}
 
 	result, err := c.client.StartSession(ctx, input)
@@ -147,6 +147,48 @@ func (c *SSMClient) StartSession(ctx context.Context, instanceID, documentName s
 	sessionInfo.WebSocketURL = fmt.Sprintf("wss://ssmmessages.%s.amazonaws.com/v1/data-channel/%s", c.region, *result.SessionId)
 
 	return sessionInfo, nil
+}
+
+// checkNumActiveSessions checks if the instance has reached the maximum concurrent sessions limit
+func (c *SSMClient) checkNumActiveSessions(ctx context.Context, instanceID string) error {
+	logger := log.FromContext(ctx).WithName("ssm-client")
+
+	// Describe active sessions for this instance
+	// Set MaxResults to ensure we get enough sessions to check the limit
+	// We only need to know if there are >= MaxConcurrentSSMSessionsPerInstance sessions
+	maxResults := int32(MaxConcurrentSSMSessionsPerInstance)
+	input := &ssm.DescribeSessionsInput{
+		State:      types.SessionStateActive,
+		MaxResults: &maxResults,
+		Filters: []types.SessionFilter{
+			{
+				Key:   types.SessionFilterKeyTargetId,
+				Value: aws.String(instanceID),
+			},
+		},
+	}
+
+	result, err := c.client.DescribeSessions(ctx, input)
+	if err != nil {
+		logger.Error(err, "Failed to describe sessions", "instanceId", instanceID)
+		return fmt.Errorf("failed to describe sessions for instance %s: %w", instanceID, err)
+	}
+
+	numActiveSessions := len(result.Sessions)
+	logger.Info("Retrieved active sessions on SSM Managed Instance",
+		"numActiveSessions", numActiveSessions,
+		"instanceId", instanceID)
+
+	if numActiveSessions >= MaxConcurrentSSMSessionsPerInstance {
+		logger.Error(nil, "Too many sessions running on instance",
+			"instanceId", instanceID,
+			"activeSessions", numActiveSessions,
+			"maxSessions", MaxConcurrentSSMSessionsPerInstance)
+		return fmt.Errorf("instance %s exceeds active sessions limit (%d/%d)",
+			instanceID, numActiveSessions, MaxConcurrentSSMSessionsPerInstance)
+	}
+
+	return nil
 }
 
 // CreateActivation creates an SSM activation for managed instance registration
