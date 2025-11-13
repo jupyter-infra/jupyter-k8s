@@ -155,11 +155,11 @@ var _ = Describe("Workspace Resources", Ordered, func() {
 			createWorkspace(basicWorkspace)
 			waitForDeployment(basicWorkspace)
 			verifyFinalizerAdded(basicWorkspace)
-			
+
 			deleteWorkspaceAsync(basicWorkspace)
 			verifyWorkspaceDeletionTimestamp(basicWorkspace)
 			verifyResourcesStillExist(basicWorkspace)
-			
+
 			// Wait for workspace to be completely deleted (finalizer removed by controller)
 			verifyWorkspaceDeleted(basicWorkspace)
 		})
@@ -169,7 +169,7 @@ var _ = Describe("Workspace Resources", Ordered, func() {
 			verifyPVCCreated(basicWorkspace, "2Gi")
 			waitForDeployment(basicWorkspace)
 			verifyServiceCreated(basicWorkspace)
-			
+
 			deleteWorkspace(basicWorkspace)
 			verifyAllResourcesDeleted(basicWorkspace)
 		})
@@ -178,13 +178,38 @@ var _ = Describe("Workspace Resources", Ordered, func() {
 			createWorkspace(basicWorkspace)
 			addCustomFinalizer(basicWorkspace, "test.finalizer/custom")
 			verifyMultipleFinalizers(basicWorkspace)
-			
+
 			deleteWorkspaceAsync(basicWorkspace)
 			verifyWorkspaceDeletionTimestamp(basicWorkspace)
-			
+
 			removeCustomFinalizer(basicWorkspace, "test.finalizer/custom")
 			waitForFinalizerRemoval(basicWorkspace)
 			verifyWorkspaceDeleted(basicWorkspace)
+		})
+	})
+
+	Context("External Volumes", func() {
+		const (
+			externalVolume1  = "external-pvc-1"
+			externalVolume2  = "external-pvc-2"
+			volumesWorkspace = "workspace-with-volumes"
+		)
+
+		BeforeAll(func() {
+			createExternalPVC(externalVolume1)
+			createExternalPVC(externalVolume2)
+		})
+
+		AfterAll(func() {
+			cleanupWorkspaces(volumesWorkspace)
+			cleanupExternalPVCs(externalVolume1, externalVolume2)
+		})
+
+		It("should mount external PVCs specified in volumes field", func() {
+			createWorkspaceWithVolumes(volumesWorkspace)
+			waitForDeployment(volumesWorkspace)
+			verifyExternalVolumeMounts(volumesWorkspace, externalVolume1, externalVolume2)
+			verifyPodCanAccessExternalVolumes(volumesWorkspace)
 		})
 	})
 
@@ -233,7 +258,7 @@ func setupController() {
 		podNamesList := strings.Fields(strings.TrimSpace(podNames))
 		g.Expect(podNamesList).To(HaveLen(1), "expected 1 controller pod running")
 
-		cmd = exec.Command("kubectl", "get", "pods", podNamesList[0], 
+		cmd = exec.Command("kubectl", "get", "pods", podNamesList[0],
 			"-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}", "-n", "jupyter-k8s-system")
 		readyStatus, err := utils.Run(cmd)
 		g.Expect(err).NotTo(HaveOccurred())
@@ -342,7 +367,7 @@ func verifyVolumeMount(workspaceName, expectedPath string) {
 
 func verifyStoragePersistence(workspaceName string) {
 	By("testing storage persistence across pod restarts")
-	
+
 	pvcName := controller.GeneratePVCName(workspaceName)
 	Eventually(func() error {
 		cmd := exec.Command("kubectl", "get", "pvc", pvcName, "-o", "jsonpath={.status.phase}")
@@ -518,7 +543,7 @@ func verifyServiceCreated(workspaceName string) {
 
 func verifyResourceOwnership(workspaceName string) {
 	By("verifying all resources have correct owner references")
-	
+
 	// PVC ownership
 	pvcName := controller.GeneratePVCName(workspaceName)
 	err := utils.VerifyPVCOwnerReference(pvcName, "default", workspaceName)
@@ -586,7 +611,7 @@ func verifyWorkspaceDeletionTimestamp(workspaceName string) {
 
 func verifyResourcesStillExist(workspaceName string) {
 	By("verifying resources behavior during deletion")
-	
+
 	// Check if workspace still exists first
 	cmd := exec.Command("kubectl", "get", "workspace", workspaceName)
 	_, err := utils.Run(cmd)
@@ -594,20 +619,20 @@ func verifyResourcesStillExist(workspaceName string) {
 		By("workspace already deleted - skipping resource existence check")
 		return
 	}
-	
+
 	// If workspace still exists, resources should still exist
 	cmd = exec.Command("kubectl", "get", "pvc", controller.GeneratePVCName(workspaceName))
 	_, err = utils.Run(cmd)
 	if err == nil {
 		By("PVC still exists as expected")
 	}
-	
+
 	cmd = exec.Command("kubectl", "get", "deployment", controller.GenerateDeploymentName(workspaceName))
 	_, err = utils.Run(cmd)
 	if err == nil {
 		By("Deployment still exists as expected")
 	}
-	
+
 	cmd = exec.Command("kubectl", "get", "service", controller.GenerateServiceName(workspaceName))
 	_, err = utils.Run(cmd)
 	if err == nil {
@@ -652,7 +677,7 @@ func verifyWorkspaceDeleted(workspaceName string) {
 
 func verifyAllResourcesDeleted(workspaceName string) {
 	By("verifying all workspace resources are deleted")
-	
+
 	// Verify PVC is deleted
 	Eventually(func() error {
 		cmd := exec.Command("kubectl", "get", "pvc", controller.GeneratePVCName(workspaceName))
@@ -662,7 +687,7 @@ func verifyAllResourcesDeleted(workspaceName string) {
 		}
 		return nil
 	}, 60*time.Second, 5*time.Second).Should(Succeed())
-	
+
 	// Verify Deployment is deleted
 	Eventually(func() error {
 		cmd := exec.Command("kubectl", "get", "deployment", controller.GenerateDeploymentName(workspaceName))
@@ -672,7 +697,7 @@ func verifyAllResourcesDeleted(workspaceName string) {
 		}
 		return nil
 	}, 60*time.Second, 5*time.Second).Should(Succeed())
-	
+
 	// Verify Service is deleted
 	Eventually(func() error {
 		cmd := exec.Command("kubectl", "get", "service", controller.GenerateServiceName(workspaceName))
@@ -704,13 +729,13 @@ func verifyMultipleFinalizers(workspaceName string) {
 
 func removeCustomFinalizer(workspaceName, finalizer string) {
 	By(fmt.Sprintf("removing custom finalizer %s from workspace %s", finalizer, workspaceName))
-	
+
 	// Get current finalizers
 	cmd := exec.Command("kubectl", "get", "workspace", workspaceName,
 		"-o", "jsonpath={.metadata.finalizers[*]}")
 	output, err := utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())
-	
+
 	// Remove the custom finalizer, keep others
 	finalizers := strings.Fields(output)
 	var remainingFinalizers []string
@@ -719,16 +744,123 @@ func removeCustomFinalizer(workspaceName, finalizer string) {
 			remainingFinalizers = append(remainingFinalizers, f)
 		}
 	}
-	
+
 	finalizersJson := `[]`
 	if len(remainingFinalizers) > 0 {
 		finalizersJson = fmt.Sprintf(`["%s"]`, strings.Join(remainingFinalizers, `","`))
 	}
-	
+
 	cmd = exec.Command("kubectl", "patch", "workspace", workspaceName,
 		"--type=merge", "-p", fmt.Sprintf(`{"metadata":{"finalizers":%s}}`, finalizersJson))
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())
+}
+
+func createExternalPVC(pvcName string) {
+	By(fmt.Sprintf("creating external PVC %s", pvcName))
+	cmd := exec.Command("kubectl", "apply", "-f", fmt.Sprintf("test/e2e/static/volumes/%s.yaml", pvcName))
+	_, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Just verify PVC is created - it won't bind until a pod uses it due to WaitForFirstConsumer
+	Eventually(func() error {
+		cmd := exec.Command("kubectl", "get", "pvc", pvcName)
+		_, err := utils.Run(cmd)
+		return err
+	}, 30*time.Second, 2*time.Second).Should(Succeed())
+}
+
+func createWorkspaceWithVolumes(workspaceName string) {
+	By(fmt.Sprintf("creating workspace %s with external volumes", workspaceName))
+	cmd := exec.Command("kubectl", "apply", "-f", fmt.Sprintf("test/e2e/static/volumes/%s.yaml", workspaceName))
+	_, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+}
+
+func verifyExternalVolumeMounts(workspaceName, pvc1, pvc2 string) {
+	deploymentName := controller.GenerateDeploymentName(workspaceName)
+
+	By("verifying external volume mounts in deployment")
+
+	// Check data-volume mount
+	cmd := exec.Command("kubectl", "get", "deployment", deploymentName,
+		"-o", "jsonpath={.spec.template.spec.containers[0].volumeMounts[?(@.name=='data-volume')].mountPath}")
+	output, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(output).To(Equal("/data"))
+
+	// Check shared-volume mount
+	cmd = exec.Command("kubectl", "get", "deployment", deploymentName,
+		"-o", "jsonpath={.spec.template.spec.containers[0].volumeMounts[?(@.name=='shared-volume')].mountPath}")
+	output, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(output).To(Equal("/shared"))
+
+	By("verifying external volume definitions in deployment")
+
+	// Check data-volume PVC reference
+	cmd = exec.Command("kubectl", "get", "deployment", deploymentName,
+		"-o", "jsonpath={.spec.template.spec.volumes[?(@.name=='data-volume')].persistentVolumeClaim.claimName}")
+	output, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(output).To(Equal(pvc1))
+
+	// Check shared-volume PVC reference
+	cmd = exec.Command("kubectl", "get", "deployment", deploymentName,
+		"-o", "jsonpath={.spec.template.spec.volumes[?(@.name=='shared-volume')].persistentVolumeClaim.claimName}")
+	output, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(output).To(Equal(pvc2))
+}
+
+func verifyPodCanAccessExternalVolumes(workspaceName string) {
+	By("verifying pod can access external volumes")
+
+	podSelector := fmt.Sprintf("app=jupyter,workspace.jupyter.org/workspace-name=%s", workspaceName)
+
+	Eventually(func() error {
+		cmd := exec.Command("kubectl", "get", "pvc", "external-pvc-2", "-o", "jsonpath={.status.phase}")
+		output, err := utils.Run(cmd)
+		if err != nil {
+			return err
+		}
+		if output != "Bound" {
+			return fmt.Errorf("external-pvc-2 not bound yet, status: %s", output)
+		}
+		return nil
+	}, 120*time.Second, 5*time.Second).Should(Succeed())
+
+	podName, err := utils.WaitForPodRunning(podSelector, "default", 300*time.Second)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Test write access to /data volume
+	cmd := exec.Command("kubectl", "exec", podName, "--", "touch", "/data/test-file-1.txt")
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Test write access to /shared volume
+	cmd = exec.Command("kubectl", "exec", podName, "--", "touch", "/shared/test-file-2.txt")
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Verify files exist
+	cmd = exec.Command("kubectl", "exec", podName, "--", "ls", "/data/test-file-1.txt")
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+
+	cmd = exec.Command("kubectl", "exec", podName, "--", "ls", "/shared/test-file-2.txt")
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+}
+
+func cleanupExternalPVCs(pvcNames ...string) {
+	if len(pvcNames) == 0 {
+		return
+	}
+	By("cleaning up external PVCs")
+	cmd := exec.Command("kubectl", "delete", "pvc", "--ignore-not-found", "--wait=true")
+	cmd.Args = append(cmd.Args, pvcNames...)
+	_, _ = utils.Run(cmd)
 }
 
 func cleanupWorkspaces(names ...string) {

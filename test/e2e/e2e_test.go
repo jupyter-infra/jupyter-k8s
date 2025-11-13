@@ -105,6 +105,14 @@ var _ = Describe("Manager", Ordered, func() {
 		// Delete CRDs last to avoid race conditions with controller finalizer processing
 		cmd = exec.Command("make", "uninstall")
 		_, _ = utils.Run(cmd)
+
+		By("waiting for namespace to be fully terminated")
+		Eventually(func(g Gomega) {
+			cmd := exec.Command("kubectl", "get", "namespace", namespace, "--ignore-not-found")
+			output, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(strings.TrimSpace(string(output))).To(BeEmpty(), "namespace should be fully deleted")
+		}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 	})
 
 	// After each test, check for failures and collect logs, events,
