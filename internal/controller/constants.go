@@ -49,7 +49,6 @@ const (
 	KubernetesAppManagedByLabel = "app.kubernetes.io/managed-by"
 
 	// Kubernetes recommended label values
-	KubernetesAppNameValue      = "jupyter"
 	KubernetesAppComponentValue = "workspace"
 	KubernetesAppPartOfValue    = "jupyter-k8s"
 	KubernetesAppManagedByValue = "jupyter-k8s-operator"
@@ -147,7 +146,7 @@ func GenerateLabels(workspaceName string) map[string]string {
 // See: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
 func GenerateKubernetesRecommendedLabels(workspaceName string) map[string]string {
 	return map[string]string{
-		KubernetesAppNameLabel:      KubernetesAppNameValue,
+		KubernetesAppNameLabel:      AppLabelValue,
 		KubernetesAppInstanceLabel:  workspaceName,
 		KubernetesAppVersionLabel:   KubernetesAppVersionValue,
 		KubernetesAppComponentLabel: KubernetesAppComponentValue,
