@@ -245,6 +245,9 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 		return fmt.Errorf("failed to apply service account defaults: %w", err)
 	}
 
+	// Set workspace defaults for OwnershipType and AccessType
+	setWorkspaceSharingDefaults(workspace)
+
 	// Ensure template has finalizer to prevent deletion while in use
 	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
 		templateNamespace := workspaceutil.GetTemplateRefNamespace(workspace)
