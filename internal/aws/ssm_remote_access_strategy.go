@@ -262,7 +262,7 @@ func (s *SSMRemoteAccessStrategy) createSSMActivation(ctx context.Context, pod *
 }
 
 // GenerateVSCodeConnectionURL generates a VSCode connection URL using SSM session
-func (s *SSMRemoteAccessStrategy) GenerateVSCodeConnectionURL(ctx context.Context, workspaceName string, namespace string, podUID string, eksClusterARN string) (string, error) {
+func (s *SSMRemoteAccessStrategy) GenerateVSCodeConnectionURL(ctx context.Context, workspaceName string, namespace string, podUID string, eksClusterARN string, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (string, error) {
 	logger := logf.FromContext(ctx).WithName("ssm-vscode-connection")
 
 	// Find managed instance by pod UID
@@ -273,10 +273,14 @@ func (s *SSMRemoteAccessStrategy) GenerateVSCodeConnectionURL(ctx context.Contex
 
 	logger.Info("Found managed instance for pod", "podUID", podUID, "instanceID", instanceID)
 
-	// Get SSM document name from environment variable
-	documentName, err := GetSSMDocumentName()
-	if err != nil {
-		return "", fmt.Errorf("failed to get SSM document name: %w", err)
+	// Get SSM document name from access strategy controller configuration
+	var documentName string
+	if accessStrategy.Spec.ControllerConfig != nil {
+		documentName = accessStrategy.Spec.ControllerConfig["SSM_DOCUMENT_NAME"]
+	}
+
+	if documentName == "" {
+		return "", fmt.Errorf("SSM_DOCUMENT_NAME not found in access strategy")
 	}
 
 	// Start SSM session
