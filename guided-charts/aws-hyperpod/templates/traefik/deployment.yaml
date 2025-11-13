@@ -2,11 +2,13 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: traefik
+  name: workspace-traefik-router
   namespace: {{ .Values.namespace }}
   labels:
+    {{- include "jupyter-k8s-aws-hyperpod.labels" . | nindent 4 }}
     app: traefik
     component: router
+    workspace.jupyter.org/component: router
 spec:
   replicas: {{ .Values.clusterWebUI.traefik.replicas }}
   selector:
@@ -26,8 +28,10 @@ spec:
         prometheus.io/path: "/metrics"
         prometheus.io/port: "9100"
       labels:
+        {{- include "jupyter-k8s-aws-hyperpod.labels" . | nindent 8 }}
         app: traefik
         component: router
+        workspace.jupyter.org/component: router
     spec:
       serviceAccountName: jupyter-k8s-traefik
       terminationGracePeriodSeconds: 60

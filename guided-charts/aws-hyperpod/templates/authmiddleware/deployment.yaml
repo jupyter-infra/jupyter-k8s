@@ -2,11 +2,13 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: authmiddleware
+  name: workspace-auth-middleware
   namespace: {{ .Values.namespace }}
   labels:
+    {{- include "jupyter-k8s-aws-hyperpod.labels" . | nindent 4 }}
     app: authmiddleware
     component: auth
+    workspace.jupyter.org/component: authmiddleware
 spec:
   replicas: {{ .Values.clusterWebUI.auth.replicas }}
   selector:
@@ -22,8 +24,10 @@ spec:
   template:
     metadata:
       labels:
+        {{- include "jupyter-k8s-aws-hyperpod.labels" . | nindent 8 }}
         app: authmiddleware
         component: auth
+        workspace.jupyter.org/component: authmiddleware
     spec:
       serviceAccountName: jupyter-k8s-authmiddleware
       terminationGracePeriodSeconds: 30

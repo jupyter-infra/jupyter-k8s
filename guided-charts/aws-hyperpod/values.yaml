@@ -34,7 +34,7 @@ clusterWebUI:
 
   # Authentication middleware configuration
   auth:
-    replicas: 1
+    replicas: 2
     imagePullPolicy: Always
     repository: docker.io
     imageName: jupyter-k8s-auth
@@ -98,3 +98,12 @@ storageClass:
       type: gp3
       fsType: ext4
       encrypted: "true"
+
+# Traefik subchart configuration
+traefik:
+  service:
+    enabled: false
+  ingressClass:
+    enabled: false
+  deployment:
+    enabled: false

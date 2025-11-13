@@ -6,10 +6,6 @@ metadata:
 spec:
   displayName: HyperPod Access Strategy
   {{- if .Values.clusterWebUI.enabled }}
-  accessResourceNamespace: {{ .Release.Namespace }}
-  {{- end }}
-
-  {{- if .Values.clusterWebUI.enabled }}
   accessResourceTemplates:
     # The authorized route - tries token verification on already authenticated requests
     - kind: IngressRoute
@@ -61,7 +57,7 @@ spec:
   {{- end }}
 
   {{- if .Values.clusterWebUI.enabled }}
-  accessURLTemplate: "https://{{ .Values.clusterWebUI.domain }}/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth"
+  bearerAuthURLTemplate: "https://{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.clusterWebUI.domain }}/bearer-auth"
   {{- end }}
 
   # Deployment modifications for init container (always enabled)
@@ -128,5 +124,4 @@ spec:
       valueTemplate: "{{`{{ .Workspace.Spec.AppType }}`}}"
     - name: JUPYTER_BASE_URL
       valueTemplate: "/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/"
-  accessURLTemplate: "https://{{ .Values.clusterWebUI.domain }}/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth"
-  bearerAuthURLTemplate: "https://{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.clusterWebUI.domain }}/bearer-auth"
+

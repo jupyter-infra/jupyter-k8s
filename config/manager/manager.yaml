@@ -16,6 +16,7 @@ metadata:
     control-plane: controller-manager
     app.kubernetes.io/name: jupyter-k8s
     app.kubernetes.io/managed-by: kustomize
+    workspace.jupyter.org/component: controller
 spec:
   selector:
     matchLabels:
@@ -29,6 +30,7 @@ spec:
       labels:
         control-plane: controller-manager
         app.kubernetes.io/name: jupyter-k8s
+        workspace.jupyter.org/component: controller
     spec:
       nodeSelector: {}
       tolerations: []
