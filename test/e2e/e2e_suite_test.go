@@ -58,9 +58,8 @@ func TestE2E(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	var setupErr error
 	defer func() {
-		if setupErr != nil {
+		if CurrentSpecReport().Failed() {
 			dumpSetupDiagnostics()
 		}
 	}()
@@ -71,10 +70,8 @@ var _ = BeforeSuite(func() {
 	if _, err := cmd.CombinedOutput(); err != nil {
 		By("building the manager(Operator) image")
 		cmd = exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
-		_, setupErr = utils.Run(cmd)
-		if setupErr != nil {
-			return
-		}
+		_, err := utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to build manager image")
 	} else {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Manager image already exists, skipping build\n")
 	}
@@ -82,10 +79,8 @@ var _ = BeforeSuite(func() {
 	// TODO(user): If you want to change the e2e test vendor from Kind, ensure the image is
 	// built and available before running the tests. Also, remove the following block.
 	By("loading the manager(Operator) image on Kind")
-	setupErr = utils.LoadImageToKindClusterWithName(projectImage)
-	if setupErr != nil {
-		return
-	}
+	err := utils.LoadImageToKindClusterWithName(projectImage)
+	Expect(err).NotTo(HaveOccurred(), "Failed to load image to Kind cluster")
 
 	// The tests-e2e are intended to run on a temporary cluster that is created and destroyed for testing.
 	// To prevent errors when tests run in environments with CertManager already installed,
@@ -96,10 +91,8 @@ var _ = BeforeSuite(func() {
 		isCertManagerAlreadyInstalled = utils.IsCertManagerCRDsInstalled()
 		if !isCertManagerAlreadyInstalled {
 			_, _ = fmt.Fprintf(GinkgoWriter, "Installing CertManager...\n")
-			setupErr = utils.InstallCertManager()
-			if setupErr != nil {
-				return
-			}
+			err := utils.InstallCertManager()
+			Expect(err).NotTo(HaveOccurred(), "Failed to install CertManager")
 		} else {
 			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: CertManager is already installed. Skipping installation...\n")
 		}
@@ -108,10 +101,8 @@ var _ = BeforeSuite(func() {
 		By("waiting for cert-manager webhook to be ready")
 		cmd = exec.Command("kubectl", "wait", "deployment/cert-manager-webhook",
 			"-n", "cert-manager", "--for=condition=Available", "--timeout=3m")
-		_, setupErr = utils.Run(cmd)
-		if setupErr != nil {
-			return
-		}
+		_, err := utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "CertManager webhook failed to become ready")
 	}
 
 	By("creating shared test namespace")
@@ -120,42 +111,32 @@ var _ = BeforeSuite(func() {
 	_, _ = utils.Run(cmd)
 	// Create namespace for all test suites
 	cmd = exec.Command("kubectl", "create", "ns", controllerNamespace)
-	_, setupErr = utils.Run(cmd)
-	if setupErr != nil {
-		return
-	}
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to create shared test namespace")
 
 	By("labeling the namespace to enforce the restricted security policy")
 	cmd = exec.Command("kubectl", "label", "--overwrite", "ns", controllerNamespace,
 		"pod-security.kubernetes.io/enforce=restricted")
-	_, setupErr = utils.Run(cmd)
-	if setupErr != nil {
-		return
-	}
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with pod security policy")
 
 	// Consolidated controller deployment for all E2E tests
 	// This eliminates race conditions from multiple test suites deploying separate controllers
 	By("installing CRDs")
 	cmd = exec.Command("make", "install")
-	_, setupErr = utils.Run(cmd)
-	if setupErr != nil {
-		return
-	}
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
 	By("deploying the controller-manager with webhook enabled")
 	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
-	_, setupErr = utils.Run(cmd)
-	if setupErr != nil {
-		return
-	}
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to deploy controller-manager")
 
 	By("waiting for controller deployment to be available")
 	cmd = exec.Command("kubectl", "wait", "deployment/jupyter-k8s-controller-manager",
 		"-n", "jupyter-k8s-system", "--for=condition=Available", "--timeout=3m")
-	_, setupErr = utils.Run(cmd)
-	if setupErr != nil {
-		return
-	}
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Controller deployment failed to become available")
 
 	By("waiting for webhook certificate to be ready")
 	Eventually(func(g Gomega) {
@@ -190,10 +171,8 @@ var _ = BeforeSuite(func() {
 	By("testing webhook endpoint with dry-run API call")
 	cmd = exec.Command("kubectl", "apply", "--dry-run=server",
 		"-f", "test/e2e/static/workspace_webhook_readiness.yaml")
-	_, setupErr = utils.Run(cmd)
-	if setupErr != nil {
-		return
-	}
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Webhook endpoint failed to respond to dry-run request")
 
 	_, _ = fmt.Fprintf(GinkgoWriter, "✓ Controller and webhooks are ready for testing\n")
 })
