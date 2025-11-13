@@ -23,7 +23,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -56,16 +58,34 @@ func TestE2E(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	By("building the manager(Operator) image")
-	cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
-	_, err := utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) image")
+	var setupErr error
+	defer func() {
+		if setupErr != nil {
+			dumpSetupDiagnostics()
+		}
+	}()
+
+	// Check if image exists to skip unnecessary rebuild
+	By("checking if manager image exists")
+	cmd := exec.Command("finch", "image", "inspect", projectImage)
+	if _, err := cmd.CombinedOutput(); err != nil {
+		By("building the manager(Operator) image")
+		cmd = exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
+		_, setupErr = utils.Run(cmd)
+		if setupErr != nil {
+			return
+		}
+	} else {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Manager image already exists, skipping build\n")
+	}
 
 	// TODO(user): If you want to change the e2e test vendor from Kind, ensure the image is
 	// built and available before running the tests. Also, remove the following block.
 	By("loading the manager(Operator) image on Kind")
-	err = utils.LoadImageToKindClusterWithName(projectImage)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager(Operator) image into Kind")
+	setupErr = utils.LoadImageToKindClusterWithName(projectImage)
+	if setupErr != nil {
+		return
+	}
 
 	// The tests-e2e are intended to run on a temporary cluster that is created and destroyed for testing.
 	// To prevent errors when tests run in environments with CertManager already installed,
@@ -76,14 +96,227 @@ var _ = BeforeSuite(func() {
 		isCertManagerAlreadyInstalled = utils.IsCertManagerCRDsInstalled()
 		if !isCertManagerAlreadyInstalled {
 			_, _ = fmt.Fprintf(GinkgoWriter, "Installing CertManager...\n")
-			Expect(utils.InstallCertManager()).To(Succeed(), "Failed to install CertManager")
+			setupErr = utils.InstallCertManager()
+			if setupErr != nil {
+				return
+			}
 		} else {
 			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: CertManager is already installed. Skipping installation...\n")
 		}
+
+		// Wait for cert-manager webhook to be ready before deploying controller
+		By("waiting for cert-manager webhook to be ready")
+		cmd = exec.Command("kubectl", "wait", "deployment/cert-manager-webhook",
+			"-n", "cert-manager", "--for=condition=Available", "--timeout=3m")
+		_, setupErr = utils.Run(cmd)
+		if setupErr != nil {
+			return
+		}
 	}
+
+	// Consolidated controller deployment for all E2E tests
+	// This eliminates race conditions from multiple test suites deploying separate controllers
+	By("installing CRDs")
+	cmd = exec.Command("make", "install")
+	_, setupErr = utils.Run(cmd)
+	if setupErr != nil {
+		return
+	}
+
+	By("deploying the controller-manager with webhook enabled")
+	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+	_, setupErr = utils.Run(cmd)
+	if setupErr != nil {
+		return
+	}
+
+	By("waiting for controller deployment to be available")
+	cmd = exec.Command("kubectl", "wait", "deployment/jupyter-k8s-controller-manager",
+		"-n", "jupyter-k8s-system", "--for=condition=Available", "--timeout=3m")
+	_, setupErr = utils.Run(cmd)
+	if setupErr != nil {
+		return
+	}
+
+	By("waiting for webhook certificate to be ready")
+	Eventually(func(g Gomega) {
+		cmd := exec.Command("kubectl", "get", "certificate", "serving-cert",
+			"-n", "jupyter-k8s-system",
+			"-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
+		status, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(strings.TrimSpace(string(status))).To(Equal("True"), "Certificate not ready")
+	}).WithTimeout(3 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
+
+	By("verifying mutating webhook configuration with CA bundle")
+	Eventually(func(g Gomega) {
+		cmd := exec.Command("kubectl", "get", "mutatingwebhookconfiguration",
+			"jupyter-k8s-mutating-webhook-configuration",
+			"-o", "jsonpath={.webhooks[0].clientConfig.caBundle}")
+		caBundle, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(strings.TrimSpace(string(caBundle))).NotTo(BeEmpty(), "CA bundle not injected")
+	}).WithTimeout(3 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
+
+	By("verifying validating webhook configuration with CA bundle")
+	Eventually(func(g Gomega) {
+		cmd := exec.Command("kubectl", "get", "validatingwebhookconfiguration",
+			"jupyter-k8s-validating-webhook-configuration",
+			"-o", "jsonpath={.webhooks[0].clientConfig.caBundle}")
+		caBundle, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(strings.TrimSpace(string(caBundle))).NotTo(BeEmpty(), "CA bundle not injected")
+	}).WithTimeout(3 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
+
+	By("testing webhook endpoint with dry-run API call")
+	cmd = exec.Command("kubectl", "apply", "--dry-run=server",
+		"-f", "test/e2e/static/workspace_webhook_readiness.yaml")
+	_, setupErr = utils.Run(cmd)
+	if setupErr != nil {
+		return
+	}
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "✓ Controller and webhooks are ready for testing\n")
 })
 
+func dumpSetupDiagnostics() {
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n=== SETUP FAILED - Collecting Diagnostics ===\n")
+
+	cmd := exec.Command("kubectl", "get", "pods", "-A")
+	if output, _ := utils.Run(cmd); len(output) > 0 {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\nAll pods:\n%s\n", output)
+	}
+
+	cmd = exec.Command("kubectl", "logs", "-n", "jupyter-k8s-system",
+		"-l", "control-plane=controller-manager", "--tail=100")
+	if logs, _ := utils.Run(cmd); len(logs) > 0 {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\nController logs:\n%s\n", logs)
+	}
+
+	cmd = exec.Command("kubectl", "get", "events", "-A",
+		"--sort-by=.lastTimestamp", "--field-selector", "type=Warning")
+	if events, _ := utils.Run(cmd); len(events) > 0 {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\nWarning events:\n%s\n", events)
+	}
+
+	cmd = exec.Command("kubectl", "get", "certificate", "-n", "jupyter-k8s-system")
+	if certs, _ := utils.Run(cmd); len(certs) > 0 {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\nCertificates:\n%s\n", certs)
+	}
+
+	cmd = exec.Command("kubectl", "get", "mutatingwebhookconfiguration",
+		"jupyter-k8s-mutating-webhook-configuration", "-o", "yaml")
+	if mwh, _ := utils.Run(cmd); len(mwh) > 0 {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\nMutatingWebhookConfiguration:\n%s\n", mwh)
+	}
+}
+
 var _ = AfterSuite(func() {
+	// Consolidated cleanup for all E2E tests
+	// Resources are deleted in reverse order of creation to allow proper finalizer processing
+	// Each cleanup step logs errors but continues to ensure comprehensive cleanup
+
+	By("cleaning up all workspaces across all namespaces")
+	// Delete workspaces synchronously to ensure controller processes finalizers
+	// This allows template finalizers to be removed automatically by the controller
+	cmd := exec.Command("kubectl", "delete", "workspace", "--all", "--all-namespaces",
+		"--ignore-not-found", "--wait=true", "--timeout=180s")
+	if output, err := utils.Run(cmd); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Workspace cleanup failed: %v\nOutput: %s\n", err, output)
+	}
+
+	By("cleaning up all workspace templates across all namespaces")
+	// Templates should have finalizers removed by controller after workspaces are deleted
+	// Controller automatically removes finalizers when templates are no longer referenced
+	cmd = exec.Command("kubectl", "delete", "workspacetemplate", "--all", "--all-namespaces",
+		"--ignore-not-found", "--wait=true", "--timeout=180s")
+	if output, err := utils.Run(cmd); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Template cleanup failed: %v\nOutput: %s\n", err, output)
+	}
+
+	diagnoseAndCleanupStuckTemplates()
+
+	By("deleting webhook configurations explicitly")
+	// Webhook configurations may persist after undeploy if namespace is deleted first
+	cmd = exec.Command("kubectl", "delete", "mutatingwebhookconfiguration",
+		"jupyter-k8s-mutating-webhook-configuration", "--ignore-not-found")
+	_, _ = utils.Run(cmd)
+	cmd = exec.Command("kubectl", "delete", "validatingwebhookconfiguration",
+		"jupyter-k8s-validating-webhook-configuration", "--ignore-not-found")
+	_, _ = utils.Run(cmd)
+
+	By("deleting cert-manager resources")
+	// Clean up certificates and issuers created by the controller
+	cmd = exec.Command("kubectl", "delete", "certificate", "serving-cert",
+		"-n", "jupyter-k8s-system", "--ignore-not-found")
+	_, _ = utils.Run(cmd)
+	cmd = exec.Command("kubectl", "delete", "issuer", "selfsigned-issuer",
+		"-n", "jupyter-k8s-system", "--ignore-not-found")
+	_, _ = utils.Run(cmd)
+
+	By("undeploying the controller-manager")
+	// Controller must be stopped BEFORE deleting CRDs to allow proper finalizer processing
+	// Otherwise finalizers can't be processed and resources become stuck
+	cmd = exec.Command("make", "undeploy")
+	if output, err := utils.Run(cmd); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Undeploy failed: %v\nOutput: %s\n", err, output)
+	}
+
+	By("waiting for controller pod to be fully terminated")
+	// Ensure controller is completely stopped before deleting CRDs
+	// This prevents race conditions with controller finalizer processing
+	Eventually(func(g Gomega) {
+		cmd := exec.Command("kubectl", "get", "pods", "-n", "jupyter-k8s-system",
+			"-l", "control-plane=controller-manager",
+			"-o", "jsonpath={.items[*].status.phase}")
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		// Should be no pods at all (empty output)
+		g.Expect(strings.TrimSpace(string(output))).To(BeEmpty(),
+			"Controller pod still exists or terminating")
+	}).WithTimeout(120 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
+	// Defensive check: Force delete if pod is still stuck despite Eventually verification
+	// This handles edge cases like finalizers or disrupted API server communication
+	cmd = exec.Command("kubectl", "get", "pods", "-n", "jupyter-k8s-system",
+		"-l", "control-plane=controller-manager", "-o", "name")
+	if output, _ := utils.Run(cmd); strings.TrimSpace(string(output)) != "" {
+		By("Force deleting stuck controller pod")
+		podName := strings.TrimSpace(string(output))
+		cmd = exec.Command("kubectl", "delete", podName,
+			"-n", "jupyter-k8s-system", "--force", "--grace-period=0")
+		_, _ = utils.Run(cmd)
+	}
+
+	By("cleaning up cluster-scoped RBAC resources")
+	// Cluster-scoped resources survive namespace deletion and must be explicitly removed
+	rbacResources := []string{
+		"clusterrole/jupyter-k8s-manager-role",
+		"clusterrole/jupyter-k8s-metrics-reader",
+		"clusterrole/jupyter-k8s-proxy-role",
+		"clusterrolebinding/jupyter-k8s-manager-rolebinding",
+		"clusterrolebinding/jupyter-k8s-proxy-rolebinding",
+	}
+	for _, resource := range rbacResources {
+		cmd := exec.Command("kubectl", "delete", resource, "--ignore-not-found")
+		_, _ = utils.Run(cmd)
+	}
+
+	By("uninstalling CRDs")
+	// CRDs must be deleted after controller termination to avoid orphaned resources
+	cmd = exec.Command("make", "uninstall")
+	if output, err := utils.Run(cmd); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: CRD uninstall failed: %v\nOutput: %s\n", err, output)
+	}
+
+	By("deleting jupyter-k8s-system namespace")
+	// Clean up the controller namespace to ensure no resources leak
+	cmd = exec.Command("kubectl", "delete", "namespace", "jupyter-k8s-system",
+		"--ignore-not-found", "--timeout=180s")
+	if output, err := utils.Run(cmd); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Namespace deletion failed: %v\nOutput: %s\n", err, output)
+	}
+
 	// Teardown CertManager after the suite if not skipped and if it was not already installed
 	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")

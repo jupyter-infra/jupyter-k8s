@@ -32,8 +32,6 @@ import (
 )
 
 var _ = Describe("WorkspaceTemplate", Ordered, func() {
-	var controllerPodName string
-
 	// Helper functions for workspace management
 	extractWorkspaceName := func(fullName string) string {
 		return strings.TrimPrefix(fullName, "workspace.workspace.jupyter.org/")
@@ -123,77 +121,13 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 		waitForWorkspaceDeletion(templateName)
 	}
 
+	// This test suite installs WorkspaceTemplate samples for validation testing
 	BeforeAll(func() {
-		By("installing CRDs")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Installing CRDs...\n")
-		cmd := exec.Command("make", "install")
-		_, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
-
-		By("deploying the controller-manager")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Deploying controller manager...\n")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to deploy controller")
-
-		By("waiting for controller-manager to be ready")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for controller manager pod...\n")
-		verifyControllerUp := func(g Gomega) {
-			cmd := exec.Command("kubectl", "get",
-				"pods", "-l", "control-plane=controller-manager",
-				"-o", "go-template={{ range .items }}"+
-					"{{ if not .metadata.deletionTimestamp }}"+
-					"{{ .metadata.name }}"+
-					"{{ \"\\n\" }}{{ end }}{{ end }}",
-				"-n", namespace,
-			)
-			podOutput, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred())
-			podNames := utils.GetNonEmptyLines(podOutput)
-			g.Expect(podNames).To(HaveLen(1), "expected 1 controller pod running")
-			controllerPodName = podNames[0]
-
-			// Check pod is Ready (not just Running) - ensures webhook server is initialized
-			cmd = exec.Command("kubectl", "get",
-				"pods", controllerPodName, "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}",
-				"-n", namespace,
-			)
-			readyStatus, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(readyStatus).To(Equal("True"), "expected controller pod to be Ready (webhook server initialized)")
-		}
-		Eventually(verifyControllerUp, 2*time.Minute).Should(Succeed())
-
-		By("waiting for webhook server to be ready")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for webhook server to accept requests...\n")
-		verifyWebhookReady := func(g Gomega) {
-			// Verify mutating webhook configuration has CA bundle injected
-			cmd := exec.Command("kubectl", "get", "mutatingwebhookconfiguration",
-				"jupyter-k8s-mutating-webhook-configuration",
-				"-o", "jsonpath={.webhooks[0].clientConfig.caBundle}")
-			caBundle, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(caBundle).NotTo(BeEmpty(), "webhook CA bundle should be injected by cert-manager")
-
-			// Verify webhook endpoint is reachable by attempting a dry-run resource creation
-			testWorkspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: webhook-readiness-test
-spec:
-  displayName: "Webhook Readiness Test"`
-			cmd = exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply --dry-run=server -f -", testWorkspaceYaml))
-			_, err = utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred(), "webhook server should respond to admission requests")
-		}
-		Eventually(verifyWebhookReady, 30*time.Second, 2*time.Second).Should(Succeed())
-
 		By("installing WorkspaceTemplate samples")
 		_, _ = fmt.Fprintf(GinkgoWriter, "Applying production template...\n")
-		cmd = exec.Command("kubectl", "apply", "-f",
+		cmd := exec.Command("kubectl", "apply", "-f",
 			"config/samples/workspace_v1alpha1_workspacetemplate_production.yaml")
-		_, err = utils.Run(cmd)
+		_, err := utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create production template")
 
 		_, _ = fmt.Fprintf(GinkgoWriter, "Applying restricted template for validation tests...\n")
@@ -205,6 +139,7 @@ spec:
 		Expect(err).To(HaveOccurred(), "Expected webhook to reject invalid workspace")
 	})
 
+	// Clean up test-specific workspaces and templates
 	AfterAll(func() {
 		By("cleaning up test workspaces")
 		_, _ = fmt.Fprintf(GinkgoWriter, "Deleting test workspaces...\n")
@@ -215,28 +150,6 @@ spec:
 			"--ignore-not-found", "--timeout=60s")
 		_, _ = utils.Run(cmd)
 
-		By("waiting for all workspaces to be fully deleted")
-		Eventually(func(g Gomega) {
-			cmd := exec.Command("kubectl", "get", "workspace", "-o", "name")
-			output, err := utils.Run(cmd)
-			if err != nil || strings.TrimSpace(output) == "" {
-				// No workspaces exist, cleanup successful
-				return
-			}
-
-			// Check if any remaining workspaces are not being deleted
-			workspaceNames := strings.Fields(output)
-			for _, workspaceName := range workspaceNames {
-				name := extractWorkspaceName(workspaceName)
-
-				if !isWorkspaceBeingDeleted(name) {
-					g.Expect(false).To(BeTrue(), fmt.Sprintf("Workspace %s still exists and is not being deleted", name))
-					return
-				}
-			}
-			// All remaining workspaces are being deleted, which is acceptable
-		}).WithTimeout(180 * time.Second).WithPolling(5 * time.Second).Should(Succeed())
-
 		By("cleaning up test templates")
 		_, _ = fmt.Fprintf(GinkgoWriter, "Deleting test templates...\n")
 		// Templates with lazy finalizers will only delete after workspaces are gone
@@ -244,18 +157,6 @@ spec:
 			"production-notebook-template", "restricted-template",
 			"immutability-test-template",
 			"--ignore-not-found", "--timeout=60s")
-		_, _ = utils.Run(cmd)
-
-		By("undeploying the controller-manager")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Undeploying controller manager...\n")
-		cmd = exec.Command("make", "undeploy")
-		cmd.Args = append(cmd.Args, "--timeout=300s")
-		_, _ = utils.Run(cmd)
-
-		By("uninstalling CRDs")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CRDs...\n")
-		cmd = exec.Command("make", "uninstall")
-		cmd.Args = append(cmd.Args, "--timeout=300s")
 		_, _ = utils.Run(cmd)
 	})
 
@@ -321,7 +222,7 @@ spec:
 					"{{ if not .metadata.deletionTimestamp }}"+
 					"{{ .metadata.name }}"+
 					"{{ \"\\n\" }}{{ end }}{{ end }}",
-				"-n", namespace,
+				"-n", controllerNamespace,
 			)
 			podOutput, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -330,7 +231,7 @@ spec:
 			controllerPodName := podNames[0]
 
 			By("checking controller logs for template resolution")
-			cmd = exec.Command("kubectl", "logs", controllerPodName, "-n", namespace,
+			cmd = exec.Command("kubectl", "logs", controllerPodName, "-n", controllerNamespace,
 				"--tail=500")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())

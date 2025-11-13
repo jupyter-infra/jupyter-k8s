@@ -4,10 +4,8 @@
 package e2e
 
 import (
-	"fmt"
 	"os/exec"
 	"strings"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -16,62 +14,11 @@ import (
 )
 
 var _ = Describe("Webhook Owner", Ordered, func() {
-	BeforeAll(func() {
-		By("installing CRDs")
-		cmd := exec.Command("make", "install")
-		_, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
-
-		By("deploying the controller-manager with webhook enabled")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
-
-		By("waiting for controller-manager to be ready")
-		Eventually(func() error {
-			cmd := exec.Command("kubectl", "get", "pods", "-l", "control-plane=controller-manager",
-				"-o", "go-template={{ range .items }}{{ if not .metadata.deletionTimestamp }}{{ .metadata.name }}{{ \"\\n\" }}{{ end }}{{ end }}",
-				"-n", "jupyter-k8s-system")
-			output, err := utils.Run(cmd)
-			if err != nil {
-				return err
-			}
-			podName := strings.TrimSpace(string(output))
-			if podName == "" {
-				return fmt.Errorf("no controller pod found")
-			}
-
-			cmd = exec.Command("kubectl", "get", "pods", podName,
-				"-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}",
-				"-n", "jupyter-k8s-system")
-			output, err = utils.Run(cmd)
-			if err != nil {
-				return err
-			}
-			if strings.TrimSpace(string(output)) != "True" {
-				return fmt.Errorf("pod not ready")
-			}
-			return nil
-		}, 2*time.Minute, 5*time.Second).Should(Succeed())
-
-		By("verifying webhook service exists")
-		cmd = exec.Command("kubectl", "get", "service", "jupyter-k8s-controller-manager",
-			"-n", "jupyter-k8s-system")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
-	})
+	// This test suite validates webhook ownership annotations on workspaces
 
 	AfterAll(func() {
 		By("cleaning up test workspaces")
-		cmd := exec.Command("kubectl", "delete", "workspace", "--all", "--ignore-not-found", "--wait=false")
-		_, _ = utils.Run(cmd)
-
-		By("undeploying the controller-manager")
-		cmd = exec.Command("make", "undeploy")
-		_, _ = utils.Run(cmd)
-
-		By("uninstalling CRDs")
-		cmd = exec.Command("make", "uninstall")
+		cmd := exec.Command("kubectl", "delete", "workspace", "--all", "--ignore-not-found", "--wait=true", "--timeout=60s")
 		_, _ = utils.Run(cmd)
 	})
 
@@ -97,16 +44,8 @@ var _ = Describe("Webhook Owner", Ordered, func() {
 
 		It("should preserve existing annotations when adding created-by", func() {
 			By("creating workspace with existing annotation")
-			workspaceYAML := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: workspace-with-annotations
-  annotations:
-    custom-annotation: "test-value"
-spec:
-  displayName: "Test Workspace"
-`
-			cmd := exec.Command("sh", "-c", fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYAML))
+			cmd := exec.Command("kubectl", "apply",
+				"-f", "test/e2e/static/workspace_with_annotations.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
