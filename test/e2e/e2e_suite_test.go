@@ -120,6 +120,13 @@ var _ = BeforeSuite(func() {
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with pod security policy")
 
+	By("creating jupyter-k8s-shared namespace for templates")
+	cmd = exec.Command("kubectl", "delete", "ns", "jupyter-k8s-shared", "--ignore-not-found", "--wait=true", "--timeout=300s")
+	_, _ = utils.Run(cmd)
+	cmd = exec.Command("kubectl", "create", "ns", "jupyter-k8s-shared")
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to create jupyter-k8s-shared namespace")
+
 	// Consolidated controller deployment for all E2E tests
 	// This eliminates race conditions from multiple test suites deploying separate controllers
 	By("installing CRDs")
@@ -134,14 +141,14 @@ var _ = BeforeSuite(func() {
 
 	By("waiting for controller deployment to be available")
 	cmd = exec.Command("kubectl", "wait", "deployment/jupyter-k8s-controller-manager",
-		"-n", "jupyter-k8s-system", "--for=condition=Available", "--timeout=3m")
+		"-n", controllerNamespace, "--for=condition=Available", "--timeout=3m")
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Controller deployment failed to become available")
 
 	By("waiting for webhook certificate to be ready")
 	Eventually(func(g Gomega) {
-		cmd := exec.Command("kubectl", "get", "certificate", "serving-cert",
-			"-n", "jupyter-k8s-system",
+		cmd := exec.Command("kubectl", "get", "certificate", webhookCertificateName,
+			"-n", controllerNamespace,
 			"-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
 		status, err := utils.Run(cmd)
 		g.Expect(err).NotTo(HaveOccurred())
@@ -185,7 +192,7 @@ func dumpSetupDiagnostics() {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nAll pods:\n%s\n", output)
 	}
 
-	cmd = exec.Command("kubectl", "logs", "-n", "jupyter-k8s-system",
+	cmd = exec.Command("kubectl", "logs", "-n", controllerNamespace,
 		"-l", "control-plane=controller-manager", "--tail=100")
 	if logs, _ := utils.Run(cmd); len(logs) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nController logs:\n%s\n", logs)
@@ -197,7 +204,7 @@ func dumpSetupDiagnostics() {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nWarning events:\n%s\n", events)
 	}
 
-	cmd = exec.Command("kubectl", "get", "certificate", "-n", "jupyter-k8s-system")
+	cmd = exec.Command("kubectl", "get", "certificate", "-n", controllerNamespace)
 	if certs, _ := utils.Run(cmd); len(certs) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nCertificates:\n%s\n", certs)
 	}
@@ -245,11 +252,11 @@ var _ = AfterSuite(func() {
 
 	By("deleting cert-manager resources")
 	// Clean up certificates and issuers created by the controller
-	cmd = exec.Command("kubectl", "delete", "certificate", "serving-cert",
-		"-n", "jupyter-k8s-system", "--ignore-not-found")
+	cmd = exec.Command("kubectl", "delete", "certificate", webhookCertificateName,
+		"-n", controllerNamespace, "--ignore-not-found")
 	_, _ = utils.Run(cmd)
 	cmd = exec.Command("kubectl", "delete", "issuer", "selfsigned-issuer",
-		"-n", "jupyter-k8s-system", "--ignore-not-found")
+		"-n", controllerNamespace, "--ignore-not-found")
 	_, _ = utils.Run(cmd)
 
 	By("undeploying the controller-manager")
@@ -264,7 +271,7 @@ var _ = AfterSuite(func() {
 	// Ensure controller is completely stopped before deleting CRDs
 	// This prevents race conditions with controller finalizer processing
 	Eventually(func(g Gomega) {
-		cmd := exec.Command("kubectl", "get", "pods", "-n", "jupyter-k8s-system",
+		cmd := exec.Command("kubectl", "get", "pods", "-n", controllerNamespace,
 			"-l", "control-plane=controller-manager",
 			"-o", "jsonpath={.items[*].status.phase}")
 		output, err := utils.Run(cmd)
@@ -276,13 +283,13 @@ var _ = AfterSuite(func() {
 
 	// Defensive check: Force delete if pod is still stuck despite Eventually verification
 	// This handles edge cases like finalizers or disrupted API server communication
-	cmd = exec.Command("kubectl", "get", "pods", "-n", "jupyter-k8s-system",
+	cmd = exec.Command("kubectl", "get", "pods", "-n", controllerNamespace,
 		"-l", "control-plane=controller-manager", "-o", "name")
 	if output, _ := utils.Run(cmd); strings.TrimSpace(string(output)) != "" {
 		By("Force deleting stuck controller pod")
 		podName := strings.TrimSpace(string(output))
 		cmd = exec.Command("kubectl", "delete", podName,
-			"-n", "jupyter-k8s-system", "--force", "--grace-period=0")
+			"-n", controllerNamespace, "--force", "--grace-period=0")
 		_, _ = utils.Run(cmd)
 	}
 

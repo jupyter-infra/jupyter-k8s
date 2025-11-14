@@ -32,7 +32,7 @@ const (
 	metricsRoleBindingName = "jupyter-k8s-metrics-binding"
 
 	// webhookCertificateName is the cert-manager certificate for webhooks
-	webhookCertificateName = "serving-cert"
+	webhookCertificateName = "jupyter-k8s-serving-cert"
 
 	// mutatingWebhookConfigName is the mutating webhook configuration
 	mutatingWebhookConfigName = "jupyter-k8s-mutating-webhook-configuration"

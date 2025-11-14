@@ -149,6 +149,14 @@ test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expect
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
 
+.PHONY: cleanup-test-e2e-images
+cleanup-test-e2e-images: ## Remove e2e test images to force rebuild
+	@echo "Removing e2e test images..."
+	@$(CONTAINER_TOOL) rmi jupyter.org/jupyter-k8s:v0.0.1 2>/dev/null || true
+
+.PHONY: test-e2e-clean
+test-e2e-clean: cleanup-test-e2e cleanup-test-e2e-images test-e2e ## Full cleanup and rerun e2e tests
+
 .PHONY: lint
 lint: golangci-lint helm-lint ## Run golangci-lint linter
 	$(GOLANGCI_LINT) run

@@ -15,6 +15,14 @@ import (
 )
 
 var _ = Describe("Webhook Owner", Ordered, func() {
+	AfterAll(func() {
+		By("cleaning up webhook owner test workspaces")
+		cmd := exec.Command("kubectl", "delete", "workspace",
+			"workspace-sample", "workspace-with-annotations",
+			"--ignore-not-found", "--timeout=60s")
+		_, _ = utils.Run(cmd)
+	})
+
 	Context("Ownership Annotation", func() {
 		It("should add created-by annotation to new workspace", func() {
 			By("creating a workspace")
