@@ -12,7 +12,7 @@ spec:
         command: ["/bin/sh", "-c", "echo started"]
   defaultIdleShutdown:
     enabled: true
-    timeoutMinutes: 30
+    idleTimeoutInMinutes: 30
     detection:
       httpGet:
         path: "/api/status"
