@@ -63,7 +63,6 @@ spec:
           - --health-probe-bind-address=:8081
           - --application-images-pull-policy=IfNotPresent
           - --application-images-registry=docker.io/library
-          - --default-template-namespace=jupyter-k8s-shared
         image: controller:latest
         name: manager
         ports: []

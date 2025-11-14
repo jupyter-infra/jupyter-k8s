@@ -33,6 +33,7 @@ spec:
             {{- end }}
             - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"
             - "--application-images-registry={{ .Values.application.imagesRegistry }}"
+            - "--default-template-namespace={{ .Values.workspaceTemplates.defaultNamespace }}"
             {{- if .Values.accessResources.traefik.enable }}
             - "--watch-traefik"
             {{- end}}
