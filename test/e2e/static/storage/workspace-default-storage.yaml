@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-default-storage
+spec:
+  displayName: "Workspace with Default Storage"
+  image: "jupyter/scipy-notebook:latest"
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
