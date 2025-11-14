@@ -15,12 +15,11 @@ import (
 
 // MockKMSClient implements a mock KMS client for testing
 type MockKMSClient struct {
-	dataKey             []byte
-	encryptedKey        []byte
-	decryptCalled       bool
-	decryptCallCount    int
-	generateDataKeyFunc func(ctx context.Context, keyId string) ([]byte, []byte, error)
-	decryptFunc         func(ctx context.Context, encryptedKey []byte) ([]byte, error)
+	dataKey          []byte
+	encryptedKey     []byte
+	decryptCalled    bool
+	decryptCallCount int
+	decryptFunc      func(ctx context.Context, encryptedKey []byte) ([]byte, error)
 }
 
 func (m *MockKMSClient) GenerateDataKey(ctx context.Context, params *kms.GenerateDataKeyInput, optFns ...func(*kms.Options)) (*kms.GenerateDataKeyOutput, error) {
