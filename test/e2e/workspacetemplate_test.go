@@ -609,7 +609,7 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			Expect(output).To(Equal("true"))
 
 			cmd = exec.Command("kubectl", "get", "workspace", "lifecycle-test",
-				"-o", "jsonpath={.spec.idleShutdown.timeoutMinutes}")
+				"-o", "jsonpath={.spec.idleShutdown.idleTimeoutInMinutes}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("30"))
