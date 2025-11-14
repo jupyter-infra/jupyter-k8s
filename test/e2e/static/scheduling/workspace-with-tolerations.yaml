@@ -1,0 +1,13 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-with-tolerations
+spec:
+  displayName: "Workspace with Tolerations"
+  image: "jupyter/scipy-notebook:latest"
+  desiredStatus: Running
+  tolerations:
+  - key: "dedicated"
+    operator: "Equal"
+    value: "jupyter"
+    effect: "NoSchedule"

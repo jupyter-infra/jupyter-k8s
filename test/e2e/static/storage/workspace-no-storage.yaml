@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-no-storage
+spec:
+  displayName: "Workspace without Storage"
+  image: "jupyter/scipy-notebook:latest"
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"

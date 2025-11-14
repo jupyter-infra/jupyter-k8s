@@ -1,0 +1,6 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: webhook-readiness-test
+spec:
+  displayName: "Webhook Readiness Test"
