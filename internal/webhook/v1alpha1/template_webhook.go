@@ -221,19 +221,19 @@ func idleShutdownTimeoutBoundsChanged(oldOverrides, newOverrides *workspacev1alp
 		return false
 	}
 
-	// Check MinTimeoutMinutes
-	if (oldOverrides.MinTimeoutMinutes == nil) != (newOverrides.MinTimeoutMinutes == nil) {
+	// Check MinIdleTimeoutInMinutes
+	if (oldOverrides.MinIdleTimeoutInMinutes == nil) != (newOverrides.MinIdleTimeoutInMinutes == nil) {
 		return true
 	}
-	if oldOverrides.MinTimeoutMinutes != nil && *oldOverrides.MinTimeoutMinutes != *newOverrides.MinTimeoutMinutes {
+	if oldOverrides.MinIdleTimeoutInMinutes != nil && *oldOverrides.MinIdleTimeoutInMinutes != *newOverrides.MinIdleTimeoutInMinutes {
 		return true
 	}
 
-	// Check MaxTimeoutMinutes
-	if (oldOverrides.MaxTimeoutMinutes == nil) != (newOverrides.MaxTimeoutMinutes == nil) {
+	// Check MaxIdleTimeoutInMinutes
+	if (oldOverrides.MaxIdleTimeoutInMinutes == nil) != (newOverrides.MaxIdleTimeoutInMinutes == nil) {
 		return true
 	}
-	if oldOverrides.MaxTimeoutMinutes != nil && *oldOverrides.MaxTimeoutMinutes != *newOverrides.MaxTimeoutMinutes {
+	if oldOverrides.MaxIdleTimeoutInMinutes != nil && *oldOverrides.MaxIdleTimeoutInMinutes != *newOverrides.MaxIdleTimeoutInMinutes {
 		return true
 	}
 

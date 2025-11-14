@@ -90,9 +90,9 @@ type IdleShutdownSpec struct {
 	// Enabled indicates if idle shutdown is enabled
 	Enabled bool `json:"enabled"`
 
-	// TimeoutMinutes specifies idle timeout in minutes
+	// IdleTimeoutInMinutes specifies idle timeout in minutes
 	// +kubebuilder:validation:Minimum=1
-	TimeoutMinutes int `json:"timeoutMinutes"`
+	IdleTimeoutInMinutes int `json:"idleTimeoutInMinutes"`
 
 	// Detection specifies how to detect idle state
 	Detection IdleDetectionSpec `json:"detection"`
