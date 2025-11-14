@@ -65,7 +65,6 @@ const (
 	EnvOidcGroupsPrefix    = "OIDC_GROUPS_PREFIX"
 	EnvOIDCIssuerURL       = "OIDC_ISSUER_URL"
 	EnvOIDCClientID        = "OIDC_CLIENT_ID"
-	EnvOIDCClientSecret    = "OIDC_CLIENT_SECRET"
 	EnvOIDCInitTimeoutSecs = "OIDC_INIT_TIMEOUT_SECONDS"
 )
 
@@ -184,7 +183,6 @@ type Config struct {
 	OidcGroupsPrefix    string
 	OIDCIssuerURL       string
 	OIDCClientID        string
-	OIDCClientSecret    string
 	OIDCInitTimeoutSecs int
 }
 
@@ -524,10 +522,6 @@ func applyOidcConfig(config *Config) error {
 
 	if oidcClientID := os.Getenv(EnvOIDCClientID); oidcClientID != "" {
 		config.OIDCClientID = oidcClientID
-	}
-
-	if oidcClientSecret := os.Getenv(EnvOIDCClientSecret); oidcClientSecret != "" {
-		config.OIDCClientSecret = oidcClientSecret
 	}
 
 	if oidcInitTimeoutSecs := os.Getenv(EnvOIDCInitTimeoutSecs); oidcInitTimeoutSecs != "" {

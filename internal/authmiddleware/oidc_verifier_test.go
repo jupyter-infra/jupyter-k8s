@@ -141,8 +141,7 @@ func TestOIDCVerifierConfig(t *testing.T) {
 	// Create a comprehensive config to test all values
 	config := &Config{
 		OIDCIssuerURL:       "https://example.com/dex",
-		OIDCClientID:        "authmiddleware",
-		OIDCClientSecret:    "test-secret",
+		OIDCClientID:        "oauth2-proxy",
 		OIDCInitTimeoutSecs: 30,
 	}
 
@@ -154,7 +153,6 @@ func TestOIDCVerifierConfig(t *testing.T) {
 	// 1. Test that all config values are correctly passed
 	assert.Equal(t, config.OIDCIssuerURL, verifier.issuerURL)
 	assert.Equal(t, config.OIDCClientID, verifier.clientID)
-	assert.Equal(t, config.OIDCClientSecret, verifier.clientSecret)
 	assert.Equal(t, config.OIDCInitTimeoutSecs, verifier.timeoutSeconds)
 
 	// 2. Test that provider and verifier are nil after NewOIDCVerifier
@@ -164,8 +162,8 @@ func TestOIDCVerifierConfig(t *testing.T) {
 	// 3. Assert that oidcConfig is properly set
 	require.NotNil(t, verifier.oidcConfig)
 	assert.Equal(t, config.OIDCClientID, verifier.oidcConfig.ClientID)
-	assert.True(t, verifier.oidcConfig.SkipClientIDCheck,
-		"OIDCVerifier should have SkipClientIDCheck set to true to allow audience mismatches")
+	assert.False(t, verifier.oidcConfig.SkipClientIDCheck,
+		"OIDCVerifier should enforce audience validation")
 }
 
 // TestGetOIDCGroupsFromToken tests the GetOIDCGroupsFromToken function

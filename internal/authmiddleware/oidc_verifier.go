@@ -29,7 +29,6 @@ type OIDCVerifier struct {
 	provider       *oidc.Provider
 	verifier       *oidc.IDTokenVerifier
 	clientID       string
-	clientSecret   string
 	issuerURL      string
 	logger         *slog.Logger
 	timeoutSeconds int // Timeout for OIDC provider initialization
@@ -63,23 +62,21 @@ func NewOIDCVerifier(config *Config, logger *slog.Logger) (*OIDCVerifier, error)
 	)
 
 	// Create the token verifier
-	// authmiddleware should be registered with OIDC provider (e.g. dex) as its own client
-	// so that it can access the public keys.
-	// However, in authmiddleware flow, the OIDC provider will issue token to a different component (e.g. oauth2-proxy)
+	// Note that any caller may obtain the public keys from the OIDC well-known page, a client ID
+	// and client secret are only needed to issue new token (and secret are optional for public
+	// access points).
+	// In authmiddleware flow, the OIDC provider will issue token to a different component (e.g. oauth2-proxy)
 	// and such component will pass the token as Authentication token to authmiddleware,
-	// thus, authmiddleware will not necessarily be in the audience of the token.
-	// In order to prevent the token verification to fail on target audience, set SkipClientIDCheck to true.
-	// This is okay: authmiddleware's only purpose is to verify that the token was issued by the OIDC provider.
+	// thus we use the client ID of the previous component as client.
 	oidcConfig := &oidc.Config{
 		ClientID:          config.OIDCClientID,
-		SkipClientIDCheck: true,
+		SkipClientIDCheck: false,
 	}
 
 	return &OIDCVerifier{
 		provider:       nil, // Will be initialized in Start()
 		verifier:       nil, // Will be initialized in Start()
 		clientID:       config.OIDCClientID,
-		clientSecret:   config.OIDCClientSecret,
 		issuerURL:      config.OIDCIssuerURL,
 		logger:         logger,
 		timeoutSeconds: config.OIDCInitTimeoutSecs,

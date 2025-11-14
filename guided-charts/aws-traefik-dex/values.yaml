@@ -92,12 +92,6 @@ dex:
     - 18000
     - 9800
 
-  # Client ID for authmiddleware to authenticate with Dex
-  authmiddlewareClientId: "authmiddleware"
-  # Client secret for authmiddleware to authenticate with Dex (auto-generated if empty)
-  # Generate with 'openssl rand -hex 16'
-  authmiddlewareClientSecret: "852c547d73dfaa51ef3bb290ed29ea5e"
-
 # Github OAuth configuration
 github:
   # GitHub OAuth client ID (required)

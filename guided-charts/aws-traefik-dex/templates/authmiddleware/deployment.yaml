@@ -129,12 +129,7 @@ spec:
           - name: OIDC_ISSUER_URL
             value: "https://{{ .Values.domain }}/dex"
           - name: OIDC_CLIENT_ID
-            value: "{{ .Values.dex.authmiddlewareClientId }}"
-          - name: OIDC_CLIENT_SECRET
-            valueFrom:
-              secretKeyRef:
-                name: authmiddleware-secrets
-                key: oidc-client-secret
+            value: "{{ .Values.dex.oauth2ProxyClientId }}"
           - name: OIDC_INIT_TIMEOUT_SECONDS
             value: "{{ .Values.authmiddleware.oidcInitTimeoutSecs }}"
         volumeMounts:

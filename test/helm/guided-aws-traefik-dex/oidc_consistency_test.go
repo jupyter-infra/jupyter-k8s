@@ -17,20 +17,16 @@ var _ = Describe("OIDC Configuration Consistency", func() {
 		dexConfigmapData   []byte
 		authMiddlewareData []byte
 		oauth2ProxyData    []byte
-		secretsData        []byte
 
 		// Dex configmap values
 		dexIssuerURL      string
 		dexRedirectURI    string
 		dexOAuth2ClientID string
 		dexOAuth2Secret   string
-		dexAuthMwClientID string
-		dexAuthMwSecret   string
 
 		// Authmiddleware values
-		authMwIssuerURL    string
-		authMwClientID     string
-		authMwClientSecret string
+		authMwIssuerURL string
+		authMwClientID  string
 
 		// OAuth2-proxy values
 		oauth2IssuerURL    string
@@ -55,10 +51,6 @@ var _ = Describe("OIDC Configuration Consistency", func() {
 		authMiddlewarePath := filepath.Join(testOutputDir, "authmiddleware/deployment.yaml")
 		authMiddlewareData, err = os.ReadFile(authMiddlewarePath)
 		Expect(err).NotTo(HaveOccurred(), "Failed to read authmiddleware deployment file")
-
-		authMwSecretsPath := filepath.Join(testOutputDir, "authmiddleware/secrets.yaml")
-		secretsData, err = os.ReadFile(authMwSecretsPath)
-		Expect(err).NotTo(HaveOccurred(), "Failed to read authmiddleware secrets file")
 
 		oauth2ProxyPath := filepath.Join(testOutputDir, "oauth2-proxy/deployment.yaml")
 		oauth2ProxyData, err = os.ReadFile(oauth2ProxyPath)
@@ -95,22 +87,6 @@ var _ = Describe("OIDC Configuration Consistency", func() {
 		dexOAuth2Secret = matches[1]
 		Expect(dexOAuth2Secret).NotTo(BeEmpty(), "oauth2-proxy secret in dex configmap is empty")
 		By(fmt.Sprintf("Extracted oauth2-proxy secret from dex: %s", dexOAuth2Secret))
-
-		// Extract authmiddleware client ID
-		authMwClientIDRegex := `(?m)^\s*-\s*id:\s*(\S+)\s*\n\s*name:\s*'Auth Middleware'`
-		matches = regexp.MustCompile(authMwClientIDRegex).FindStringSubmatch(dexConfigmapContent)
-		Expect(matches).To(HaveLen(2), "Could not find authmiddleware client ID in dex configmap")
-		dexAuthMwClientID = matches[1]
-		Expect(dexAuthMwClientID).NotTo(BeEmpty(), "authmiddleware client ID in dex configmap is empty")
-		By(fmt.Sprintf("Extracted authmiddleware client ID from dex: %s", dexAuthMwClientID))
-
-		// Extract authmiddleware client secret
-		authMwSecretRegex := `(?m)^\s*name:\s*'Auth Middleware'\s*\n\s*secret:\s*(\S+)`
-		matches = regexp.MustCompile(authMwSecretRegex).FindStringSubmatch(dexConfigmapContent)
-		Expect(matches).To(HaveLen(2), "Could not find authmiddleware secret in dex configmap")
-		dexAuthMwSecret = matches[1]
-		Expect(dexAuthMwSecret).NotTo(BeEmpty(), "authmiddleware secret in dex configmap is empty")
-		By(fmt.Sprintf("Extracted authmiddleware secret from dex: %s", dexAuthMwSecret))
 
 		// Extract values from oauth2-proxy deployment
 		oauth2ProxyContent := string(oauth2ProxyData)
@@ -161,17 +137,6 @@ var _ = Describe("OIDC Configuration Consistency", func() {
 		authMwClientID = matches[1]
 		Expect(authMwClientID).NotTo(BeEmpty(), "OIDC_CLIENT_ID in authmiddleware deployment is empty")
 		By(fmt.Sprintf("Extracted authmiddleware client ID: %s", authMwClientID))
-
-		// Extract client secret from authmiddleware secrets
-		authMwSecretsContent := string(secretsData)
-		matches = regexp.MustCompile(`(?m)^\s*oidc-client-secret:\s*(.+)$`).FindStringSubmatch(authMwSecretsContent)
-		Expect(matches).To(HaveLen(2), "Could not find oidc-client-secret in authmiddleware secrets")
-		authMwClientSecret = matches[1]
-
-		// Remove quotes if present
-		authMwClientSecret = regexp.MustCompile(`^"(.*)"$`).ReplaceAllString(authMwClientSecret, "$1")
-		Expect(authMwClientSecret).NotTo(BeEmpty(), "oidc-client-secret in authmiddleware secrets is empty")
-		By(fmt.Sprintf("Extracted authmiddleware client secret: %s", authMwClientSecret))
 	})
 
 	It("should have consistent OIDC issuer URL between dex configmap and authmiddleware deployment", func() {
@@ -198,14 +163,6 @@ var _ = Describe("OIDC Configuration Consistency", func() {
 		Expect(oauth2RedirectURL).To(Equal(dexRedirectURI), errMsg)
 	})
 
-	It("should have consistent client ID between dex configmap and authmiddleware deployment", func() {
-		By(fmt.Sprintf("Comparing authmiddleware client ID in dex configmap '%s' with "+
-			"OIDC_CLIENT_ID in authmiddleware deployment '%s'", dexAuthMwClientID, authMwClientID))
-
-		const errMsg = "OIDC_CLIENT_ID in authmiddleware deployment does not match client ID in dex configmap"
-		Expect(authMwClientID).To(Equal(dexAuthMwClientID), errMsg)
-	})
-
 	It("should have consistent client ID between dex configmap and oauth2-proxy deployment", func() {
 		By(fmt.Sprintf("Comparing oauth2-proxy client ID in dex configmap '%s' with "+
 			"--client-id in oauth2-proxy deployment '%s'", dexOAuth2ClientID, oauth2ClientID))
@@ -222,11 +179,11 @@ var _ = Describe("OIDC Configuration Consistency", func() {
 		Expect(oauth2ClientSecret).To(Equal(dexOAuth2Secret), errMsg)
 	})
 
-	It("should have consistent client secret between dex configmap and authmiddleware secrets", func() {
-		By(fmt.Sprintf("Comparing authmiddleware client secret in dex configmap '%s' with "+
-			"oidc-client-secret in authmiddleware secrets '%s'", dexAuthMwSecret, authMwClientSecret))
+	It("should have consistent client ID between authmiddleware and oauth2-proxy deployment", func() {
+		By(fmt.Sprintf("Comparing oauth2-proxy client ID '%s' with "+
+			"OIDCClientID env var in authmiddleware '%s'", authMwClientID, oauth2ClientID))
 
-		const errMsg = "oidc-client-secret in authmiddleware secrets does not match client secret in dex configmap"
-		Expect(authMwClientSecret).To(Equal(dexAuthMwSecret), errMsg)
+		const errMsg = "--client-id in oauth2-proxy deployment does not match OIDCClientID env var in authmiddleware"
+		Expect(oauth2ClientID).To(Equal(authMwClientID), errMsg)
 	})
 })

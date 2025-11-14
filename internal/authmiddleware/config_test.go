@@ -153,9 +153,6 @@ func checkOIDCDefaults(t *testing.T, config *Config) {
 	if config.OIDCClientID != "" {
 		t.Errorf("Expected default OIDCClientID to be empty, got %s", config.OIDCClientID)
 	}
-	if config.OIDCClientSecret != "" {
-		t.Errorf("Expected default OIDCClientSecret to be empty, got %s", config.OIDCClientSecret)
-	}
 	if config.OIDCInitTimeoutSecs != DefaultOIDCInitTimeoutSecs {
 		t.Errorf("Expected OIDCInitTimeoutSecs to be %d, got %d", DefaultOIDCInitTimeoutSecs, config.OIDCInitTimeoutSecs)
 	}
@@ -223,7 +220,6 @@ func TestNewConfigEnvOverrides(t *testing.T) {
 	setEnv(t, EnvOidcGroupsPrefix, "oidc-group:")
 	setEnv(t, EnvOIDCIssuerURL, "https://test-dex.example.com")
 	setEnv(t, EnvOIDCClientID, "test-client-id")
-	setEnv(t, EnvOIDCClientSecret, "test-client-secret")
 	setEnv(t, EnvOIDCInitTimeoutSecs, "45")
 
 	// Clean up environment variables after the test
@@ -238,7 +234,7 @@ func TestNewConfigEnvOverrides(t *testing.T) {
 		EnvCsrfCookieMaxAge, EnvCsrfCookieSecure, EnvCsrfFieldName, EnvCsrfHeaderName,
 		EnvCsrfTrustedOrigins,
 		EnvOidcUsernamePrefix, EnvOidcGroupsPrefix,
-		EnvOIDCIssuerURL, EnvOIDCClientID, EnvOIDCClientSecret, EnvOIDCInitTimeoutSecs,
+		EnvOIDCIssuerURL, EnvOIDCClientID, EnvOIDCInitTimeoutSecs,
 	}
 	defer unsetEnv(t, vars)
 
@@ -388,9 +384,6 @@ func checkOIDCConfig(t *testing.T, config *Config) {
 	}
 	if config.OIDCClientID != "test-client-id" {
 		t.Errorf("Expected OIDCClientID to be test-client-id, got %s", config.OIDCClientID)
-	}
-	if config.OIDCClientSecret != "test-client-secret" {
-		t.Errorf("Expected OIDCClientSecret to be test-client-secret, got %s", config.OIDCClientSecret)
 	}
 	if config.OIDCInitTimeoutSecs != 45 {
 		t.Errorf("Expected OIDCInitTimeoutSecs to be 45, got %d", config.OIDCInitTimeoutSecs)
@@ -626,7 +619,6 @@ func TestOIDCVerifierInitConfig(t *testing.T) {
 			config := &Config{
 				OIDCIssuerURL:       tc.issuerURL,
 				OIDCClientID:        tc.clientID,
-				OIDCClientSecret:    tc.clientSecret,
 				OIDCInitTimeoutSecs: 1, // Short timeout for tests
 			}
 
