@@ -22,9 +22,7 @@ package e2e
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -107,6 +105,14 @@ var _ = Describe("Manager", Ordered, func() {
 		// Delete CRDs last to avoid race conditions with controller finalizer processing
 		cmd = exec.Command("make", "uninstall")
 		_, _ = utils.Run(cmd)
+
+		By("waiting for namespace to be fully terminated")
+		Eventually(func(g Gomega) {
+			cmd := exec.Command("kubectl", "get", "namespace", namespace, "--ignore-not-found")
+			output, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(strings.TrimSpace(string(output))).To(BeEmpty(), "namespace should be fully deleted")
+		}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 	})
 
 	// After each test, check for failures and collect logs, events,
@@ -334,18 +340,8 @@ var _ = Describe("Manager", Ordered, func() {
 // It uses the Kubernetes TokenRequest API to generate a token by directly sending a request
 // and parsing the resulting token from the API response.
 func serviceAccountToken() (string, error) {
-	const tokenRequestRawString = `{
-		"apiVersion": "authentication.k8s.io/v1",
-		"kind": "TokenRequest"
-	}`
-
-	// Temporary file to store the token request
-	secretName := fmt.Sprintf("%s-token-request", serviceAccountName)
-	tokenRequestFile := filepath.Join("/tmp", secretName)
-	err := os.WriteFile(tokenRequestFile, []byte(tokenRequestRawString), os.FileMode(0o644))
-	if err != nil {
-		return "", err
-	}
+	// Use static token request file
+	tokenRequestFile := "test/e2e/static/token-request.json"
 
 	var out string
 	verifyTokenCreation := func(g Gomega) {
@@ -368,7 +364,7 @@ func serviceAccountToken() (string, error) {
 	}
 	Eventually(verifyTokenCreation).Should(Succeed())
 
-	return out, err
+	return out, nil
 }
 
 // getMetricsOutput retrieves and returns the logs from the curl pod used to access the metrics endpoint.
