@@ -40,8 +40,6 @@ const (
 )
 
 var _ = Describe("Workspace Status Transitions", Ordered, func() {
-	var controllerPodName string
-
 	// Helper functions for status verification
 	verifyStatusCondition := func(workspaceName, conditionType, expectedStatus string) {
 		Eventually(func(g Gomega) {
@@ -75,115 +73,24 @@ var _ = Describe("Workspace Status Transitions", Ordered, func() {
 	}
 
 	BeforeAll(func() {
-		By("installing CRDs")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Installing CRDs...\n")
-		cmd := exec.Command("make", "install")
-		_, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
-
-		By("deploying the controller-manager")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Deploying controller manager...\n")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to deploy controller")
-
-		// Set environment variables for e2e testing
-		By("setting controller environment variables")
-		envVars := []string{
-			"CONTROLLER_POD_SERVICE_ACCOUNT=jupyter-k8s-controller-manager",
-			"CONTROLLER_POD_NAMESPACE=jupyter-k8s-system",
-		}
-		for _, envVar := range envVars {
-			cmd = exec.Command("kubectl", "set", "env", "deployment/jupyter-k8s-controller-manager", envVar, "-n", namespace)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to set environment variable: %s", envVar))
-		}
-
-		By("waiting for controller-manager to be ready")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for controller manager pod...\n")
-		verifyControllerUp := func(g Gomega) {
-			cmd := exec.Command("kubectl", "get",
-				"pods", "-l", "control-plane=controller-manager",
-				"-o", "go-template={{ range .items }}"+
-					"{{ if not .metadata.deletionTimestamp }}"+
-					"{{ .metadata.name }}"+
-					"{{ \"\\n\" }}{{ end }}{{ end }}",
-				"-n", namespace,
-			)
-			podOutput, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred())
-			podNames := utils.GetNonEmptyLines(podOutput)
-			g.Expect(podNames).To(HaveLen(1), "expected 1 controller pod running")
-			controllerPodName = podNames[0]
-
-			// Check pod is Ready (not just Running) - ensures webhook server is initialized
-			cmd = exec.Command("kubectl", "get",
-				"pods", controllerPodName, "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}",
-				"-n", namespace,
-			)
-			readyStatus, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(readyStatus).To(Equal("True"), "expected controller pod to be Ready (webhook server initialized)")
-		}
-		Eventually(verifyControllerUp, 2*time.Minute).Should(Succeed())
-
-		By("waiting for webhook server to be ready")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for webhook server to accept requests...\n")
-		verifyWebhookReady := func(g Gomega) {
-			// Verify webhook endpoint is reachable by attempting a dry-run resource creation
-			cmd := exec.Command("kubectl", "apply", "--dry-run=server", "-f", "test/e2e/static/webhook-validation/webhook-readiness-test.yaml")
-			_, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred(), "webhook server should respond to admission requests")
-		}
-		Eventually(verifyWebhookReady, 30*time.Second, 2*time.Second).Should(Succeed())
-
-		By("installing WorkspaceTemplate samples")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Creating jupyter-k8s-shared namespace...\n")
-		cmd = exec.Command("kubectl", "create", "namespace", "jupyter-k8s-shared")
-		_, _ = utils.Run(cmd) // Ignore error if namespace already exists
-
 		By("applying production template for tests")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Applying production template...\n")
-		cmd = exec.Command("kubectl", "apply", "-f",
+		cmd := exec.Command("kubectl", "apply", "-f",
 			"config/samples/workspace_v1alpha1_workspacetemplate_production.yaml")
-		_, err = utils.Run(cmd)
+		_, err := utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create production template")
 	})
 
 	AfterAll(func() {
 		By("cleaning up test workspaces")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Deleting test workspaces...\n")
 		cmd := exec.Command("kubectl", "delete", "workspace",
 			runningWorkspace, stoppedWorkspace, transitionWorkspace,
 			"--ignore-not-found", "--timeout=60s")
 		_, _ = utils.Run(cmd)
 
 		By("cleaning up test templates")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Deleting test templates...\n")
 		cmd = exec.Command("kubectl", "delete", "workspacetemplate",
 			"production-notebook-template",
 			"--ignore-not-found", "--wait=false")
-		_, _ = utils.Run(cmd)
-
-		By("uninstalling CRDs")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CRDs...\n")
-		cmd = exec.Command("make", "uninstall")
-		_, _ = utils.Run(cmd)
-
-		By("undeploying the controller-manager")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Undeploying controller manager...\n")
-		cmd = exec.Command("make", "undeploy")
-		_, _ = utils.Run(cmd)
-
-		By("waiting for namespace to be fully terminated")
-		Eventually(func() error {
-			cmd := exec.Command("kubectl", "get", "namespace", "jupyter-k8s-system")
-			_, err := utils.Run(cmd)
-			if err != nil {
-				return nil // namespace doesn't exist, cleanup complete
-			}
-			return fmt.Errorf("namespace still exists")
-		}, 120*time.Second, 2*time.Second).Should(Succeed())
 		_, _ = utils.Run(cmd)
 	})
 
