@@ -94,21 +94,24 @@ const (
 
 	// ControllerPodServiceAccountEnv is the environment variable for the controller pod service account
 	ControllerPodServiceAccountEnv = "CONTROLLER_POD_SERVICE_ACCOUNT"
+
+	// ResourcePrefix is the prefix for workspace resource names
+	ResourcePrefix = "workspace"
 )
 
 // GenerateDeploymentName creates a consistent deployment name
 func GenerateDeploymentName(workspaceName string) string {
-	return fmt.Sprintf("workspace-%s", workspaceName)
+	return fmt.Sprintf("%s-%s", ResourcePrefix, workspaceName)
 }
 
 // GenerateServiceName creates a consistent service name
 func GenerateServiceName(workspaceName string) string {
-	return fmt.Sprintf("workspace-%s-service", workspaceName)
+	return fmt.Sprintf("%s-%s-service", ResourcePrefix, workspaceName)
 }
 
 // GeneratePVCName creates a consistent PVC name
 func GeneratePVCName(workspaceName string) string {
-	return fmt.Sprintf("workspace-%s-pvc", workspaceName)
+	return fmt.Sprintf("%s-%s-pvc", ResourcePrefix, workspaceName)
 }
 
 // GenerateLabels creates consistent labels for resources

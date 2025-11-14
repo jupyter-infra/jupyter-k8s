@@ -14,15 +14,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// GetSSMDocumentName returns the SSM document name from environment
-func GetSSMDocumentName() (string, error) {
-	name := os.Getenv(AWSSSMDocumentNameEnv)
-	if name == "" {
-		return "", fmt.Errorf("%s environment variable is required", AWSSSMDocumentNameEnv)
-	}
-	return name, nil
-}
-
 // SSMClientInterface defines the interface for SSM operations we need
 type SSMClientInterface interface {
 	CreateActivation(ctx context.Context, params *ssm.CreateActivationInput, optFns ...func(*ssm.Options)) (*ssm.CreateActivationOutput, error)
@@ -114,7 +105,7 @@ func (c *SSMClient) FindInstanceByPodUID(ctx context.Context, podUID string) (st
 }
 
 // StartSession starts an SSM session for the given instance with specified document
-func (c *SSMClient) StartSession(ctx context.Context, instanceID, documentName string) (*SessionInfo, error) {
+func (c *SSMClient) StartSession(ctx context.Context, instanceID, documentName, port string) (*SessionInfo, error) {
 	// Check active session count before starting new session
 	if err := c.checkNumActiveSessions(ctx, instanceID); err != nil {
 		return nil, err
@@ -123,6 +114,9 @@ func (c *SSMClient) StartSession(ctx context.Context, instanceID, documentName s
 	input := &ssm.StartSessionInput{
 		Target:       &instanceID,
 		DocumentName: aws.String(documentName),
+		Parameters: map[string][]string{
+			"portNumber": {port},
+		},
 	}
 
 	result, err := c.client.StartSession(ctx, input)

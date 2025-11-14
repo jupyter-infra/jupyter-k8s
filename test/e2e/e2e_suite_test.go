@@ -99,8 +99,16 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
+	By("cleaning up all resources before namespace deletion")
+	// Force cleanup of all workspaces and templates to prevent finalizer deadlock
+	cmd := exec.Command("kubectl", "delete", "workspace", "--all", "--ignore-not-found", "--wait=false", "--timeout=60s")
+	_, _ = utils.Run(cmd)
+	
+	cmd = exec.Command("kubectl", "delete", "workspacetemplate", "--all", "--ignore-not-found", "--wait=false", "--timeout=60s")
+	_, _ = utils.Run(cmd)
+
 	By("removing shared test namespace")
-	cmd := exec.Command("kubectl", "delete", "ns", namespace, "--wait=true", "--timeout=300s")
+	cmd = exec.Command("kubectl", "delete", "ns", namespace, "--wait=true", "--timeout=300s")
 	_, _ = utils.Run(cmd)
 
 	// Teardown CertManager after the suite if not skipped and if it was not already installed
