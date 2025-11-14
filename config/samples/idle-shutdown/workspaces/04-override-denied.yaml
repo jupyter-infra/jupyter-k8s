@@ -11,7 +11,7 @@ spec:
   # This override should be REJECTED by template validation
   idleShutdown:
     enabled: true
-    timeoutMinutes: 10  # Try to override template's 2 minutes
+    idleTimeoutInMinutes: 10  # Try to override template's 2 minutes
     detection:
       httpGet:
         path: "/api/idle"
