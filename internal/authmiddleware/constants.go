@@ -6,6 +6,7 @@ const (
 	HeaderAuthRequestUser              = "X-Auth-Request-User"
 	HeaderAuthRequestGroups            = "X-Auth-Request-Groups"
 	HeaderAuthRequestPreferredUsername = "X-Auth-Request-Preferred-Username"
+	HeaderAuthorization                = "Authorization"
 
 	// Headers from reverse proxy
 	HeaderForwardedURI   = "X-Forwarded-Uri"
@@ -20,4 +21,7 @@ const (
 	// Routing modes
 	RoutingModeSubdomain = "subdomain"
 	RoutingModePath      = "path"
+
+	// OIDC constants
+	OIDCAuthHeaderPrefix = "Bearer "
 )
