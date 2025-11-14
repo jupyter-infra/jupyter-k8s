@@ -15,8 +15,6 @@ import (
 	"github.com/jupyter-ai-contrib/jupyter-k8s/test/utils"
 )
 
-// commenting out flaky test: https://github.com/jupyter-infra/jupyter-k8s/issues/45
-// reinstate 'Describe' to run again
 var _ = XDescribe("Workspace Scheduling", Ordered, func() {
 	BeforeAll(func() {
 		By("installing CRDs")
@@ -90,26 +88,7 @@ var _ = XDescribe("Workspace Scheduling", Ordered, func() {
 	Context("Node Affinity", func() {
 		It("should create workspace with node affinity and apply it to deployment", func() {
 			By("creating workspace with node affinity")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: workspace-with-affinity
-spec:
-  displayName: "Workspace with Node Affinity"
-  image: "jupyter/scipy-notebook:latest"
-  desiredStatus: Running
-  affinity:
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-        - matchExpressions:
-          - key: kubernetes.io/arch
-            operator: In
-            values:
-            - amd64
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f", "static/scheduling/workspace-with-affinity.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -125,22 +104,7 @@ spec:
 	Context("Tolerations", func() {
 		It("should create workspace with tolerations and apply them to deployment", func() {
 			By("creating workspace with tolerations")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: workspace-with-tolerations
-spec:
-  displayName: "Workspace with Tolerations"
-  image: "jupyter/scipy-notebook:latest"
-  desiredStatus: Running
-  tolerations:
-  - key: "dedicated"
-    operator: "Equal"
-    value: "jupyter"
-    effect: "NoSchedule"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f", "static/scheduling/workspace-with-tolerations.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -156,19 +120,7 @@ spec:
 	Context("Node Selector", func() {
 		It("should create workspace with node selector and apply it to deployment", func() {
 			By("creating workspace with node selector")
-			workspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: workspace-with-node-selector
-spec:
-  displayName: "Workspace with Node Selector"
-  image: "jupyter/scipy-notebook:latest"
-  desiredStatus: Running
-  nodeSelector:
-    kubernetes.io/arch: "amd64"
-`
-			cmd := exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYaml))
+			cmd := exec.Command("kubectl", "apply", "-f", "static/scheduling/workspace-with-node-selector.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 

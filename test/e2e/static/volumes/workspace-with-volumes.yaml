@@ -1,0 +1,17 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-with-volumes
+spec:
+  displayName: "Workspace with External Volumes"
+  desiredStatus: Running
+  image: "jupyter/scipy-notebook:latest"
+  storage:
+    size: "1Gi"
+  volumes:
+    - name: "data-volume"
+      persistentVolumeClaimName: "external-pvc-1"
+      mountPath: "/data"
+    - name: "shared-volume"
+      persistentVolumeClaimName: "external-pvc-2"
+      mountPath: "/shared"
