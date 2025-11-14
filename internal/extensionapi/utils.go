@@ -43,9 +43,9 @@ func GetNamespaceFromPath(path string) (string, error) {
 	return "", fmt.Errorf("cannot find the namespace in URL")
 }
 
-// GetUserFromHeaders extracts the user from Kubernetes request context
-func GetUserFromHeaders(r *http.Request) string {
-	// Try to get user info from Kubernetes request context
+// GetUser extracts the user from Kubernetes request context or falls back to headers
+func GetUser(r *http.Request) string {
+	// Try to get user info from Kubernetes request context first
 	if userInfo, ok := request.UserFrom(r.Context()); ok {
 		if userInfo != nil && userInfo.GetName() != "" {
 			return stringutil.SanitizeUsername(userInfo.GetName())
@@ -59,5 +59,6 @@ func GetUserFromHeaders(r *http.Request) string {
 	if user := r.Header.Get(HeaderRemoteUser); user != "" {
 		return stringutil.SanitizeUsername(user)
 	}
+
 	return ""
 }

@@ -834,7 +834,7 @@ func TestGetUserFromHeaders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("X-Remote-User", testUser)
 
-	user := GetUserFromHeaders(req)
+	user := GetUser(req)
 	if user != testUser {
 		t.Errorf("expected %s, got %s", testUser, user)
 	}

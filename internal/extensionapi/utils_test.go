@@ -132,7 +132,7 @@ var _ = Describe("Utils", func() {
 		)
 	})
 
-	Context("GetUserFromHeaders", func() {
+	Context("GetUser", func() {
 		It("Should return user from Kubernetes request context when available", func() {
 			req := httptest.NewRequest("GET", "/test", nil)
 
@@ -141,7 +141,7 @@ var _ = Describe("Utils", func() {
 			ctx := request.WithUser(req.Context(), userInfo)
 			req = req.WithContext(ctx)
 
-			user := GetUserFromHeaders(req)
+			user := GetUser(req)
 			Expect(user).To(Equal("k8s-authenticated-user"))
 		})
 
@@ -149,7 +149,7 @@ var _ = Describe("Utils", func() {
 			req := httptest.NewRequest("GET", "/test", nil)
 			req.Header.Set("X-User", "header-user")
 
-			user := GetUserFromHeaders(req)
+			user := GetUser(req)
 			Expect(user).To(Equal("header-user"))
 		})
 
@@ -163,7 +163,7 @@ var _ = Describe("Utils", func() {
 			ctx := request.WithUser(req.Context(), userInfo)
 			req = req.WithContext(ctx)
 
-			user := GetUserFromHeaders(req)
+			user := GetUser(req)
 			Expect(user).To(Equal("real-k8s-user"))
 		})
 
@@ -171,14 +171,14 @@ var _ = Describe("Utils", func() {
 			req := httptest.NewRequest("GET", "/test", nil)
 			req.Header.Set("X-Remote-User", "remote-user")
 
-			user := GetUserFromHeaders(req)
+			user := GetUser(req)
 			Expect(user).To(Equal("remote-user"))
 		})
 
 		It("Should return empty string when no user info is available", func() {
 			req := httptest.NewRequest("GET", "/test", nil)
 
-			user := GetUserFromHeaders(req)
+			user := GetUser(req)
 			Expect(user).To(Equal(""))
 		})
 
@@ -190,7 +190,7 @@ var _ = Describe("Utils", func() {
 			ctx := request.WithUser(req.Context(), nil)
 			req = req.WithContext(ctx)
 
-			user := GetUserFromHeaders(req)
+			user := GetUser(req)
 			Expect(user).To(Equal("fallback-user"))
 		})
 
@@ -203,7 +203,7 @@ var _ = Describe("Utils", func() {
 			ctx := request.WithUser(req.Context(), userInfo)
 			req = req.WithContext(ctx)
 
-			user := GetUserFromHeaders(req)
+			user := GetUser(req)
 			Expect(user).To(Equal("fallback-user"))
 		})
 	})

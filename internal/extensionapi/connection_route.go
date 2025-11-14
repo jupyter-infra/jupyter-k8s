@@ -34,7 +34,7 @@ func (n *noOpPodExec) ExecInPod(ctx context.Context, pod *corev1.Pod, containerN
 // generateWebUIBearerTokenURL generates a Web UI connection URL with JWT token
 // Returns (connectionType, connectionURL, error)
 func (s *ExtensionServer) generateWebUIBearerTokenURL(r *http.Request, workspaceName, namespace string) (string, string, error) {
-	user := GetUserFromHeaders(r)
+	user := GetUser(r)
 	if user == "" {
 		return "", "", fmt.Errorf("user information not found in request headers")
 	}
@@ -247,7 +247,7 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 
 // checkWorkspaceAuthorization checks if the user is authorized to access the workspace
 func (s *ExtensionServer) checkWorkspaceAuthorization(r *http.Request, workspaceName, namespace string) (*WorkspaceAdmissionResult, error) {
-	user := GetUserFromHeaders(r)
+	user := GetUser(r)
 	if user == "" {
 		return nil, fmt.Errorf("user not found in request headers")
 	}

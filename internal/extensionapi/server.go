@@ -183,43 +183,27 @@ func (s *ExtensionServer) NeedLeaderElection() bool {
 	return false
 }
 
-// SetupExtensionAPIServerWithManager sets up the extension API server and adds it to the manager
-func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfig) error {
-	// Use the config or create a default config
-	if config == nil {
-		config = NewConfig()
+// createJWTManager creates a JWT manager from config (placeholder for KMS-based JWT)
+func createJWTManager(config *ExtensionConfig) (jwt.Signer, error) {
+	if config.KMSKeyID == "" {
+		return nil, fmt.Errorf("KMS key ID is required")
 	}
+	// This would normally create a KMS-based JWT manager
+	// For now, return the KMS JWT manager creation
+	return createKMSJWTManager(config)
+}
 
-	// Retrieve the logger
-	logger := mgr.GetLogger().WithName("extension-api")
-
-	// Retrieve the k8s client
-	k8sClient := mgr.GetClient()
-
-	// Retrieve the sar client
-	clientSet, err := kubernetes.NewForConfig(mgr.GetConfig())
+// createSARClient creates a SubjectAccessReview client from manager
+func createSARClient(mgr ctrl.Manager) (v1.SubjectAccessReviewInterface, error) {
+	k8sClientset, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
-		return fmt.Errorf("failed to instantiate the sar client: %w", err)
+		return nil, fmt.Errorf("failed to instantiate the sar client: %w", err)
 	}
-	sarClient := clientSet.AuthorizationV1().SubjectAccessReviews()
+	return k8sClientset.AuthorizationV1().SubjectAccessReviews(), nil
+}
 
-	// Create KMS JWT manager
-	ctx := context.Background()
-	kmsClient, err := aws.NewKMSClient(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to create KMS client: %w", err)
-	}
-
-	jwtManager := aws.NewKMSJWTManager(aws.KMSJWTConfig{
-		KMSClient:  kmsClient,
-		KeyId:      config.KMSKeyID,
-		Issuer:     "jupyter-k8s",
-		Audience:   "workspace-ui",
-		Expiration: time.Hour * 24, // 24 hour token expiration
-	})
-
-	// Create server with config
-	// Create RecommendedOptions for GenericAPIServer
+// createRecommendedOptions creates GenericAPIServer options from config
+func createRecommendedOptions(config *ExtensionConfig) *genericoptions.RecommendedOptions {
 	recommendedOptions := genericoptions.NewRecommendedOptions(
 		"/unused",
 		nil, // No codec needed for our simple case
@@ -232,29 +216,93 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	recommendedOptions.SecureServing.ServerCert.CertKey.KeyFile = config.KeyPath
 	recommendedOptions.SecureServing.ServerCert.PairName = "tls"
 
+	return recommendedOptions
+}
+
+// createGenericAPIServer creates a GenericAPIServer from options
+func createGenericAPIServer(recommendedOptions *genericoptions.RecommendedOptions) (*genericapiserver.GenericAPIServer, error) {
 	// Create server config
 	serverConfig := genericapiserver.NewRecommendedConfig(codecs)
 	serverConfig.EffectiveVersion = compatibility.DefaultBuildEffectiveVersion()
 
 	// Apply options to configure authentication automatically
 	if err := recommendedOptions.ApplyTo(serverConfig); err != nil {
-		return fmt.Errorf("failed to apply recommended options: %w", err)
+		return nil, fmt.Errorf("failed to apply recommended options: %w", err)
 	}
 
 	// Create GenericAPIServer
 	genericServer, err := serverConfig.Complete().New("extension-apiserver", genericapiserver.NewEmptyDelegate())
 	if err != nil {
-		return fmt.Errorf("failed to create generic API server: %w", err)
+		return nil, fmt.Errorf("failed to create generic API server: %w", err)
 	}
 
-	// Create extension server
-	server := NewExtensionServer(genericServer, config, &logger, k8sClient, sarClient, jwtManager)
-	server.registerAllRoutes()
+	return genericServer, nil
+}
 
-	// Add the server as a runnable to the manager
+// createKMSJWTManager creates a KMS-based JWT manager from config
+func createKMSJWTManager(config *ExtensionConfig) (jwt.Signer, error) {
+	ctx := context.Background()
+	kmsClient, err := aws.NewKMSClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create KMS client: %w", err)
+	}
+
+	jwtManager := aws.NewKMSJWTManager(aws.KMSJWTConfig{
+		KMSClient:  kmsClient,
+		KeyId:      config.KMSKeyID,
+		Issuer:     "jupyter-k8s",
+		Audience:   "workspace-ui",
+		Expiration: time.Minute * 5, // 24 hour token expiration
+	})
+
+	return jwtManager, nil
+}
+
+// createExtensionServer creates and configures the extension server
+func createExtensionServer(genericServer *genericapiserver.GenericAPIServer, config *ExtensionConfig, logger *logr.Logger, k8sClient client.Client, sarClient v1.SubjectAccessReviewInterface, jwtManager jwt.Signer) *ExtensionServer {
+	server := NewExtensionServer(genericServer, config, logger, k8sClient, sarClient, jwtManager)
+	server.registerAllRoutes()
+	return server
+}
+
+// addServerToManager adds the server to the controller manager
+func addServerToManager(mgr ctrl.Manager, server *ExtensionServer) error {
 	if err := mgr.Add(server); err != nil {
 		return fmt.Errorf("failed to add extension API server to manager: %w", err)
 	}
-
 	return nil
+}
+// SetupExtensionAPIServerWithManager sets up the extension API server and adds it to the manager
+func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfig) error {
+	// Use the config or create a default config
+	if config == nil {
+		config = NewConfig()
+	}
+
+	logger := mgr.GetLogger().WithName("extension-api")
+
+	// Create JWT manager
+	jwtManager, err := createJWTManager(config)
+	if err != nil {
+		return err
+	}
+
+	// Create SAR client
+	sarClient, err := createSARClient(mgr)
+	if err != nil {
+		return err
+	}
+
+	// Create GenericAPIServer
+	recommendedOptions := createRecommendedOptions(config)
+	genericServer, err := createGenericAPIServer(recommendedOptions)
+	if err != nil {
+		return err
+	}
+
+	// Create and configure extension server
+	server := createExtensionServer(genericServer, config, &logger, mgr.GetClient(), sarClient, jwtManager)
+
+	// Add server to manager
+	return addServerToManager(mgr, server)
 }

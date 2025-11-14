@@ -6,6 +6,8 @@ import (
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
+	"k8s.io/apiserver/pkg/authentication/user"
+	"k8s.io/apiserver/pkg/endpoints/request"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -35,7 +37,11 @@ func TestCheckWorkspaceAuthorization_PublicWorkspace(t *testing.T) {
 	server := &ExtensionServer{k8sClient: client, logger: &logger}
 
 	req, _ := http.NewRequest("POST", "/test", nil)
-	req.Header.Set("X-User", "test-user")
+	// Set user in Kubernetes authentication context
+	userInfo := &user.DefaultInfo{Name: "test-user"}
+	ctx := request.WithUser(req.Context(), userInfo)
+	req = req.WithContext(ctx)
+	
 	result, err := server.checkWorkspaceAuthorization(req, "public-workspace", "default")
 
 	assert.NoError(t, err)
@@ -63,7 +69,10 @@ func TestCheckWorkspaceAuthorization_PrivateWorkspace_SameUser(t *testing.T) {
 	server := &ExtensionServer{k8sClient: client, logger: &logger}
 
 	req, _ := http.NewRequest("POST", "/test", nil)
-	req.Header.Set("X-User", "test-user")
+	// Set user in Kubernetes authentication context
+	userInfo := &user.DefaultInfo{Name: "test-user"}
+	ctx := request.WithUser(req.Context(), userInfo)
+	req = req.WithContext(ctx)
 
 	result, err := server.checkWorkspaceAuthorization(req, "private-workspace", "default")
 
@@ -92,7 +101,10 @@ func TestCheckWorkspaceAuthorization_PrivateWorkspace_DifferentUser(t *testing.T
 	server := &ExtensionServer{k8sClient: client, logger: &logger}
 
 	req, _ := http.NewRequest("POST", "/test", nil)
-	req.Header.Set("X-User", "different-user")
+	// Set user in Kubernetes authentication context
+	userInfo := &user.DefaultInfo{Name: "different-user"}
+	ctx := request.WithUser(req.Context(), userInfo)
+	req = req.WithContext(ctx)
 
 	result, err := server.checkWorkspaceAuthorization(req, "private-workspace", "default")
 
@@ -108,7 +120,10 @@ func TestCheckWorkspaceAuthorization_WorkspaceNotFound(t *testing.T) {
 	server := &ExtensionServer{k8sClient: client, logger: &logger}
 
 	req, _ := http.NewRequest("POST", "/test", nil)
-	req.Header.Set("X-User", "test-user")
+	// Set user in Kubernetes authentication context
+	userInfo := &user.DefaultInfo{Name: "test-user"}
+	ctx := request.WithUser(req.Context(), userInfo)
+	req = req.WithContext(ctx)
 	result, err := server.checkWorkspaceAuthorization(req, "non-existent", "default")
 
 	assert.NoError(t, err)
