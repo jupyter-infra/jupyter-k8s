@@ -1,0 +1,29 @@
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: hyperpod-workspace-app-type-policy
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - operations: ["CREATE", "UPDATE"]
+      apiGroups: ["workspace.jupyter.org"]
+      apiVersions: ["v1alpha1"]
+      resources: ["workspaces"]
+  validations:
+  - expression: |
+      !has(object.spec.appType) || 
+      (object.spec.appType == "jupyter" || object.spec.appType == "code-editor")
+    message: "Workspace app type must be either 'jupyter' or 'code-editor'"
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: hyperpod-workspace-app-type-binding
+spec:
+  policyName: hyperpod-workspace-app-type-policy
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        hyperpod.aws.com/managed: "true"
