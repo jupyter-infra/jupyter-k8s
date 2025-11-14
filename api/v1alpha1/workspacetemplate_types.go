@@ -189,13 +189,13 @@ type IdleShutdownOverridePolicy struct {
 	// +optional
 	Allow *bool `json:"allow,omitempty"`
 
-	// MinTimeoutMinutes is the minimum allowed timeout
+	// MinIdleTimeoutInMinutes is the minimum allowed timeout
 	// +optional
-	MinTimeoutMinutes *int `json:"minTimeoutMinutes,omitempty"`
+	MinIdleTimeoutInMinutes *int `json:"minIdleTimeoutInMinutes,omitempty"`
 
-	// MaxTimeoutMinutes is the maximum allowed timeout
+	// MaxIdleTimeoutInMinutes is the maximum allowed timeout
 	// +optional
-	MaxTimeoutMinutes *int `json:"maxTimeoutMinutes,omitempty"`
+	MaxIdleTimeoutInMinutes *int `json:"maxIdleTimeoutInMinutes,omitempty"`
 }
 
 // WorkspaceTemplateStatus defines the observed state of WorkspaceTemplate

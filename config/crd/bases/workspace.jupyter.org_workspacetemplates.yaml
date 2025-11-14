@@ -1089,14 +1089,14 @@ spec:
                   enabled:
                     description: Enabled indicates if idle shutdown is enabled
                     type: boolean
-                  timeoutMinutes:
-                    description: TimeoutMinutes specifies idle timeout in minutes
+                  idleTimeoutInMinutes:
+                    description: IdleTimeoutInMinutes specifies idle timeout in minutes
                     minimum: 1
                     type: integer
                 required:
                 - detection
                 - enabled
-                - timeoutMinutes
+                - idleTimeoutInMinutes
                 type: object
               defaultImage:
                 description: DefaultImage is the default container image for workspaces
@@ -1696,11 +1696,11 @@ spec:
                     description: Allow controls whether workspaces can override idle
                       shutdown
                     type: boolean
-                  maxTimeoutMinutes:
-                    description: MaxTimeoutMinutes is the maximum allowed timeout
+                  maxIdleTimeoutInMinutes:
+                    description: MaxIdleTimeoutInMinutes is the maximum allowed timeout
                     type: integer
-                  minTimeoutMinutes:
-                    description: MinTimeoutMinutes is the minimum allowed timeout
+                  minIdleTimeoutInMinutes:
+                    description: MinIdleTimeoutInMinutes is the minimum allowed timeout
                     type: integer
                 type: object
               primaryStorage:
