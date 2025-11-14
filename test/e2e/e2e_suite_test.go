@@ -66,7 +66,12 @@ var _ = BeforeSuite(func() {
 
 	// Check if image exists to skip unnecessary rebuild
 	By("checking if manager image exists")
-	cmd := exec.Command("finch", "image", "inspect", projectImage)
+	// Get container tool from environment (matches Makefile pattern)
+	containerTool := os.Getenv("CONTAINER_TOOL")
+	if containerTool == "" {
+		containerTool = "docker" // Default to docker for CI compatibility
+	}
+	cmd := exec.Command(containerTool, "image", "inspect", projectImage)
 	if _, err := cmd.CombinedOutput(); err != nil {
 		By("building the manager(Operator) image")
 		cmd = exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
@@ -81,6 +86,23 @@ var _ = BeforeSuite(func() {
 	By("loading the manager(Operator) image on Kind")
 	err := utils.LoadImageToKindClusterWithName(projectImage)
 	Expect(err).NotTo(HaveOccurred(), "Failed to load image to Kind cluster")
+
+	// Verify image was successfully loaded to Kind
+	cmd = exec.Command("kubectl", "get", "nodes",
+		"-o", "jsonpath={.items[0].status.nodeInfo.containerRuntimeVersion}")
+	runtime, _ := utils.Run(cmd)
+	_, _ = fmt.Fprintf(GinkgoWriter, "Container runtime: %s\n", strings.TrimSpace(string(runtime)))
+
+	// List images on the node to confirm our image is there
+	cmd = exec.Command("docker", "exec", "jupyter-k8s-test-e2e-control-plane",
+		"crictl", "images")
+	if images, err := utils.Run(cmd); err == nil {
+		if strings.Contains(string(images), projectImage) {
+			_, _ = fmt.Fprintf(GinkgoWriter, "✓ Image %s confirmed on node\n", projectImage)
+		} else {
+			_, _ = fmt.Fprintf(GinkgoWriter, "⚠ WARNING: Image %s NOT found on node\n", projectImage)
+		}
+	}
 
 	// The tests-e2e are intended to run on a temporary cluster that is created and destroyed for testing.
 	// To prevent errors when tests run in environments with CertManager already installed,
@@ -114,6 +136,14 @@ var _ = BeforeSuite(func() {
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to create shared test namespace")
 
+	// Verify namespace actually exists and is Active
+	cmd = exec.Command("kubectl", "get", "ns", namespace,
+		"-o", "jsonpath={.status.phase}")
+	phase, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to verify namespace exists")
+	Expect(strings.TrimSpace(string(phase))).To(Equal("Active"),
+		"Namespace not in Active phase")
+
 	By("labeling the namespace to enforce the restricted security policy")
 	cmd = exec.Command("kubectl", "label", "--overwrite", "ns", namespace,
 		"pod-security.kubernetes.io/enforce=restricted")
@@ -134,6 +164,33 @@ var _ = BeforeSuite(func() {
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
+	By("waiting for CRDs to be established in API server")
+	Eventually(func(g Gomega) {
+		// Workspace CRD
+		cmd := exec.Command("kubectl", "get", "crd",
+			"workspaces.workspace.jupyter.org",
+			"-o", "jsonpath={.status.conditions[?(@.type=='Established')].status}")
+		status, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(strings.TrimSpace(string(status))).To(Equal("True"))
+
+		// WorkspaceTemplate CRD
+		cmd = exec.Command("kubectl", "get", "crd",
+			"workspacetemplates.workspace.jupyter.org",
+			"-o", "jsonpath={.status.conditions[?(@.type=='Established')].status}")
+		status, err = utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(strings.TrimSpace(string(status))).To(Equal("True"))
+
+		// WorkspaceAccessStrategy CRD
+		cmd = exec.Command("kubectl", "get", "crd",
+			"workspaceaccessstrategies.workspace.jupyter.org",
+			"-o", "jsonpath={.status.conditions[?(@.type=='Established')].status}")
+		status, err = utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(strings.TrimSpace(string(status))).To(Equal("True"))
+	}).WithTimeout(30 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
+
 	By("deploying the controller-manager with webhook enabled")
 	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
 	_, err = utils.Run(cmd)
@@ -144,6 +201,29 @@ var _ = BeforeSuite(func() {
 		"-n", namespace, "--for=condition=Available", "--timeout=3m")
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Controller deployment failed to become available")
+
+	By("verifying controller pods are running")
+	Eventually(func(g Gomega) {
+		cmd := exec.Command("kubectl", "get", "pods",
+			"-l", "control-plane=controller-manager",
+			"-n", namespace,
+			"-o", "jsonpath={.items[*].metadata.name}")
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		podNames := strings.Fields(strings.TrimSpace(string(output)))
+		g.Expect(len(podNames)).To(BeNumerically(">=", 1), "Expected at least 1 controller pod")
+
+		// Verify pod is actually Running, not CrashLoopBackOff
+		for _, podName := range podNames {
+			cmd = exec.Command("kubectl", "get", "pod", podName,
+				"-n", namespace,
+				"-o", "jsonpath={.status.phase}")
+			phase, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(strings.TrimSpace(string(phase))).To(Equal("Running"),
+				fmt.Sprintf("Pod %s not in Running state", podName))
+		}
+	}).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(Succeed())
 
 	By("waiting for webhook certificate to be ready")
 	Eventually(func(g Gomega) {
@@ -190,6 +270,27 @@ func dumpSetupDiagnostics() {
 	cmd := exec.Command("kubectl", "get", "pods", "-A")
 	if output, _ := utils.Run(cmd); len(output) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nAll pods:\n%s\n", output)
+	}
+
+	// Detailed pod status for jupyter-k8s-system
+	cmd = exec.Command("kubectl", "describe", "pods",
+		"-n", namespace, "-l", "control-plane=controller-manager")
+	if podDetails, _ := utils.Run(cmd); len(podDetails) > 0 {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\nController pod details:\n%s\n", podDetails)
+	}
+
+	// Check deployment status
+	cmd = exec.Command("kubectl", "get", "deployment",
+		"-n", namespace, "-o", "wide")
+	if deploys, _ := utils.Run(cmd); len(deploys) > 0 {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\nDeployments:\n%s\n", deploys)
+	}
+
+	// Check replicasets (shows deployment issues)
+	cmd = exec.Command("kubectl", "get", "replicasets",
+		"-n", namespace, "-o", "wide")
+	if rs, _ := utils.Run(cmd); len(rs) > 0 {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\nReplicaSets:\n%s\n", rs)
 	}
 
 	cmd = exec.Command("kubectl", "logs", "-n", namespace,
