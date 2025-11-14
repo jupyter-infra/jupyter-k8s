@@ -73,10 +73,10 @@ authmiddleware:
   resources:
     limits:
       cpu: 200m
-      memory: 128Mi
+      memory: 256Mi
     requests:
       cpu: 200m
-      memory: 128Mi
+      memory: 256Mi
   # JWT configuration
   # JWT signing type: "standard" or "kms"
   jwtSigningType: "kms"
