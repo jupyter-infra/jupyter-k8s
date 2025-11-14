@@ -55,7 +55,7 @@ const (
 // SSMRemoteAccessStrategy handles SSM remote access strategy operations
 type SSMRemoteAccessStrategy struct {
 	ssmClient   SSMRemoteAccessClientInterface
-	podExecUtil PodExecInterface 
+	podExecUtil PodExecInterface
 }
 
 // NewSSMRemoteAccessStrategy creates a new SSMRemoteAccessStrategy with optional dependency injection
