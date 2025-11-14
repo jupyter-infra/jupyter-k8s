@@ -339,6 +339,15 @@ setup-kind: ## Set up a Kind cluster for development if it does not exist
 		echo "cert-manager is already installed, skipping installation"; \
 	fi
 
+.PHONY: test-e2e-focus
+test-e2e-focus: setup-test-e2e manifests generate fmt vet ## Run specific e2e tests using FOCUS parameter. Usage: make test-e2e-focus FOCUS="Primary Storage"
+	@if [ -z "$(FOCUS)" ]; then \
+		echo "Error: FOCUS parameter is required. Usage: make test-e2e-focus FOCUS=\"Primary Storage\""; \
+		exit 1; \
+	fi
+	KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -ginkgo.v -ginkgo.focus="$(FOCUS)"
+	$(MAKE) cleanup-test-e2e
+
 .PHONY: teardown-kind
 teardown-kind: ## Tear down the Kind cluster, registry, and clean up images
 	# Delete the Kind cluster

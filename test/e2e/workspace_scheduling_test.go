@@ -4,7 +4,10 @@
 package e2e
 
 import (
+	"fmt"
 	"os/exec"
+	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -12,24 +15,80 @@ import (
 	"github.com/jupyter-ai-contrib/jupyter-k8s/test/utils"
 )
 
-// This test suite validates workspace scheduling features: affinity, tolerations, node selectors
-// commenting out flaky test: https://github.com/jupyter-infra/jupyter-k8s/issues/45
-// reinstate 'Describe' to run again
 var _ = XDescribe("Workspace Scheduling", Ordered, func() {
+	BeforeAll(func() {
+		By("installing CRDs")
+		cmd := exec.Command("make", "install")
+		_, err := utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
+
+		By("deploying the controller-manager")
+		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to deploy controller")
+
+		By("waiting for controller-manager to be ready")
+		verifyControllerUp := func(g Gomega) {
+			cmd := exec.Command("kubectl", "get",
+				"pods", "-l", "control-plane=controller-manager",
+				"-o", "go-template={{ range .items }}"+
+					"{{ if not .metadata.deletionTimestamp }}"+
+					"{{ .metadata.name }}"+
+					"{{ \"\\n\" }}{{ end }}{{ end }}",
+				"-n", namespace,
+			)
+			podOutput, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			podNames := utils.GetNonEmptyLines(podOutput)
+			g.Expect(podNames).To(HaveLen(1), "expected 1 controller pod running")
+
+			cmd = exec.Command("kubectl", "get",
+				"pods", podNames[0], "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}",
+				"-n", namespace,
+			)
+			readyStatus, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(readyStatus).To(Equal("True"), "expected controller pod to be Ready")
+		}
+		Eventually(verifyControllerUp, 2*time.Minute).Should(Succeed())
+	})
 
 	AfterAll(func() {
 		By("cleaning up test workspaces")
+		// Use --wait=true for synchronous deletion to ensure finalizers are processed
 		cmd := exec.Command("kubectl", "delete", "workspace",
 			"workspace-with-affinity", "workspace-with-tolerations", "workspace-with-node-selector",
-			"--ignore-not-found", "--wait=true", "--timeout=60s")
+			"--ignore-not-found", "--wait=true", "--timeout=180s")
+		_, _ = utils.Run(cmd)
+
+		By("undeploying the controller-manager")
+		// Undeploy controller BEFORE uninstalling CRDs to allow controller to process finalizers
+		// This follows K8s best practice: delete resources in reverse order of creation
+		cmd = exec.Command("make", "undeploy")
+		_, _ = utils.Run(cmd)
+
+		By("waiting for controller pod to be fully terminated")
+		// Ensure controller is completely stopped before deleting CRDs
+		Eventually(func(g Gomega) {
+			cmd := exec.Command("kubectl", "get", "pods",
+				"-n", "jupyter-k8s-system",
+				"-l", "control-plane=controller-manager",
+				"-o", "name")
+			output, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(strings.TrimSpace(string(output))).To(BeEmpty())
+		}).WithTimeout(60 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
+		By("uninstalling CRDs")
+		// Delete CRDs last to avoid race conditions with controller finalizer processing
+		cmd = exec.Command("make", "uninstall")
 		_, _ = utils.Run(cmd)
 	})
 
 	Context("Node Affinity", func() {
 		It("should create workspace with node affinity and apply it to deployment", func() {
 			By("creating workspace with node affinity")
-			cmd := exec.Command("kubectl", "apply",
-				"-f", "test/e2e/static/workspace_with_affinity.yaml")
+			cmd := exec.Command("kubectl", "apply", "-f", "static/scheduling/workspace-with-affinity.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -45,8 +104,7 @@ var _ = XDescribe("Workspace Scheduling", Ordered, func() {
 	Context("Tolerations", func() {
 		It("should create workspace with tolerations and apply them to deployment", func() {
 			By("creating workspace with tolerations")
-			cmd := exec.Command("kubectl", "apply",
-				"-f", "test/e2e/static/workspace_with_tolerations.yaml")
+			cmd := exec.Command("kubectl", "apply", "-f", "static/scheduling/workspace-with-tolerations.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -62,8 +120,7 @@ var _ = XDescribe("Workspace Scheduling", Ordered, func() {
 	Context("Node Selector", func() {
 		It("should create workspace with node selector and apply it to deployment", func() {
 			By("creating workspace with node selector")
-			cmd := exec.Command("kubectl", "apply",
-				"-f", "test/e2e/static/workspace_with_node_selector.yaml")
+			cmd := exec.Command("kubectl", "apply", "-f", "static/scheduling/workspace-with-node-selector.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 

@@ -45,16 +45,7 @@ var _ = Describe("Webhook Owner", Ordered, func() {
 
 		It("should preserve existing annotations when adding created-by", func() {
 			By("creating workspace with existing annotation")
-			workspaceYAML := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: workspace-with-annotations
-  annotations:
-    custom-annotation: "test-value"
-spec:
-  displayName: "Test Workspace"
-`
-			cmd := exec.Command("sh", "-c", fmt.Sprintf("echo '%s' | kubectl apply -f -", workspaceYAML))
+			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/static/webhook-validation/workspace-with-annotations.yaml")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
