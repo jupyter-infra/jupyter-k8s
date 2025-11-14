@@ -107,15 +107,15 @@ var _ = BeforeSuite(func() {
 
 	By("creating shared test namespace")
 	// Delete first to ensure clean state (idempotent)
-	cmd = exec.Command("kubectl", "delete", "ns", controllerNamespace, "--ignore-not-found", "--wait=true", "--timeout=300s")
+	cmd = exec.Command("kubectl", "delete", "ns", namespace, "--ignore-not-found", "--wait=true", "--timeout=300s")
 	_, _ = utils.Run(cmd)
 	// Create namespace for all test suites
-	cmd = exec.Command("kubectl", "create", "ns", controllerNamespace)
+	cmd = exec.Command("kubectl", "create", "ns", namespace)
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to create shared test namespace")
 
 	By("labeling the namespace to enforce the restricted security policy")
-	cmd = exec.Command("kubectl", "label", "--overwrite", "ns", controllerNamespace,
+	cmd = exec.Command("kubectl", "label", "--overwrite", "ns", namespace,
 		"pod-security.kubernetes.io/enforce=restricted")
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with pod security policy")
@@ -141,14 +141,14 @@ var _ = BeforeSuite(func() {
 
 	By("waiting for controller deployment to be available")
 	cmd = exec.Command("kubectl", "wait", "deployment/jupyter-k8s-controller-manager",
-		"-n", controllerNamespace, "--for=condition=Available", "--timeout=3m")
+		"-n", namespace, "--for=condition=Available", "--timeout=3m")
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Controller deployment failed to become available")
 
 	By("waiting for webhook certificate to be ready")
 	Eventually(func(g Gomega) {
 		cmd := exec.Command("kubectl", "get", "certificate", webhookCertificateName,
-			"-n", controllerNamespace,
+			"-n", namespace,
 			"-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
 		status, err := utils.Run(cmd)
 		g.Expect(err).NotTo(HaveOccurred())
@@ -192,7 +192,7 @@ func dumpSetupDiagnostics() {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nAll pods:\n%s\n", output)
 	}
 
-	cmd = exec.Command("kubectl", "logs", "-n", controllerNamespace,
+	cmd = exec.Command("kubectl", "logs", "-n", namespace,
 		"-l", "control-plane=controller-manager", "--tail=100")
 	if logs, _ := utils.Run(cmd); len(logs) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nController logs:\n%s\n", logs)
@@ -204,7 +204,7 @@ func dumpSetupDiagnostics() {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nWarning events:\n%s\n", events)
 	}
 
-	cmd = exec.Command("kubectl", "get", "certificate", "-n", controllerNamespace)
+	cmd = exec.Command("kubectl", "get", "certificate", "-n", namespace)
 	if certs, _ := utils.Run(cmd); len(certs) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nCertificates:\n%s\n", certs)
 	}
@@ -253,10 +253,10 @@ var _ = AfterSuite(func() {
 	By("deleting cert-manager resources")
 	// Clean up certificates and issuers created by the controller
 	cmd = exec.Command("kubectl", "delete", "certificate", webhookCertificateName,
-		"-n", controllerNamespace, "--ignore-not-found")
+		"-n", namespace, "--ignore-not-found")
 	_, _ = utils.Run(cmd)
 	cmd = exec.Command("kubectl", "delete", "issuer", "selfsigned-issuer",
-		"-n", controllerNamespace, "--ignore-not-found")
+		"-n", namespace, "--ignore-not-found")
 	_, _ = utils.Run(cmd)
 
 	By("undeploying the controller-manager")
@@ -271,7 +271,7 @@ var _ = AfterSuite(func() {
 	// Ensure controller is completely stopped before deleting CRDs
 	// This prevents race conditions with controller finalizer processing
 	Eventually(func(g Gomega) {
-		cmd := exec.Command("kubectl", "get", "pods", "-n", controllerNamespace,
+		cmd := exec.Command("kubectl", "get", "pods", "-n", namespace,
 			"-l", "control-plane=controller-manager",
 			"-o", "jsonpath={.items[*].status.phase}")
 		output, err := utils.Run(cmd)
@@ -283,13 +283,13 @@ var _ = AfterSuite(func() {
 
 	// Defensive check: Force delete if pod is still stuck despite Eventually verification
 	// This handles edge cases like finalizers or disrupted API server communication
-	cmd = exec.Command("kubectl", "get", "pods", "-n", controllerNamespace,
+	cmd = exec.Command("kubectl", "get", "pods", "-n", namespace,
 		"-l", "control-plane=controller-manager", "-o", "name")
 	if output, _ := utils.Run(cmd); strings.TrimSpace(string(output)) != "" {
 		By("Force deleting stuck controller pod")
 		podName := strings.TrimSpace(string(output))
 		cmd = exec.Command("kubectl", "delete", podName,
-			"-n", controllerNamespace, "--force", "--grace-period=0")
+			"-n", namespace, "--force", "--grace-period=0")
 		_, _ = utils.Run(cmd)
 	}
 
@@ -315,7 +315,7 @@ var _ = AfterSuite(func() {
 	}
 
 	By("removing shared test namespace")
-	cmd = exec.Command("kubectl", "delete", "ns", controllerNamespace, "--wait=true", "--timeout=300s")
+	cmd = exec.Command("kubectl", "delete", "ns", namespace, "--wait=true", "--timeout=300s")
 	_, _ = utils.Run(cmd)
 
 	// Teardown CertManager after the suite if not skipped and if it was not already installed
