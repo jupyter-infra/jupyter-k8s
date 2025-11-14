@@ -30,7 +30,7 @@ spec:
           service:
             name: traefik
             port:
-              number: 443
+              number: 80
   - host: "*.{{ .Values.domain }}"
     http:
       paths:
@@ -40,5 +40,5 @@ spec:
           service:
             name: traefik
             port:
-              number: 443
+              number: 80
 {{- end }}
