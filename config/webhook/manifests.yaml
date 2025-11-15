@@ -39,7 +39,7 @@ webhooks:
       namespace: system
       path: /validate-pods-exec-workspace
       port: 9443
-  failurePolicy: Fail
+  failurePolicy: Ignore
   name: vpods-exec-workspace-v1.kb.io
   rules:
   - apiGroups:

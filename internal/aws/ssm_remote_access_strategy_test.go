@@ -118,10 +118,7 @@ func mockWorkspaceSetup(mockPodExec *MockPodExecUtil) {
 		mock.Anything,
 		mock.Anything,
 		WorkspaceContainerName,
-		mock.MatchedBy(func(cmd []string) bool {
-			return len(cmd) == 3 && cmd[0] == "bash" && cmd[1] == "-c" &&
-				strings.Contains(cmd[2], "remote-access-server")
-		}),
+		[]string{RemoteAccessServerScriptPath, "--port", RemoteAccessServerPort},
 		"",
 	).Return("", nil).Once()
 }
@@ -172,8 +169,8 @@ func (m *MockSSMRemoteAccessClient) FindInstanceByPodUID(ctx context.Context, po
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockSSMRemoteAccessClient) StartSession(ctx context.Context, instanceID, documentName string) (*SessionInfo, error) {
-	args := m.Called(ctx, instanceID, documentName)
+func (m *MockSSMRemoteAccessClient) StartSession(ctx context.Context, instanceID, documentName, port string) (*SessionInfo, error) {
+	args := m.Called(ctx, instanceID, documentName, port)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -643,7 +640,7 @@ func TestGenerateVSCodeConnectionURL_Success(t *testing.T) {
 	mockSSMClient.On("FindInstanceByPodUID", mock.Anything, "test-pod-uid").Return("i-1234567890abcdef0", nil)
 
 	// Mock StartSession
-	mockSSMClient.On("StartSession", mock.Anything, "i-1234567890abcdef0", "test-document").Return(
+	mockSSMClient.On("StartSession", mock.Anything, "i-1234567890abcdef0", "test-document", RemoteAccessServerPort).Return(
 		&SessionInfo{
 			SessionID:  "sess-123",
 			TokenValue: "token-456",
@@ -653,10 +650,12 @@ func TestGenerateVSCodeConnectionURL_Success(t *testing.T) {
 	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
 	assert.NoError(t, err)
 
-	// Set environment variable for SSM document name
-	t.Setenv(AWSSSMDocumentNameEnv, "test-document")
+	// Create access strategy with SSM document name
+	accessStrategy := createTestAccessStrategy(map[string]string{
+		"SSM_DOCUMENT_NAME": "test-document",
+	})
 
-	url, err := strategy.GenerateVSCodeConnectionURL(context.Background(), "test-workspace", "default", "test-pod-uid", "arn:aws:eks:us-east-1:123456789012:cluster/test")
+	url, err := strategy.GenerateVSCodeConnectionURL(context.Background(), "test-workspace", "default", "test-pod-uid", "arn:aws:eks:us-east-1:123456789012:cluster/test", accessStrategy)
 
 	assert.NoError(t, err)
 	assert.Contains(t, url, "vscode://amazonwebservices.aws-toolkit-vscode/connect/workspace")
@@ -674,15 +673,17 @@ func TestGenerateVSCodeConnectionURL_StartSessionError(t *testing.T) {
 	mockSSMClient.On("FindInstanceByPodUID", mock.Anything, "test-pod-uid").Return("i-1234567890abcdef0", nil)
 
 	// Mock StartSession failure
-	mockSSMClient.On("StartSession", mock.Anything, "i-1234567890abcdef0", "test-document").Return(nil, errors.New("session start failed"))
+	mockSSMClient.On("StartSession", mock.Anything, "i-1234567890abcdef0", "test-document", RemoteAccessServerPort).Return(nil, errors.New("session start failed"))
 
 	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
 	assert.NoError(t, err)
 
-	// Set environment variable for SSM document name
-	t.Setenv(AWSSSMDocumentNameEnv, "test-document")
+	// Create access strategy with SSM document name
+	accessStrategy := createTestAccessStrategy(map[string]string{
+		"SSM_DOCUMENT_NAME": "test-document",
+	})
 
-	url, err := strategy.GenerateVSCodeConnectionURL(context.Background(), "test-workspace", "default", "test-pod-uid", "arn:aws:eks:us-east-1:123456789012:cluster/test")
+	url, err := strategy.GenerateVSCodeConnectionURL(context.Background(), "test-workspace", "default", "test-pod-uid", "arn:aws:eks:us-east-1:123456789012:cluster/test", accessStrategy)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to start SSM session")
