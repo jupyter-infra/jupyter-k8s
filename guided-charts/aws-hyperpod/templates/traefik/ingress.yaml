@@ -31,7 +31,7 @@ spec:
           service:
             name: traefik
             port:
-              number: 443
+              number: 80
   - host: "*.{{ .Values.clusterWebUI.domain }}"
     http:
       paths:
@@ -41,5 +41,5 @@ spec:
           service:
             name: traefik
             port:
-              number: 443
+              number: 80
 {{- end }}

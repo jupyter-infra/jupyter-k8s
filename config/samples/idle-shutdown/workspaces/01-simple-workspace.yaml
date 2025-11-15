@@ -10,7 +10,7 @@ spec:
   # Complete idle shutdown config - no template needed
   idleShutdown:
     enabled: true
-    timeoutMinutes: 2
+    idleTimeoutInMinutes: 2
     detection:
       httpGet:
         path: "/api/idle"

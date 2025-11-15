@@ -255,7 +255,7 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 		KeyId:      config.KMSKeyID,
 		Issuer:     "jupyter-k8s",
 		Audience:   "workspace-ui",
-		Expiration: time.Hour * 24, // 24 hour token expiration
+		Expiration: time.Minute * 5, // 5 minute bootstrap token expiration
 	})
 
 	// Create server with config

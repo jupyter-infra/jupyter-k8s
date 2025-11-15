@@ -150,7 +150,18 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
     if ! grep -q "nodeSelector:" "${CHART_DIR}/values.yaml"; then
         echo "Adding scheduling configuration to controllerManager section"
         # Add scheduling fields after terminationGracePeriodSeconds
-        sed -i '/terminationGracePeriodSeconds:/a\  # Controller pod scheduling configuration\n  nodeSelector: {}\n  tolerations: []\n  affinity: {}' "${CHART_DIR}/values.yaml"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS sed requires different syntax for append command
+            sed -i '' '/terminationGracePeriodSeconds:/a\
+  # Controller pod scheduling configuration\
+  nodeSelector: {}\
+  tolerations: []\
+  affinity: {}
+' "${CHART_DIR}/values.yaml"
+        else
+            # Linux sed
+            sed -i '/terminationGracePeriodSeconds:/a\  # Controller pod scheduling configuration\n  nodeSelector: {}\n  tolerations: []\n  affinity: {}' "${CHART_DIR}/values.yaml"
+        fi
     fi
 
     # Append the entire patch file content to values.yaml
@@ -207,13 +218,37 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
                 # Also add extension API volume mount if not already present
                 if ! grep -q "extension-server-cert" "${MANAGER_YAML}"; then
                     # Add volume mount for extension API server certificates
-                    sed -i '/volumeMounts:/a\            {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\n            - name: extension-server-cert\n              mountPath: /tmp/extension-server/serving-certs\n              readOnly: true\n            {{- end }}' "${MANAGER_YAML}"
+                    if [[ "$OSTYPE" == "darwin"* ]]; then
+                        sed -i '' '/volumeMounts:/a\
+            {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\
+            - name: extension-server-cert\
+              mountPath: /tmp/extension-server/serving-certs\
+              readOnly: true\
+            {{- end }}
+' "${MANAGER_YAML}"
+                    else
+                        sed -i '/volumeMounts:/a\            {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\n            - name: extension-server-cert\n              mountPath: /tmp/extension-server/serving-certs\n              readOnly: true\n            {{- end }}' "${MANAGER_YAML}"
+                    fi
 
                     # Add volume for extension API server certificates
-                    sed -i '/volumes:/a\        {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\n        - name: extension-server-cert\n          secret:\n            secretName: extension-server-cert\n        {{- end }}' "${MANAGER_YAML}"
+                    if [[ "$OSTYPE" == "darwin"* ]]; then
+                        sed -i '' '/volumes:/a\
+        {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\
+        - name: extension-server-cert\
+          secret:\
+            secretName: extension-server-cert\
+        {{- end }}
+' "${MANAGER_YAML}"
+                    else
+                        sed -i '/volumes:/a\        {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\n        - name: extension-server-cert\n          secret:\n            secretName: extension-server-cert\n        {{- end }}' "${MANAGER_YAML}"
+                    fi
 
                     # Update the conditional wrapping for volumeMounts and volumes
-                    sed -i 's/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable) }}/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable .Values.extensionApi.enable) }}/g' "${MANAGER_YAML}"
+                    if [[ "$OSTYPE" == "darwin"* ]]; then
+                        sed -i '' 's/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable) }}/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable .Values.extensionApi.enable) }}/g' "${MANAGER_YAML}"
+                    else
+                        sed -i 's/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable) }}/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable .Values.extensionApi.enable) }}/g' "${MANAGER_YAML}"
+                    fi
                 fi
 
                 # Clean up temp file
@@ -339,7 +374,11 @@ echo "Patching certmanager/certificate.yaml..."
 CERT_YAML="${CHART_DIR}/templates/certmanager/certificate.yaml"
 if [ -f "${CERT_YAML}" ]; then
     # Update all issuer references to use jupyter-k8s-selfsigned-issuer
-    sed -i 's/name: selfsigned-issuer/name: jupyter-k8s-selfsigned-issuer/g' "${CERT_YAML}"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' 's/name: selfsigned-issuer/name: jupyter-k8s-selfsigned-issuer/g' "${CERT_YAML}"
+    else
+        sed -i 's/name: selfsigned-issuer/name: jupyter-k8s-selfsigned-issuer/g' "${CERT_YAML}"
+    fi
     echo "Updated issuer name to jupyter-k8s-selfsigned-issuer"
 fi
 

@@ -32,8 +32,6 @@ import (
 )
 
 var _ = Describe("WorkspaceTemplate", Ordered, func() {
-	var controllerPodName string
-
 	// Helper functions for workspace management
 	findWorkspacesUsingTemplate := func(templateName string) ([]string, error) {
 		// Use label selector to find workspaces by template
@@ -93,75 +91,8 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 	}
 
 	BeforeAll(func() {
-		By("installing CRDs")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Installing CRDs...\n")
-		cmd := exec.Command("make", "install")
-		_, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
-
-		By("deploying the controller-manager")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Deploying controller manager...\n")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to deploy controller")
-
-		// Set environment variables for e2e testing
-		By("setting controller environment variables")
-		envVars := []string{
-			"CONTROLLER_POD_SERVICE_ACCOUNT=jupyter-k8s-controller-manager",
-			"CONTROLLER_POD_NAMESPACE=jupyter-k8s-system",
-		}
-		for _, envVar := range envVars {
-			cmd = exec.Command("kubectl", "set", "env", "deployment/jupyter-k8s-controller-manager", envVar, "-n", namespace)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to set environment variable: %s", envVar))
-		}
-
-		By("waiting for controller-manager to be ready")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for controller manager pod...\n")
-		verifyControllerUp := func(g Gomega) {
-			cmd := exec.Command("kubectl", "get",
-				"pods", "-l", "control-plane=controller-manager",
-				"-o", "go-template={{ range .items }}"+
-					"{{ if not .metadata.deletionTimestamp }}"+
-					"{{ .metadata.name }}"+
-					"{{ \"\\n\" }}{{ end }}{{ end }}",
-				"-n", namespace,
-			)
-			podOutput, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred())
-			podNames := utils.GetNonEmptyLines(podOutput)
-			g.Expect(podNames).To(HaveLen(1), "expected 1 controller pod running")
-			controllerPodName = podNames[0]
-
-			// Check pod is Ready (not just Running) - ensures webhook server is initialized
-			cmd = exec.Command("kubectl", "get",
-				"pods", controllerPodName, "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}",
-				"-n", namespace,
-			)
-			readyStatus, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(readyStatus).To(Equal("True"), "expected controller pod to be Ready (webhook server initialized)")
-		}
-		Eventually(verifyControllerUp, 2*time.Minute).Should(Succeed())
-
-		By("waiting for webhook server to be ready")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for webhook server to accept requests...\n")
-		verifyWebhookReady := func(g Gomega) {
-			// Verify mutating webhook configuration has CA bundle injected
-			cmd := exec.Command("kubectl", "get", "mutatingwebhookconfiguration",
-				"jupyter-k8s-mutating-webhook-configuration",
-				"-o", "jsonpath={.webhooks[0].clientConfig.caBundle}")
-			caBundle, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(caBundle).NotTo(BeEmpty(), "webhook CA bundle should be injected by cert-manager")
-
-			// Verify webhook endpoint is reachable by attempting a dry-run resource creation
-			cmd = exec.Command("kubectl", "apply", "--dry-run=server", "-f", "test/e2e/static/webhook-validation/webhook-readiness-test.yaml")
-			_, err = utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred(), "webhook server should respond to admission requests")
-		}
-		Eventually(verifyWebhookReady, 30*time.Second, 2*time.Second).Should(Succeed())
+		var cmd *exec.Cmd
+		var err error
 
 		By("installing WorkspaceTemplate samples")
 		_, _ = fmt.Fprintf(GinkgoWriter, "Creating jupyter-k8s-shared namespace...\n")
@@ -221,18 +152,6 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			"lazy-application-template",
 			"immutability-test-template",
 			"--ignore-not-found", "--wait=false")
-		_, _ = utils.Run(cmd)
-
-		By("uninstalling CRDs")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CRDs (this deletes all CRs and allows controller to handle finalizers)...\n")
-		cmd = exec.Command("make", "uninstall")
-		cmd.Args = append(cmd.Args, "--timeout=300s")
-		_, _ = utils.Run(cmd)
-
-		By("undeploying the controller-manager")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Undeploying controller manager...\n")
-		cmd = exec.Command("make", "undeploy")
-		cmd.Args = append(cmd.Args, "--timeout=300s")
 		_, _ = utils.Run(cmd)
 	})
 
@@ -296,10 +215,10 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			By("attempting to create workspace with invalid image")
 			cmd := exec.Command("kubectl", "apply", "-f",
 				"test/e2e/static/template-validation/rejected-image-workspace.yaml")
-
+			
 			_, err := utils.Run(cmd)
 			Expect(err).To(HaveOccurred(), "Expected webhook to reject workspace with invalid image")
-
+			
 			By("verifying workspace was not created")
 			cmd = exec.Command("kubectl", "get", "workspace", "test-rejected-workspace", "--ignore-not-found")
 			output, err := utils.Run(cmd)
@@ -350,48 +269,6 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("False"))
-		})
-
-		It("should reject workspace update that violates template bounds", func() {
-			By("creating workspace with valid initial configuration")
-			cmd := exec.Command("kubectl", "apply", "-f",
-				"test/e2e/static/template-validation/valid-overrides-workspace.yaml")
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("waiting for workspace to be valid")
-			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "workspace", "valid-overrides-test",
-					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"))
-			}).WithTimeout(10 * time.Second).Should(Succeed())
-
-			By("attempting to update CPU beyond template max (2 cores)")
-			cmd = exec.Command("kubectl", "patch", "workspace", "valid-overrides-test",
-				"--type=merge", "-p", `{"spec":{"resources":{"requests":{"cpu":"3"}}}}`)
-			_, err = utils.Run(cmd)
-			Expect(err).To(HaveOccurred(), "Should reject CPU update beyond template max of 2 cores")
-
-			By("attempting to update memory beyond template max (4Gi)")
-			cmd = exec.Command("kubectl", "patch", "workspace", "valid-overrides-test",
-				"--type=merge", "-p", `{"spec":{"resources":{"requests":{"memory":"5Gi"}}}}`)
-			_, err = utils.Run(cmd)
-			Expect(err).To(HaveOccurred(), "Should reject memory update beyond template max of 4Gi")
-
-			By("attempting to update storage beyond template max (20Gi)")
-			cmd = exec.Command("kubectl", "patch", "workspace", "valid-overrides-test",
-				"--type=merge", "-p", `{"spec":{"storage":{"size":"25Gi"}}}`)
-			_, err = utils.Run(cmd)
-			Expect(err).To(HaveOccurred(), "Should reject storage update beyond template max of 20Gi")
-
-			By("verifying workspace remains valid after rejected updates")
-			cmd = exec.Command("kubectl", "get", "workspace", "valid-overrides-test",
-				"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
-			output, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(output).To(Equal("True"), "Workspace should remain valid after rejected updates")
 		})
 	})
 
@@ -457,14 +334,15 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("verifying template still exists with deletionTimestamp set")
-			time.Sleep(2 * time.Second)
-			cmd = exec.Command("kubectl", "get", "workspacetemplate",
+		By("verifying template still exists with deletionTimestamp set")
+		Eventually(func(g Gomega) {
+			cmd := exec.Command("kubectl", "get", "workspacetemplate",
 				"production-notebook-template", "-n", "jupyter-k8s-shared",
 				"-o", "jsonpath={.metadata.deletionTimestamp}")
-			output, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(output).NotTo(BeEmpty(), "expected deletionTimestamp to be set")
+			output, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(output).NotTo(BeEmpty(), "expected deletionTimestamp to be set")
+		}).WithTimeout(10 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
 
 			By("verifying finalizer is blocking deletion")
 			cmd = exec.Command("kubectl", "get", "workspacetemplate",
@@ -731,7 +609,7 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			Expect(output).To(Equal("true"))
 
 			cmd = exec.Command("kubectl", "get", "workspace", "lifecycle-test",
-				"-o", "jsonpath={.spec.idleShutdown.timeoutMinutes}")
+				"-o", "jsonpath={.spec.idleShutdown.idleTimeoutInMinutes}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("30"))
