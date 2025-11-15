@@ -67,10 +67,6 @@ func TestNewCookieManagerSameSite(t *testing.T) {
 				t.Fatalf("Failed to create cookie manager: %v", err)
 			}
 
-			if manager.csrfProtect == nil {
-				t.Errorf("CSRF protect function is nil")
-			}
-
 			// We can't directly test the CSRF protect options since they're wrapped inside the function,
 			// but we can verify that the manager fields are correctly set
 			var expectedHttpSameSite http.SameSite

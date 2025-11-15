@@ -86,7 +86,6 @@ type MockCookieHandler struct {
 	SetCookieFunc   func(w http.ResponseWriter, token string, path string, domain string)
 	GetCookieFunc   func(r *http.Request, path string) (string, error)
 	ClearCookieFunc func(w http.ResponseWriter, path string, domain string)
-	CSRFProtectFunc func() func(http.Handler) http.Handler
 }
 
 // Ensure MockCookieHandler implements the CookieHandler interface
@@ -111,18 +110,6 @@ func (m *MockCookieHandler) GetCookie(r *http.Request, path string) (string, err
 func (m *MockCookieHandler) ClearCookie(w http.ResponseWriter, path string, domain string) {
 	if m.ClearCookieFunc != nil {
 		m.ClearCookieFunc(w, path, domain)
-	}
-}
-
-// CSRFProtect calls the mock implementation
-func (m *MockCookieHandler) CSRFProtect() func(http.Handler) http.Handler {
-	if m.CSRFProtectFunc != nil {
-		return m.CSRFProtectFunc()
-	}
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r)
-		})
 	}
 }
 

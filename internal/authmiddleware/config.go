@@ -208,10 +208,6 @@ func NewConfig() (*Config, error) {
 		return nil, err
 	}
 
-	if err := applyCSRFConfig(config); err != nil {
-		return nil, err
-	}
-
 	if err := applyOidcConfig(config); err != nil {
 		return nil, err
 	}
@@ -260,13 +256,6 @@ func createDefaultConfig() *Config {
 		RoutingMode:                      DefaultRoutingMode,
 		WorkspaceNamespaceSubdomainRegex: DefaultWorkspaceNamespaceSubdomainRegex,
 		WorkspaceNameSubdomainRegex:      DefaultWorkspaceNameSubdomainRegex,
-
-		// CSRF defaults
-		CSRFCookieName:   DefaultCsrfCookieName,
-		CSRFCookieMaxAge: DefaultCsrfCookieMaxAge,
-		CSRFCookieSecure: DefaultCsrfCookieSecure,
-		CSRFFieldName:    DefaultCsrfFieldName,
-		CSRFHeaderName:   DefaultCsrfHeaderName,
 
 		// OIDC defaults
 		OidcUsernamePrefix:  DefaultOidcUsernamePrefix,
@@ -457,50 +446,6 @@ func applyCookieConfig(config *Config) error {
 
 	if cookieSameSite := os.Getenv(EnvCookieSameSite); cookieSameSite != "" {
 		config.CookieSameSite = cookieSameSite
-	}
-
-	return nil
-}
-
-// applyCSRFConfig applies CSRF-related environment variable overrides
-func applyCSRFConfig(config *Config) error {
-	// Required CSRF auth key
-	if csrfAuthKey := os.Getenv(EnvCsrfAuthKey); csrfAuthKey != "" {
-		config.CSRFAuthKey = csrfAuthKey
-	} else {
-		return fmt.Errorf("%s environment variable must be set", EnvCsrfAuthKey)
-	}
-
-	if csrfCookieName := os.Getenv(EnvCsrfCookieName); csrfCookieName != "" {
-		config.CSRFCookieName = csrfCookieName
-	}
-
-	if csrfCookieMaxAge := os.Getenv(EnvCsrfCookieMaxAge); csrfCookieMaxAge != "" {
-		d, err := time.ParseDuration(csrfCookieMaxAge)
-		if err != nil {
-			return fmt.Errorf("invalid %s: %w", EnvCsrfCookieMaxAge, err)
-		}
-		config.CSRFCookieMaxAge = d
-	}
-
-	if csrfCookieSecure := os.Getenv(EnvCsrfCookieSecure); csrfCookieSecure != "" {
-		secure, err := strconv.ParseBool(csrfCookieSecure)
-		if err != nil {
-			return fmt.Errorf("invalid %s: %w", EnvCsrfCookieSecure, err)
-		}
-		config.CSRFCookieSecure = secure
-	}
-
-	if csrfFieldName := os.Getenv(EnvCsrfFieldName); csrfFieldName != "" {
-		config.CSRFFieldName = csrfFieldName
-	}
-
-	if csrfHeaderName := os.Getenv(EnvCsrfHeaderName); csrfHeaderName != "" {
-		config.CSRFHeaderName = csrfHeaderName
-	}
-
-	if csrfTrustedOrigins := os.Getenv(EnvCsrfTrustedOrigins); csrfTrustedOrigins != "" {
-		config.CSRFTrustedOrigins = splitAndTrim(csrfTrustedOrigins, ",")
 	}
 
 	return nil
