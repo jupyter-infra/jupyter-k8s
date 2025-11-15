@@ -64,6 +64,16 @@ spec:
   accessURLTemplate: "https://{{ .Values.domain }}/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth"
   {{- end }}
 
+  {{- if .Values.authmiddleware.enabled }}
+  # Connection handler configuration for JWT authentication
+  createConnectionHandler: "aws"
+  createConnectionContext:
+    kms_key_id: "{{ .Values.authmiddleware.kmsKeyId }}"
+    {{- if .Values.authmiddleware.kmsEncryptionContext.enabled }}
+    encryption_context: '{"sagemaker:component":"amazon-sagemaker-spaces","sagemaker:eks-cluster-arn":"{{ .Values.authmiddleware.kmsEncryptionContext.eksClusterArn }}"}'
+    {{- end }}
+  {{- end }}
+
   {{- if .Values.remoteAccess.enabled }}
   # Controller-specific configuration (not injected into workspace containers)
   controllerConfig:

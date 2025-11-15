@@ -24,12 +24,12 @@ var (
 
 // ExtensionServer represents the extension API HTTP server
 type ExtensionServer struct {
-	config     *ExtensionConfig
-	k8sClient  client.Client
-	sarClient  v1.SubjectAccessReviewInterface
-	jwtManager jwt.Signer
-	logger     *logr.Logger
-	httpServer interface {
+	config        *ExtensionConfig
+	k8sClient     client.Client
+	sarClient     v1.SubjectAccessReviewInterface
+	signerFactory SignerFactory
+	logger        *logr.Logger
+	httpServer    interface {
 		ListenAndServe() error
 		ListenAndServeTLS(certFile, keyFile string) error
 		Shutdown(ctx context.Context) error
@@ -251,11 +251,12 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	}
 
 	jwtManager := aws.NewKMSJWTManager(aws.KMSJWTConfig{
-		KMSClient:  kmsClient,
-		KeyId:      config.KMSKeyID,
-		Issuer:     "jupyter-k8s",
-		Audience:   "workspace-ui",
-		Expiration: time.Hour * 24, // 24 hour token expiration
+		KMSClient:         kmsClient,
+		KeyId:             config.KMSKeyID,
+		Issuer:            "jupyter-k8s",
+		Audience:          "workspace-ui",
+		Expiration:        time.Hour * 24,
+		EncryptionContext: nil,
 	})
 
 	// Create server with config

@@ -93,6 +93,16 @@ spec:
                 description: ControllerConfig contains settings used by the controller
                   for strategy-specific operations
                 type: object
+              createConnectionContext:
+                additionalProperties:
+                  type: string
+                description: CreateConnectionContext contains configuration for the
+                  connection handler
+                type: object
+              createConnectionHandler:
+                description: CreateConnectionHandler specifies the handler for connection
+                  creation
+                type: string
               deploymentSpecModifications:
                 description: DeploymentSpecModifications defines modifications to
                   apply to workspace deployments

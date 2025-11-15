@@ -32,13 +32,13 @@ func NewJWTHandler(cfg *Config) (jwt.Handler, error) {
 			return nil, fmt.Errorf("failed to create KMS client: %w", err)
 		}
 
-		// Create KMS JWT signer
 		kmsConfig := aws.KMSJWTConfig{
-			KMSClient:  kmsClient,
-			KeyId:      cfg.KMSKeyId,
-			Issuer:     cfg.JWTIssuer,
-			Audience:   cfg.JWTAudience,
-			Expiration: cfg.JWTExpiration,
+			KMSClient:         kmsClient,
+			KeyId:             cfg.KMSKeyId,
+			Issuer:            cfg.JWTIssuer,
+			Audience:          cfg.JWTAudience,
+			Expiration:        cfg.JWTExpiration,
+			EncryptionContext: nil,
 		}
 		signer = aws.NewKMSJWTManager(kmsConfig)
 

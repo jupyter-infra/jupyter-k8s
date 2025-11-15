@@ -112,6 +112,14 @@ type WorkspaceAccessStrategySpec struct {
 	// +optional
 	ControllerConfig map[string]string `json:"controllerConfig,omitempty"`
 
+	// CreateConnectionHandler specifies the handler for connection creation
+	// +optional
+	CreateConnectionHandler string `json:"createConnectionHandler,omitempty"`
+
+	// CreateConnectionContext contains configuration for the connection handler
+	// +optional
+	CreateConnectionContext map[string]string `json:"createConnectionContext,omitempty"`
+
 	// DeploymentSpecModifications defines modifications to apply to workspace deployments
 	// +optional
 	DeploymentSpecModifications *DeploymentSpecModifications `json:"deploymentSpecModifications,omitempty"`
