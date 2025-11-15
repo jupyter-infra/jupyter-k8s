@@ -124,22 +124,20 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return r.stateMachine.ReconcileDeletion(ctx, workspace)
 	}
 
+	// Consolidated function to ensure labels are set correctly
+	// and perform at most one update
+	needsUpdate := false
+	finalizerAdded := false
+	labelsChanged := map[string]string{}
+	labelsRemoved := []string{}
+
 	// Add finalizer if missing (for new workspaces)
 	if !controllerutil.ContainsFinalizer(workspace, WorkspaceFinalizerName) {
 		logger.Info("Adding finalizer to workspace")
 		controllerutil.AddFinalizer(workspace, WorkspaceFinalizerName)
-		if err := r.Update(ctx, workspace); err != nil {
-			logger.Error(err, "Failed to add finalizer")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true}, nil
+		needsUpdate = true
+		finalizerAdded = true
 	}
-
-	// Consolidated function to ensure labels are set correctly
-	// and perform at most one update
-	needsUpdate := false
-	labelsChanged := map[string]string{}
-	labelsRemoved := []string{}
 
 	// Initialize labels map if needed
 	if workspace.Labels == nil {
@@ -209,19 +207,21 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
-	// Perform a single update if any labels have changed
+	// Perform a single update if any labels or finalizer have changed
 	if needsUpdate {
 		logger.Info("Updating workspace labels",
+			"finalizerAdded", finalizerAdded,
 			"labelsChanged", labelsChanged,
-			"labelsRemoved", labelsRemoved)
+			"labelsRemoved", labelsRemoved,
+		)
 
 		if err := r.Update(ctx, workspace); err != nil {
-			logger.Error(err, "Failed to update workspace labels")
-			return ctrl.Result{}, err
+			logger.Error(err, "Failed to update workspace labels or finalizers")
+			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 		}
-		logger.Info("Successfully updated workspace labels")
-		// Requeue to process with updated labels
-		return ctrl.Result{Requeue: true}, nil
+		logger.Info("Successfully updated workspace labels or finalizers")
+		// Requeue to process with updated labels and/or finalizer
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
 	}
 
 	// Get desired status to decide if we need to fetch AccessStrategy

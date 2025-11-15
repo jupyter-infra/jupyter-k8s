@@ -93,7 +93,7 @@ func (r *WorkspaceAccessStrategyReconciler) Reconcile(ctx context.Context, req c
 			"workspaceCount", len(workspaces))
 
 		// Use the safe utility to add finalizer (handles conflicts)
-		err = workspace.SafelyAddFinalizerToAccessStrategy(ctx, r.Client, accessStrategy)
+		err = workspace.SafelyAddFinalizerToAccessStrategy(ctx, logger, r.Client, accessStrategy)
 		if err != nil {
 			logger.Error(err, "Failed to add finalizer to AccessStrategy")
 			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
@@ -108,7 +108,7 @@ func (r *WorkspaceAccessStrategyReconciler) Reconcile(ctx context.Context, req c
 			"finalizer", webhookconst.AccessStrategyFinalizerName)
 
 		// Use the safe utility to remove finalizer (handles conflicts)
-		err := workspace.SafelyRemoveFinalizerFromAccessStrategy(ctx, r.Client, accessStrategy, false)
+		err := workspace.SafelyRemoveFinalizerFromAccessStrategy(ctx, logger, r.Client, accessStrategy, false)
 		if err != nil {
 			logger.Error(err, "Failed to remove finalizer from AccessStrategy")
 			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
@@ -164,7 +164,7 @@ func (r *WorkspaceAccessStrategyReconciler) handleDeletion(ctx context.Context, 
 	// Use the safe utility to remove finalizer (handles conflicts)
 	// Set deletedOk to true since we're in the deletion handler and
 	// it's fine if the resource is already gone
-	err = workspace.SafelyRemoveFinalizerFromAccessStrategy(ctx, r.Client, accessStrategy, true)
+	err = workspace.SafelyRemoveFinalizerFromAccessStrategy(ctx, logger, r.Client, accessStrategy, true)
 	if err != nil {
 		logger.Error(err, "Failed to remove finalizer from AccessStrategy",
 			"accessStrategyName", accessStrategy.Name)

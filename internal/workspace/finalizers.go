@@ -5,26 +5,22 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/go-logr/logr"
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // SafelyAddFinalizerToAccessStrategy attempts to add a finalizer to an AccessStrategy,
 // handling conflict errors by checking if the finalizer was added in a concurrent operation.
 func SafelyAddFinalizerToAccessStrategy(
 	ctx context.Context,
+	logger logr.Logger,
 	k8sClient client.Client,
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) error {
-
-	logger := logf.FromContext(ctx)
-	logger = logger.WithValues(
-		"accessStrategy", accessStrategy.Name,
-		"namespace", accessStrategy.Namespace)
 
 	// Check if finalizer is already present
 	if controllerutil.ContainsFinalizer(accessStrategy, webhookconst.AccessStrategyFinalizerName) {
@@ -80,14 +76,10 @@ func SafelyAddFinalizerToAccessStrategy(
 // if the resource itself is gone).
 func SafelyRemoveFinalizerFromAccessStrategy(
 	ctx context.Context,
+	logger logr.Logger,
 	k8sClient client.Client,
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 	deletedOk bool) error {
-
-	logger := logf.FromContext(ctx)
-	logger = logger.WithValues(
-		"accessStrategy", accessStrategy.Name,
-		"namespace", accessStrategy.Namespace)
 
 	// Check if finalizer is present
 	if !controllerutil.ContainsFinalizer(accessStrategy, webhookconst.AccessStrategyFinalizerName) {

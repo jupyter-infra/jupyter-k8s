@@ -140,7 +140,7 @@ func ensureAccessStrategyFinalizer(ctx context.Context, k8sClient client.Client,
 	}
 
 	// Use the safe utility to add finalizer (handles conflicts)
-	err = workspaceutil.SafelyAddFinalizerToAccessStrategy(ctx, k8sClient, accessStrategy)
+	err = workspaceutil.SafelyAddFinalizerToAccessStrategy(ctx, workspacelog, k8sClient, accessStrategy)
 	if err != nil {
 		workspacelog.Error(err, "Failed to add finalizer to AccessStrategy",
 			"accessStrategy", accessStrategy.Name,
