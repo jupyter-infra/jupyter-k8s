@@ -1,6 +1,7 @@
 package authmiddleware
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -31,4 +32,22 @@ func ExtractSubdomain(host string) string {
 		return parts[0]
 	}
 	return host
+}
+
+// ExtractBearerToken extracts a bearer token from an Authorization header
+func ExtractBearerToken(authHeader string) (string, error) {
+	if authHeader == "" {
+		return "", errors.New("authorization header is empty")
+	}
+
+	if !strings.HasPrefix(authHeader, OIDCAuthHeaderPrefix) {
+		return "", errors.New("authorization header is not a bearer token")
+	}
+
+	token := strings.TrimPrefix(authHeader, OIDCAuthHeaderPrefix)
+	if token == "" {
+		return "", errors.New("bearer token is empty")
+	}
+
+	return token, nil
 }

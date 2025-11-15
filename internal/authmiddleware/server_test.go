@@ -1,6 +1,7 @@
 package authmiddleware
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -231,6 +232,216 @@ func TestServerTerminatesOnSIGINT(t *testing.T) {
 	}
 }
 
+func TestServerStarts_RetrievesKeySetFromOIDCProvider_WhenOauthIsEnabled(t *testing.T) {
+	t.Run("successful OIDC initialization", func(t *testing.T) {
+		// Create a test logger that captures logs
+		var logBuffer strings.Builder
+		logger := slog.New(slog.NewTextHandler(&logBuffer, nil))
+
+		// Create config with OAuth enabled
+		config := &Config{
+			Port:             0, // Use random port to avoid conflicts
+			ReadTimeout:      1 * time.Second,
+			WriteTimeout:     1 * time.Second,
+			ShutdownTimeout:  1 * time.Second,
+			PathRegexPattern: DefaultPathRegexPattern,
+			JWTSigningKey:    "test-key",
+			EnableOAuth:      true,
+			OIDCIssuerURL:    "https://test-issuer.example.com",
+			OIDCClientID:     "test-client-id",
+			OidcGroupsPrefix: "test-prefix:",
+		}
+
+		// Track if Start() was called on the OIDC verifier
+		startCalled := false
+
+		// Create a mock OIDC verifier that tracks if Start was called
+		mockOIDCVerifier := &MockOIDCVerifier{
+			StartFunc: func(ctx context.Context) error {
+				startCalled = true
+				return nil // Success case
+			},
+		}
+
+		// Create mocks for other components
+		jwtHandler := &MockJWTHandler{}
+		cookieHandler := &MockCookieHandler{}
+
+		// Create server with the mock OIDC verifier
+		server := NewServer(config, jwtHandler, cookieHandler, logger)
+
+		// Replace the server's OIDC verifier with our mock
+		// We need to do this because NewServer initializes its own OIDC verifier
+		server.oidcVerifier = mockOIDCVerifier
+
+		// Start server in a goroutine
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- server.Start()
+		}()
+
+		// Give the server a moment to start and initialize
+		time.Sleep(200 * time.Millisecond)
+
+		// Define cleanup to ensure server is always stopped
+		defer func() {
+			// Trigger shutdown by sending signal
+			p, err := os.FindProcess(os.Getpid())
+			if err == nil {
+				_ = p.Signal(syscall.SIGINT)
+			}
+
+			// Wait for server to shut down (with timeout)
+			select {
+			case err := <-errCh:
+				// If we're still getting the error here, it means the server started
+				// successfully (otherwise it would have returned immediately)
+				if err != nil && !strings.Contains(err.Error(), "server closed") {
+					t.Errorf("Server did not shut down gracefully: %v", err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Log("Warning: Server did not shut down within expected time")
+			}
+		}()
+
+		// Verify that Start() was called on the OIDC verifier
+		if !startCalled {
+			t.Error("OIDC verifier Start() method was not called when OAuth is enabled")
+		}
+
+		// Check that no error was sent to the error channel immediately
+		select {
+		case err := <-errCh:
+			t.Errorf("Server failed to start: %v", err)
+		default:
+			// No error means server started successfully
+		}
+	})
+
+	t.Run("OIDC initialization failure", func(t *testing.T) {
+		// Create a test logger that captures logs
+		var logBuffer strings.Builder
+		logger := slog.New(slog.NewTextHandler(&logBuffer, nil))
+
+		// Create config with OAuth enabled
+		config := &Config{
+			Port:             0, // Use random port to avoid conflicts
+			ReadTimeout:      1 * time.Second,
+			WriteTimeout:     1 * time.Second,
+			ShutdownTimeout:  1 * time.Second,
+			PathRegexPattern: DefaultPathRegexPattern,
+			JWTSigningKey:    "test-key",
+			EnableOAuth:      true,
+			OIDCIssuerURL:    "https://test-issuer.example.com",
+			OIDCClientID:     "test-client-id",
+			OidcGroupsPrefix: "test-prefix:",
+		}
+
+		// Create a mock OIDC verifier that returns an error from Start()
+		mockOIDCVerifier := &MockOIDCVerifier{
+			StartFunc: func(ctx context.Context) error {
+				return fmt.Errorf("simulated OIDC provider connection failure")
+			},
+		}
+
+		// Create mocks for other components
+		jwtHandler := &MockJWTHandler{}
+		cookieHandler := &MockCookieHandler{}
+
+		// Create server with the mock OIDC verifier
+		server := NewServer(config, jwtHandler, cookieHandler, logger)
+
+		// Replace the server's OIDC verifier with our mock
+		server.oidcVerifier = mockOIDCVerifier
+
+		// Start server directly (not in goroutine) since we expect an immediate error
+		err := server.Start()
+
+		// Verify that the server failed to start due to OIDC error
+		if err == nil {
+			t.Error("Server started successfully despite OIDC verification failure")
+		} else if !strings.Contains(err.Error(), "failed to start OIDC verifier") {
+			t.Errorf("Unexpected error: %v", err)
+		}
+	})
+}
+
+func TestServerStarts_DoesNotCallOIDCProvier_WhenOauthIsDisabled(t *testing.T) {
+	// Create a test logger that captures logs
+	var logBuffer strings.Builder
+	logger := slog.New(slog.NewTextHandler(&logBuffer, nil))
+
+	// Create config with OAuth disabled but with OIDC config present
+	config := &Config{
+		Port:             0, // Use random port to avoid conflicts
+		ReadTimeout:      1 * time.Second,
+		WriteTimeout:     1 * time.Second,
+		ShutdownTimeout:  1 * time.Second,
+		PathRegexPattern: DefaultPathRegexPattern,
+		JWTSigningKey:    "test-key",
+		EnableOAuth:      false,                             // This is the important part - OAuth is disabled
+		OIDCIssuerURL:    "https://test-issuer.example.com", // Still has OIDC config
+		OIDCClientID:     "test-client-id",
+		OidcGroupsPrefix: "test-prefix:",
+	}
+
+	// Track if Start() was incorrectly called on the OIDC verifier
+	startCalled := false
+
+	// Create a mock OIDC verifier that tracks if Start was called
+	mockOIDCVerifier := &MockOIDCVerifier{
+		StartFunc: func(ctx context.Context) error {
+			startCalled = true // This should not happen in this test
+			return nil
+		},
+	}
+
+	// Create mocks for other components
+	jwtHandler := &MockJWTHandler{}
+	cookieHandler := &MockCookieHandler{}
+
+	// Create server
+	server := NewServer(config, jwtHandler, cookieHandler, logger)
+
+	// In this test case, the server should not initialize the OIDC verifier at all
+	// since OAuth is disabled. So we'll check that server.oidcVerifier is nil after
+	// creating the server.
+
+	// We'll also manually set it just to ensure no calls happen to it during Start()
+	server.oidcVerifier = mockOIDCVerifier
+
+	// Start server in a goroutine
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- server.Start()
+	}()
+
+	// Give the server a moment to start and initialize
+	time.Sleep(200 * time.Millisecond)
+
+	// Define cleanup to ensure server is always stopped
+	defer func() {
+		// Trigger shutdown by sending signal
+		p, err := os.FindProcess(os.Getpid())
+		if err == nil {
+			_ = p.Signal(syscall.SIGINT)
+		}
+
+		// Wait for server to shut down (with timeout)
+		select {
+		case <-errCh:
+			// Server shut down successfully
+		case <-time.After(2 * time.Second):
+			t.Log("Warning: Server did not shut down within expected time")
+		}
+	}()
+
+	// Verify that Start() was not called on the OIDC verifier
+	if startCalled {
+		t.Error("OIDC verifier Start() method was incorrectly called when OAuth is disabled")
+	}
+}
+
 // TestServerTerminatesOnSIGTERM tests that the server terminates when receiving SIGTERM
 func TestServerTerminatesOnSIGTERM(t *testing.T) {
 	// Skip in short mode as it involves timing and signals
@@ -383,7 +594,20 @@ func TestServerLogsAnErrorIfClientInstantiationFails(t *testing.T) {
 	req.Header.Set("X-Auth-Request-Groups", "group1")
 	req.Header.Set("X-Forwarded-Uri", testAppPath)
 	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("Authorization", "Bearer mock-token") // Add Authorization header for OIDC
 	w := httptest.NewRecorder()
+
+	// Set up OIDC verifier with matching username
+	server.oidcVerifier = &MockOIDCVerifier{
+		VerifyTokenFunc: func(ctx context.Context, tokenString string, logger *slog.Logger) (*OIDCClaims, bool, error) {
+			claims := &OIDCClaims{
+				Subject:  "test-user",
+				Username: "test-user",
+				Groups:   []string{"group1"},
+			}
+			return claims, false, nil
+		},
+	}
 
 	// Explicitly set restClient to nil for this test
 	server.restClient = nil

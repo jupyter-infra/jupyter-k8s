@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-with-node-selector
+spec:
+  displayName: "Workspace with Node Selector"
+  image: "jupyter/scipy-notebook:latest"
+  desiredStatus: Running
+  nodeSelector:
+    kubernetes.io/arch: "amd64"

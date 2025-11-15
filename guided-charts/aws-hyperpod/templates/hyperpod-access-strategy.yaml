@@ -76,10 +76,8 @@ spec:
       additionalContainers:
         - name: "ssm-agent-sidecar"
           image: "{{ .Values.remoteAccess.ssmSidecarImage }}"
-          command: ["/bin/sh"]
-          args:
-            - "-c"
-            - "cp /usr/local/bin/remote-access-server /opt/amazon/sagemaker/workspace/ || echo \"Failed to copy: $?\"; sleep infinity"
+          command:
+            - /opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-remote-access
           resources:
             requests:
               cpu: "100m"

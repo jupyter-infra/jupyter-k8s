@@ -91,7 +91,7 @@ dex:
     - 8000
     - 18000
     - 9800
-    
+
 # Github OAuth configuration
 github:
   # GitHub OAuth client ID (required)
@@ -183,3 +183,8 @@ authmiddleware:
   readTimeout: "10s"
   writeTimeout: "10s"
   shutdownTimeout: "30s"
+  # Bearer auth configuration
+  enableOauth: true
+  enableBearerAuth: false
+  # Timeout in seconds for OIDC provider initialization
+  oidcInitTimeoutSecs: 30
