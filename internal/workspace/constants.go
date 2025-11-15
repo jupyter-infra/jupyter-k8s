@@ -19,4 +19,10 @@ package workspace
 const (
 	// LabelWorkspaceName is the label key for workspace name
 	LabelWorkspaceName = "workspace.jupyter.org/workspace-name"
+
+	// ConflictRetryDelayMilliseconds is the base delay in milliseconds before retrying after a conflict
+	ConflictRetryDelayMilliseconds = 100
+
+	// ConflictRetryJitterMilliseconds is the maximum random jitter in milliseconds added to the retry delay
+	ConflictRetryJitterMilliseconds = 50
 )
