@@ -1,8 +1,10 @@
 package authmiddleware
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -419,4 +421,33 @@ func (m *MockK8sServer) AssertRequestBody(expectedBody string) {
 	req := m.GetLastRequest()
 	require.NotNil(m.T, req, "No request was recorded")
 	assert.Equal(m.T, expectedBody, string(req.Body), "Request body does not match")
+}
+
+// MockOIDCVerifier is a mock implementation of an OIDC verifier for testing
+type MockOIDCVerifier struct {
+	VerifyTokenFunc func(ctx context.Context, tokenString string, logger *slog.Logger) (*OIDCClaims, bool, error)
+	StartFunc       func(ctx context.Context) error
+}
+
+// VerifyToken calls the mock implementation function
+func (m *MockOIDCVerifier) VerifyToken(ctx context.Context, tokenString string, logger *slog.Logger) (*OIDCClaims, bool, error) {
+	if m.VerifyTokenFunc != nil {
+		return m.VerifyTokenFunc(ctx, tokenString, logger)
+	}
+	// Default implementation with successful verification
+	claims := &OIDCClaims{
+		Subject:  "test-subject",
+		Username: "test-user",
+		Groups:   []string{"test-group"},
+	}
+	return claims, false, nil
+}
+
+// Start implements the Start method required by OIDCVerifierInterface
+func (m *MockOIDCVerifier) Start(ctx context.Context) error {
+	if m.StartFunc != nil {
+		return m.StartFunc(ctx)
+	}
+	// Default implementation with successful initialization
+	return nil
 }

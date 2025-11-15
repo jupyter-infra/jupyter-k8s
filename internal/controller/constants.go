@@ -35,6 +35,9 @@ const (
 	// LabelWorkspaceTemplateNamespace is the label key for workspace template namespace
 	LabelWorkspaceTemplateNamespace = "workspace.jupyter.org/template-namespace"
 
+	// LabelComponent is the label key for component identification
+	LabelComponent = "workspace.jupyter.org/component"
+
 	// AppLabelValue is the label value for app label
 	AppLabelValue = "jupyter"
 
@@ -116,5 +119,6 @@ func GenerateLabels(workspaceName string) map[string]string {
 	return map[string]string{
 		AppLabel:                         AppLabelValue,
 		workspaceutil.LabelWorkspaceName: workspaceName,
+		LabelComponent:                   "workspace",
 	}
 }

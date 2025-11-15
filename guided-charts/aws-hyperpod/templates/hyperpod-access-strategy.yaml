@@ -5,11 +5,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   displayName: HyperPod Access Strategy
-  {{- if .Values.authmiddleware.enabled }}
-  accessResourceNamespace: {{ .Release.Namespace }}
-  {{- end }}
-
-  {{- if .Values.authmiddleware.enabled }}
+  {{- if .Values.clusterWebUI.enabled }}
   accessResourceTemplates:
     # The authorized route - tries token verification on already authenticated requests
     - kind: IngressRoute
@@ -20,7 +16,7 @@ spec:
           entryPoints:
             - web
           routes:
-            - match: "Host(`{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.domain }}`)"
+            - match: "Host(`{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.clusterWebUI.domain }}`)"
               kind: Rule
               priority: 100
               middlewares:
@@ -42,7 +38,7 @@ spec:
           entryPoints:
             - web
           routes:
-            - match: "Host(`{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.domain }}`) && PathPrefix(`/bearer-auth`)"
+            - match: "Host(`{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.clusterWebUI.domain }}`) && PathPrefix(`/bearer-auth`)"
               kind: Rule
               priority: 110  # Higher priority specifically for bearer-auth paths
               middlewares:
@@ -60,36 +56,29 @@ spec:
   accessResourceTemplates: []
   {{- end }}
 
-  {{- if .Values.authmiddleware.enabled }}
-  accessURLTemplate: "https://{{ .Values.domain }}/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth"
+  {{- if .Values.clusterWebUI.enabled }}
+  bearerAuthURLTemplate: "https://{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.clusterWebUI.domain }}/bearer-auth"
   {{- end }}
 
-  {{- if .Values.authmiddleware.enabled }}
+  {{- if .Values.clusterWebUI.enabled  }}
   # Connection handler configuration for JWT authentication
   createConnectionHandler: "aws"
   createConnectionContext:
-    kms_key_id: "{{ .Values.authmiddleware.kmsKeyId }}"
-    {{- if .Values.authmiddleware.kmsEncryptionContext.enabled }}
+    kms_key_id: "{{ .Values.clusterWebUI.kmsKeyId }}"
+    {{- if .Values.clusterWebUI.kmsEncryptionContext.enabled }}
     encryption_context: '{"sagemaker:component":"amazon-sagemaker-spaces","sagemaker:eks-cluster-arn":"{{ .Values.authmiddleware.kmsEncryptionContext.eksClusterArn }}"}'
     {{- end }}
   {{- end }}
 
-  {{- if .Values.remoteAccess.enabled }}
-  # Controller-specific configuration (not injected into workspace containers)
-  controllerConfig:
-    SSM_MANAGED_NODE_ROLE: "sagemaker-space-ssm-managed-node-role"
-    AWS_SSM_DOCUMENT_NAME: "AWS-StartSSHSession"
-
   # Deployment modifications for SSM remote access
   deploymentSpecModifications:
     podSpec:
+      {{- if .Values.remoteAccess.enabled }}
       additionalContainers:
         - name: "ssm-agent-sidecar"
-          image: "{{ .Values.remoteAccess.ssmSidecarImage }}"
-          command: ["/bin/sh"]
-          args:
-            - "-c"
-            - "cp /usr/local/bin/remote-access-server /opt/amazon/sagemaker/workspace/ || echo \"Failed to copy: $?\"; sleep infinity"
+          image: "{{ .Values.remoteAccess.ssmSidecarImage.containerRegistry }}/{{ .Values.remoteAccess.ssmSidecarImage.repository }}:{{ .Values.remoteAccess.ssmSidecarImage.tag }}"
+          command:
+            - /opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-remote-access
           resources:
             requests:
               cpu: "100m"
@@ -105,6 +94,7 @@ spec:
               command: ["test", "-f", "/tmp/ssm-registered"]
             initialDelaySeconds: 2
             periodSeconds: 2
+      {{- end }}
 
       volumes:
         - name: "workspace-base"
@@ -113,7 +103,7 @@ spec:
 
       initContainers:
         - name: workspace-init-container
-          image: "{{ .Values.remoteAccess.ssmSidecarImage }}"
+          image: "{{ .Values.remoteAccess.ssmSidecarImage.containerRegistry }}/{{ .Values.remoteAccess.ssmSidecarImage.repository }}:{{ .Values.remoteAccess.ssmSidecarImage.tag }}"
           command:
             - /opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-init-container
           volumeMounts:
@@ -124,6 +114,12 @@ spec:
       volumeMounts:
         - name: "workspace-base"
           mountPath: "/opt/amazon/sagemaker/workspace"
+
+  {{- if .Values.remoteAccess.enabled }}
+  # Controller-specific configuration (not injected into workspace containers)
+  controllerConfig:
+    SSM_MANAGED_NODE_ROLE: "{{ .Values.remoteAccess.ssmManagedNodeRole }}"
+    AWS_SSM_DOCUMENT_NAME: "{{ .Values.remoteAccess.ssmDocumentName }}"
   {{- end }}
   mergeEnv:
     - name: WORKSPACE_NAMESPACE
@@ -136,5 +132,4 @@ spec:
       valueTemplate: "{{`{{ .Workspace.Spec.AppType }}`}}"
     - name: JUPYTER_BASE_URL
       valueTemplate: "/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/"
-  accessURLTemplate: "https://{{ .Values.domain }}/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/bearer-auth"
-  bearerAuthURLTemplate: "https://{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.domain }}/bearer-auth"
+

@@ -251,11 +251,11 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	}
 
 	jwtManager := aws.NewKMSJWTManager(aws.KMSJWTConfig{
-		KMSClient:         kmsClient,
-		KeyId:             config.KMSKeyID,
-		Issuer:            "jupyter-k8s",
-		Audience:          "workspace-ui",
-		Expiration:        time.Hour * 24,
+		KMSClient:  kmsClient,
+		KeyId:      config.KMSKeyID,
+		Issuer:     "jupyter-k8s",
+		Audience:   "workspace-ui",
+		Expiration: time.Minute * 5, // 5 minute bootstrap token expiration
 		EncryptionContext: nil,
 	})
 
