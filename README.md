@@ -74,7 +74,7 @@ kubectl apply -k config/samples/
 
 ### Workspace Templates
 
-Jupyter Workspace Templates provide standardized, reusable configurations for Jupyter Workspaces. Platform administrators can define approved environments with resource limits, allowed container images, storage configuration, and environment variables, while giving users flexibility within those boundaries.
+Jupyter Workspace Templates provide standardized, reusable configurations for Jupyter Workspaces. Platform administrators can define approved environments with resource limits, allowed container images, and storage configuration, while giving users flexibility within those boundaries.
 
 **Immutability:** Both `WorkspaceTemplate.spec` AND `Workspace.templateRef` are immutable after creation (enforced by CEL validation). To update a template, create a new version with a different name (e.g., `production-v2`). This ensures workspaces maintain stable, predictable configurations throughout their lifecycle.
 
