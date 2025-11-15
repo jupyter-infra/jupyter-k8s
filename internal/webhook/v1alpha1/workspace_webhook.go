@@ -139,19 +139,15 @@ func ensureAccessStrategyFinalizer(ctx context.Context, k8sClient client.Client,
 		return nil
 	}
 
-	// Add finalizer to the AccessStrategy
-	controllerutil.AddFinalizer(accessStrategy, webhookconst.AccessStrategyFinalizerName)
-	if err := k8sClient.Update(ctx, accessStrategy); err != nil {
+	// Use the safe utility to add finalizer (handles conflicts)
+	err = workspaceutil.SafelyAddFinalizerToAccessStrategy(ctx, k8sClient, accessStrategy)
+	if err != nil {
 		workspacelog.Error(err, "Failed to add finalizer to AccessStrategy",
 			"accessStrategy", accessStrategy.Name,
 			"namespace", accessStrategy.Namespace)
 		return fmt.Errorf("failed to add finalizer to AccessStrategy %s/%s: %w",
 			accessStrategy.Namespace, accessStrategy.Name, err)
 	}
-
-	workspacelog.Info("Added finalizer to AccessStrategy",
-		"accessStrategy", accessStrategy.Name,
-		"namespace", accessStrategy.Namespace)
 	return nil
 }
 
