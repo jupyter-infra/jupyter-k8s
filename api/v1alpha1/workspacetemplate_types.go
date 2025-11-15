@@ -66,10 +66,6 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	PrimaryStorage *StorageConfig `json:"primaryStorage,omitempty"`
 
-	// EnvironmentVariables defines default environment variables
-	// +optional
-	EnvironmentVariables []corev1.EnvVar `json:"environmentVariables,omitempty"`
-
 	// DefaultContainerConfig specifies default container command and args configuration
 	// +optional
 	DefaultContainerConfig *ContainerConfig `json:"defaultContainerConfig,omitempty"`

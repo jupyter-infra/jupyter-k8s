@@ -759,13 +759,6 @@ func (in *WorkspaceTemplateSpec) DeepCopyInto(out *WorkspaceTemplateSpec) {
 		*out = new(StorageConfig)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.EnvironmentVariables != nil {
-		in, out := &in.EnvironmentVariables, &out.EnvironmentVariables
-		*out = make([]v1.EnvVar, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
-	}
 	if in.DefaultContainerConfig != nil {
 		in, out := &in.DefaultContainerConfig, &out.DefaultContainerConfig
 		*out = new(ContainerConfig)

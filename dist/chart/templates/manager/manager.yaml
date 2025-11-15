@@ -126,8 +126,7 @@ spec:
                   operator: In
                   values:
                     - linux
-      {{- end }}
-      terminationGracePeriodSeconds: {{ .Values.controllerManager.terminationGracePeriodSeconds }}
+      {{- end }}      terminationGracePeriodSeconds: {{ .Values.controllerManager.terminationGracePeriodSeconds }}
       {{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable .Values.extensionApi.enable) }}
       volumes:
         {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}
