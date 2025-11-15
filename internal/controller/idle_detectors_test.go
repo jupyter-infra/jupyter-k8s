@@ -37,7 +37,7 @@ func createTestPod() *corev1.Pod {
 
 func createTestIdleConfig() *workspacev1alpha1.IdleShutdownSpec {
 	return &workspacev1alpha1.IdleShutdownSpec{
-		TimeoutMinutes: 30,
+		IdleTimeoutInMinutes: 30,
 		Detection: workspacev1alpha1.IdleDetectionSpec{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/api/idle",

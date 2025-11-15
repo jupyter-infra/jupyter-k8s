@@ -1082,14 +1082,14 @@ spec:
                   enabled:
                     description: Enabled indicates if idle shutdown is enabled
                     type: boolean
-                  timeoutMinutes:
-                    description: TimeoutMinutes specifies idle timeout in minutes
+                  idleTimeoutInMinutes:
+                    description: IdleTimeoutInMinutes specifies idle timeout in minutes
                     minimum: 1
                     type: integer
                 required:
                 - detection
                 - enabled
-                - timeoutMinutes
+                - idleTimeoutInMinutes
                 type: object
               image:
                 description: Image specifies the container image to use

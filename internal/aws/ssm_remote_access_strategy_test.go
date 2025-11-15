@@ -305,11 +305,13 @@ func TestInitSSMAgent_SuccessFlow(t *testing.T) {
 				!strings.Contains(stdin, "us-west-2") // Region should not be in stdin
 		})).Return("", nil)
 
-	// Third call: remote access server start
+	// Third call: remote access server start using script
 	mockPodExecUtil.On("ExecInPod", mock.Anything, mock.Anything, WorkspaceContainerName,
 		mock.MatchedBy(func(cmd []string) bool {
-			return len(cmd) == 3 && cmd[0] == bashCommand && cmd[1] == "-c" &&
-				strings.Contains(cmd[2], "remote-access-server")
+			return len(cmd) == 3 &&
+				cmd[0] == RemoteAccessServerScriptPath &&
+				cmd[1] == "--port" &&
+				cmd[2] == RemoteAccessServerPort
 		}), "").Return("", nil)
 
 	// Fourth call: completion marker creation

@@ -46,7 +46,7 @@ func createTestWorkspace() *workspacev1alpha1.Workspace {
 
 func createTestIdleConfigChecker(timeoutMinutes int) *workspacev1alpha1.IdleShutdownSpec {
 	return &workspacev1alpha1.IdleShutdownSpec{
-		TimeoutMinutes: timeoutMinutes,
+		IdleTimeoutInMinutes: timeoutMinutes,
 		Detection: workspacev1alpha1.IdleDetectionSpec{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/api/idle",
