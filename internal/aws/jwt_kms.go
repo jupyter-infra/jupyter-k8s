@@ -7,11 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
 	jwt5 "github.com/golang-jwt/jwt/v5"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
+)
+
+const (
+	defaultEvictBatchSize = 1000  // Number of keys to evict when cache is full
+	defaultMaxCacheSize   = 10000 // Default maximum cache size
 )
 
 // Error definitions
@@ -22,37 +28,53 @@ var (
 
 // KMSJWTManager handles JWT token creation and validation using AWS KMS envelope encryption
 type KMSJWTManager struct {
-	kmsClient   *KMSClient
-	keyId       string
-	issuer      string
-	audience    string
-	expiration  time.Duration
-	keyCache    map[string][]byte    // encrypted_key_hash -> plaintext_key
-	cacheExpiry map[string]time.Time // encrypted_key_hash -> expiry_time
-	lastCleanup time.Time
-	cacheMutex  sync.RWMutex
+	kmsClient      *KMSClient
+	keyId          string
+	issuer         string
+	audience       string
+	expiration     time.Duration
+	keyCache       map[string][]byte
+	cacheExpiry    map[string]time.Time
+	lastCleanup    time.Time
+	cacheMutex     sync.RWMutex
+	maxCacheSize   int
+	evictBatchSize int
 }
 
 // KMSJWTConfig contains configuration for KMS JWT manager
 type KMSJWTConfig struct {
-	KMSClient  *KMSClient
-	KeyId      string
-	Issuer     string
-	Audience   string
-	Expiration time.Duration
+	KMSClient      *KMSClient
+	KeyId          string
+	Issuer         string
+	Audience       string
+	Expiration     time.Duration
+	MaxCacheSize   int
+	EvictBatchSize int
 }
 
 // NewKMSJWTManager creates a new KMSJWTManager
 func NewKMSJWTManager(config KMSJWTConfig) *KMSJWTManager {
+	maxSize := config.MaxCacheSize
+	if maxSize <= 0 {
+		maxSize = defaultMaxCacheSize
+	}
+
+	evictSize := config.EvictBatchSize
+	if evictSize <= 0 {
+		evictSize = defaultEvictBatchSize
+	}
+
 	return &KMSJWTManager{
-		kmsClient:   config.KMSClient,
-		keyId:       config.KeyId,
-		issuer:      config.Issuer,
-		audience:    config.Audience,
-		expiration:  config.Expiration,
-		keyCache:    make(map[string][]byte),
-		cacheExpiry: make(map[string]time.Time),
-		lastCleanup: time.Now(),
+		kmsClient:      config.KMSClient,
+		keyId:          config.KeyId,
+		issuer:         config.Issuer,
+		audience:       config.Audience,
+		expiration:     config.Expiration,
+		keyCache:       make(map[string][]byte),
+		cacheExpiry:    make(map[string]time.Time),
+		lastCleanup:    time.Now(),
+		maxCacheSize:   maxSize,
+		evictBatchSize: evictSize,
 	}
 }
 
@@ -186,9 +208,44 @@ func (m *KMSJWTManager) ValidateToken(tokenString string) (*jwt.Claims, error) {
 // setCachedKey stores a key in cache with TTL
 func (m *KMSJWTManager) setCachedKey(keyHash string, plaintextKey []byte) {
 	m.cacheMutex.Lock()
+	defer m.cacheMutex.Unlock()
+
+	// Evict if at capacity
+	m.evictIfNeeded()
+
 	m.keyCache[keyHash] = plaintextKey
-	m.cacheExpiry[keyHash] = time.Now().Add(m.expiration * 2) // Buffer: 2x JWT expiration
-	m.cacheMutex.Unlock()
+	m.cacheExpiry[keyHash] = time.Now().Add(m.expiration + 15*time.Minute) // JWT expiration + 15min buffer
+}
+
+func (m *KMSJWTManager) evictIfNeeded() {
+	if len(m.keyCache) < m.maxCacheSize {
+		return
+	}
+
+	type entry struct {
+		hash   string
+		expiry time.Time
+	}
+
+	entries := make([]entry, 0, len(m.cacheExpiry))
+	for hash, expiry := range m.cacheExpiry {
+		entries = append(entries, entry{hash, expiry})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].expiry.Before(entries[j].expiry)
+	})
+
+	evictCount := m.evictBatchSize
+	if evictCount > len(entries) {
+		evictCount = len(entries)
+	}
+
+	for i := 0; i < evictCount; i++ {
+		hash := entries[i].hash
+		delete(m.keyCache, hash)
+		delete(m.cacheExpiry, hash)
+	}
 }
 
 // cleanupExpiredKeys removes all expired entries from cache
