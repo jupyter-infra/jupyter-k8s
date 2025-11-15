@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -84,6 +85,73 @@ func ensureTemplateFinalizer(ctx context.Context, k8sClient client.Client, templ
 	}
 
 	workspacelog.Info("Added finalizer to template", "template", templateName, "templateNamespace", templateNamespace)
+	return nil
+}
+
+// ensureAccessStrategyFinalizer ensures the AccessStrategy has a finalizer to prevent deletion while in use.
+// Uses lazy finalizer pattern: only adds finalizer if a workspace actively uses the AccessStrategy.
+func ensureAccessStrategyFinalizer(ctx context.Context, k8sClient client.Client, workspace *workspacev1alpha1.Workspace) error {
+	// If no AccessStrategy is referenced, there's nothing to do
+	if workspace.Spec.AccessStrategy == nil || workspace.Spec.AccessStrategy.Name == "" {
+		return nil
+	}
+
+	// Skip if workspace is being deleted
+	if !workspace.DeletionTimestamp.IsZero() {
+		workspacelog.V(1).Info("Workspace is being deleted, skipping AccessStrategy finalizer",
+			"workspace", workspace.Name,
+			"namespace", workspace.Namespace)
+		return nil
+	}
+
+	// Determine namespace for the AccessStrategy
+	accessStrategyNamespace := workspace.Namespace
+	if workspace.Spec.AccessStrategy.Namespace != "" {
+		accessStrategyNamespace = workspace.Spec.AccessStrategy.Namespace
+	}
+
+	// Fetch the AccessStrategy
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{}
+	err := k8sClient.Get(ctx, types.NamespacedName{
+		Name:      workspace.Spec.AccessStrategy.Name,
+		Namespace: accessStrategyNamespace,
+	}, accessStrategy)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Fail webhook if AccessStrategy doesn't exist
+			workspacelog.Info("AccessStrategy not found",
+				"accessStrategy", workspace.Spec.AccessStrategy.Name,
+				"namespace", accessStrategyNamespace)
+			return fmt.Errorf("referenced AccessStrategy %s not found in namespace %s",
+				workspace.Spec.AccessStrategy.Name, accessStrategyNamespace)
+		}
+		// Other errors
+		workspacelog.Error(err, "Failed to get AccessStrategy",
+			"accessStrategy", workspace.Spec.AccessStrategy.Name,
+			"namespace", accessStrategyNamespace)
+		return fmt.Errorf("failed to get AccessStrategy %s in namespace %s: %w",
+			workspace.Spec.AccessStrategy.Name, accessStrategyNamespace, err)
+	}
+
+	// Check if finalizer already exists
+	if controllerutil.ContainsFinalizer(accessStrategy, webhookconst.AccessStrategyFinalizerName) {
+		return nil
+	}
+
+	// Add finalizer to the AccessStrategy
+	controllerutil.AddFinalizer(accessStrategy, webhookconst.AccessStrategyFinalizerName)
+	if err := k8sClient.Update(ctx, accessStrategy); err != nil {
+		workspacelog.Error(err, "Failed to add finalizer to AccessStrategy",
+			"accessStrategy", accessStrategy.Name,
+			"namespace", accessStrategy.Namespace)
+		return fmt.Errorf("failed to add finalizer to AccessStrategy %s/%s: %w",
+			accessStrategy.Namespace, accessStrategy.Name, err)
+	}
+
+	workspacelog.Info("Added finalizer to AccessStrategy",
+		"accessStrategy", accessStrategy.Name,
+		"namespace", accessStrategy.Namespace)
 	return nil
 }
 
@@ -255,6 +323,12 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 			workspacelog.Error(err, "Failed to add finalizer to template", "workspace", workspace.GetName(), "template", workspace.Spec.TemplateRef.Name, "templateNamespace", templateNamespace)
 			return fmt.Errorf("failed to add finalizer to template: %w", err)
 		}
+	}
+
+	// Ensure AccessStrategy has finalizer to prevent deletion while in use
+	if err := ensureAccessStrategyFinalizer(ctx, d.client, workspace); err != nil {
+		workspacelog.Error(err, "Failed to add finalizer to AccessStrategy", "workspace", workspace.GetName())
+		return fmt.Errorf("failed to add finalizer to AccessStrategy: %w", err)
 	}
 
 	return nil

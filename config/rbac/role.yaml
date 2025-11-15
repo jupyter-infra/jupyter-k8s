@@ -94,6 +94,7 @@ rules:
 - apiGroups:
   - workspace.jupyter.org
   resources:
+  - workspaceaccessstrategies/finalizers
   - workspaces/finalizers
   - workspacetemplates/finalizers
   verbs:

@@ -21,5 +21,6 @@ const (
 
 // Finalizer constants
 const (
-	TemplateFinalizerName = "workspace.jupyter.org/template-protection"
+	TemplateFinalizerName       = "workspace.jupyter.org/template-protection"
+	AccessStrategyFinalizerName = "workspace.jupyter.org/accessstrategy-protection"
 )
