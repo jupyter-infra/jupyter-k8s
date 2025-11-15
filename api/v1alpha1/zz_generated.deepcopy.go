@@ -164,13 +164,13 @@ func (in *IdleShutdownOverridePolicy) DeepCopyInto(out *IdleShutdownOverridePoli
 		*out = new(bool)
 		**out = **in
 	}
-	if in.MinTimeoutMinutes != nil {
-		in, out := &in.MinTimeoutMinutes, &out.MinTimeoutMinutes
+	if in.MinIdleTimeoutInMinutes != nil {
+		in, out := &in.MinIdleTimeoutInMinutes, &out.MinIdleTimeoutInMinutes
 		*out = new(int)
 		**out = **in
 	}
-	if in.MaxTimeoutMinutes != nil {
-		in, out := &in.MaxTimeoutMinutes, &out.MaxTimeoutMinutes
+	if in.MaxIdleTimeoutInMinutes != nil {
+		in, out := &in.MaxIdleTimeoutInMinutes, &out.MaxIdleTimeoutInMinutes
 		*out = new(int)
 		**out = **in
 	}

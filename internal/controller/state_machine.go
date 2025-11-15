@@ -290,7 +290,7 @@ func (sm *StateMachine) handleIdleShutdownForRunningWorkspace(
 
 	logger.Info("Processing idle shutdown",
 		"enabled", idleConfig.Enabled,
-		"timeoutMinutes", idleConfig.TimeoutMinutes,
+		"idleTimeoutInMinutes", idleConfig.IdleTimeoutInMinutes,
 		"hasHTTPGet", idleConfig.Detection.HTTPGet != nil,
 		"workspace", workspace.Name,
 		"namespace", workspace.Namespace)
@@ -319,7 +319,7 @@ func (sm *StateMachine) handleIdleShutdownForRunningWorkspace(
 		logger.V(1).Info("Successfully checked idle status", "isIdle", result.IsIdle)
 		if result.IsIdle {
 			logger.Info("Workspace idle timeout reached, stopping workspace",
-				"timeout", idleConfig.TimeoutMinutes)
+				"timeout", idleConfig.IdleTimeoutInMinutes)
 			return sm.stopWorkspaceDueToIdle(ctx, workspace, idleConfig)
 		}
 	}
@@ -335,7 +335,7 @@ func (sm *StateMachine) stopWorkspaceDueToIdle(ctx context.Context, workspace *w
 
 	// Record event
 	sm.recorder.Event(workspace, corev1.EventTypeNormal, "IdleShutdown",
-		fmt.Sprintf("Stopping workspace due to idle timeout of %d minutes", idleConfig.TimeoutMinutes))
+		fmt.Sprintf("Stopping workspace due to idle timeout of %d minutes", idleConfig.IdleTimeoutInMinutes))
 
 	// Update desired status to trigger stop
 	workspace.Spec.DesiredStatus = PhaseStopped

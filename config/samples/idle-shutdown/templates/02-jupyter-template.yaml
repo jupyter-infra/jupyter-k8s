@@ -21,7 +21,7 @@ spec:
   # Default idle shutdown configuration for Jupyter
   defaultIdleShutdown:
     enabled: true
-    timeoutMinutes: 3  # 3 minutes for testing
+    idleTimeoutInMinutes: 3  # 3 minutes for testing
     detection:
       httpGet:
         path: "/api/idle"
@@ -29,5 +29,5 @@ spec:
   # Allow overrides with bounds
   idleShutdownOverrides:
     allow: true
-    minTimeoutMinutes: 1    # At least 1 minute
-    maxTimeoutMinutes: 10   # At most 10 minutes
+    minIdleTimeoutInMinutes: 1    # At least 1 minute
+    maxIdleTimeoutInMinutes: 10   # At most 10 minutes
