@@ -174,10 +174,10 @@ func (h *PodEventHandler) handlePodRunning(ctx context.Context, pod *corev1.Pod,
 	// Handle SSM remote access strategy
 	if accessStrategy != nil && (accessStrategy.Name == "aws-ssm-remote-access" || accessStrategy.Name == "hyperpod-access-strategy") {
 		if h.ssmRemoteAccessStrategy == nil {
-			logger.Error(nil, "SSM remote access strategy not available - cannot initialize SSM agent")
+			logger.Error(nil, "SSM remote access strategy not available - cannot setup containers")
 		} else {
-			if err := h.ssmRemoteAccessStrategy.InitSSMAgent(ctx, pod, workspace, accessStrategy); err != nil {
-				logger.Error(err, "Failed to initialize SSM agent")
+			if err := h.ssmRemoteAccessStrategy.SetupContainers(ctx, pod, workspace, accessStrategy); err != nil {
+				logger.Error(err, "Failed to setup containers")
 			}
 		}
 	}
