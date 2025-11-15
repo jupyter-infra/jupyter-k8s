@@ -1,13 +1,16 @@
+{{- if .Values.clusterWebUI.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: traefik
+  name: workspace-traefik-router
   namespace: {{ .Values.namespace }}
   labels:
+    {{- include "jupyter-k8s-aws-hyperpod.labels" . | nindent 4 }}
     app: traefik
     component: router
+    workspace.jupyter.org/component: router
 spec:
-  replicas: {{ .Values.traefik.replicas }}
+  replicas: {{ .Values.clusterWebUI.traefik.replicas }}
   selector:
     matchLabels:
       app: traefik
@@ -25,8 +28,10 @@ spec:
         prometheus.io/path: "/metrics"
         prometheus.io/port: "9100"
       labels:
+        {{- include "jupyter-k8s-aws-hyperpod.labels" . | nindent 8 }}
         app: traefik
         component: router
+        workspace.jupyter.org/component: router
     spec:
       serviceAccountName: jupyter-k8s-traefik
       terminationGracePeriodSeconds: 60
@@ -44,7 +49,7 @@ spec:
                   - traefik
               topologyKey: kubernetes.io/hostname
       containers:
-      - image: {{ .Values.traefik.repository }}/{{ .Values.traefik.imageName }}:{{ .Values.traefik.imageTag }}
+      - image: {{ .Values.clusterWebUI.traefik.repository }}/{{ .Values.clusterWebUI.traefik.imageName }}:{{ .Values.clusterWebUI.traefik.imageTag }}
         imagePullPolicy: IfNotPresent
         name: traefik
         resources:
@@ -101,7 +106,7 @@ spec:
           - "--entrypoints.metrics.address=:9100/tcp"
           - "--entrypoints.traefik.address=:9000/tcp"
           - "--entrypoints.web.address=:8000/tcp"
-        {{- if .Values.traefik.redirectHttp }}
+        {{- if .Values.clusterWebUI.traefik.redirectHttp }}
           - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
           - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
           - "--entrypoints.web.http.redirections.entryPoint.permanent=true"
@@ -113,10 +118,10 @@ spec:
           - "--metrics.prometheus.entrypoint=metrics"
           - "--providers.kubernetescrd"
           - "--providers.kubernetescrd.allowexternalnameservices=true"
-          - "--providers.kubernetescrd.allowcrossnamespace={{ .Values.traefik.allowCrossNamespace }}"
+          - "--providers.kubernetescrd.allowcrossnamespace={{ .Values.clusterWebUI.traefik.allowCrossNamespace }}"
           - "--providers.kubernetesingress"
 
-        {{- if .Values.traefik.debug }}
+        {{- if .Values.clusterWebUI.traefik.debug }}
           - "--log.level=DEBUG"
         {{- end }}
       volumes:
@@ -127,3 +132,4 @@ spec:
         runAsGroup: 65532
         runAsNonRoot: true
         runAsUser: 65532
+{{- end }}

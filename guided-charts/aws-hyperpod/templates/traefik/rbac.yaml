@@ -1,3 +1,4 @@
+{{- if .Values.clusterWebUI.enabled }}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -70,3 +71,4 @@ subjects:
   - kind: ServiceAccount
     name: jupyter-k8s-traefik
     namespace: {{ .Values.namespace }}
+{{- end }}

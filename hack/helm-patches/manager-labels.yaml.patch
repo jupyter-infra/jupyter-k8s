@@ -1,0 +1,2 @@
+# Patch to add custom labels to manager deployment and pod template
+# This patch adds workspace.jupyter.org/component: controller labels

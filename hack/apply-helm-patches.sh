@@ -382,9 +382,37 @@ if [ -f "${CERT_YAML}" ]; then
     echo "Updated issuer name to jupyter-k8s-selfsigned-issuer"
 fi
 
+# Handle manager labels patch
+if [ -f "${PATCHES_DIR}/manager-labels.yaml.patch" ]; then
+    MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
+    if [ -f "${MANAGER_YAML}" ]; then
+        echo "Applying labels patch to manager.yaml..."
+        
+        # Check if labels patch is already applied
+        if ! grep -q "workspace.jupyter.org/component: controller" "${MANAGER_YAML}"; then
+            echo "Adding custom labels to manager.yaml"
+            
+            # Add custom label to deployment metadata labels (after the first control-plane: controller-manager)
+            sed -i '0,/control-plane: controller-manager$/s//&\n    workspace.jupyter.org\/component: controller/' "${MANAGER_YAML}"
+            
+            # Add custom label to selector matchLabels (after the selector control-plane: controller-manager)
+            sed -i '0,/control-plane: controller-manager$/b; s/control-plane: controller-manager$/&\n      workspace.jupyter.org\/component: controller/' "${MANAGER_YAML}"
+            
+            # Add custom label to pod template labels (after the pod template control-plane: controller-manager)
+            sed -i '0,/control-plane: controller-manager$/b; 0,/control-plane: controller-manager$/b; s/control-plane: controller-manager$/&\n        workspace.jupyter.org\/component: controller/' "${MANAGER_YAML}"
+            
+            echo "Successfully applied labels patch"
+        else
+            echo "Labels patch already applied, skipping"
+        fi
+    else
+        echo "Warning: manager.yaml not found at ${MANAGER_YAML}"
+    fi
+fi
+
 # Process any additional patch files
 for patch_file in "${PATCHES_DIR}"/*.patch; do
-    if [ -f "$patch_file" ] && [ "$(basename "$patch_file")" != "values.yaml.patch" ] && [ "$(basename "$patch_file")" != "manager.yaml.patch" ]; then
+    if [ -f "$patch_file" ] && [ "$(basename "$patch_file")" != "values.yaml.patch" ] && [ "$(basename "$patch_file")" != "manager.yaml.patch" ] && [ "$(basename "$patch_file")" != "manager-labels.yaml.patch" ]; then
         file_name=$(basename "$patch_file" .patch)
         apply_patch "$file_name" "$(basename "$patch_file")"
     fi
