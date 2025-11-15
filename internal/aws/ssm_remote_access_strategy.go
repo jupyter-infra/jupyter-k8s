@@ -44,9 +44,9 @@ const (
 	TagWorkspacePodUID = "workspace-pod-uid"
 
 	// File paths
-	SSMRegistrationMarkerFile = "/tmp/ssm-registered"
-	SSMRegistrationScript     = "/usr/local/bin/register-ssm.sh"
-	RemoteAccessServerPath    = "/opt/amazon/sagemaker/workspace/remote-access-server"
+	SSMRegistrationMarkerFile    = "/tmp/ssm-registered"
+	SSMRegistrationScript        = "/usr/local/bin/register-ssm.sh"
+	RemoteAccessServerScriptPath = "/opt/amazon/sagemaker/workspace/remote-access/start-remote-access-server.sh"
 
 	// Remote access server configuration
 	RemoteAccessServerPort = "2222"
@@ -193,9 +193,9 @@ func (s *SSMRemoteAccessStrategy) performSSMRegistration(ctx context.Context, po
 		return fmt.Errorf("failed to execute SSM registration script: %w", err)
 	}
 
-	// Step 3: Start remote access server in main container
+	// Step 3: Start remote access server in main container using the startup script
 	logger.Info("Starting remote access server in main container")
-	serverCmd := []string{"bash", "-c", fmt.Sprintf("%s -port %s > /dev/null 2>&1 &", RemoteAccessServerPath, RemoteAccessServerPort)}
+	serverCmd := []string{RemoteAccessServerScriptPath, "--port", RemoteAccessServerPort}
 	if _, err := s.podExecUtil.ExecInPod(ctx, pod, WorkspaceContainerName, serverCmd, noStdin); err != nil {
 		return fmt.Errorf("failed to start remote access server: %w", err)
 	}
