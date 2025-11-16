@@ -31,9 +31,4 @@ spec:
     defaultSize: "1Gi"
     minSize: "100Mi"
     maxSize: "20Gi"
-  environmentVariables:
-    - name: JUPYTER_ENABLE_LAB
-      value: "yes"
-    - name: ENVIRONMENT
-      value: "production"
   appType: "jupyter"
