@@ -64,9 +64,13 @@ spec:
   # Connection handler configuration for JWT authentication
   createConnectionHandler: "aws"
   createConnectionContext:
-    kms_key_id: "{{ .Values.clusterWebUI.kmsKeyId }}"
-    {{- if .Values.clusterWebUI.kmsEncryptionContext.enabled }}
-    encryption_context: '{"sagemaker:component":"amazon-sagemaker-spaces","sagemaker:eks-cluster-arn":"{{ .Values.authmiddleware.kmsEncryptionContext.eksClusterArn }}"}'
+    kmsKeyId: "{{ .Values.clusterWebUI.auth.kmsKeyId }}"
+    {{- if .Values.clusterWebUI.auth.kmsEncryptionContext.enabled }}
+    encryptionContext: '{"sagemaker:component":"amazon-sagemaker-spaces","sagemaker:eks-cluster-arn":"{{ .Values.clusterWebUI.auth.kmsEncryptionContext.eksClusterArn }}"}'
+    {{- end }}
+    {{- if .Values.remoteAccess.enabled }}
+    ssmManagedNodeRole: "{{ .Values.remoteAccess.ssmManagedNodeRole }}"
+    ssmDocumentName: "{{ .Values.remoteAccess.ssmDocumentName }}"
     {{- end }}
   {{- end }}
 
@@ -115,12 +119,6 @@ spec:
         - name: "workspace-base"
           mountPath: "/opt/amazon/sagemaker/workspace"
 
-  {{- if .Values.remoteAccess.enabled }}
-  # Controller-specific configuration (not injected into workspace containers)
-  controllerConfig:
-    SSM_MANAGED_NODE_ROLE: "{{ .Values.remoteAccess.ssmManagedNodeRole }}"
-    AWS_SSM_DOCUMENT_NAME: "{{ .Values.remoteAccess.ssmDocumentName }}"
-  {{- end }}
   mergeEnv:
     - name: WORKSPACE_NAMESPACE
       valueTemplate: "{{`{{ .Workspace.Namespace }}`}}"

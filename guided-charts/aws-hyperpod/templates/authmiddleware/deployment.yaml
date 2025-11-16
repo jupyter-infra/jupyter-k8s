@@ -78,6 +78,10 @@ spec:
             value: "{{ .Values.clusterWebUI.auth.jwtSigningType }}"
           - name: KMS_KEY_ID
             value: "{{ .Values.clusterWebUI.auth.kmsKeyId }}"
+          {{- if .Values.clusterWebUI.auth.kmsEncryptionContext.enabled }}
+          - name: KMS_ENCRYPTION_CONTEXT
+            value: '{"sagemaker:component":"amazon-sagemaker-spaces","sagemaker:eks-cluster-arn":"{{ .Values.clusterWebUI.auth.kmsEncryptionContext.eksClusterArn }}"}'
+          {{- end }}
           - name: JWT_ISSUER
             value: "{{ .Values.clusterWebUI.auth.jwtIssuer }}"
           - name: JWT_AUDIENCE

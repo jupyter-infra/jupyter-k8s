@@ -30,6 +30,7 @@ const (
 	EnvEnableOAuth       = "ENABLE_OAUTH"
 	EnvEnableBearerAuth  = "ENABLE_BEARER_URL_AUTH"
 	EnvKMSKeyId          = "KMS_KEY_ID"
+	EnvKMSEncryptionContext = "KMS_ENCRYPTION_CONTEXT"
 
 	// Routing configuration
 	EnvRoutingMode                      = "ROUTING_MODE"
@@ -148,6 +149,7 @@ type Config struct {
 	EnableOAuth       bool
 	EnableBearerAuth  bool
 	KMSKeyId          string
+	KMSEncryptionContext string
 
 	// Cookie configuration
 	CookieName     string
@@ -401,6 +403,10 @@ func applyJWTConfig(config *Config) error {
 
 	if kmsKeyId := os.Getenv(EnvKMSKeyId); kmsKeyId != "" {
 		config.KMSKeyId = kmsKeyId
+	}
+
+	if kmsEncryptionContext := os.Getenv(EnvKMSEncryptionContext); kmsEncryptionContext != "" {
+		config.KMSEncryptionContext = kmsEncryptionContext
 	}
 
 	// Validate that JWTExpiration >= JWTRefreshWindow

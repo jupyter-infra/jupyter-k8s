@@ -9,6 +9,12 @@ import (
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
 )
 
+// Connection context keys for KMS JWT operations
+const (
+	KMSKeyIDKey          = "kmsKeyId"
+	EncryptionContextKey = "encryptionContext"
+)
+
 // AWSSignerFactory creates AWS KMS-based signers
 type AWSSignerFactory struct {
 	kmsClient    *KMSClient
@@ -42,16 +48,16 @@ func (f *AWSSignerFactory) CreateSigner(accessStrategy *workspacev1alpha1.Worksp
 
 	// Parse configuration from createConnectionContext
 	context := accessStrategy.Spec.CreateConnectionContext
-	keyId := context["kms_key_id"]
+	keyId := context[KMSKeyIDKey]
 	if keyId == "" {
-		keyId = f.defaultKeyId // fallback to default
+		return nil, fmt.Errorf("%s is required in createConnectionContext", KMSKeyIDKey)
 	}
 
 	// Parse encryption context from JSON
 	var encryptionContext map[string]string
-	if encCtxStr := context["encryption_context"]; encCtxStr != "" {
+	if encCtxStr := context[EncryptionContextKey]; encCtxStr != "" {
 		if err := json.Unmarshal([]byte(encCtxStr), &encryptionContext); err != nil {
-			return nil, fmt.Errorf("failed to parse encryption_context: %w", err)
+			return nil, fmt.Errorf("failed to parse %s: %w", EncryptionContextKey, err)
 		}
 	}
 
