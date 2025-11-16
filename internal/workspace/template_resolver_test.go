@@ -97,6 +97,29 @@ func TestResolveTemplate(t *testing.T) {
 			expectedNamespace: "default-ns",
 		},
 		{
+			name: "template found in primary namespace, fallback not used even when default exists",
+			templateRef: &workspacev1alpha1.TemplateRef{
+				Name: "test-template",
+			},
+			workspaceNamespace:       "workspace-ns",
+			defaultTemplateNamespace: "default-ns",
+			existingTemplates: []client.Object{
+				&workspacev1alpha1.WorkspaceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-template",
+						Namespace: "workspace-ns",
+					},
+				},
+				&workspacev1alpha1.WorkspaceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-template",
+						Namespace: "default-ns",
+					},
+				},
+			},
+			expectedNamespace: "workspace-ns",
+		},
+		{
 			name: "template not found anywhere",
 			templateRef: &workspacev1alpha1.TemplateRef{
 				Name: "missing-template",
