@@ -148,13 +148,13 @@ func createTestWorkspace() *workspacev1alpha1.Workspace {
 	}
 }
 
-func createTestAccessStrategy(controllerConfig map[string]string) *workspacev1alpha1.WorkspaceAccessStrategy {
+func createTestAccessStrategy(connectionContext map[string]string) *workspacev1alpha1.WorkspaceAccessStrategy {
 	return &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "aws-ssm-remote-access",
 		},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			ControllerConfig: controllerConfig,
+			CreateConnectionContext: connectionContext,
 		},
 	}
 }

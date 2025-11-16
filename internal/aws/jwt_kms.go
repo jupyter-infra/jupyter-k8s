@@ -46,7 +46,6 @@ type KMSJWTConfig struct {
 
 // NewKMSJWTManager creates a new KMSJWTManager
 func NewKMSJWTManager(config KMSJWTConfig) *KMSJWTManager {
-	log.Printf("DEBUG: Creating KMS JWT Manager with encryption context: %+v", config.EncryptionContext)
 	return &KMSJWTManager{
 		kmsClient:         config.KMSClient,
 		keyId:             config.KeyId,

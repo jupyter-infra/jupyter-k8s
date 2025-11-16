@@ -19,13 +19,15 @@ const (
 type AWSSignerFactory struct {
 	kmsClient    *KMSClient
 	defaultKeyId string
+	expiration   time.Duration
 }
 
 // NewAWSSignerFactory creates a new AWS signer factory
-func NewAWSSignerFactory(kmsClient *KMSClient, defaultKeyId string) *AWSSignerFactory {
+func NewAWSSignerFactory(kmsClient *KMSClient, defaultKeyId string, expiration time.Duration) *AWSSignerFactory {
 	return &AWSSignerFactory{
 		kmsClient:    kmsClient,
 		defaultKeyId: defaultKeyId,
+		expiration:   expiration,
 	}
 }
 
@@ -66,7 +68,7 @@ func (f *AWSSignerFactory) CreateSigner(accessStrategy *workspacev1alpha1.Worksp
 		KeyId:             keyId,
 		Issuer:            "jupyter-k8s",
 		Audience:          "workspace-ui",
-		Expiration:        time.Hour * 24,
+		Expiration:        f.expiration,
 		EncryptionContext: encryptionContext,
 	}), nil
 }
@@ -78,7 +80,7 @@ func (f *AWSSignerFactory) createDefaultSigner() jwt.Signer {
 		KeyId:             f.defaultKeyId,
 		Issuer:            "jupyter-k8s",
 		Audience:          "workspace-ui",
-		Expiration:        time.Hour * 24,
+		Expiration:        f.expiration,
 		EncryptionContext: nil,
 	})
 }

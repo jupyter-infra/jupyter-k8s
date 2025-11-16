@@ -116,6 +116,10 @@ type WorkspaceAccessStrategySpec struct {
 	// +optional
 	CreateConnectionHandler string `json:"createConnectionHandler,omitempty"`
 
+	// PodEventsHandler specifies the handler for pod lifecycle events
+	// +optional
+	PodEventsHandler string `json:"podEventsHandler,omitempty"`
+
 	// CreateConnectionContext contains configuration for the connection handler
 	// +optional
 	CreateConnectionContext map[string]string `json:"createConnectionContext,omitempty"`

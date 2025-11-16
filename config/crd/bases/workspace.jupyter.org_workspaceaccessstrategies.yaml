@@ -5180,6 +5180,10 @@ spec:
                   - valueTemplate
                   type: object
                 type: array
+              podEventsHandler:
+                description: PodEventsHandler specifies the handler for pod lifecycle
+                  events
+                type: string
             required:
             - accessResourceTemplates
             - displayName

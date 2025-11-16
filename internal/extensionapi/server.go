@@ -250,7 +250,7 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 		return fmt.Errorf("failed to create KMS client: %w", err)
 	}
 
-	signerFactory := aws.NewAWSSignerFactory(kmsClient, config.KMSKeyID)
+	signerFactory := aws.NewAWSSignerFactory(kmsClient, config.KMSKeyID, time.Minute*5)
 
 	// Create server with config
 	server := newExtensionServer(config, &logger, k8sClient, sarClient, signerFactory)

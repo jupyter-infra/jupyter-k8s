@@ -60,13 +60,16 @@ spec:
   bearerAuthURLTemplate: "https://{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.clusterWebUI.domain }}/bearer-auth"
   {{- end }}
 
-  {{- if .Values.clusterWebUI.enabled  }}
-  # Connection handler configuration for JWT authentication
   createConnectionHandler: "aws"
+  podEventsHandler: "aws"
+  
+  {{- if or .Values.clusterWebUI.enabled .Values.remoteAccess.enabled }}
   createConnectionContext:
+    {{- if .Values.clusterWebUI.enabled }}
     kmsKeyId: "{{ .Values.clusterWebUI.auth.kmsKeyId }}"
     {{- if .Values.clusterWebUI.auth.kmsEncryptionContext.enabled }}
     encryptionContext: '{"sagemaker:component":"amazon-sagemaker-spaces","sagemaker:eks-cluster-arn":"{{ .Values.clusterWebUI.auth.kmsEncryptionContext.eksClusterArn }}"}'
+    {{- end }}
     {{- end }}
     {{- if .Values.remoteAccess.enabled }}
     ssmManagedNodeRole: "{{ .Values.remoteAccess.ssmManagedNodeRole }}"
