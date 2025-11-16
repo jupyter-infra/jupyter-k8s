@@ -326,9 +326,9 @@ func TestHandleWorkspacePodEvents_PodDeleted_SSMCleanupFailure(t *testing.T) {
 
 func TestHandlePodRunning_WithPodEventsHandler(t *testing.T) {
 	tests := []struct {
-		name                string
-		podEventsHandler    string
-		expectError         bool
+		name             string
+		podEventsHandler string
+		expectError      bool
 	}{
 		{
 			name:             "AWS handler processes normally",
