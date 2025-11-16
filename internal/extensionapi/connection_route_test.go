@@ -321,6 +321,7 @@ func TestGenerateVSCodeURL(t *testing.T) {
 func TestGenerateVSCodeURLWithPod(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
+	_ = workspacev1alpha1.AddToScheme(scheme)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -333,7 +334,33 @@ func TestGenerateVSCodeURLWithPod(t *testing.T) {
 		},
 	}
 
-	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+	// Create workspace with access strategy reference
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workspace",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
+				Name: "test-strategy",
+			},
+		},
+	}
+
+	// Create access strategy with SSM document name
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-strategy",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			ControllerConfig: map[string]string{
+				"SSM_DOCUMENT_NAME": "test-document",
+			},
+		},
+	}
+
+	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(pod, workspace, accessStrategy).Build()
 
 	server := &ExtensionServer{
 		config: &ExtensionConfig{
@@ -479,6 +506,7 @@ func TestGenerateVSCodeURLSSMSuccess(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
+	_ = workspacev1alpha1.AddToScheme(scheme)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -491,7 +519,33 @@ func TestGenerateVSCodeURLSSMSuccess(t *testing.T) {
 		},
 	}
 
-	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+	// Create workspace with access strategy reference
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workspace",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
+				Name: "test-strategy",
+			},
+		},
+	}
+
+	// Create access strategy with SSM document name
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-strategy",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			ControllerConfig: map[string]string{
+				"SSM_DOCUMENT_NAME": "test-document",
+			},
+		},
+	}
+
+	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(pod, workspace, accessStrategy).Build()
 
 	server := &ExtensionServer{
 		config: &ExtensionConfig{
@@ -838,4 +892,137 @@ func TestGetUserFromHeaders(t *testing.T) {
 	if user != testUser {
 		t.Errorf("expected %s, got %s", testUser, user)
 	}
+}
+
+func TestGenerateVSCodeURL_MissingWorkspace(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = workspacev1alpha1.AddToScheme(scheme)
+
+	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).Build()
+
+	server := &ExtensionServer{
+		config: &ExtensionConfig{
+			ClusterId: "test-cluster",
+		},
+		k8sClient: fakeClient,
+	}
+	req := httptest.NewRequest("POST", "/test", nil)
+
+	_, _, err := server.generateVSCodeURL(req, "nonexistent-workspace", "default")
+
+	if err == nil {
+		t.Error("expected error for missing workspace")
+	}
+	// Error should contain "not found" from Kubernetes API
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected workspace not found error, got: %v", err)
+	}
+}
+
+func TestGenerateVSCodeURL_MissingAccessStrategy(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = workspacev1alpha1.AddToScheme(scheme)
+
+	// Create workspace without access strategy
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workspace",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			AccessStrategy: nil,
+		},
+	}
+
+	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace).Build()
+
+	server := &ExtensionServer{
+		config: &ExtensionConfig{
+			ClusterId: "test-cluster",
+		},
+		k8sClient: fakeClient,
+	}
+	req := httptest.NewRequest("POST", "/test", nil)
+
+	_, _, err := server.generateVSCodeURL(req, "test-workspace", "default")
+
+	if err == nil {
+		t.Error("expected error for missing access strategy")
+	}
+	if !strings.Contains(err.Error(), "no access strategy configured") {
+		t.Errorf("expected access strategy error, got: %v", err)
+	}
+}
+
+func TestGenerateVSCodeURL_MissingSSMDocumentName(t *testing.T) {
+	original := newSSMRemoteAccessStrategy
+	defer func() {
+		newSSMRemoteAccessStrategy = original
+	}()
+
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = workspacev1alpha1.AddToScheme(scheme)
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod",
+			Namespace: "default",
+			UID:       "test-uid-123",
+			Labels: map[string]string{
+				"workspace.jupyter.org/workspace-name": "test-workspace",
+			},
+		},
+	}
+
+	// Create workspace with access strategy reference
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-workspace",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
+				Name: "test-strategy",
+			},
+		},
+	}
+
+	// Create access strategy WITHOUT SSM_DOCUMENT_NAME
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-strategy",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			ControllerConfig: map[string]string{
+				// Missing SSM_DOCUMENT_NAME
+			},
+		},
+	}
+
+	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(pod, workspace, accessStrategy).Build()
+
+	// Mock SSM strategy to return a real strategy that will fail when SSM_DOCUMENT_NAME is missing
+	newSSMRemoteAccessStrategy = func(ssmClient aws.SSMRemoteAccessClientInterface, podExec aws.PodExecInterface) (*aws.SSMRemoteAccessStrategy, error) {
+		return aws.NewSSMRemoteAccessStrategy(ssmClient, podExec)
+	}
+
+	server := &ExtensionServer{
+		config: &ExtensionConfig{
+			ClusterId: "test-cluster",
+		},
+		k8sClient: fakeClient,
+	}
+	req := httptest.NewRequest("POST", "/test", nil)
+
+	_, _, err := server.generateVSCodeURL(req, "test-workspace", "default")
+
+	if err == nil {
+		t.Error("expected error for missing SSM_DOCUMENT_NAME")
+	}
+	// The error could be from SSM strategy creation or from missing document name
+	// Either is acceptable for this test
 }

@@ -164,13 +164,13 @@ func (in *IdleShutdownOverridePolicy) DeepCopyInto(out *IdleShutdownOverridePoli
 		*out = new(bool)
 		**out = **in
 	}
-	if in.MinTimeoutMinutes != nil {
-		in, out := &in.MinTimeoutMinutes, &out.MinTimeoutMinutes
+	if in.MinIdleTimeoutInMinutes != nil {
+		in, out := &in.MinIdleTimeoutInMinutes, &out.MinIdleTimeoutInMinutes
 		*out = new(int)
 		**out = **in
 	}
-	if in.MaxTimeoutMinutes != nil {
-		in, out := &in.MaxTimeoutMinutes, &out.MaxTimeoutMinutes
+	if in.MaxIdleTimeoutInMinutes != nil {
+		in, out := &in.MaxIdleTimeoutInMinutes, &out.MaxIdleTimeoutInMinutes
 		*out = new(int)
 		**out = **in
 	}
@@ -758,13 +758,6 @@ func (in *WorkspaceTemplateSpec) DeepCopyInto(out *WorkspaceTemplateSpec) {
 		in, out := &in.PrimaryStorage, &out.PrimaryStorage
 		*out = new(StorageConfig)
 		(*in).DeepCopyInto(*out)
-	}
-	if in.EnvironmentVariables != nil {
-		in, out := &in.EnvironmentVariables, &out.EnvironmentVariables
-		*out = make([]v1.EnvVar, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
 	}
 	if in.DefaultContainerConfig != nil {
 		in, out := &in.DefaultContainerConfig, &out.DefaultContainerConfig

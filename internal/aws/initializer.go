@@ -6,44 +6,48 @@ import (
 	"sync"
 )
 
-var (
+// ResourceInitializer handles AWS resource initialization
+type ResourceInitializer struct {
+	ssmClient *SSMClient
 	initOnce  sync.Once
 	initError error
-)
+}
 
-// EnsureResourcesInitialized is a variable that holds the function to ensure resources are initialized
-var EnsureResourcesInitialized = ensureResourcesInitialized
+// NewResourceInitializer creates a new ResourceInitializer with AWS clients
+func NewResourceInitializer(ctx context.Context) (*ResourceInitializer, error) {
+	ssmClient, err := NewSSMClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create SSM client: %w", err)
+	}
 
-// ensureResourcesInitialized ensures SSH document is created (only once)
-func ensureResourcesInitialized(ctx context.Context) error {
-	initOnce.Do(func() {
-		// TODO: remove these comments in future change to use customer provided KMS key
+	return &ResourceInitializer{
+		ssmClient: ssmClient,
+	}, nil
+}
 
-		// Create KMS key
-		// kmsClient, err := NewKMSClient(ctx)
-		// if err != nil {
-		// 	initError = fmt.Errorf("failed to create KMS client: %w", err)
-		// 	return
-		// }
-
-		// _, err = kmsClient.CreateJWTKMSKey(ctx)
-		// if err != nil {
-		// 	initError = fmt.Errorf("failed to create KMS key: %w", err)
-		// 	return
-		// }
-
-		// Create SSH document
-		ssmClient, err := NewSSMClient(ctx)
+// EnsureResourcesInitialized ensures SSH document is created (only once)
+func (r *ResourceInitializer) EnsureResourcesInitialized(ctx context.Context) error {
+	r.initOnce.Do(func() {
+		err := r.ssmClient.createSageMakerSpaceSSMDocument(ctx)
 		if err != nil {
-			initError = fmt.Errorf("failed to create SSM client: %w", err)
-			return
-		}
-
-		err = ssmClient.createSageMakerSpaceSSMDocument(ctx)
-		if err != nil {
-			initError = fmt.Errorf("failed to create SSH document: %w", err)
+			r.initError = fmt.Errorf("failed to create SSH document: %w", err)
 			return
 		}
 	})
-	return initError
+	return r.initError
+}
+
+var globalInitializer *ResourceInitializer
+var initializerOnce sync.Once
+
+// EnsureResourcesInitialized is a global function that uses a singleton initializer
+var EnsureResourcesInitialized = func(ctx context.Context) error {
+	var err error
+	initializerOnce.Do(func() {
+		globalInitializer, err = NewResourceInitializer(ctx)
+	})
+	if err != nil {
+		return err
+	}
+	return globalInitializer.EnsureResourcesInitialized(ctx)
 }

@@ -252,7 +252,7 @@ func createKMSJWTManager(config *ExtensionConfig) (jwt.Signer, error) {
 		KeyId:      config.KMSKeyID,
 		Issuer:     "jupyter-k8s",
 		Audience:   "workspace-ui",
-		Expiration: time.Minute * 5, // 24 hour token expiration
+		Expiration: time.Minute * 5, // 5 minute bootstrap token expiration
 	})
 
 	return jwtManager, nil

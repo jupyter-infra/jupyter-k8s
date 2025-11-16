@@ -221,6 +221,24 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 	// Get cluster ID from config (already validated earlier)
 	clusterId := s.config.ClusterId
 
+	// Get workspace
+	ws, err := s.getWorkspace(namespace, workspaceName)
+	if err != nil {
+		logger.Error(err, "Failed to get workspace", "workspaceName", workspaceName)
+		return "", "", err
+	}
+
+	// Get access strategy
+	accessStrategy, err := s.getAccessStrategy(ws)
+	if err != nil {
+		logger.Error(err, "Failed to get access strategy", "workspaceName", workspaceName)
+		return "", "", err
+	}
+
+	if accessStrategy == nil {
+		return "", "", fmt.Errorf("no access strategy configured for workspace")
+	}
+
 	// Get pod UID from workspace name using existing k8sClient
 	podUID, err := workspace.GetPodUIDFromWorkspaceName(s.k8sClient, workspaceName)
 	if err != nil {
@@ -236,8 +254,8 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 		return "", "", err
 	}
 
-	// Generate VSCode connection URL using SSM strategy
-	connectionURL, err := ssmStrategy.GenerateVSCodeConnectionURL(r.Context(), workspaceName, namespace, podUID, clusterId)
+	// Generate VSCode connection URL using SSM strategy with access strategy
+	connectionURL, err := ssmStrategy.GenerateVSCodeConnectionURL(r.Context(), workspaceName, namespace, podUID, clusterId, accessStrategy)
 	if err != nil {
 		return "", "", err
 	}
