@@ -23,7 +23,7 @@ type SSMRemoteAccessClientInterface interface {
 	CleanupManagedInstancesByPodUID(ctx context.Context, podUID string) error
 	CleanupActivationsByPodUID(ctx context.Context, podUID string) error
 	FindInstanceByPodUID(ctx context.Context, podUID string) (string, error)
-	StartSession(ctx context.Context, instanceID, documentName string) (*SessionInfo, error)
+	StartSession(ctx context.Context, instanceID, documentName, port string) (*SessionInfo, error)
 }
 
 // PodExecInterface defines the interface for executing commands in pods.
@@ -44,9 +44,12 @@ const (
 	TagWorkspacePodUID = "workspace-pod-uid"
 
 	// File paths
-	SSMRegistrationMarkerFile = "/tmp/ssm-registered"
-	SSMRegistrationScript     = "/usr/local/bin/register-ssm.sh"
-	RemoteAccessServerPath    = "/opt/amazon/sagemaker/workspace/remote-access-server"
+	SSMRegistrationMarkerFile    = "/tmp/ssm-registered"
+	SSMRegistrationScript        = "/usr/local/bin/register-ssm.sh"
+	RemoteAccessServerScriptPath = "/opt/amazon/sagemaker/workspace/remote-access/start-remote-access-server.sh"
+
+	// Remote access server configuration
+	RemoteAccessServerPort = "2222"
 )
 
 // SSMRemoteAccessStrategy handles SSM remote access strategy operations
@@ -190,9 +193,9 @@ func (s *SSMRemoteAccessStrategy) performSSMRegistration(ctx context.Context, po
 		return fmt.Errorf("failed to execute SSM registration script: %w", err)
 	}
 
-	// Step 3: Start remote access server in main container
+	// Step 3: Start remote access server in main container using the startup script
 	logger.Info("Starting remote access server in main container")
-	serverCmd := []string{"bash", "-c", fmt.Sprintf("sudo %s > /dev/null 2>&1 &", RemoteAccessServerPath)}
+	serverCmd := []string{RemoteAccessServerScriptPath, "--port", RemoteAccessServerPort}
 	if _, err := s.podExecUtil.ExecInPod(ctx, pod, WorkspaceContainerName, serverCmd, noStdin); err != nil {
 		return fmt.Errorf("failed to start remote access server: %w", err)
 	}
@@ -259,7 +262,7 @@ func (s *SSMRemoteAccessStrategy) createSSMActivation(ctx context.Context, pod *
 }
 
 // GenerateVSCodeConnectionURL generates a VSCode connection URL using SSM session
-func (s *SSMRemoteAccessStrategy) GenerateVSCodeConnectionURL(ctx context.Context, workspaceName string, namespace string, podUID string, eksClusterARN string) (string, error) {
+func (s *SSMRemoteAccessStrategy) GenerateVSCodeConnectionURL(ctx context.Context, workspaceName string, namespace string, podUID string, eksClusterARN string, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (string, error) {
 	logger := logf.FromContext(ctx).WithName("ssm-vscode-connection")
 
 	// Find managed instance by pod UID
@@ -270,14 +273,18 @@ func (s *SSMRemoteAccessStrategy) GenerateVSCodeConnectionURL(ctx context.Contex
 
 	logger.Info("Found managed instance for pod", "podUID", podUID, "instanceID", instanceID)
 
-	// Get SSM document name from environment variable
-	documentName, err := GetSSMDocumentName()
-	if err != nil {
-		return "", fmt.Errorf("failed to get SSM document name: %w", err)
+	// Get SSM document name from access strategy controller configuration
+	var documentName string
+	if accessStrategy.Spec.ControllerConfig != nil {
+		documentName = accessStrategy.Spec.ControllerConfig["SSM_DOCUMENT_NAME"]
+	}
+
+	if documentName == "" {
+		return "", fmt.Errorf("SSM_DOCUMENT_NAME not found in access strategy")
 	}
 
 	// Start SSM session
-	sessionInfo, err := s.ssmClient.StartSession(ctx, instanceID, documentName)
+	sessionInfo, err := s.ssmClient.StartSession(ctx, instanceID, documentName, RemoteAccessServerPort)
 	if err != nil {
 		return "", fmt.Errorf("failed to start SSM session: %w", err)
 	}
