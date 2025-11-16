@@ -6,10 +6,10 @@ import (
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
-	"k8s.io/apiserver/pkg/authentication/user"
-	"k8s.io/apiserver/pkg/endpoints/request"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apiserver/pkg/authentication/user"
+	"k8s.io/apiserver/pkg/endpoints/request"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	rlog "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -41,7 +41,7 @@ func TestCheckWorkspaceAuthorization_PublicWorkspace(t *testing.T) {
 	userInfo := &user.DefaultInfo{Name: "test-user"}
 	ctx := request.WithUser(req.Context(), userInfo)
 	req = req.WithContext(ctx)
-	
+
 	result, err := server.checkWorkspaceAuthorization(req, "public-workspace", "default")
 
 	assert.NoError(t, err)

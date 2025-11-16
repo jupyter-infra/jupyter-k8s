@@ -20,27 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-// Mock types for GenericAPIServer testing
-type mockGenericAPIServer struct {
-	preparedServer   *mockPreparedServer
-	prepareRunCalled bool
-}
-
-func (m *mockGenericAPIServer) PrepareRun() *mockPreparedServer {
-	m.prepareRunCalled = true
-	return m.preparedServer
-}
-
-type mockPreparedServer struct {
-	runWithContextCalled bool
-	runError            error
-}
-
-func (m *mockPreparedServer) RunWithContext(ctx context.Context) error {
-	m.runWithContextCalled = true
-	return m.runError
-}
-
 // We don't need a mock Clientset since we're using the actual Clientset type
 
 const testResourceName = "test-resource"
@@ -578,7 +557,7 @@ var _ = Describe("Server", func() {
 					WithCertPath("/test/cert.pem"),
 					WithKeyPath("/test/key.pem"),
 				)
-				
+
 				options := createRecommendedOptions(config)
 				Expect(options.SecureServing.BindPort).To(Equal(9999))
 				Expect(options.SecureServing.ServerCert.CertKey.CertFile).To(Equal("/test/cert.pem"))
@@ -593,9 +572,9 @@ var _ = Describe("Server", func() {
 						NonGoRestfulMux: mux.NewPathRecorderMux("test"),
 					},
 				}
-				
+
 				server := createExtensionServer(genericServer, config, &logger, k8sClient, sarClient, &mockJWTManager{})
-				
+
 				Expect(server).NotTo(BeNil())
 				Expect(server.config).To(Equal(config))
 				Expect(server.routes).To(HaveKey("/health"))
@@ -607,9 +586,9 @@ var _ = Describe("Server", func() {
 			It("Should attempt to create server", func() {
 				options := genericoptions.NewRecommendedOptions("/unused", nil)
 				options.SecureServing.BindPort = 0 // Use any available port
-				
+
 				_, err := createGenericAPIServer(options)
-				
+
 				// Expected to fail without proper setup, but we tested the code path
 				Expect(err).To(HaveOccurred())
 			})
@@ -618,10 +597,10 @@ var _ = Describe("Server", func() {
 		Describe("createKMSJWTManager", func() {
 			It("Should attempt KMS client creation", func() {
 				config := NewConfig(WithKMSKeyID("test-key"))
-				
+
 				// This may or may not fail depending on environment
-				createKMSJWTManager(config)
-				
+				_, _ = createKMSJWTManager(config)
+
 				// We just want to test the code path is executed
 				Expect(true).To(BeTrue())
 			})
@@ -631,9 +610,9 @@ var _ = Describe("Server", func() {
 			It("Should add server to manager successfully", func() {
 				mockMgr := &MockManager{}
 				server := &ExtensionServer{}
-				
+
 				err := addServerToManager(mockMgr, server)
-				
+
 				Expect(err).NotTo(HaveOccurred())
 				Expect(mockMgr.runnables).To(HaveLen(1))
 				Expect(mockMgr.runnables[0]).To(Equal(server))
@@ -642,9 +621,9 @@ var _ = Describe("Server", func() {
 			It("Should return error when manager Add fails", func() {
 				mockMgr := &MockManager{addError: errors.New("add failed")}
 				server := &ExtensionServer{}
-				
+
 				err := addServerToManager(mockMgr, server)
-				
+
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("failed to add extension API server to manager"))
 				Expect(err.Error()).To(ContainSubstring("add failed"))
@@ -834,27 +813,6 @@ var _ = Describe("Server", func() {
 		})
 	})
 })
-
-// mockSARServer starts a test HTTP server that can be used to test the SAR client
-// func mockSARServer(clientErr error) (*httptest.Server, *rest.Config) {
-//	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-//		// If we want to simulate an error, return 500
-//		if clientErr != nil {
-//			http.Error(w, clientErr.Error(), http.StatusInternalServerError)
-//			return
-//		}
-//		// Otherwise return success
-//		w.WriteHeader(http.StatusOK)
-//		_, _ = w.Write([]byte("{}")) // Empty JSON response
-//	}))
-//
-//	// Create a rest config that points to our test server
-//	config := &rest.Config{
-//		Host: server.URL,
-//	}
-//
-//	return server, config
-// }
 
 var _ = Describe("ServerWithManager", func() {
 

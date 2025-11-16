@@ -272,6 +272,7 @@ func addServerToManager(mgr ctrl.Manager, server *ExtensionServer) error {
 	}
 	return nil
 }
+
 // SetupExtensionAPIServerWithManager sets up the extension API server and adds it to the manager
 func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfig) error {
 	// Use the config or create a default config
