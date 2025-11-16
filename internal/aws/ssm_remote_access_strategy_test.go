@@ -365,7 +365,7 @@ func TestInitSSMAgent_SuccessFlow(t *testing.T) {
 	pod := createTestPod(containerStatuses)
 	workspace := createTestWorkspace()
 	accessStrategy := createTestAccessStrategy(map[string]string{
-		"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
+		"ssmManagedNodeRole": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
 	})
 
 	// Test successful InitSSMAgent flow
@@ -430,7 +430,7 @@ func TestInitSSMAgent_RegistrationFailure(t *testing.T) {
 	pod := createTestPod(containerStatuses)
 	workspace := createTestWorkspace()
 	accessStrategy := createTestAccessStrategy(map[string]string{
-		"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
+		"ssmManagedNodeRole": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
 	})
 
 	// Test InitSSMAgent with registration failure
@@ -536,7 +536,7 @@ func TestGenerateVSCodeConnectionURL_Success(t *testing.T) {
 
 	// Create access strategy with SSM document name
 	accessStrategy := createTestAccessStrategy(map[string]string{
-		"SSM_DOCUMENT_NAME": "test-document",
+		"ssmDocumentName": "test-document",
 	})
 
 	url, err := strategy.GenerateVSCodeConnectionURL(context.Background(), "test-workspace", "default", "test-pod-uid", "arn:aws:eks:us-east-1:123456789012:cluster/test", accessStrategy)
@@ -564,7 +564,7 @@ func TestGenerateVSCodeConnectionURL_StartSessionError(t *testing.T) {
 
 	// Create access strategy with SSM document name
 	accessStrategy := createTestAccessStrategy(map[string]string{
-		"SSM_DOCUMENT_NAME": "test-document",
+		"ssmDocumentName": "test-document",
 	})
 
 	url, err := strategy.GenerateVSCodeConnectionURL(context.Background(), "test-workspace", "default", "test-pod-uid", "arn:aws:eks:us-east-1:123456789012:cluster/test", accessStrategy)
