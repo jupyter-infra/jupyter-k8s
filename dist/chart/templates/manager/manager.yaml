@@ -13,7 +13,6 @@ spec:
     matchLabels:
       {{- include "chart.selectorLabels" . | nindent 6 }}
       control-plane: controller-manager
-      workspace.jupyter.org/component: controller
   template:
     metadata:
       annotations:
@@ -22,7 +21,6 @@ spec:
         {{- include "chart.labels" . | nindent 8 }}
         control-plane: controller-manager
         workspace.jupyter.org/component: controller
-      workspace.jupyter.org/component: controller
         {{- if and .Values.controllerManager.pod .Values.controllerManager.pod.labels }}
         {{- range $key, $value := .Values.controllerManager.pod.labels }}
         {{ $key }}: {{ $value }}
