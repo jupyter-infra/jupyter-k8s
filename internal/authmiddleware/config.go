@@ -19,17 +19,18 @@ const (
 	EnvTrustedProxies  = "TRUSTED_PROXIES"
 
 	// Auth configuration
-	EnvJwtSigningKey     = "JWT_SIGNING_KEY"
-	EnvJwtSigningType    = "JWT_SIGNING_TYPE"
-	EnvJwtIssuer         = "JWT_ISSUER"
-	EnvJwtAudience       = "JWT_AUDIENCE"
-	EnvJwtExpiration     = "JWT_EXPIRATION"
-	EnvEnableJwtRefresh  = "JWT_REFRESH_ENABLE"
-	EnvJwtRefreshWindow  = "JWT_REFRESH_WINDOW"
-	EnvJwtRefreshHorizon = "JWT_REFRESH_HORIZON"
-	EnvEnableOAuth       = "ENABLE_OAUTH"
-	EnvEnableBearerAuth  = "ENABLE_BEARER_URL_AUTH"
-	EnvKMSKeyId          = "KMS_KEY_ID"
+	EnvJwtSigningKey        = "JWT_SIGNING_KEY"
+	EnvJwtSigningType       = "JWT_SIGNING_TYPE"
+	EnvJwtIssuer            = "JWT_ISSUER"
+	EnvJwtAudience          = "JWT_AUDIENCE"
+	EnvJwtExpiration        = "JWT_EXPIRATION"
+	EnvEnableJwtRefresh     = "JWT_REFRESH_ENABLE"
+	EnvJwtRefreshWindow     = "JWT_REFRESH_WINDOW"
+	EnvJwtRefreshHorizon    = "JWT_REFRESH_HORIZON"
+	EnvEnableOAuth          = "ENABLE_OAUTH"
+	EnvEnableBearerAuth     = "ENABLE_BEARER_URL_AUTH"
+	EnvKMSKeyId             = "KMS_KEY_ID"
+	EnvKMSEncryptionContext = "KMS_ENCRYPTION_CONTEXT"
 
 	// Routing configuration
 	EnvRoutingMode                      = "ROUTING_MODE"
@@ -137,17 +138,18 @@ type Config struct {
 	TrustedProxies  []string
 
 	// Auth configuration
-	JWTSigningKey     string
-	JWTSigningType    string
-	JWTIssuer         string
-	JWTAudience       string
-	JWTExpiration     time.Duration
-	JWTRefreshEnable  bool
-	JWTRefreshWindow  time.Duration
-	JWTRefreshHorizon time.Duration
-	EnableOAuth       bool
-	EnableBearerAuth  bool
-	KMSKeyId          string
+	JWTSigningKey        string
+	JWTSigningType       string
+	JWTIssuer            string
+	JWTAudience          string
+	JWTExpiration        time.Duration
+	JWTRefreshEnable     bool
+	JWTRefreshWindow     time.Duration
+	JWTRefreshHorizon    time.Duration
+	EnableOAuth          bool
+	EnableBearerAuth     bool
+	KMSKeyId             string
+	KMSEncryptionContext string
 
 	// Cookie configuration
 	CookieName     string
@@ -401,6 +403,10 @@ func applyJWTConfig(config *Config) error {
 
 	if kmsKeyId := os.Getenv(EnvKMSKeyId); kmsKeyId != "" {
 		config.KMSKeyId = kmsKeyId
+	}
+
+	if kmsEncryptionContext := os.Getenv(EnvKMSEncryptionContext); kmsEncryptionContext != "" {
+		config.KMSEncryptionContext = kmsEncryptionContext
 	}
 
 	// Validate that JWTExpiration >= JWTRefreshWindow

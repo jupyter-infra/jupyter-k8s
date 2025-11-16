@@ -24,12 +24,12 @@ var (
 
 // ExtensionServer represents the extension API HTTP server
 type ExtensionServer struct {
-	config     *ExtensionConfig
-	k8sClient  client.Client
-	sarClient  v1.SubjectAccessReviewInterface
-	jwtManager jwt.Signer
-	logger     *logr.Logger
-	httpServer interface {
+	config        *ExtensionConfig
+	k8sClient     client.Client
+	sarClient     v1.SubjectAccessReviewInterface
+	signerFactory jwt.SignerFactory
+	logger        *logr.Logger
+	httpServer    interface {
 		ListenAndServe() error
 		ListenAndServeTLS(certFile, keyFile string) error
 		Shutdown(ctx context.Context) error
@@ -44,17 +44,17 @@ func newExtensionServer(
 	logger *logr.Logger,
 	k8sClient client.Client,
 	sarClient v1.SubjectAccessReviewInterface,
-	jwtManager jwt.Signer) *ExtensionServer {
+	signerFactory jwt.SignerFactory) *ExtensionServer {
 	mux := http.NewServeMux()
 
 	server := &ExtensionServer{
-		config:     config,
-		logger:     logger,
-		k8sClient:  k8sClient,
-		sarClient:  sarClient,
-		jwtManager: jwtManager,
-		routes:     make(map[string]func(http.ResponseWriter, *http.Request)),
-		mux:        mux,
+		config:        config,
+		logger:        logger,
+		k8sClient:     k8sClient,
+		sarClient:     sarClient,
+		signerFactory: signerFactory,
+		routes:        make(map[string]func(http.ResponseWriter, *http.Request)),
+		mux:           mux,
 		httpServer: &http.Server{
 			Addr:         fmt.Sprintf(":%d", config.ServerPort),
 			Handler:      mux,
@@ -243,23 +243,17 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	}
 	sarClient := clientSet.AuthorizationV1().SubjectAccessReviews()
 
-	// Create KMS JWT manager
+	// Create KMS client and signer factory
 	ctx := context.Background()
 	kmsClient, err := aws.NewKMSClient(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create KMS client: %w", err)
 	}
 
-	jwtManager := aws.NewKMSJWTManager(aws.KMSJWTConfig{
-		KMSClient:  kmsClient,
-		KeyId:      config.KMSKeyID,
-		Issuer:     "jupyter-k8s",
-		Audience:   "workspace-ui",
-		Expiration: time.Minute * 5, // 5 minute bootstrap token expiration
-	})
+	signerFactory := aws.NewAWSSignerFactory(kmsClient, config.KMSKeyID, time.Minute*5)
 
 	// Create server with config
-	server := newExtensionServer(config, &logger, k8sClient, sarClient, jwtManager)
+	server := newExtensionServer(config, &logger, k8sClient, sarClient, signerFactory)
 	server.registerAllRoutes()
 
 	// Add the server as a runnable to the manager

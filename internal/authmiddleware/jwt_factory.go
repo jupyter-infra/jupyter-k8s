@@ -2,6 +2,7 @@ package authmiddleware
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
@@ -32,13 +33,21 @@ func NewJWTHandler(cfg *Config) (jwt.Handler, error) {
 			return nil, fmt.Errorf("failed to create KMS client: %w", err)
 		}
 
-		// Create KMS JWT signer
+		// Parse encryption context from config if provided
+		var encryptionContext map[string]string
+		if cfg.KMSEncryptionContext != "" {
+			if err := json.Unmarshal([]byte(cfg.KMSEncryptionContext), &encryptionContext); err != nil {
+				return nil, fmt.Errorf("failed to parse KMS encryption context: %w", err)
+			}
+		}
+
 		kmsConfig := aws.KMSJWTConfig{
-			KMSClient:  kmsClient,
-			KeyId:      cfg.KMSKeyId,
-			Issuer:     cfg.JWTIssuer,
-			Audience:   cfg.JWTAudience,
-			Expiration: cfg.JWTExpiration,
+			KMSClient:         kmsClient,
+			KeyId:             cfg.KMSKeyId,
+			Issuer:            cfg.JWTIssuer,
+			Audience:          cfg.JWTAudience,
+			Expiration:        cfg.JWTExpiration,
+			EncryptionContext: encryptionContext,
 		}
 		signer = aws.NewKMSJWTManager(kmsConfig)
 

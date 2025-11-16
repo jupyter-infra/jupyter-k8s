@@ -495,6 +495,13 @@ func (in *WorkspaceAccessStrategySpec) DeepCopyInto(out *WorkspaceAccessStrategy
 			(*out)[key] = val
 		}
 	}
+	if in.CreateConnectionContext != nil {
+		in, out := &in.CreateConnectionContext, &out.CreateConnectionContext
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.DeploymentSpecModifications != nil {
 		in, out := &in.DeploymentSpecModifications, &out.DeploymentSpecModifications
 		*out = new(DeploymentSpecModifications)

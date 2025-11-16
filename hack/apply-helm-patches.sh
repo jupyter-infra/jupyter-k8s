@@ -395,11 +395,8 @@ if [ -f "${PATCHES_DIR}/manager-labels.yaml.patch" ]; then
             # Add custom label to deployment metadata labels (after the first control-plane: controller-manager)
             sed -i '0,/control-plane: controller-manager$/s//&\n    workspace.jupyter.org\/component: controller/' "${MANAGER_YAML}"
             
-            # Add custom label to selector matchLabels (after the selector control-plane: controller-manager)
-            sed -i '0,/control-plane: controller-manager$/b; s/control-plane: controller-manager$/&\n      workspace.jupyter.org\/component: controller/' "${MANAGER_YAML}"
-            
-            # Add custom label to pod template labels (after the pod template control-plane: controller-manager)
-            sed -i '0,/control-plane: controller-manager$/b; 0,/control-plane: controller-manager$/b; s/control-plane: controller-manager$/&\n        workspace.jupyter.org\/component: controller/' "${MANAGER_YAML}"
+            # Add custom label to pod template labels (skip selector, target template section)
+            sed -i '/template:/,/spec:/ { /control-plane: controller-manager$/s//&\n        workspace.jupyter.org\/component: controller/ }' "${MANAGER_YAML}"
             
             echo "Successfully applied labels patch"
         else
