@@ -31,7 +31,7 @@ func TestNewAWSSignerFactory(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockKMS := &MockKMSClient{}
 			factory := NewAWSSignerFactory(NewKMSWrapper(mockKMS, "us-east-1"), "test-key", tt.expiration)
-			
+
 			assert.NotNil(t, factory)
 			assert.Equal(t, tt.expiration, factory.expiration)
 			assert.Equal(t, "test-key", factory.defaultKeyId)
@@ -53,7 +53,7 @@ func TestAWSSignerFactory_CreateSigner_WithAccessStrategy(t *testing.T) {
 	}
 
 	signer, err := factory.CreateSigner(accessStrategy)
-	
+
 	assert.NoError(t, err)
 	assert.NotNil(t, signer)
 }
@@ -63,7 +63,7 @@ func TestAWSSignerFactory_CreateSigner_EmptyAccessStrategy(t *testing.T) {
 	factory := NewAWSSignerFactory(NewKMSWrapper(mockKMS, "us-east-1"), "default-key", time.Minute*5)
 
 	signer, err := factory.CreateSigner(nil)
-	
+
 	assert.NoError(t, err)
 	assert.NotNil(t, signer)
 }
@@ -79,7 +79,7 @@ func TestAWSSignerFactory_CreateSigner_InvalidHandler(t *testing.T) {
 	}
 
 	signer, err := factory.CreateSigner(accessStrategy)
-	
+
 	assert.Error(t, err)
 	assert.Nil(t, signer)
 	assert.Contains(t, err.Error(), "unsupported connection handler")
@@ -99,7 +99,7 @@ func TestAWSSignerFactory_CreateSigner_MissingKMSKey(t *testing.T) {
 	}
 
 	signer, err := factory.CreateSigner(accessStrategy)
-	
+
 	assert.Error(t, err)
 	assert.Nil(t, signer)
 	assert.Contains(t, err.Error(), "kmsKeyId is required")
@@ -120,7 +120,7 @@ func TestAWSSignerFactory_CreateSigner_InvalidEncryptionContext(t *testing.T) {
 	}
 
 	signer, err := factory.CreateSigner(accessStrategy)
-	
+
 	assert.Error(t, err)
 	assert.Nil(t, signer)
 	assert.Contains(t, err.Error(), "failed to parse encryptionContext")
@@ -131,6 +131,6 @@ func TestAWSSignerFactory_CreateDefaultSigner(t *testing.T) {
 	factory := NewAWSSignerFactory(NewKMSWrapper(mockKMS, "us-east-1"), "default-key", time.Minute*5)
 
 	signer := factory.createDefaultSigner()
-	
+
 	assert.NotNil(t, signer)
 }
