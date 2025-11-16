@@ -124,6 +124,10 @@ type WorkspaceAccessStrategySpec struct {
 	// +optional
 	CreateConnectionContext map[string]string `json:"createConnectionContext,omitempty"`
 
+	// PodEventsContext contains configuration for the pod events handler
+	// +optional
+	PodEventsContext map[string]string `json:"podEventsContext,omitempty"`
+
 	// DeploymentSpecModifications defines modifications to apply to workspace deployments
 	// +optional
 	DeploymentSpecModifications *DeploymentSpecModifications `json:"deploymentSpecModifications,omitempty"`
