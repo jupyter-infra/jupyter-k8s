@@ -16,6 +16,8 @@ const (
 )
 
 // AWSSignerFactory creates AWS KMS-based signers
+//
+//revive:disable:exported
 type AWSSignerFactory struct {
 	kmsClient    *KMSClient
 	defaultKeyId string
