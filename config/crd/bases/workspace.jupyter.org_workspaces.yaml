@@ -1742,6 +1742,9 @@ spec:
                   - persistentVolumeClaimName
                   type: object
                 type: array
+                x-kubernetes-validations:
+                - message: volume name 'workspace-storage' is reserved
+                  rule: '!self.exists(v, v.name == ''workspace-storage'')'
             required:
             - displayName
             type: object
@@ -1790,9 +1793,9 @@ spec:
 
                   Standard condition types include:
                   - "Available": the resource is fully functional and ready to use
-                  - "Progressing": the resource is being created or updated
+                  - "Progressing": the resource is being created, updated, or stopped
                   - "Degraded": the resource failed to reach or maintain its desired state
-                  - "Valid": the workspace configuration passes all validation checks (template, quota, etc.)
+                  - "Stopped": the workspace has been stopped and resources scaled down
 
                   The status of each condition is one of True, False, or Unknown.
                 items:

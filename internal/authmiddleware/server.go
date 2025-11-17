@@ -96,7 +96,7 @@ func (s *Server) Start() error {
 	router.HandleFunc("/verify", s.handleVerify)
 	router.HandleFunc("/health", s.handleHealth)
 
-	// Apply CSRF protection
+	// Skip CSRF protection
 	handler := s.csrfProtect()(router)
 
 	// Configure HTTP server
@@ -149,39 +149,8 @@ func (s *Server) handleShutdown(idleConnsClosed chan struct{}) {
 func (s *Server) csrfProtect() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// CSRF protection strategy:
-			//
-			// 1. /auth - No CSRF protection
-			//    - Initial authentication endpoint where users get their first token
-			//    - Users don't have CSRF tokens yet when they authenticate
-			//    - Similar to "login page exception" in standard CSRF protection patterns
-			//
-			// 2. /health - No CSRF protection
-			//    - Read-only status endpoint used by monitoring systems and load balancers
-			//    - No state changes occur here, so CSRF is not applicable
-			//    - Monitoring systems don't handle CSRF tokens
-			//
-			// 3. All other endpoints (including /verify) - Apply CSRF protection
-			//    - /verify can refresh tokens, which modifies state
-			//    - State-changing operations need CSRF protection
-			//    - Clients should have received CSRF tokens from /auth endpoint
-
-			// Skip CSRF protection for specific endpoints
-			skipCSRF := r.URL.Path == "/health"
-			if s.config.EnableOAuth && r.URL.Path == "/auth" {
-				skipCSRF = true
-			}
-			if s.config.EnableBearerAuth && r.URL.Path == "/bearer-auth" {
-				skipCSRF = true
-			}
-
-			if skipCSRF {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			// Apply CSRF protection for all other endpoints (including /verify)
-			s.cookieManager.CSRFProtect()(next).ServeHTTP(w, r)
+			// Always skip CSRF
+			next.ServeHTTP(w, r)
 		})
 	}
 }
