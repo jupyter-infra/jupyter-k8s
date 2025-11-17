@@ -195,6 +195,7 @@ func (h *PodEventHandler) handlePodDeleted(ctx context.Context, pod *corev1.Pod,
 	logger.Info("Workspace pod has been deleted", "podUID", pod.UID)
 
 	// Check if this pod uses SSM remote access strategy by checking labels
+	// AccessStrategy labels are set by workspace reconciler and propagated: Workspace.labels -> Deployment.labels -> Pod.labels
 	accessStrategyName := pod.Labels[LabelAccessStrategyName]
 	if accessStrategyName == "" {
 		logger.V(1).Info("Pod has no access strategy label, skipping resource cleanup")
