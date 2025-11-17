@@ -9,18 +9,17 @@ import (
 )
 
 // ReconcileAccessForDesiredRunningStatus reconciles the access strategy for a Workspace whose desired state is Running
-func (sm *StateMachine) ReconcileAccessForDesiredRunningStatus(ctx context.Context, workspace *workspacev1alpha1.Workspace, service *corev1.Service) error {
+func (sm *StateMachine) ReconcileAccessForDesiredRunningStatus(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	service *corev1.Service,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) error {
 	logger := logf.FromContext(ctx)
 	accessStrategyRef := workspace.Spec.AccessStrategy
 
 	// CASE 1: there is an AccessStrategy
 	// ensure the AccessResources exist
 	if accessStrategyRef != nil {
-		accessStrategy, accessStrategyErr := sm.resourceManager.GetAccessStrategyForWorkspace(ctx, workspace)
-		if accessStrategyErr != nil {
-			logger.Error(accessStrategyErr, "Failed to retrieve access strategy")
-			return accessStrategyErr
-		}
 
 		ensureAccessResourceErr := sm.resourceManager.EnsureAccessResourcesExist(ctx, workspace, accessStrategy, service)
 		if ensureAccessResourceErr != nil {
