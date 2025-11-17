@@ -46,7 +46,6 @@ The auth middleware component provides authentication and authorization for work
 
 - **JWT-Based Authentication**: Uses JSON Web Tokens (JWT) for stateless authentication
 - **Path-Based Authorization**: Tokens are scoped to specific workspace paths
-- **CSRF Protection**: Implements protection for state-changing operations
 - **Token Refresh**: Transparently refreshes tokens within a configurable window
 - **Cookie Management**: Handles secure cookie storage with path-specific scopes
 
@@ -55,7 +54,6 @@ The auth middleware component provides authentication and authorization for work
 - `/auth`: Initial authentication endpoint that generates JWT tokens from proxy headers
   - Takes user and group information from headers
   - Creates a token scoped to the workspace path
-  - Returns CSRF token for form submissions
 
 - `/verify`: Token verification endpoint for validating requests
   - Verifies token validity and freshness
