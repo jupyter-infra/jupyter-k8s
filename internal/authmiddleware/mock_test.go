@@ -1,8 +1,10 @@
 package authmiddleware
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -84,7 +86,6 @@ type MockCookieHandler struct {
 	SetCookieFunc   func(w http.ResponseWriter, token string, path string, domain string)
 	GetCookieFunc   func(r *http.Request, path string) (string, error)
 	ClearCookieFunc func(w http.ResponseWriter, path string, domain string)
-	CSRFProtectFunc func() func(http.Handler) http.Handler
 }
 
 // Ensure MockCookieHandler implements the CookieHandler interface
@@ -109,18 +110,6 @@ func (m *MockCookieHandler) GetCookie(r *http.Request, path string) (string, err
 func (m *MockCookieHandler) ClearCookie(w http.ResponseWriter, path string, domain string) {
 	if m.ClearCookieFunc != nil {
 		m.ClearCookieFunc(w, path, domain)
-	}
-}
-
-// CSRFProtect calls the mock implementation
-func (m *MockCookieHandler) CSRFProtect() func(http.Handler) http.Handler {
-	if m.CSRFProtectFunc != nil {
-		return m.CSRFProtectFunc()
-	}
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r)
-		})
 	}
 }
 
@@ -419,4 +408,33 @@ func (m *MockK8sServer) AssertRequestBody(expectedBody string) {
 	req := m.GetLastRequest()
 	require.NotNil(m.T, req, "No request was recorded")
 	assert.Equal(m.T, expectedBody, string(req.Body), "Request body does not match")
+}
+
+// MockOIDCVerifier is a mock implementation of an OIDC verifier for testing
+type MockOIDCVerifier struct {
+	VerifyTokenFunc func(ctx context.Context, tokenString string, logger *slog.Logger) (*OIDCClaims, bool, error)
+	StartFunc       func(ctx context.Context) error
+}
+
+// VerifyToken calls the mock implementation function
+func (m *MockOIDCVerifier) VerifyToken(ctx context.Context, tokenString string, logger *slog.Logger) (*OIDCClaims, bool, error) {
+	if m.VerifyTokenFunc != nil {
+		return m.VerifyTokenFunc(ctx, tokenString, logger)
+	}
+	// Default implementation with successful verification
+	claims := &OIDCClaims{
+		Subject:  "test-subject",
+		Username: "test-user",
+		Groups:   []string{"test-group"},
+	}
+	return claims, false, nil
+}
+
+// Start implements the Start method required by OIDCVerifierInterface
+func (m *MockOIDCVerifier) Start(ctx context.Context) error {
+	if m.StartFunc != nil {
+		return m.StartFunc(ctx)
+	}
+	// Default implementation with successful initialization
+	return nil
 }

@@ -74,7 +74,7 @@ kubectl apply -k config/samples/
 
 ### Workspace Templates
 
-Jupyter Workspace Templates provide standardized, reusable configurations for Jupyter Workspaces. Platform administrators can define approved environments with resource limits, allowed container images, storage configuration, and environment variables, while giving users flexibility within those boundaries.
+Jupyter Workspace Templates provide standardized, reusable configurations for Jupyter Workspaces. Platform administrators can define approved environments with resource limits, allowed container images, and storage configuration, while giving users flexibility within those boundaries.
 
 **Immutability:** Both `WorkspaceTemplate.spec` AND `Workspace.templateRef` are immutable after creation (enforced by CEL validation). To update a template, create a new version with a different name (e.g., `production-v2`). This ensures workspaces maintain stable, predictable configurations throughout their lifecycle.
 
@@ -89,7 +89,7 @@ To delete a template:
 2. Wait for workspaces to finish deleting (they will complete in background)
 3. Delete the template: `kubectl delete workspacetemplate <name>`
 
-Templates are validated by the controller during reconciliation. Invalid workspaces are created but marked with `Valid=False` condition and will not deploy pods until validation passes. This ensures no compute resources are wasted on invalid configurations.
+Templates are enforced by admission webhooks during workspace creation/update. Invalid workspaces are rejected immediately with detailed error messages, preventing invalid configurations from reaching the cluster.
 
 **Validation Rules**
 - Allowed Images: Only container images in the `allowedImages` list are permitted
@@ -132,9 +132,9 @@ kubectl get workspacetemplates
 kubectl apply -f config/samples/workspace_v1alpha1_workspace_with_template.yaml
 ```
 
-**Check validation status:**
+**Check workspace status:**
 ```sh
-kubectl get workspace workspace-with-template -o jsonpath='{.status.conditions[?(@.type=="Valid")]}'
+kubectl get workspace workspace-with-template -o jsonpath='{.status.conditions[?(@.type=="Available")]}'
 ```
 
 

@@ -22,20 +22,19 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 )
 
 // validateResourceBounds checks if resources are within template bounds
-func validateResourceBounds(resources corev1.ResourceRequirements, template *workspacev1alpha1.WorkspaceTemplate) []controller.TemplateViolation {
-	var violations []controller.TemplateViolation
+func validateResourceBounds(resources corev1.ResourceRequirements, template *workspacev1alpha1.WorkspaceTemplate) []TemplateViolation {
+	var violations []TemplateViolation
 
 	// Validate limits >= requests
 	if resources.Requests != nil && resources.Limits != nil {
 		if cpuRequest, hasRequest := resources.Requests[corev1.ResourceCPU]; hasRequest {
 			if cpuLimit, hasLimit := resources.Limits[corev1.ResourceCPU]; hasLimit {
 				if cpuLimit.Cmp(cpuRequest) < 0 {
-					violations = append(violations, controller.TemplateViolation{
-						Type:    controller.ViolationTypeResourceExceeded,
+					violations = append(violations, TemplateViolation{
+						Type:    ViolationTypeResourceExceeded,
 						Field:   "spec.resources.limits.cpu",
 						Message: "CPU limit must be greater than or equal to CPU request",
 						Allowed: cpuRequest.String(),
@@ -47,8 +46,8 @@ func validateResourceBounds(resources corev1.ResourceRequirements, template *wor
 		if memRequest, hasRequest := resources.Requests[corev1.ResourceMemory]; hasRequest {
 			if memLimit, hasLimit := resources.Limits[corev1.ResourceMemory]; hasLimit {
 				if memLimit.Cmp(memRequest) < 0 {
-					violations = append(violations, controller.TemplateViolation{
-						Type:    controller.ViolationTypeResourceExceeded,
+					violations = append(violations, TemplateViolation{
+						Type:    ViolationTypeResourceExceeded,
 						Field:   "spec.resources.limits.memory",
 						Message: "Memory limit must be greater than or equal to memory request",
 						Allowed: memRequest.String(),
@@ -68,8 +67,8 @@ func validateResourceBounds(resources corev1.ResourceRequirements, template *wor
 	if bounds.CPU != nil && resources.Requests != nil {
 		if cpuRequest, exists := resources.Requests[corev1.ResourceCPU]; exists {
 			if cpuRequest.Cmp(bounds.CPU.Min) < 0 {
-				violations = append(violations, controller.TemplateViolation{
-					Type:    controller.ViolationTypeResourceExceeded,
+				violations = append(violations, TemplateViolation{
+					Type:    ViolationTypeResourceExceeded,
 					Field:   "spec.resources.requests.cpu",
 					Message: fmt.Sprintf("CPU request %s is below minimum %s required by template '%s'", cpuRequest.String(), bounds.CPU.Min.String(), template.Name),
 					Allowed: fmt.Sprintf("min: %s", bounds.CPU.Min.String()),
@@ -77,8 +76,8 @@ func validateResourceBounds(resources corev1.ResourceRequirements, template *wor
 				})
 			}
 			if cpuRequest.Cmp(bounds.CPU.Max) > 0 {
-				violations = append(violations, controller.TemplateViolation{
-					Type:    controller.ViolationTypeResourceExceeded,
+				violations = append(violations, TemplateViolation{
+					Type:    ViolationTypeResourceExceeded,
 					Field:   "spec.resources.requests.cpu",
 					Message: fmt.Sprintf("CPU request %s exceeds maximum %s allowed by template '%s'", cpuRequest.String(), bounds.CPU.Max.String(), template.Name),
 					Allowed: fmt.Sprintf("max: %s", bounds.CPU.Max.String()),
@@ -92,8 +91,8 @@ func validateResourceBounds(resources corev1.ResourceRequirements, template *wor
 	if bounds.Memory != nil && resources.Requests != nil {
 		if memRequest, exists := resources.Requests[corev1.ResourceMemory]; exists {
 			if memRequest.Cmp(bounds.Memory.Min) < 0 {
-				violations = append(violations, controller.TemplateViolation{
-					Type:    controller.ViolationTypeResourceExceeded,
+				violations = append(violations, TemplateViolation{
+					Type:    ViolationTypeResourceExceeded,
 					Field:   "spec.resources.requests.memory",
 					Message: fmt.Sprintf("Memory request %s is below minimum %s required by template '%s'", memRequest.String(), bounds.Memory.Min.String(), template.Name),
 					Allowed: fmt.Sprintf("min: %s", bounds.Memory.Min.String()),
@@ -101,8 +100,8 @@ func validateResourceBounds(resources corev1.ResourceRequirements, template *wor
 				})
 			}
 			if memRequest.Cmp(bounds.Memory.Max) > 0 {
-				violations = append(violations, controller.TemplateViolation{
-					Type:    controller.ViolationTypeResourceExceeded,
+				violations = append(violations, TemplateViolation{
+					Type:    ViolationTypeResourceExceeded,
 					Field:   "spec.resources.requests.memory",
 					Message: fmt.Sprintf("Memory request %s exceeds maximum %s allowed by template '%s'", memRequest.String(), bounds.Memory.Max.String(), template.Name),
 					Allowed: fmt.Sprintf("max: %s", bounds.Memory.Max.String()),
@@ -117,8 +116,8 @@ func validateResourceBounds(resources corev1.ResourceRequirements, template *wor
 		gpuResourceName := corev1.ResourceName("nvidia.com/gpu")
 		if gpuRequest, exists := resources.Requests[gpuResourceName]; exists {
 			if gpuRequest.Cmp(bounds.GPU.Min) < 0 {
-				violations = append(violations, controller.TemplateViolation{
-					Type:    controller.ViolationTypeResourceExceeded,
+				violations = append(violations, TemplateViolation{
+					Type:    ViolationTypeResourceExceeded,
 					Field:   "spec.resources.requests.nvidia.com/gpu",
 					Message: fmt.Sprintf("GPU request %s is below minimum %s required by template '%s'", gpuRequest.String(), bounds.GPU.Min.String(), template.Name),
 					Allowed: fmt.Sprintf("min: %s", bounds.GPU.Min.String()),
@@ -126,8 +125,8 @@ func validateResourceBounds(resources corev1.ResourceRequirements, template *wor
 				})
 			}
 			if gpuRequest.Cmp(bounds.GPU.Max) > 0 {
-				violations = append(violations, controller.TemplateViolation{
-					Type:    controller.ViolationTypeResourceExceeded,
+				violations = append(violations, TemplateViolation{
+					Type:    ViolationTypeResourceExceeded,
 					Field:   "spec.resources.requests.nvidia.com/gpu",
 					Message: fmt.Sprintf("GPU request %s exceeds maximum %s allowed by template '%s'", gpuRequest.String(), bounds.GPU.Max.String(), template.Name),
 					Allowed: fmt.Sprintf("max: %s", bounds.GPU.Max.String()),

@@ -64,6 +64,7 @@ spec:
       - "X-Auth-Request-Email"
       - "X-Auth-Request-Groups"
       - "X-Auth-Request-Preferred-Username"
+      - "Authorization"
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware

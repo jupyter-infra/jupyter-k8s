@@ -150,7 +150,18 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
     if ! grep -q "nodeSelector:" "${CHART_DIR}/values.yaml"; then
         echo "Adding scheduling configuration to controllerManager section"
         # Add scheduling fields after terminationGracePeriodSeconds
-        sed -i '/terminationGracePeriodSeconds:/a\  # Controller pod scheduling configuration\n  nodeSelector: {}\n  tolerations: []\n  affinity: {}' "${CHART_DIR}/values.yaml"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS sed requires different syntax for append command
+            sed -i '' '/terminationGracePeriodSeconds:/a\
+  # Controller pod scheduling configuration\
+  nodeSelector: {}\
+  tolerations: []\
+  affinity: {}
+' "${CHART_DIR}/values.yaml"
+        else
+            # Linux sed
+            sed -i '/terminationGracePeriodSeconds:/a\  # Controller pod scheduling configuration\n  nodeSelector: {}\n  tolerations: []\n  affinity: {}' "${CHART_DIR}/values.yaml"
+        fi
     fi
 
     # Append the entire patch file content to values.yaml
@@ -208,13 +219,37 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
                 # Also add extension API volume mount if not already present
                 if ! grep -q "extension-server-cert" "${MANAGER_YAML}"; then
                     # Add volume mount for extension API server certificates
-                    sed -i '/volumeMounts:/a\            {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\n            - name: extension-server-cert\n              mountPath: /tmp/extension-server/serving-certs\n              readOnly: true\n            {{- end }}' "${MANAGER_YAML}"
+                    if [[ "$OSTYPE" == "darwin"* ]]; then
+                        sed -i '' '/volumeMounts:/a\
+            {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\
+            - name: extension-server-cert\
+              mountPath: /tmp/extension-server/serving-certs\
+              readOnly: true\
+            {{- end }}
+' "${MANAGER_YAML}"
+                    else
+                        sed -i '/volumeMounts:/a\            {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\n            - name: extension-server-cert\n              mountPath: /tmp/extension-server/serving-certs\n              readOnly: true\n            {{- end }}' "${MANAGER_YAML}"
+                    fi
 
                     # Add volume for extension API server certificates
-                    sed -i '/volumes:/a\        {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\n        - name: extension-server-cert\n          secret:\n            secretName: extension-server-cert\n        {{- end }}' "${MANAGER_YAML}"
+                    if [[ "$OSTYPE" == "darwin"* ]]; then
+                        sed -i '' '/volumes:/a\
+        {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\
+        - name: extension-server-cert\
+          secret:\
+            secretName: extension-server-cert\
+        {{- end }}
+' "${MANAGER_YAML}"
+                    else
+                        sed -i '/volumes:/a\        {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\n        - name: extension-server-cert\n          secret:\n            secretName: extension-server-cert\n        {{- end }}' "${MANAGER_YAML}"
+                    fi
 
                     # Update the conditional wrapping for volumeMounts and volumes
-                    sed -i 's/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable) }}/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable .Values.extensionApi.enable) }}/g' "${MANAGER_YAML}"
+                    if [[ "$OSTYPE" == "darwin"* ]]; then
+                        sed -i '' 's/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable) }}/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable .Values.extensionApi.enable) }}/g' "${MANAGER_YAML}"
+                    else
+                        sed -i 's/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable) }}/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable .Values.extensionApi.enable) }}/g' "${MANAGER_YAML}"
+                    fi
                 fi
 
                 # Clean up temp file
@@ -340,13 +375,45 @@ echo "Patching certmanager/certificate.yaml..."
 CERT_YAML="${CHART_DIR}/templates/certmanager/certificate.yaml"
 if [ -f "${CERT_YAML}" ]; then
     # Update all issuer references to use jupyter-k8s-selfsigned-issuer
-    sed -i 's/name: selfsigned-issuer/name: jupyter-k8s-selfsigned-issuer/g' "${CERT_YAML}"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' 's/name: selfsigned-issuer/name: jupyter-k8s-selfsigned-issuer/g' "${CERT_YAML}"
+    else
+        sed -i 's/name: selfsigned-issuer/name: jupyter-k8s-selfsigned-issuer/g' "${CERT_YAML}"
+    fi
     echo "Updated issuer name to jupyter-k8s-selfsigned-issuer"
+fi
+
+# Handle manager labels patch
+if [ -f "${PATCHES_DIR}/manager-labels.yaml.patch" ]; then
+    MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
+    if [ -f "${MANAGER_YAML}" ]; then
+        echo "Applying labels patch to manager.yaml..."
+        
+        # Check if labels patch is already applied
+        if ! grep -q "workspace.jupyter.org/component: controller" "${MANAGER_YAML}"; then
+            echo "Adding custom labels to manager.yaml"
+            
+            # Add custom label to deployment metadata labels (after the first control-plane: controller-manager)
+            sed -i '0,/control-plane: controller-manager$/s//&\n    workspace.jupyter.org\/component: controller/' "${MANAGER_YAML}"
+            
+            # Add custom label to selector matchLabels (after the selector control-plane: controller-manager)
+            sed -i '0,/control-plane: controller-manager$/b; s/control-plane: controller-manager$/&\n      workspace.jupyter.org\/component: controller/' "${MANAGER_YAML}"
+            
+            # Add custom label to pod template labels (after the pod template control-plane: controller-manager)
+            sed -i '0,/control-plane: controller-manager$/b; 0,/control-plane: controller-manager$/b; s/control-plane: controller-manager$/&\n        workspace.jupyter.org\/component: controller/' "${MANAGER_YAML}"
+            
+            echo "Successfully applied labels patch"
+        else
+            echo "Labels patch already applied, skipping"
+        fi
+    else
+        echo "Warning: manager.yaml not found at ${MANAGER_YAML}"
+    fi
 fi
 
 # Process any additional patch files
 for patch_file in "${PATCHES_DIR}"/*.patch; do
-    if [ -f "$patch_file" ] && [ "$(basename "$patch_file")" != "values.yaml.patch" ] && [ "$(basename "$patch_file")" != "manager.yaml.patch" ]; then
+    if [ -f "$patch_file" ] && [ "$(basename "$patch_file")" != "values.yaml.patch" ] && [ "$(basename "$patch_file")" != "manager.yaml.patch" ] && [ "$(basename "$patch_file")" != "manager-labels.yaml.patch" ]; then
         file_name=$(basename "$patch_file" .patch)
         apply_patch "$file_name" "$(basename "$patch_file")"
     fi

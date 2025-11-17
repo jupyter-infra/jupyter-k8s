@@ -12,7 +12,7 @@ const (
 	// ConditionTypeAvailable indicates the Workspace is fully available
 	ConditionTypeAvailable = "Available"
 
-	// ConditionTypeStarting indicates the Workspace is in the process of starting
+	// ConditionTypeProgressing indicates the Workspace is in a transitional state (starting or stopping)
 	ConditionTypeProgressing = "Progressing"
 
 	// ConditionTypeDegraded indicates the Workspace is in a degraded state
@@ -20,9 +20,6 @@ const (
 
 	// ConditionTypeStopped indicates if the Workspace is in a stopped state
 	ConditionTypeStopped = "Stopped"
-
-	// ConditionTypeValid indicates if the Workspace configuration passes all validation checks
-	ConditionTypeValid = "Valid"
 )
 
 // Condition reasons for Workspace resources
@@ -48,11 +45,8 @@ const (
 	ReasonServiceError    = "ServiceError"
 	ReasonNoError         = "NoError"
 
-	// ConditionTypeValid reasons
-	ReasonAllChecksPass          = "AllChecksPass"
-	ReasonTemplateViolation      = "TemplateViolation"
-	ReasonExecutionProfileDenied = "ExecutionProfileDenied" // Future use
-	ReasonQuotaExceeded          = "QuotaExceeded"          // Future use
+	// ConditionTypeAvailable reasons (special cases)
+	ReasonPreempted = "Preempted"
 )
 
 // NewCondition creates a new condition with the specified status

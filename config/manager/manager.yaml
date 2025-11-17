@@ -16,6 +16,7 @@ metadata:
     control-plane: controller-manager
     app.kubernetes.io/name: jupyter-k8s
     app.kubernetes.io/managed-by: kustomize
+    workspace.jupyter.org/component: controller
 spec:
   selector:
     matchLabels:
@@ -29,6 +30,7 @@ spec:
       labels:
         control-plane: controller-manager
         app.kubernetes.io/name: jupyter-k8s
+        workspace.jupyter.org/component: controller
     spec:
       nodeSelector: {}
       tolerations: []
@@ -63,6 +65,16 @@ spec:
           - --health-probe-bind-address=:8081
           - --application-images-pull-policy=IfNotPresent
           - --application-images-registry=docker.io/library
+          - --default-template-namespace=jupyter-k8s-shared
+        env:
+        - name: CONTROLLER_POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CONTROLLER_POD_SERVICE_ACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
         image: controller:latest
         name: manager
         ports: []
