@@ -14,7 +14,7 @@ The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 */
 
-package controller
+package v1alpha1
 
 // TemplateViolation describes a specific validation failure
 type TemplateViolation struct {
