@@ -68,7 +68,7 @@ spec:
         - name: "ssm-agent-sidecar"
           image: "{{ .Values.remoteAccess.ssmSidecarImage.containerRegistry }}/{{ .Values.remoteAccess.ssmSidecarImage.repository }}:{{ .Values.remoteAccess.ssmSidecarImage.tag }}"
           command:
-            - /opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-remote-access
+            - /opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-sidecar-container
           resources:
             requests:
               cpu: "100m"
