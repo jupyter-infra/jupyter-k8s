@@ -54,19 +54,6 @@ spec:
               value: "true"
             - name: COOKIE_SAME_SITE
               value: "lax"
-            - name: CSRF_AUTH_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: authmiddleware-secrets
-                  key: csrf-auth-key
-            - name: CSRF_COOKIE_NAME
-              value: "workspace_csrf"
-            - name: CSRF_COOKIE_PATH
-              value: "/"
-            - name: CSRF_COOKIE_MAX_AGE
-              value: "1h"
-            - name: CSRF_COOKIE_SECURE
-              value: "true"
           resources:
             limits:
               cpu: 200m
@@ -125,4 +112,3 @@ data:
   # These values need to be replaced with actual secrets generated at deployment time
   # The values below are placeholders for demonstration
   jwt-signing-key: ChangeMe
-  csrf-auth-key: ChangeMe32CharactersMinimumLength
