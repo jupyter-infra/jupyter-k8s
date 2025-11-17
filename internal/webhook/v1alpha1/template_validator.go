@@ -55,7 +55,7 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		return err
 	}
 
-	var violations []controller.TemplateViolation
+	var violations []TemplateViolation
 
 	// Validate image
 	if workspace.Spec.Image != "" {
@@ -76,6 +76,11 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		if violation := validateStorageSize(workspace.Spec.Storage.Size, template); violation != nil {
 			violations = append(violations, *violation)
 		}
+	}
+
+	// Validate secondary storage volumes
+	if violation := validateSecondaryStorages(workspace.Spec.Volumes, template); violation != nil {
+		violations = append(violations, *violation)
 	}
 
 	if len(violations) > 0 {
@@ -152,7 +157,7 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 }
 
 // formatViolations formats template violations into a readable error message
-func formatViolations(violations []controller.TemplateViolation) string {
+func formatViolations(violations []TemplateViolation) string {
 	if len(violations) == 0 {
 		return ""
 	}

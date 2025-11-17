@@ -6,14 +6,12 @@ metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
     control-plane: controller-manager
-    workspace.jupyter.org/component: controller
 spec:
   replicas:  {{ .Values.controllerManager.replicas }}
   selector:
     matchLabels:
       {{- include "chart.selectorLabels" . | nindent 6 }}
       control-plane: controller-manager
-      workspace.jupyter.org/component: controller
   template:
     metadata:
       annotations:
@@ -21,8 +19,6 @@ spec:
       labels:
         {{- include "chart.labels" . | nindent 8 }}
         control-plane: controller-manager
-        workspace.jupyter.org/component: controller
-      workspace.jupyter.org/component: controller
         {{- if and .Values.controllerManager.pod .Values.controllerManager.pod.labels }}
         {{- range $key, $value := .Values.controllerManager.pod.labels }}
         {{ $key }}: {{ $value }}
@@ -130,8 +126,7 @@ spec:
                   operator: In
                   values:
                     - linux
-      {{- end }}
-      terminationGracePeriodSeconds: {{ .Values.controllerManager.terminationGracePeriodSeconds }}
+      {{- end }}      terminationGracePeriodSeconds: {{ .Values.controllerManager.terminationGracePeriodSeconds }}
       {{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable .Values.extensionApi.enable) }}
       volumes:
         {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}

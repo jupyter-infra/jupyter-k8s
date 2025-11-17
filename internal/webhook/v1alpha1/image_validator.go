@@ -20,11 +20,10 @@ import (
 	"fmt"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 )
 
 // validateImageAllowed checks if image is in template's allowed list
-func validateImageAllowed(image string, template *workspacev1alpha1.WorkspaceTemplate) *controller.TemplateViolation {
+func validateImageAllowed(image string, template *workspacev1alpha1.WorkspaceTemplate) *TemplateViolation {
 	// Skip validation if custom images are allowed
 	if template.Spec.AllowCustomImages != nil && *template.Spec.AllowCustomImages {
 		return nil
@@ -41,8 +40,8 @@ func validateImageAllowed(image string, template *workspacev1alpha1.WorkspaceTem
 		}
 	}
 
-	return &controller.TemplateViolation{
-		Type:    controller.ViolationTypeImageNotAllowed,
+	return &TemplateViolation{
+		Type:    ViolationTypeImageNotAllowed,
 		Field:   "spec.image",
 		Message: fmt.Sprintf("Image '%s' is not allowed by template '%s'. Allowed images: %v", image, template.Name, effectiveAllowedImages),
 		Allowed: fmt.Sprintf("%v", effectiveAllowedImages),
