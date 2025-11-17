@@ -1,4 +1,4 @@
-{{- if .Values.authmiddleware.enabled }}
+{{- if .Values.clusterWebUI.enabled }}
 ---
 apiVersion: v1
 kind: ServiceAccount

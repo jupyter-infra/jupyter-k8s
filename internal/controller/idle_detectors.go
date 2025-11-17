@@ -152,7 +152,7 @@ func (h *HTTPGetDetector) checkIdleTimeout(ctx context.Context, workspaceName st
 		return false
 	}
 
-	timeout := time.Duration(idleConfig.TimeoutMinutes) * time.Minute
+	timeout := time.Duration(idleConfig.IdleTimeoutInMinutes) * time.Minute
 	idleTime := time.Since(lastActivity)
 
 	if idleTime > timeout {

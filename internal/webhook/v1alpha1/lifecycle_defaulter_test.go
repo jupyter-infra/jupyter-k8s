@@ -86,15 +86,15 @@ var _ = Describe("LifecycleDefaulter", func() {
 
 		It("should apply idle shutdown defaults", func() {
 			template.Spec.DefaultIdleShutdown = &workspacev1alpha1.IdleShutdownSpec{
-				Enabled:        true,
-				TimeoutMinutes: 60,
+				Enabled:              true,
+				IdleTimeoutInMinutes: 60,
 			}
 
 			applyLifecycleDefaults(workspace, template)
 
 			Expect(workspace.Spec.IdleShutdown).ToNot(BeNil())
 			Expect(workspace.Spec.IdleShutdown.Enabled).To(BeTrue())
-			Expect(workspace.Spec.IdleShutdown.TimeoutMinutes).To(Equal(60))
+			Expect(workspace.Spec.IdleShutdown.IdleTimeoutInMinutes).To(Equal(60))
 		})
 
 		It("should not override existing idle shutdown", func() {

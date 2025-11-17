@@ -2,8 +2,8 @@ package aws
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 
@@ -18,6 +18,121 @@ import (
 const (
 	bashCommand = "bash"
 )
+
+// Test helper functions for common mocking patterns
+
+// mockReadStateFile mocks reading the state file from the sidecar container
+func mockReadStateFile(mockPodExec *MockPodExecUtil, state *RegistrationState) {
+	if state == nil {
+		// File doesn't exist
+		mockPodExec.On("ExecInPod",
+			mock.Anything,
+			mock.Anything,
+			SSMAgentSidecarContainerName,
+			[]string{"cat", SSMRegistrationStateFile},
+			"",
+		).Return("", errors.New("file not found")).Once()
+	} else {
+		// File exists with state
+		stateJSON, _ := json.Marshal(state)
+		mockPodExec.On("ExecInPod",
+			mock.Anything,
+			mock.Anything,
+			SSMAgentSidecarContainerName,
+			[]string{"cat", SSMRegistrationStateFile},
+			"",
+		).Return(string(stateJSON), nil).Once()
+	}
+}
+
+// mockWriteStateFile mocks writing the state file to the sidecar container
+func mockWriteStateFile(mockPodExec *MockPodExecUtil, expectedState *RegistrationState) {
+	mockPodExec.On("ExecInPod",
+		mock.Anything,
+		mock.Anything,
+		SSMAgentSidecarContainerName,
+		mock.MatchedBy(func(cmd []string) bool {
+			if len(cmd) != 3 || cmd[0] != bashCommand || cmd[1] != "-c" {
+				return false
+			}
+			if !strings.Contains(cmd[2], "echo") || !strings.Contains(cmd[2], SSMRegistrationStateFile) {
+				return false
+			}
+			// Extract and verify JSON
+			if strings.Contains(cmd[2], "echo '") {
+				start := strings.Index(cmd[2], "echo '") + 6
+				end := strings.Index(cmd[2][start:], "'")
+				if end > 0 {
+					jsonStr := cmd[2][start : start+end]
+					var state RegistrationState
+					if err := json.Unmarshal([]byte(jsonStr), &state); err != nil {
+						return false
+					}
+					return state.SidecarRestartCount == expectedState.SidecarRestartCount &&
+						state.WorkspaceRestartCount == expectedState.WorkspaceRestartCount &&
+						state.SetupInProgress == expectedState.SetupInProgress
+				}
+			}
+			return false
+		}),
+		"",
+	).Return("", nil).Once()
+}
+
+// mockCleanup mocks SSM cleanup operations
+func mockCleanup(mockSSMClient *MockSSMRemoteAccessClient, podUID string) {
+	mockSSMClient.On("CleanupManagedInstancesByPodUID", mock.Anything, podUID).Return(nil).Once()
+	mockSSMClient.On("CleanupActivationsByPodUID", mock.Anything, podUID).Return(nil).Once()
+}
+
+// mockSSMRegistration mocks SSM agent registration in sidecar
+func mockSSMRegistration(mockPodExec *MockPodExecUtil) {
+	mockPodExec.On("ExecInPod",
+		mock.Anything,
+		mock.Anything,
+		SSMAgentSidecarContainerName,
+		mock.MatchedBy(func(cmd []string) bool {
+			return len(cmd) == 3 && cmd[0] == "bash" && cmd[1] == "-c" &&
+				strings.Contains(cmd[2], "register-ssm.sh")
+		}),
+		mock.MatchedBy(func(stdin string) bool {
+			return strings.Contains(stdin, "test-activation-id")
+		}),
+	).Return("", nil).Once()
+}
+
+// mockMarkerFile mocks marker file creation for backward compatibility
+func mockMarkerFile(mockPodExec *MockPodExecUtil) {
+	mockPodExec.On("ExecInPod",
+		mock.Anything,
+		mock.Anything,
+		SSMAgentSidecarContainerName,
+		[]string{"touch", SSMRegistrationMarkerFile},
+		"",
+	).Return("", nil).Once()
+}
+
+// mockWorkspaceSetup mocks starting the remote access server in workspace container
+func mockWorkspaceSetup(mockPodExec *MockPodExecUtil) {
+	mockPodExec.On("ExecInPod",
+		mock.Anything,
+		mock.Anything,
+		WorkspaceContainerName,
+		[]string{RemoteAccessServerScriptPath, "--port", RemoteAccessServerPort},
+		"",
+	).Return("", nil).Once()
+}
+
+// mockSSMActivation mocks SSM activation creation
+func mockSSMActivation(mockSSMClient *MockSSMRemoteAccessClient) {
+	mockSSMClient.On("GetRegion").Return("us-west-2")
+	mockSSMClient.On("CreateActivation",
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+	).Return(&SSMActivation{
+		ActivationId:   "test-activation-id",
+		ActivationCode: "test-activation-code",
+	}, nil).Once()
+}
 
 // Mock implementations for testing
 
@@ -159,205 +274,222 @@ func createTestAccessStrategy(controllerConfig map[string]string) *workspacev1al
 	}
 }
 
-// InitSSMAgent Tests
+// SetupContainers Tests
 
-func TestInitSSMAgent_SSMClientNotAvailable(t *testing.T) {
-	// Create strategy directly with nil SSM client (bypass constructor)
+func TestSetupContainers_FirstTimeSetup_NoStateFile(t *testing.T) {
+	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+
 	mockPodExecUtil := &MockPodExecUtil{}
-	strategy := &SSMRemoteAccessStrategy{
-		ssmClient:   nil, // Explicitly nil
-		podExecUtil: mockPodExecUtil,
-	}
-
-	// Create test objects (container status doesn't matter since we return early)
-	pod := createTestPod([]corev1.ContainerStatus{})
-	workspace := createTestWorkspace()
-	accessStrategy := createTestAccessStrategy(nil)
-
-	// Test InitSSMAgent with nil SSM client
-	err := strategy.InitSSMAgent(context.Background(), pod, workspace, accessStrategy)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "SSM client not available")
-}
-
-func TestInitSSMAgent_SidecarNotFound(t *testing.T) {
-	// Create mocks (we won't reach them due to early return)
 	mockSSMClient := &MockSSMRemoteAccessClient{}
-	mockPodExecUtil := &MockPodExecUtil{}
+
+	// Mock 1: Read state file - doesn't exist
+	mockReadStateFile(mockPodExecUtil, nil)
+
+	// Mock 2: Write state - mark in progress
+	inProgressState := &RegistrationState{
+		SidecarRestartCount:   0,
+		WorkspaceRestartCount: 0,
+		SetupInProgress:       true,
+	}
+	mockWriteStateFile(mockPodExecUtil, inProgressState)
+
+	// Mock 3: SSM activation and registration
+	mockSSMActivation(mockSSMClient)
+	mockSSMRegistration(mockPodExecUtil)
+	mockMarkerFile(mockPodExecUtil)
+
+	// Mock 4: Workspace setup
+	mockWorkspaceSetup(mockPodExecUtil)
+
+	// Mock 5: Write state - mark complete
+	completeState := &RegistrationState{
+		SidecarRestartCount:   0,
+		WorkspaceRestartCount: 0,
+		SetupInProgress:       false,
+	}
+	mockWriteStateFile(mockPodExecUtil, completeState)
 
 	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
 	assert.NoError(t, err)
 
-	// Create pod with no SSM sidecar container
+	// Create pod with running containers (restart count = 0)
 	containerStatuses := []corev1.ContainerStatus{
 		{
-			Name: "main-container",
-			State: corev1.ContainerState{
-				Running: &corev1.ContainerStateRunning{},
-			},
+			Name:         SSMAgentSidecarContainerName,
+			State:        corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			Ready:        true,
+			RestartCount: 0,
 		},
 		{
-			Name: "other-sidecar",
-			State: corev1.ContainerState{
-				Running: &corev1.ContainerStateRunning{},
-			},
+			Name:         WorkspaceContainerName,
+			State:        corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			Ready:        true,
+			RestartCount: 0,
 		},
 	}
 	pod := createTestPod(containerStatuses)
 	workspace := createTestWorkspace()
-	accessStrategy := createTestAccessStrategy(nil)
+	accessStrategy := createTestAccessStrategy(map[string]string{
+		"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
+	})
 
-	// Test InitSSMAgent with no SSM sidecar
-	err = strategy.InitSSMAgent(context.Background(), pod, workspace, accessStrategy)
+	// Execute
+	err = strategy.SetupContainers(context.Background(), pod, workspace, accessStrategy)
 
-	assert.NoError(t, err) // Should return nil (graceful exit)
+	// Verify
+	assert.NoError(t, err)
+	mockPodExecUtil.AssertExpectations(t)
+	mockSSMClient.AssertExpectations(t)
 }
 
-func TestInitSSMAgent_SidecarNotRunning(t *testing.T) {
-	// Create mocks (we won't reach them due to early return)
-	mockSSMClient := &MockSSMRemoteAccessClient{}
+func TestSetupContainers_SidecarContainerRestart(t *testing.T) {
+	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+
 	mockPodExecUtil := &MockPodExecUtil{}
+	mockSSMClient := &MockSSMRemoteAccessClient{}
+
+	// Mock 1: Read existing state (sidecar restart count = 1)
+	existingState := &RegistrationState{
+		SidecarRestartCount:   1,
+		WorkspaceRestartCount: 0,
+		SetupInProgress:       false,
+	}
+	mockReadStateFile(mockPodExecUtil, existingState)
+
+	// Mock 2: Cleanup (because sidecar restarted)
+	mockCleanup(mockSSMClient, "test-pod-uid-123")
+
+	// Mock 3: Write state - mark in progress
+	inProgressState := &RegistrationState{
+		SidecarRestartCount:   2,
+		WorkspaceRestartCount: 0,
+		SetupInProgress:       true,
+	}
+	mockWriteStateFile(mockPodExecUtil, inProgressState)
+
+	// Mock 4: Setup sidecar only (no workspace setup)
+	mockSSMActivation(mockSSMClient)
+	mockSSMRegistration(mockPodExecUtil)
+	mockMarkerFile(mockPodExecUtil)
+
+	// Mock 5: Write state - mark complete
+	completeState := &RegistrationState{
+		SidecarRestartCount:   2,
+		WorkspaceRestartCount: 0,
+		SetupInProgress:       false,
+	}
+	mockWriteStateFile(mockPodExecUtil, completeState)
 
 	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
 	assert.NoError(t, err)
 
-	// Create pod with SSM sidecar that is not running
+	// Create pod with sidecar restarted (count = 2)
+	containerStatuses := []corev1.ContainerStatus{
+		{
+			Name:         SSMAgentSidecarContainerName,
+			State:        corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			Ready:        true,
+			RestartCount: 2, // Sidecar restarted
+		},
+		{
+			Name:         WorkspaceContainerName,
+			State:        corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			Ready:        true,
+			RestartCount: 0, // Workspace not restarted
+		},
+	}
+	pod := createTestPod(containerStatuses)
+	workspace := createTestWorkspace()
+	accessStrategy := createTestAccessStrategy(map[string]string{
+		"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
+	})
+
+	// Execute
+	err = strategy.SetupContainers(context.Background(), pod, workspace, accessStrategy)
+
+	// Verify
+	assert.NoError(t, err)
+	mockPodExecUtil.AssertExpectations(t)
+	mockSSMClient.AssertExpectations(t)
+}
+
+func TestSetupContainers_NoRestartDetected_AlreadySetup(t *testing.T) {
+	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+
+	mockPodExecUtil := &MockPodExecUtil{}
+	mockSSMClient := &MockSSMRemoteAccessClient{}
+
+	// Mock 1: Read existing state - restart counts match current pod status
+	existingState := &RegistrationState{
+		SidecarRestartCount:   0,
+		WorkspaceRestartCount: 0,
+		SetupInProgress:       false,
+	}
+	mockReadStateFile(mockPodExecUtil, existingState)
+
+	// NO OTHER MOCKS - should exit early after reading state
+
+	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
+	assert.NoError(t, err)
+
+	// Create pod with matching restart counts (both = 0)
+	containerStatuses := []corev1.ContainerStatus{
+		{
+			Name:         SSMAgentSidecarContainerName,
+			State:        corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			Ready:        true,
+			RestartCount: 0, // Matches state file
+		},
+		{
+			Name:         WorkspaceContainerName,
+			State:        corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			Ready:        true,
+			RestartCount: 0, // Matches state file
+		},
+	}
+	pod := createTestPod(containerStatuses)
+	workspace := createTestWorkspace()
+	accessStrategy := createTestAccessStrategy(map[string]string{
+		"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
+	})
+
+	// Execute
+	err = strategy.SetupContainers(context.Background(), pod, workspace, accessStrategy)
+
+	// Verify - should exit early with no error
+	assert.NoError(t, err)
+	// Only 1 call should have been made (reading state file)
+	mockPodExecUtil.AssertExpectations(t)
+	// No SSM client calls should have been made
+	mockSSMClient.AssertExpectations(t)
+}
+
+func TestSetupContainers_SidecarNotRunning(t *testing.T) {
+	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
+
+	mockPodExecUtil := &MockPodExecUtil{}
+	mockSSMClient := &MockSSMRemoteAccessClient{}
+
+	// NO MOCKS - should exit early before any operations
+
+	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
+	assert.NoError(t, err)
+
+	// Create pod with sidecar NOT running (nil Running state)
 	containerStatuses := []corev1.ContainerStatus{
 		{
 			Name: SSMAgentSidecarContainerName,
 			State: corev1.ContainerState{
 				Running: nil, // Not running
 			},
-			Ready: false,
+			Ready:        false,
+			RestartCount: 0,
 		},
-	}
-	pod := createTestPod(containerStatuses)
-	workspace := createTestWorkspace()
-	accessStrategy := createTestAccessStrategy(nil)
-
-	// Test InitSSMAgent with non-running sidecar
-	err = strategy.InitSSMAgent(context.Background(), pod, workspace, accessStrategy)
-
-	assert.NoError(t, err) // Should return nil (graceful exit)
-}
-
-func TestInitSSMAgent_AlreadyCompleted(t *testing.T) {
-	// Create mock PodExecUtil that simulates completed registration
-	mockPodExecUtil := &MockPodExecUtil{}
-	mockPodExecUtil.On("ExecInPod", mock.Anything, mock.Anything, SSMAgentSidecarContainerName,
-		[]string{"test", "-f", SSMRegistrationMarkerFile}, "").Return("", nil) // File exists
-
-	mockSSMClient := &MockSSMRemoteAccessClient{}
-	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
-	assert.NoError(t, err)
-
-	// Create pod with running SSM sidecar
-	containerStatuses := []corev1.ContainerStatus{
 		{
-			Name: SSMAgentSidecarContainerName,
-			State: corev1.ContainerState{
-				Running: &corev1.ContainerStateRunning{},
-			},
-			Ready: true,
-		},
-	}
-	pod := createTestPod(containerStatuses)
-	workspace := createTestWorkspace()
-	accessStrategy := createTestAccessStrategy(nil)
-
-	// Test InitSSMAgent with already completed registration
-	err = strategy.InitSSMAgent(context.Background(), pod, workspace, accessStrategy)
-
-	assert.NoError(t, err) // Should return nil (graceful exit)
-	mockPodExecUtil.AssertExpectations(t)
-}
-
-func TestInitSSMAgent_SuccessFlow(t *testing.T) {
-	// Set required environment variable for test
-	originalEKSClusterARN := os.Getenv(EKSClusterARNEnv)
-	_ = os.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
-	defer func() {
-		if originalEKSClusterARN == "" {
-			_ = os.Unsetenv(EKSClusterARNEnv)
-		} else {
-			_ = os.Setenv(EKSClusterARNEnv, originalEKSClusterARN)
-		}
-	}()
-
-	// Create mock PodExecUtil that simulates successful registration flow
-	mockPodExecUtil := &MockPodExecUtil{}
-
-	// First call: check if registration completed (return error = not completed)
-	mockPodExecUtil.On("ExecInPod", mock.Anything, mock.Anything, SSMAgentSidecarContainerName,
-		[]string{"test", "-f", SSMRegistrationMarkerFile}, "").Return("", errors.New("file not found"))
-
-	// Second call: registration script execution with stdin
-	mockPodExecUtil.On("ExecInPod", mock.Anything, mock.Anything, SSMAgentSidecarContainerName,
-		mock.MatchedBy(func(cmd []string) bool {
-			return len(cmd) == 3 && cmd[0] == bashCommand && cmd[1] == "-c" &&
-				strings.Contains(cmd[2], "read ACTIVATION_ID && read ACTIVATION_CODE") &&
-				strings.Contains(cmd[2], "REGION=us-west-2") &&
-				strings.Contains(cmd[2], "register-ssm.sh")
-		}), mock.MatchedBy(func(stdin string) bool {
-			return strings.Contains(stdin, "test-activation-id") &&
-				strings.Contains(stdin, "test-activation-code") &&
-				!strings.Contains(stdin, "us-west-2") // Region should not be in stdin
-		})).Return("", nil)
-
-	// Third call: remote access server start
-	mockPodExecUtil.On("ExecInPod", mock.Anything, mock.Anything, WorkspaceContainerName,
-		mock.MatchedBy(func(cmd []string) bool {
-			return len(cmd) == 3 && cmd[0] == bashCommand && cmd[1] == "-c" &&
-				strings.Contains(cmd[2], "remote-access-server")
-		}), "").Return("", nil)
-
-	// Fourth call: completion marker creation
-	mockPodExecUtil.On("ExecInPod", mock.Anything, mock.Anything, SSMAgentSidecarContainerName,
-		[]string{"touch", SSMRegistrationMarkerFile}, "").Return("", nil)
-
-	// Create mock SSM client
-	mockSSMClient := &MockSSMRemoteAccessClient{}
-	mockSSMClient.On("GetRegion").Return("us-west-2")
-	mockSSMClient.On("CreateActivation",
-		mock.Anything, // ctx
-		mock.Anything, // description
-		mock.Anything, // instanceName
-		mock.Anything, // iamRole
-		mock.MatchedBy(func(tags map[string]string) bool {
-			// Verify required tags are present (hardcoded to catch constant changes)
-			expectedTags := []string{
-				"sagemaker.amazonaws.com/managed-by",
-				"sagemaker.amazonaws.com/eks-cluster-arn",
-				"workspace-name",
-				"namespace",
-				"workspace-pod-uid",
-			}
-
-			for _, tag := range expectedTags {
-				if _, exists := tags[tag]; !exists {
-					return false
-				}
-			}
-
-			// Verify specific tag values (hardcoded to catch constant changes)
-			return tags["sagemaker.amazonaws.com/managed-by"] == "amazon-sagemaker-spaces"
-		})).Return(&SSMActivation{
-		ActivationId:   "test-activation-id",
-		ActivationCode: "test-activation-code",
-	}, nil)
-
-	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
-	assert.NoError(t, err)
-
-	// Create pod with running SSM sidecar
-	containerStatuses := []corev1.ContainerStatus{
-		{
-			Name: SSMAgentSidecarContainerName,
-			State: corev1.ContainerState{
-				Running: &corev1.ContainerStateRunning{},
-			},
-			Ready: true,
+			Name:         WorkspaceContainerName,
+			State:        corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			Ready:        true,
+			RestartCount: 0,
 		},
 	}
 	pod := createTestPod(containerStatuses)
@@ -366,63 +498,47 @@ func TestInitSSMAgent_SuccessFlow(t *testing.T) {
 		"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
 	})
 
-	// Test successful InitSSMAgent flow
-	err = strategy.InitSSMAgent(context.Background(), pod, workspace, accessStrategy)
+	// Execute
+	err = strategy.SetupContainers(context.Background(), pod, workspace, accessStrategy)
 
+	// Verify - should exit early with no error, no operations
 	assert.NoError(t, err)
-	mockPodExecUtil.AssertExpectations(t)
-	mockSSMClient.AssertExpectations(t)
+	mockPodExecUtil.AssertExpectations(t) // No calls
+	mockSSMClient.AssertExpectations(t)   // No calls
 }
 
-func TestInitSSMAgent_RegistrationFailure(t *testing.T) {
-	// Set required environment variable for test
-	originalEKSClusterARN := os.Getenv(EKSClusterARNEnv)
-	_ = os.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
-	defer func() {
-		if originalEKSClusterARN == "" {
-			_ = os.Unsetenv(EKSClusterARNEnv)
-		} else {
-			_ = os.Setenv(EKSClusterARNEnv, originalEKSClusterARN)
-		}
-	}()
+func TestSetupContainers_SetupInProgress(t *testing.T) {
+	t.Setenv(EKSClusterARNEnv, "arn:aws:eks:us-west-2:123456789012:cluster/test-cluster")
 
-	// Create mock PodExecUtil that simulates registration failure
 	mockPodExecUtil := &MockPodExecUtil{}
-
-	// First call: check if registration completed (return error = not completed)
-	mockPodExecUtil.On("ExecInPod", mock.Anything, mock.Anything, SSMAgentSidecarContainerName,
-		[]string{"test", "-f", SSMRegistrationMarkerFile}, "").Return("", errors.New("file not found"))
-
-	// Second call: registration script execution fails
-	expectedError := errors.New("registration script failed")
-	mockPodExecUtil.On("ExecInPod", mock.Anything, mock.Anything, SSMAgentSidecarContainerName,
-		mock.MatchedBy(func(cmd []string) bool {
-			return len(cmd) == 3 && cmd[0] == bashCommand && cmd[1] == "-c" &&
-				strings.Contains(cmd[2], "read ACTIVATION_ID && read ACTIVATION_CODE") &&
-				strings.Contains(cmd[2], "REGION=us-west-2") &&
-				strings.Contains(cmd[2], "register-ssm.sh")
-		}), mock.Anything).Return("", expectedError)
-
-	// Create mock SSM client
 	mockSSMClient := &MockSSMRemoteAccessClient{}
-	mockSSMClient.On("GetRegion").Return("us-west-2")
-	mockSSMClient.On("CreateActivation", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(&SSMActivation{
-			ActivationId:   "test-activation-id",
-			ActivationCode: "test-activation-code",
-		}, nil)
+
+	// Mock 1: Read state file - setup is already in progress
+	existingState := &RegistrationState{
+		SidecarRestartCount:   0,
+		WorkspaceRestartCount: 0,
+		SetupInProgress:       true, // Another event is already setting up
+	}
+	mockReadStateFile(mockPodExecUtil, existingState)
+
+	// NO OTHER MOCKS - should exit early after detecting setup in progress
 
 	strategy, err := NewSSMRemoteAccessStrategy(mockSSMClient, mockPodExecUtil)
 	assert.NoError(t, err)
 
-	// Create pod with running SSM sidecar
+	// Create pod with running containers
 	containerStatuses := []corev1.ContainerStatus{
 		{
-			Name: SSMAgentSidecarContainerName,
-			State: corev1.ContainerState{
-				Running: &corev1.ContainerStateRunning{},
-			},
-			Ready: true,
+			Name:         SSMAgentSidecarContainerName,
+			State:        corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			Ready:        true,
+			RestartCount: 0,
+		},
+		{
+			Name:         WorkspaceContainerName,
+			State:        corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			Ready:        true,
+			RestartCount: 0,
 		},
 	}
 	pod := createTestPod(containerStatuses)
@@ -431,12 +547,14 @@ func TestInitSSMAgent_RegistrationFailure(t *testing.T) {
 		"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
 	})
 
-	// Test InitSSMAgent with registration failure
-	err = strategy.InitSSMAgent(context.Background(), pod, workspace, accessStrategy)
+	// Execute
+	err = strategy.SetupContainers(context.Background(), pod, workspace, accessStrategy)
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to execute SSM registration script")
+	// Verify - should exit early with no error
+	assert.NoError(t, err)
+	// Only 1 call should have been made (reading state file)
 	mockPodExecUtil.AssertExpectations(t)
+	// No SSM client calls should have been made
 	mockSSMClient.AssertExpectations(t)
 }
 
