@@ -81,13 +81,13 @@ spec:
               mountPath: "/opt/amazon/sagemaker/workspace"
           startupProbe:
             exec:
-              command: ["/opt/amazon/sagemaker/workspace/bin/ssm-agent-health-check.sh"]
+              command: ["/usr/local/bin/ssm-agent-health-check.sh"]
             initialDelaySeconds: 1
             periodSeconds: 1
             failureThreshold: 300
           livenessProbe:
             exec:
-              command: ["/opt/amazon/sagemaker/workspace/bin/ssm-agent-health-check.sh"]
+              command: ["/usr/local/bin/ssm-agent-health-check.sh"]
             periodSeconds: 10
             failureThreshold: 6
           readinessProbe:
