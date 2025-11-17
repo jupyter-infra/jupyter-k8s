@@ -1,4 +1,4 @@
-{{- if .Values.networkPolicy.enabled }}
+{{- if .Values.clusterWebUI.networkPolicy.enabled }}
 ---
 # NetworkPolicy to restrict access to auth middleware
 # Only Traefik can communicate with auth middleware
