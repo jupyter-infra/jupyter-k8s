@@ -323,6 +323,53 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
     fi
 fi
 
+# Handle manager annotations patch
+if [ -f "${PATCHES_DIR}/manager-annotations.yaml.patch" ]; then
+    MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
+    if [ -f "${MANAGER_YAML}" ]; then
+        echo "Applying annotations patch to manager.yaml..."
+        
+        # Check if annotations patch is already applied
+        if ! grep -q "{{- with .Values.controllerManager.pod.annotations }}" "${MANAGER_YAML}"; then
+            echo "Adding pod annotations configuration to manager.yaml"
+            
+            # Replace the annotations section in pod template
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                # macOS sed - replace annotations section
+                sed -i '' '/annotations:/,/kubectl.kubernetes.io\/default-container: manager/ {
+                    /kubectl.kubernetes.io\/default-container: manager/r '"${PATCHES_DIR}/manager-annotations.yaml.patch"'
+                    /kubectl.kubernetes.io\/default-container: manager/d
+                }' "${MANAGER_YAML}"
+            else
+                # Linux sed - replace annotations section
+                sed -i '/annotations:/,/kubectl.kubernetes.io\/default-container: manager/ {
+                    /kubectl.kubernetes.io\/default-container: manager/r '"${PATCHES_DIR}/manager-annotations.yaml.patch"'
+                    /kubectl.kubernetes.io\/default-container: manager/d
+                }' "${MANAGER_YAML}"
+            fi
+            echo "Successfully applied annotations patch"
+        else
+            echo "Annotations patch already applied, skipping"
+        fi
+    fi
+fi
+
+# Fix duplicate workspace.jupyter.org/component: controller line
+MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
+if [ -f "${MANAGER_YAML}" ]; then
+    # Remove duplicate line if it exists
+    if grep -q "workspace.jupyter.org/component: controller" "${MANAGER_YAML}"; then
+        echo "Fixing duplicate workspace.jupyter.org/component: controller line..."
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS sed - remove duplicate line
+            sed -i '' '/workspace.jupyter.org\/component: controller$/N; /workspace.jupyter.org\/component: controller.*workspace.jupyter.org\/component: controller/s/.*workspace.jupyter.org\/component: controller\n//' "${MANAGER_YAML}"
+        else
+            # Linux sed - remove duplicate line
+            sed -i '/workspace.jupyter.org\/component: controller$/N; /workspace.jupyter.org\/component: controller.*workspace.jupyter.org\/component: controller/s/.*workspace.jupyter.org\/component: controller\n//' "${MANAGER_YAML}"
+        fi
+    fi
+fi
+
 # Handle manager scheduling patch
 if [ -f "${PATCHES_DIR}/manager-scheduling.yaml.patch" ]; then
     MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"

@@ -131,3 +131,7 @@ controllerManager:
     enabled: false
     # minAvailable: 1
     # maxUnavailable: 1
+  # Pod metadata configuration (kubebuilder convention)
+  pod:
+    labels: {}
+    annotations: {}
