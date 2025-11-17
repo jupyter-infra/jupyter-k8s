@@ -21,6 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -356,9 +357,11 @@ var _ = Describe("Template Mutability", func() {
 					DisplayName:  "Original Display Name",
 					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
 					ResourceBounds: &workspacev1alpha1.ResourceBounds{
-						CPU: &workspacev1alpha1.ResourceRange{
-							Min: resource.MustParse("100m"),
-							Max: resource.MustParse("2"),
+						Resources: map[corev1.ResourceName]workspacev1alpha1.ResourceRange{
+							corev1.ResourceCPU: {
+								Min: resource.MustParse("100m"),
+								Max: resource.MustParse("2"),
+							},
 						},
 					},
 				},
