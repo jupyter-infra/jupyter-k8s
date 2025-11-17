@@ -107,17 +107,6 @@ spec:
             value: "{{ .Values.authmiddleware.workspaceNamespacePathRegex }}"
           - name: WORKSPACE_NAME_PATH_REGEX
             value: "{{ .Values.authmiddleware.workspaceNamePathRegex }}"
-          - name: CSRF_AUTH_KEY
-            valueFrom:
-              secretKeyRef:
-                name: authmiddleware-secrets
-                key: csrf-auth-key
-          - name: CSRF_COOKIE_NAME
-            value: "{{ .Values.authmiddleware.csrfCookieName }}"
-          - name: CSRF_COOKIE_MAX_AGE
-            value: "{{ .Values.authmiddleware.csrfCookieMaxAge }}"
-          - name: CSRF_COOKIE_SECURE
-            value: "{{ .Values.authmiddleware.csrfCookieSecure }}"
           - name: ENABLE_OAUTH
             value: "{{ .Values.authmiddleware.enableOauth}}"
           - name: ENABLE_BEARER_URL_AUTH

@@ -14,15 +14,9 @@ func TestNewConfigDefault(t *testing.T) {
 	if err := os.Setenv(EnvJwtSigningKey, "test-signing-key"); err != nil {
 		t.Fatalf("Failed to set environment variable %s: %v", EnvJwtSigningKey, err)
 	}
-	if err := os.Setenv(EnvCsrfAuthKey, "test-csrf-key"); err != nil {
-		t.Fatalf("Failed to set environment variable %s: %v", EnvCsrfAuthKey, err)
-	}
 	defer func() {
 		if err := os.Unsetenv(EnvJwtSigningKey); err != nil {
 			t.Logf("Failed to unset environment variable %s: %v", EnvJwtSigningKey, err)
-		}
-		if err := os.Unsetenv(EnvCsrfAuthKey); err != nil {
-			t.Logf("Failed to unset environment variable %s: %v", EnvCsrfAuthKey, err)
 		}
 	}()
 
@@ -198,9 +192,6 @@ func TestNewConfigEnvOverrides(t *testing.T) {
 		EnvCookieName, EnvCookieSecure, EnvCookieDomain, EnvCookiePath,
 		EnvCookieMaxAge, EnvCookieHttpOnly, EnvCookieSameSite,
 		EnvPathRegexPattern, EnvWorkspaceNamespacePathRegex, EnvWorkspaceNamePathRegex,
-		EnvCsrfAuthKey, EnvCsrfCookieName,
-		EnvCsrfCookieMaxAge, EnvCsrfCookieSecure, EnvCsrfFieldName, EnvCsrfHeaderName,
-		EnvCsrfTrustedOrigins,
 		EnvOidcUsernamePrefix, EnvOidcGroupsPrefix,
 		EnvOIDCIssuerURL, EnvOIDCClientID, EnvOIDCInitTimeoutSecs,
 	}
@@ -375,15 +366,9 @@ func TestOIDCInitTimeoutConfig(t *testing.T) {
 			if err := os.Setenv(EnvJwtSigningKey, "test-signing-key"); err != nil {
 				t.Fatalf("Failed to set environment variable %s: %v", EnvJwtSigningKey, err)
 			}
-			if err := os.Setenv(EnvCsrfAuthKey, "test-csrf-key"); err != nil {
-				t.Fatalf("Failed to set environment variable %s: %v", EnvCsrfAuthKey, err)
-			}
 			defer func() {
 				if err := os.Unsetenv(EnvJwtSigningKey); err != nil {
 					t.Logf("Failed to unset environment variable %s: %v", EnvJwtSigningKey, err)
-				}
-				if err := os.Unsetenv(EnvCsrfAuthKey); err != nil {
-					t.Logf("Failed to unset environment variable %s: %v", EnvCsrfAuthKey, err)
 				}
 			}()
 
