@@ -491,7 +491,7 @@ var _ = Describe("Workspace Webhook", func() {
 			It("should reject image not in allowed list", func() {
 				violation := validateImageAllowed("malicious/image:latest", template)
 				Expect(violation).NotTo(BeNil())
-				Expect(violation.Type).To(Equal(controller.ViolationTypeImageNotAllowed))
+				Expect(violation.Type).To(Equal(ViolationTypeImageNotAllowed))
 				Expect(violation.Message).To(ContainSubstring("malicious/image:latest"))
 				Expect(violation.Message).To(ContainSubstring("test-template"))
 			})
@@ -506,7 +506,7 @@ var _ = Describe("Workspace Webhook", func() {
 				template.Spec.AllowedImages = []string{}
 				violation := validateImageAllowed("other/image:latest", template)
 				Expect(violation).NotTo(BeNil())
-				Expect(violation.Type).To(Equal(controller.ViolationTypeImageNotAllowed))
+				Expect(violation.Type).To(Equal(ViolationTypeImageNotAllowed))
 			})
 
 			It("should allow any image when AllowCustomImages is true", func() {
@@ -521,14 +521,14 @@ var _ = Describe("Workspace Webhook", func() {
 				template.Spec.AllowCustomImages = &allowCustomImages
 				violation := validateImageAllowed("malicious/image:latest", template)
 				Expect(violation).NotTo(BeNil())
-				Expect(violation.Type).To(Equal(controller.ViolationTypeImageNotAllowed))
+				Expect(violation.Type).To(Equal(ViolationTypeImageNotAllowed))
 			})
 
 			It("should enforce restrictions when AllowCustomImages is nil (default)", func() {
 				template.Spec.AllowCustomImages = nil
 				violation := validateImageAllowed("malicious/image:latest", template)
 				Expect(violation).NotTo(BeNil())
-				Expect(violation.Type).To(Equal(controller.ViolationTypeImageNotAllowed))
+				Expect(violation.Type).To(Equal(ViolationTypeImageNotAllowed))
 			})
 		})
 
@@ -548,7 +548,7 @@ var _ = Describe("Workspace Webhook", func() {
 			It("should reject storage below minimum", func() {
 				violation := validateStorageSize(resource.MustParse("500Mi"), template)
 				Expect(violation).NotTo(BeNil())
-				Expect(violation.Type).To(Equal(controller.ViolationTypeStorageExceeded))
+				Expect(violation.Type).To(Equal(ViolationTypeStorageExceeded))
 				Expect(violation.Message).To(ContainSubstring("below minimum"))
 				Expect(violation.Message).To(ContainSubstring("test-template"))
 			})
@@ -556,7 +556,7 @@ var _ = Describe("Workspace Webhook", func() {
 			It("should reject storage above maximum", func() {
 				violation := validateStorageSize(resource.MustParse("20Gi"), template)
 				Expect(violation).NotTo(BeNil())
-				Expect(violation.Type).To(Equal(controller.ViolationTypeStorageExceeded))
+				Expect(violation.Type).To(Equal(ViolationTypeStorageExceeded))
 				Expect(violation.Message).To(ContainSubstring("exceeds maximum"))
 				Expect(violation.Message).To(ContainSubstring("test-template"))
 			})
@@ -647,7 +647,7 @@ var _ = Describe("Workspace Webhook", func() {
 				}
 				violations := validateResourceBounds(resources, template)
 				Expect(violations).To(HaveLen(1))
-				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+				Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 				Expect(violations[0].Message).To(ContainSubstring("below minimum"))
 				Expect(violations[0].Message).To(ContainSubstring("test-template"))
 			})
@@ -660,7 +660,7 @@ var _ = Describe("Workspace Webhook", func() {
 				}
 				violations := validateResourceBounds(resources, template)
 				Expect(violations).To(HaveLen(1))
-				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+				Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 				Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
 				Expect(violations[0].Message).To(ContainSubstring("test-template"))
 			})
@@ -673,7 +673,7 @@ var _ = Describe("Workspace Webhook", func() {
 				}
 				violations := validateResourceBounds(resources, template)
 				Expect(violations).To(HaveLen(1))
-				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+				Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 				Expect(violations[0].Message).To(ContainSubstring("below minimum"))
 			})
 
@@ -685,7 +685,7 @@ var _ = Describe("Workspace Webhook", func() {
 				}
 				violations := validateResourceBounds(resources, template)
 				Expect(violations).To(HaveLen(1))
-				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+				Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 				Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
 			})
 
@@ -752,7 +752,7 @@ var _ = Describe("Workspace Webhook", func() {
 					}
 					violations := validateResourceBounds(resources, template)
 					Expect(violations).To(HaveLen(1))
-					Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+					Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 					Expect(violations[0].Message).To(ContainSubstring("below minimum"))
 					Expect(violations[0].Message).To(ContainSubstring("test-template"))
 				})
@@ -765,7 +765,7 @@ var _ = Describe("Workspace Webhook", func() {
 					}
 					violations := validateResourceBounds(resources, template)
 					Expect(violations).To(HaveLen(1))
-					Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+					Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 					Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
 					Expect(violations[0].Message).To(ContainSubstring("test-template"))
 				})

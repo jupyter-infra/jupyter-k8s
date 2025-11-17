@@ -22,19 +22,18 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 )
 
 // validateStorageSize checks if storage size is within template bounds
-func validateStorageSize(size resource.Quantity, template *workspacev1alpha1.WorkspaceTemplate) *controller.TemplateViolation {
+func validateStorageSize(size resource.Quantity, template *workspacev1alpha1.WorkspaceTemplate) *TemplateViolation {
 	config := template.Spec.PrimaryStorage
 	if config == nil {
 		return nil
 	}
 
 	if config.MinSize != nil && size.Cmp(*config.MinSize) < 0 {
-		return &controller.TemplateViolation{
-			Type:    controller.ViolationTypeStorageExceeded,
+		return &TemplateViolation{
+			Type:    ViolationTypeStorageExceeded,
 			Field:   "spec.storage.size",
 			Message: fmt.Sprintf("Storage size %s is below minimum %s required by template '%s'", size.String(), config.MinSize.String(), template.Name),
 			Allowed: fmt.Sprintf("min: %s", config.MinSize.String()),
@@ -43,8 +42,8 @@ func validateStorageSize(size resource.Quantity, template *workspacev1alpha1.Wor
 	}
 
 	if config.MaxSize != nil && size.Cmp(*config.MaxSize) > 0 {
-		return &controller.TemplateViolation{
-			Type:    controller.ViolationTypeStorageExceeded,
+		return &TemplateViolation{
+			Type:    ViolationTypeStorageExceeded,
 			Field:   "spec.storage.size",
 			Message: fmt.Sprintf("Storage size %s exceeds maximum %s allowed by template '%s'", size.String(), config.MaxSize.String(), template.Name),
 			Allowed: fmt.Sprintf("max: %s", config.MaxSize.String()),
