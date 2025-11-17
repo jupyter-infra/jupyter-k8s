@@ -74,18 +74,24 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 			},
 			Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 				DisplayName: "Test Routing Strategy",
-				MergeEnv: []workspacev1alpha1.AccessEnvTemplate{
-					{
-						Name:          "JUPYTER_BASE_URL",
-						ValueTemplate: "/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/",
-					},
-					{
-						Name:          "WORKSPACE_NAME",
-						ValueTemplate: "{{ .Workspace.Name }}",
-					},
-					{
-						Name:          "STRATEGY_NAME",
-						ValueTemplate: "{{ .AccessStrategy.Name }}",
+				DeploymentModifications: &workspacev1alpha1.DeploymentModifications{
+					PodModifications: &workspacev1alpha1.PodModifications{
+						PrimaryContainerModifications: &workspacev1alpha1.PrimaryContainerModifications{
+							MergeEnv: []workspacev1alpha1.AccessEnvTemplate{
+								{
+									Name:          "JUPYTER_BASE_URL",
+									ValueTemplate: "/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/",
+								},
+								{
+									Name:          "WORKSPACE_NAME",
+									ValueTemplate: "{{ .Workspace.Name }}",
+								},
+								{
+									Name:          "STRATEGY_NAME",
+									ValueTemplate: "{{ .AccessStrategy.Name }}",
+								},
+							},
+						},
 					},
 				},
 				AccessURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/",
@@ -131,7 +137,7 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 
 	Context("resolveAccessStrategyEnv", func() {
 		It("Should resolve env var values using data from workspace", func() {
-			resolvedEnvVars, err := deploymentBuilder.resolveAccessStrategyEnv(
+			resolvedEnvVars, err := deploymentBuilder.resolveAccessStrategyPrimaryContainerEnv(
 				testAccessStrategy,
 				testWorkspace,
 			)
@@ -153,9 +159,9 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 		It("Should return an error if an env var template string fails to parse", func() {
 			// Create a copy with an invalid template
 			strategyWithInvalidTemplate := testAccessStrategy.DeepCopy()
-			strategyWithInvalidTemplate.Spec.MergeEnv[0].ValueTemplate = invalidSyntaxTemplate
+			strategyWithInvalidTemplate.Spec.DeploymentModifications.PodModifications.PrimaryContainerModifications.MergeEnv[0].ValueTemplate = invalidSyntaxTemplate
 
-			_, err := deploymentBuilder.resolveAccessStrategyEnv(
+			_, err := deploymentBuilder.resolveAccessStrategyPrimaryContainerEnv(
 				strategyWithInvalidTemplate,
 				testWorkspace,
 			)
@@ -167,9 +173,9 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 		It("Should return an error if an env var template has invalid substitution", func() {
 			// Create a copy with a valid template but invalid field reference
 			strategyWithInvalidField := testAccessStrategy.DeepCopy()
-			strategyWithInvalidField.Spec.MergeEnv[0].ValueTemplate = nonexistentFieldTemplate
+			strategyWithInvalidField.Spec.DeploymentModifications.PodModifications.PrimaryContainerModifications.MergeEnv[0].ValueTemplate = nonexistentFieldTemplate
 
-			_, err := deploymentBuilder.resolveAccessStrategyEnv(
+			_, err := deploymentBuilder.resolveAccessStrategyPrimaryContainerEnv(
 				strategyWithInvalidField,
 				testWorkspace,
 			)
@@ -180,7 +186,7 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 	})
 
 	Context("addAccessStrategyEnvToContainer", func() {
-		It("Should add resolved env variables from strategy.Spec.MergeEnv", func() {
+		It("Should add resolved env variables from PrimaryContainerModifications.MergeEnv", func() {
 			container := &corev1.Container{
 				Name:  "workspace",
 				Image: "jupyter/minimal-notebook:latest",
@@ -236,7 +242,7 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 			}
 		})
 
-		It("Should not affect env variables not specified in strategy.Spec.MergeEnv", func() {
+		It("Should not affect env variables not specified in PrimaryContainerModifications.MergeEnv", func() {
 			container := &corev1.Container{
 				Name:  "workspace",
 				Image: "jupyter/minimal-notebook:latest",
@@ -274,7 +280,7 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 
 			// Create a copy with an invalid template
 			strategyWithInvalidTemplate := testAccessStrategy.DeepCopy()
-			strategyWithInvalidTemplate.Spec.MergeEnv[0].ValueTemplate = invalidSyntaxTemplate
+			strategyWithInvalidTemplate.Spec.DeploymentModifications.PodModifications.PrimaryContainerModifications.MergeEnv[0].ValueTemplate = invalidSyntaxTemplate
 
 			err := deploymentBuilder.addAccessStrategyEnvToContainer(
 				container,
@@ -295,7 +301,7 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 
 			// Create a copy with a valid template but invalid field reference
 			strategyWithInvalidField := testAccessStrategy.DeepCopy()
-			strategyWithInvalidField.Spec.MergeEnv[0].ValueTemplate = nonexistentFieldTemplate
+			strategyWithInvalidField.Spec.DeploymentModifications.PodModifications.PrimaryContainerModifications.MergeEnv[0].ValueTemplate = nonexistentFieldTemplate
 
 			err := deploymentBuilder.addAccessStrategyEnvToContainer(
 				container,
@@ -309,7 +315,7 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 	})
 
 	Context("ApplyAccessStrategyToDeployment", func() {
-		It("Should inject templated strategy.Spec.MergeEnv into the first container specs", func() {
+		It("Should inject templated PrimaryContainerModifications.MergeEnv into the first container specs", func() {
 			err := deploymentBuilder.ApplyAccessStrategyToDeployment(
 				testDeployment,
 				testWorkspace,
@@ -334,10 +340,10 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 			Expect(envMap["EXISTING_VAR"]).To(Equal("original-value"))
 		})
 
-		It("Should be a no-op when strategy.Spec.MergeEnv is nil", func() {
-			// Create a copy with nil MergeEnv
+		It("Should be a no-op when PrimaryContainerModifications is nil", func() {
+			// Create a copy with nil PrimaryContainerModifications
 			strategyWithNilEnv := testAccessStrategy.DeepCopy()
-			strategyWithNilEnv.Spec.MergeEnv = nil
+			strategyWithNilEnv.Spec.DeploymentModifications.PodModifications.PrimaryContainerModifications = nil
 
 			originalEnvVarCount := len(testDeployment.Spec.Template.Spec.Containers[0].Env)
 
@@ -351,10 +357,10 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 			Expect(testDeployment.Spec.Template.Spec.Containers[0].Env).To(HaveLen(originalEnvVarCount))
 		})
 
-		It("Should be a no-op when strategy.Spec.MergeEnv is empty", func() {
+		It("Should be a no-op when PrimaryContainerModifications.MergeEnv is empty", func() {
 			// Create a copy with empty MergeEnv
 			strategyWithEmptyEnv := testAccessStrategy.DeepCopy()
-			strategyWithEmptyEnv.Spec.MergeEnv = []workspacev1alpha1.AccessEnvTemplate{}
+			strategyWithEmptyEnv.Spec.DeploymentModifications.PodModifications.PrimaryContainerModifications.MergeEnv = []workspacev1alpha1.AccessEnvTemplate{}
 
 			originalEnvVarCount := len(testDeployment.Spec.Template.Spec.Containers[0].Env)
 
@@ -400,8 +406,8 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 					DisplayName: "Test Deployment Modifications",
-					DeploymentSpecModifications: &workspacev1alpha1.DeploymentSpecModifications{
-						PodSpec: &workspacev1alpha1.PodSpecModifications{
+					DeploymentModifications: &workspacev1alpha1.DeploymentModifications{
+						PodModifications: &workspacev1alpha1.PodModifications{
 							InitContainers: []corev1.Container{
 								{
 									Name:    "setup-init",
@@ -468,12 +474,12 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 									},
 								},
 							},
-						},
-						PrimaryContainer: &workspacev1alpha1.PrimaryContainerModifications{
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "shared-storage",
-									MountPath: "/shared-data",
+							PrimaryContainerModifications: &workspacev1alpha1.PrimaryContainerModifications{
+								VolumeMounts: []corev1.VolumeMount{
+									{
+										Name:      "shared-storage",
+										MountPath: "/shared-data",
+									},
 								},
 							},
 						},
