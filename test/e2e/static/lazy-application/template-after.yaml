@@ -14,11 +14,12 @@ spec:
       cpu: "100m"
       memory: "128Mi"
   resourceBounds:
-    cpu:
-      min: "50m"
-      max: "500m"  # Strictened from 2 to 500m
-    memory:
-      min: "64Mi"
-      max: "512Mi"  # Strictened from 2Gi to 512Mi
+    resources:
+      cpu:
+        min: "50m"
+        max: "500m"  # Strictened from 2 to 500m
+      memory:
+        min: "64Mi"
+        max: "512Mi"  # Strictened from 2Gi to 512Mi
   primaryStorage:
     defaultSize: 1Gi
