@@ -26,20 +26,3 @@ accessResources:
 extensionApi:
   # Enable extension API server for WorkspaceConnection
   enable: true
-
-# [CONTROLLER SCHEDULING]: Controller pod scheduling configuration
-controllerManager:
-  # Controller pod scheduling configuration
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
-  topologySpreadConstraints: []
-  # PodDisruptionBudget configuration
-  podDisruptionBudget:
-    enabled: false
-    # minAvailable: 1
-    # maxUnavailable: 1
-  # Pod metadata configuration (kubebuilder convention)
-  pod:
-    labels: {}
-    annotations: {}

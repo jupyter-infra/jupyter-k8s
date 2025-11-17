@@ -155,22 +155,32 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
         sed -i '/^# \[WORKSPACE POD WATCHING\]/,/^# \[/{ /^# \[WORKSPACE POD WATCHING\]/d; /^# \[/!d; }' "${CHART_DIR}/values.yaml"
     fi
 
-    # Add scheduling configuration to controllerManager section
-    if ! grep -q "nodeSelector:" "${CHART_DIR}/values.yaml"; then
-        echo "Adding scheduling configuration to controllerManager section"
-        # Add scheduling fields after terminationGracePeriodSeconds
+    # Add scheduling configuration to existing controllerManager section
+    if ! grep -q "topologySpreadConstraints:" "${CHART_DIR}/values.yaml"; then
+        echo "Adding scheduling configuration to existing controllerManager section"
+        # Add scheduling fields after serviceAccountName line
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # macOS sed requires different syntax for append command
-            sed -i '' '/terminationGracePeriodSeconds:/a\
+            sed -i '' '/serviceAccountName:/a\
+\
   # Controller pod scheduling configuration\
   nodeSelector: {}\
   tolerations: []\
   affinity: {}\
-  topologySpreadConstraints: []
+  topologySpreadConstraints: []\
+  # PodDisruptionBudget configuration\
+  podDisruptionBudget:\
+    enabled: false\
+    minAvailable: null\
+    maxUnavailable: null\
+  # Pod metadata configuration (kubebuilder convention)\
+  pod:\
+    labels: {}\
+    annotations: {}
 ' "${CHART_DIR}/values.yaml"
         else
             # Linux sed
-            sed -i '/terminationGracePeriodSeconds:/a\  # Controller pod scheduling configuration\n  nodeSelector: {}\n  tolerations: []\n  affinity: {}\n  topologySpreadConstraints: []' "${CHART_DIR}/values.yaml"
+            sed -i '/serviceAccountName:/a\\n  # Controller pod scheduling configuration\n  nodeSelector: {}\n  tolerations: []\n  affinity: {}\n  topologySpreadConstraints: []\n  # PodDisruptionBudget configuration\n  podDisruptionBudget:\n    enabled: false\n    minAvailable: null\n    maxUnavailable: null\n  # Pod metadata configuration (kubebuilder convention)\n  pod:\n    labels: {}\n    annotations: {}' "${CHART_DIR}/values.yaml"
         fi
     fi
 
