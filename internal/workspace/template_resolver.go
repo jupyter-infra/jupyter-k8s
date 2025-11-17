@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
@@ -44,10 +45,12 @@ func (tr *TemplateResolver) ResolveTemplate(ctx context.Context, templateRef *wo
 	err := tr.client.Get(ctx, templateKey, template)
 
 	// If not found and we have a default namespace, try there
-	if err != nil && tr.defaultTemplateNamespace != "" && templateNamespace != tr.defaultTemplateNamespace {
+	if apierrors.IsNotFound(err) && tr.defaultTemplateNamespace != "" && templateNamespace != tr.defaultTemplateNamespace {
 		templateKey = client.ObjectKey{Name: templateRef.Name, Namespace: tr.defaultTemplateNamespace}
 		if fallbackErr := tr.client.Get(ctx, templateKey, template); fallbackErr == nil {
 			return template, nil
+		} else {
+			return nil, fmt.Errorf("failed to get template %s from namespace %s or fallback namespace %s: %w", templateRef.Name, templateNamespace, tr.defaultTemplateNamespace, fallbackErr)
 		}
 	}
 
