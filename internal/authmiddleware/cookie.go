@@ -19,7 +19,6 @@ const (
 var (
 	ErrNoCookie      = errors.New("cookie not found")
 	ErrInvalidCookie = errors.New("invalid cookie")
-	ErrCSRFMismatch  = errors.New("CSRF token mismatch")
 )
 
 // CookieHandler exposes CookieManager interface to facilitate unit-testing

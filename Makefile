@@ -239,8 +239,7 @@ helm-lint: ## Lint the Helm chart
 		--set githubRbac.orgs[0].name=some-org \
 		--set githubRbac.orgs[0].teams[0]=ace-devs \
 		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
-		--set authmiddleware.jwtSigningKey=some-signing-key \
-		--set authmiddleware.csrfAuthKey=some-auth-key
+		--set authmiddleware.jwtSigningKey=some-signing-key
 
 .PHONY: helm-test
 helm-test: ## Test the Helm chart with helm template
@@ -271,8 +270,7 @@ helm-test-aws-traefik-dex: ## Test the Helm chart with guided mode (aws-traefik-
 		--set githubRbac.orgs[0].name=some-org \
 		--set githubRbac.orgs[0].teams[0]=ace-devs \
 		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
-		--set authmiddleware.jwtSigningKey=some-signing-key \
-		--set authmiddleware.csrfAuthKey=some-auth-key
+		--set authmiddleware.jwtSigningKey=some-signing-key
 	# Clean up temporary chart directory
 	rm -rf /tmp/helm-test-chart
 	# Run helm tests to verify resources
@@ -552,8 +550,7 @@ deploy-aws-traefik-dex-internal:
 			--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
 			--set authmiddleware.repository=$(ECR_REGISTRY) \
 			--set authmiddleware.imageName=$(ECR_REPOSITORY_AUTH) \
-			--set authmiddleware.jwtSigningKey=$$JWT_SIGNING_KEY \
-			--set authmiddleware.csrfAuthKey=$$CSRF_AUTH_KEY"; \
+			--set authmiddleware.jwtSigningKey=$$JWT_SIGNING_KEY
 		\
 		if [ ! -z "$$DEX_OAUTH2_SECRET" ]; then \
 			HELM_ARGS="$$HELM_ARGS --set dex.oauth2ProxyClientSecret=$$DEX_OAUTH2_SECRET"; \

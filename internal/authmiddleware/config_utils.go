@@ -1,5 +1,5 @@
 // Package authmiddleware provides JWT-based authentication and authorization middleware
-// for Jupyter-k8s workspaces, handling user identity, cookie management, and CSRF protection.
+// for Jupyter-k8s workspaces, handling user identity and cookie management
 package authmiddleware
 
 import (

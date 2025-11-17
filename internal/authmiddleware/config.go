@@ -1,5 +1,5 @@
 // Package authmiddleware provides JWT-based authentication and authorization middleware
-// for Jupyter-k8s workspaces, handling user identity, cookie management, and CSRF protection.
+// for Jupyter-k8s workspaces, handling user identity and cookie management.
 package authmiddleware
 
 import (
@@ -49,16 +49,6 @@ const (
 	EnvPathRegexPattern            = "PATH_REGEX_PATTERN"
 	EnvWorkspaceNamespacePathRegex = "WORKSPACE_NAMESPACE_PATH_REGEX"
 	EnvWorkspaceNamePathRegex      = "WORKSPACE_NAME_PATH_REGEX"
-
-	// CSRF configuration
-	EnvCsrfAuthKey    = "CSRF_AUTH_KEY"
-	EnvCsrfCookieName = "CSRF_COOKIE_NAME"
-	// Note: CSRF cookies use the same CookiePath and CookieDomain as auth cookies
-	EnvCsrfCookieMaxAge   = "CSRF_COOKIE_MAX_AGE"
-	EnvCsrfCookieSecure   = "CSRF_COOKIE_SECURE"
-	EnvCsrfFieldName      = "CSRF_FIELD_NAME"
-	EnvCsrfHeaderName     = "CSRF_HEADER_NAME"
-	EnvCsrfTrustedOrigins = "CSRF_TRUSTED_ORIGINS"
 
 	// OIDC configuration
 	EnvOidcUsernamePrefix  = "OIDC_USERNAME_PREFIX"
@@ -112,15 +102,6 @@ const (
 	DefaultWorkspaceNamespaceSubdomainRegex = `^([^-]+)-.*`
 	DefaultWorkspaceNameSubdomainRegex      = `^[^-]+-(.*)$`
 
-	// CSRF defaults
-	DefaultCsrfCookieName = "workspace_csrf"
-	// Note: CSRF cookies use the same CookiePath and CookieDomain as auth cookies
-	DefaultCsrfCookieMaxAge = 1 * time.Hour
-	DefaultCsrfCookieSecure = true
-	DefaultCsrfFieldName    = "csrf_token"
-	DefaultCsrfHeaderName   = "X-CSRF-Token"
-	// DefaultCsrfTrustedOrigins is a slice, defined in createDefaultConfig
-
 	// OIDC configuration
 	DefaultOidcUsernamePrefix  = "github:"
 	DefaultOidcGroupsPrefix    = "github:"
@@ -167,16 +148,6 @@ type Config struct {
 	RoutingMode                      string // Routing mode: RoutingModePath or RoutingModeSubdomain
 	WorkspaceNamespaceSubdomainRegex string // Regex pattern to extract workspace namespace from subdomain
 	WorkspaceNameSubdomainRegex      string // Regex pattern to extract workspace name from subdomain
-
-	// CSRF configuration
-	CSRFAuthKey    string
-	CSRFCookieName string
-	// Note: CSRF cookies use the same CookiePath and CookieDomain as auth cookies
-	CSRFCookieMaxAge   time.Duration
-	CSRFCookieSecure   bool
-	CSRFFieldName      string
-	CSRFHeaderName     string
-	CSRFTrustedOrigins []string
 
 	// OIDC configuration
 	OidcUsernamePrefix  string

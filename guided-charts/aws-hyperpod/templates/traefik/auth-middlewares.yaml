@@ -29,9 +29,6 @@ spec:
   forwardAuth:
     address: "http://authmiddleware.{{ .Values.namespace }}:8080/bearer-auth"
     trustForwardHeader: true
-    addAuthCookiesToResponse:
-      - "{{ .Values.clusterWebUI.auth.cookieName }}"
-      - "{{ .Values.clusterWebUI.auth.csrfCookieName }}"
     authRequestHeaders:
       - "Cookie"
       - "X-Forwarded-Uri"
@@ -50,9 +47,6 @@ spec:
   forwardAuth:
     address: "http://authmiddleware.{{ .Values.namespace }}:8080/verify"
     trustForwardHeader: true
-    addAuthCookiesToResponse:
-      - "{{ .Values.clusterWebUI.auth.cookieName }}"
-      - "{{ .Values.clusterWebUI.auth.csrfCookieName }}"
     authRequestHeaders:
       - "Cookie"
       - "X-Forwarded-Uri"
