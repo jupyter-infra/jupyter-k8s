@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: test-access-strategy
+  namespace: default
+spec:
+  displayName: Sample Access Strategy
+  accessResourceTemplates: []
+  mergeEnv:
+    - name: JUPYTER_BASE_URL
+      valueTemplate: "/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
+  accessURLTemplate: "https://gpu-burning-llm.io/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}"
