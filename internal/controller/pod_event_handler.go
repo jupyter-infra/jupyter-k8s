@@ -108,7 +108,7 @@ func (h *PodEventHandler) HandleKubernetesEvents(ctx context.Context, obj client
 
 	// Check if this is a preemption event
 	if event.InvolvedObject.Kind == KindPod &&
-		event.Reason == PhaseStopped &&
+		event.Reason == DesiredStateStopped &&
 		strings.Contains(event.Message, "Preempted") {
 
 		logger.Info("Detected pod preemption event",
@@ -132,7 +132,7 @@ func (h *PodEventHandler) HandleKubernetesEvents(ctx context.Context, obj client
 
 		logger.Info("Pod was preempted, updating workspace desiredStatus to Stopped",
 			"workspace", workspaceName)
-		h.updateWorkspaceDesiredStatus(ctx, workspaceName, event.InvolvedObject.Namespace, PhaseStopped)
+		h.updateWorkspaceDesiredStatus(ctx, workspaceName, event.InvolvedObject.Namespace, DesiredStateStopped)
 
 		// Return reconciliation request to trigger workspace reconciliation
 		return []reconcile.Request{
@@ -213,7 +213,7 @@ func (h *PodEventHandler) updateWorkspaceDesiredStatus(ctx context.Context, work
 	}
 
 	// Add annotation to track preemption reason
-	if desiredStatus == PhaseStopped {
+	if desiredStatus == DesiredStateStopped {
 		if workspace.Annotations == nil {
 			workspace.Annotations = make(map[string]string)
 		}

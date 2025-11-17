@@ -36,7 +36,7 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 	findWorkspacesUsingTemplate := func(templateName string) ([]string, error) {
 		// Use label selector to find workspaces by template
 		// Labels persist during deletion, unlike spec.templateRef which gets cleared
-		labelSelector := fmt.Sprintf("workspace.jupyter.org/template=%s", templateName)
+		labelSelector := fmt.Sprintf("workspace.jupyter.org/template-name=%s", templateName)
 		cmd := exec.Command("kubectl", "get", "workspace", "-l", labelSelector, "-o", "jsonpath={.items[*].metadata.name}")
 		output, err := utils.Run(cmd)
 		if err != nil {

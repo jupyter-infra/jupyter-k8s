@@ -17,9 +17,26 @@ type partialAccessResourceData struct {
 	AccessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
 }
 
-// resolveAccessStrategyEnv interpolates the env defined in the AccessStrategy
+func (b *DeploymentBuilder) getPrimaryContainerMergeEnv(
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
+) *[]workspacev1alpha1.AccessEnvTemplate {
+	if accessStrategy == nil {
+		return nil
+	}
+
+	if accessStrategy.Spec.DeploymentModifications != nil &&
+		accessStrategy.Spec.DeploymentModifications.PodModifications != nil &&
+		accessStrategy.Spec.DeploymentModifications.PodModifications.PrimaryContainerModifications != nil &&
+		len(accessStrategy.Spec.DeploymentModifications.PodModifications.PrimaryContainerModifications.MergeEnv) > 0 {
+		return &accessStrategy.Spec.DeploymentModifications.PodModifications.PrimaryContainerModifications.MergeEnv
+	}
+
+	return nil
+}
+
+// resolveAccessStrategyPrimaryContainerEnv interpolates the env defined in the AccessStrategy
 // for a particular Workspace.
-func (b *DeploymentBuilder) resolveAccessStrategyEnv(
+func (b *DeploymentBuilder) resolveAccessStrategyPrimaryContainerEnv(
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 	workspace *workspacev1alpha1.Workspace,
 ) ([]map[string]string, error) {
@@ -29,22 +46,24 @@ func (b *DeploymentBuilder) resolveAccessStrategyEnv(
 	}
 
 	var envVars = []map[string]string{}
+	mergeEnv := b.getPrimaryContainerMergeEnv(accessStrategy)
+	if mergeEnv != nil {
+		for _, envTemplate := range *mergeEnv {
+			tmpl, err := template.New("env").Parse(envTemplate.ValueTemplate)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse env template for %s: %w", envTemplate.Name, err)
+			}
 
-	for _, envTemplate := range accessStrategy.Spec.MergeEnv {
-		tmpl, err := template.New("env").Parse(envTemplate.ValueTemplate)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse env template for %s: %w", envTemplate.Name, err)
+			var value bytes.Buffer
+			if err := tmpl.Execute(&value, data); err != nil {
+				return nil, fmt.Errorf("failed to execute env template for %s: %w", envTemplate.Name, err)
+			}
+
+			envVars = append(envVars, map[string]string{
+				"name":  envTemplate.Name,
+				"value": value.String(),
+			})
 		}
-
-		var value bytes.Buffer
-		if err := tmpl.Execute(&value, data); err != nil {
-			return nil, fmt.Errorf("failed to execute env template for %s: %w", envTemplate.Name, err)
-		}
-
-		envVars = append(envVars, map[string]string{
-			"name":  envTemplate.Name,
-			"value": value.String(),
-		})
 	}
 
 	return envVars, nil
@@ -62,7 +81,7 @@ func (db *DeploymentBuilder) addAccessStrategyEnvToContainer(
 		return fmt.Errorf("container is nil, cannot apply env vars of AccessStrategy: %s", accessStrategy.Name)
 	}
 
-	resolvedAccessStrategyEnv, err := db.resolveAccessStrategyEnv(accessStrategy, workspace)
+	resolvedAccessStrategyEnv, err := db.resolveAccessStrategyPrimaryContainerEnv(accessStrategy, workspace)
 	if err != nil {
 		return err
 	}
@@ -138,24 +157,24 @@ func (db *DeploymentBuilder) applyDeploymentSpecModifications(
 	if deployment == nil {
 		return fmt.Errorf("deployment cannot be nil")
 	}
-	if accessStrategy.Spec.DeploymentSpecModifications == nil {
+	if accessStrategy.Spec.DeploymentModifications == nil {
 		return nil // Nothing to do
 	}
 
-	mods := accessStrategy.Spec.DeploymentSpecModifications
+	mods := accessStrategy.Spec.DeploymentModifications
 
 	// Add volumes
-	if mods.PodSpec != nil && len(mods.PodSpec.Volumes) > 0 {
-		logf.Log.V(1).Info("Adding volumes from deployment spec modifications",
+	if mods.PodModifications != nil && len(mods.PodModifications.Volumes) > 0 {
+		logf.Log.V(1).Info("Adding volumes from deployment modifications",
 			"accessStrategy", accessStrategy.Name,
-			"volumeCount", len(mods.PodSpec.Volumes))
+			"volumeCount", len(mods.PodModifications.Volumes))
 
 		deployment.Spec.Template.Spec.Volumes = append(
 			deployment.Spec.Template.Spec.Volumes,
-			mods.PodSpec.Volumes...,
+			mods.PodModifications.Volumes...,
 		)
 
-		for _, volume := range mods.PodSpec.Volumes {
+		for _, volume := range mods.PodModifications.Volumes {
 			logf.Log.V(1).Info("Added volume",
 				"accessStrategy", accessStrategy.Name,
 				"volumeName", volume.Name)
@@ -163,22 +182,25 @@ func (db *DeploymentBuilder) applyDeploymentSpecModifications(
 	}
 
 	// Add volume mounts to primary container
-	if mods.PrimaryContainer != nil && len(mods.PrimaryContainer.VolumeMounts) > 0 {
+	if mods.PodModifications != nil &&
+		mods.PodModifications.PrimaryContainerModifications != nil &&
+		len(mods.PodModifications.PrimaryContainerModifications.VolumeMounts) > 0 {
+
 		if len(deployment.Spec.Template.Spec.Containers) == 0 {
 			return fmt.Errorf("no containers found in deployment to add volume mounts")
 		}
 
 		logf.Log.V(1).Info("Adding volume mounts to primary container",
 			"accessStrategy", accessStrategy.Name,
-			"mountCount", len(mods.PrimaryContainer.VolumeMounts))
+			"mountCount", len(mods.PodModifications.PrimaryContainerModifications.VolumeMounts))
 
 		primaryContainer := &deployment.Spec.Template.Spec.Containers[0]
 		primaryContainer.VolumeMounts = append(
 			primaryContainer.VolumeMounts,
-			mods.PrimaryContainer.VolumeMounts...,
+			mods.PodModifications.PrimaryContainerModifications.VolumeMounts...,
 		)
 
-		for _, mount := range mods.PrimaryContainer.VolumeMounts {
+		for _, mount := range mods.PodModifications.PrimaryContainerModifications.VolumeMounts {
 			logf.Log.V(1).Info("Added volume mount to primary container",
 				"accessStrategy", accessStrategy.Name,
 				"volumeName", mount.Name,
@@ -187,17 +209,17 @@ func (db *DeploymentBuilder) applyDeploymentSpecModifications(
 	}
 
 	// Add init containers
-	if mods.PodSpec != nil && len(mods.PodSpec.InitContainers) > 0 {
+	if mods.PodModifications != nil && len(mods.PodModifications.InitContainers) > 0 {
 		logf.Log.V(1).Info("Adding init containers",
 			"accessStrategy", accessStrategy.Name,
-			"containerCount", len(mods.PodSpec.InitContainers))
+			"containerCount", len(mods.PodModifications.InitContainers))
 
 		deployment.Spec.Template.Spec.InitContainers = append(
 			deployment.Spec.Template.Spec.InitContainers,
-			mods.PodSpec.InitContainers...,
+			mods.PodModifications.InitContainers...,
 		)
 
-		for _, container := range mods.PodSpec.InitContainers {
+		for _, container := range mods.PodModifications.InitContainers {
 			logf.Log.V(1).Info("Added init container",
 				"accessStrategy", accessStrategy.Name,
 				"containerName", container.Name,
@@ -206,17 +228,17 @@ func (db *DeploymentBuilder) applyDeploymentSpecModifications(
 	}
 
 	// Add additional containers
-	if mods.PodSpec != nil && len(mods.PodSpec.AdditionalContainers) > 0 {
+	if mods.PodModifications != nil && len(mods.PodModifications.AdditionalContainers) > 0 {
 		logf.Log.V(1).Info("Adding additional containers",
 			"accessStrategy", accessStrategy.Name,
-			"containerCount", len(mods.PodSpec.AdditionalContainers))
+			"containerCount", len(mods.PodModifications.AdditionalContainers))
 
 		deployment.Spec.Template.Spec.Containers = append(
 			deployment.Spec.Template.Spec.Containers,
-			mods.PodSpec.AdditionalContainers...,
+			mods.PodModifications.AdditionalContainers...,
 		)
 
-		for _, container := range mods.PodSpec.AdditionalContainers {
+		for _, container := range mods.PodModifications.AdditionalContainers {
 			logf.Log.V(1).Info("Added additional container",
 				"accessStrategy", accessStrategy.Name,
 				"containerName", container.Name,
@@ -224,7 +246,7 @@ func (db *DeploymentBuilder) applyDeploymentSpecModifications(
 		}
 	}
 
-	logf.Log.V(1).Info("Successfully applied deployment spec modifications",
+	logf.Log.V(1).Info("Successfully applied deployment modifications",
 		"accessStrategy", accessStrategy.Name)
 
 	return nil
