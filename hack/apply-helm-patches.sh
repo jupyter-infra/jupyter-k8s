@@ -156,11 +156,12 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
   # Controller pod scheduling configuration\
   nodeSelector: {}\
   tolerations: []\
-  affinity: {}
+  affinity: {}\
+  topologySpreadConstraints: []
 ' "${CHART_DIR}/values.yaml"
         else
             # Linux sed
-            sed -i '/terminationGracePeriodSeconds:/a\  # Controller pod scheduling configuration\n  nodeSelector: {}\n  tolerations: []\n  affinity: {}' "${CHART_DIR}/values.yaml"
+            sed -i '/terminationGracePeriodSeconds:/a\  # Controller pod scheduling configuration\n  nodeSelector: {}\n  tolerations: []\n  affinity: {}\n  topologySpreadConstraints: []' "${CHART_DIR}/values.yaml"
         fi
     fi
 
@@ -323,42 +324,13 @@ if [ -f "${PATCHES_DIR}/manager-scheduling.yaml.patch" ]; then
         if ! grep -q "{{- with .Values.controllerManager.nodeSelector }}" "${MANAGER_YAML}"; then
             echo "Adding scheduling configuration to manager.yaml"
             
-            # Replace the scheduling section between serviceAccountName and securityContext
+            # Insert the patch content after serviceAccountName line
             if [[ "$OSTYPE" == "darwin"* ]]; then
-                # macOS sed - replace the section after serviceAccountName and before securityContext
-                sed -i '' '/serviceAccountName:/a\
-      {{- with .Values.controllerManager.nodeSelector }}\
-      nodeSelector:\
-        {{- toYaml . | nindent 8 }}\
-      {{- end }}\
-      {{- with .Values.controllerManager.tolerations }}\
-      tolerations:\
-        {{- toYaml . | nindent 8 }}\
-      {{- end }}\
-      {{- with .Values.controllerManager.affinity }}\
-      affinity:\
-        {{- toYaml . | nindent 8 }}\
-      {{- else }}\
-      affinity:\
-        nodeAffinity:\
-          requiredDuringSchedulingIgnoredDuringExecution:\
-            nodeSelectorTerms:\
-              - matchExpressions:\
-                - key: kubernetes.io/arch\
-                  operator: In\
-                  values:\
-                    - amd64\
-                    - arm64\
-                    - ppc64le\
-                    - s390x\
-                - key: kubernetes.io/os\
-                  operator: In\
-                  values:\
-                    - linux\
-      {{- end }}' "${MANAGER_YAML}"
+                # macOS sed - insert patch content after serviceAccountName
+                sed -i '' '/serviceAccountName:/r '"${PATCHES_DIR}/manager-scheduling.yaml.patch" "${MANAGER_YAML}"
             else
-                # Linux sed - replace the section after serviceAccountName and before securityContext
-                sed -i '/serviceAccountName:/a\      {{- with .Values.controllerManager.nodeSelector }}\n      nodeSelector:\n        {{- toYaml . | nindent 8 }}\n      {{- end }}\n      {{- with .Values.controllerManager.tolerations }}\n      tolerations:\n        {{- toYaml . | nindent 8 }}\n      {{- end }}\n      {{- with .Values.controllerManager.affinity }}\n      affinity:\n        {{- toYaml . | nindent 8 }}\n      {{- else }}\n      affinity:\n        nodeAffinity:\n          requiredDuringSchedulingIgnoredDuringExecution:\n            nodeSelectorTerms:\n              - matchExpressions:\n                - key: kubernetes.io/arch\n                  operator: In\n                  values:\n                    - amd64\n                    - arm64\n                    - ppc64le\n                    - s390x\n                - key: kubernetes.io/os\n                  operator: In\n                  values:\n                    - linux\n      {{- end }}' "${MANAGER_YAML}"
+                # Linux sed - insert patch content after serviceAccountName
+                sed -i '/serviceAccountName:/r '"${PATCHES_DIR}/manager-scheduling.yaml.patch" "${MANAGER_YAML}"
             fi
             echo "Successfully applied scheduling patch"
         else
