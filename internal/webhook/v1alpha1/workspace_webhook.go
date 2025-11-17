@@ -73,12 +73,12 @@ func ensureTemplateFinalizer(ctx context.Context, k8sClient client.Client, templ
 	}
 
 	// Check if finalizer already exists
-	if controllerutil.ContainsFinalizer(template, webhookconst.TemplateFinalizerName) {
+	if controllerutil.ContainsFinalizer(template, workspaceutil.TemplateFinalizerName) {
 		return nil
 	}
 
 	// Add finalizer since active workspace(s) use this template
-	controllerutil.AddFinalizer(template, webhookconst.TemplateFinalizerName)
+	controllerutil.AddFinalizer(template, workspaceutil.TemplateFinalizerName)
 	if err := k8sClient.Update(ctx, template); err != nil {
 		workspacelog.Error(err, "Failed to add finalizer to template", "template", templateName, "templateNamespace", templateNamespace)
 		return fmt.Errorf("failed to add finalizer to template %s/%s: %w", templateNamespace, templateName, err)
@@ -135,7 +135,7 @@ func ensureAccessStrategyFinalizer(ctx context.Context, k8sClient client.Client,
 	}
 
 	// Check if finalizer already exists
-	if controllerutil.ContainsFinalizer(accessStrategy, webhookconst.AccessStrategyFinalizerName) {
+	if controllerutil.ContainsFinalizer(accessStrategy, workspaceutil.AccessStrategyFinalizerName) {
 		return nil
 	}
 

@@ -87,10 +87,7 @@ const (
 	IdleCheckInterval = 5 * time.Minute
 
 	// WorkspaceFinalizerName is the finalizer name for workspace cleanup protection
-	WorkspaceFinalizerName = "workspace.jupyter.org/cleanup-protection"
-
-	// AccessStrategyFinalizerName is the finalizer name for access strategy protection
-	AccessStrategyFinalizerName = "workspace.jupyter.org/accessstrategy-protection"
+	WorkspaceFinalizerName = "workspace.jupyter.org/workspace-protection"
 
 	// ControllerPodNamespaceEnv is the environment variable for the controller pod namespace
 	ControllerPodNamespaceEnv = "CONTROLLER_POD_NAMESPACE"

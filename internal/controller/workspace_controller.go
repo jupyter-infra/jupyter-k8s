@@ -28,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	builderPkg "sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -390,42 +389,29 @@ func (r *WorkspaceReconciler) accessStrategyEventHandler(ctx context.Context, ob
 		"namespace", accessStrategy.Namespace)
 
 	// Find all Workspaces that reference this AccessStrategy
-	var workspaceList workspacev1alpha1.WorkspaceList
-	if err := r.List(ctx, &workspaceList); err != nil {
-		logger.Error(err, "Failed to list Workspaces")
+	requests, listErr := workspaceutil.GetWorkspaceReconciliationRequestsForAccessStrategy(
+		ctx,
+		r.Client,
+		accessStrategy.Name,
+		accessStrategy.Namespace)
+	if listErr != nil {
+		logger.Error(
+			listErr,
+			"Failed to list Workspaces associated with access strategy",
+			"accessStrategy", accessStrategy.Name,
+			"namespace", accessStrategy.Namespace)
 		return nil
 	}
 
-	var requests []reconcile.Request
-	for i := range workspaceList.Items {
-		workspace := &workspaceList.Items[i]
-
-		// Check if this Workspace references the AccessStrategy
-		if workspace.Spec.AccessStrategy != nil &&
-			workspace.Spec.AccessStrategy.Name == accessStrategy.Name {
-
-			// Check namespace match
-			accessStrategyNamespace := accessStrategy.Namespace
-			refNamespace := workspace.Namespace // Default to same namespace
-
-			if workspace.Spec.AccessStrategy.Namespace != "" {
-				refNamespace = workspace.Spec.AccessStrategy.Namespace
-			}
-
-			if refNamespace == accessStrategyNamespace {
-				logger.Info("Queueing reconciliation for Workspace referencing modified AccessStrategy",
-					"workspace", workspace.Name,
-					"namespace", workspace.Namespace,
-					"accessStrategy", accessStrategy.Name)
-
-				requests = append(requests, reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Name:      workspace.Name,
-						Namespace: workspace.Namespace,
-					},
-				})
-			}
-		}
+	if len(requests) > 0 {
+		logger.Info("Found active workspaces referencing access strategy",
+			"accessStrategy", accessStrategy.Name,
+			"namespace", accessStrategy.Namespace,
+			"workspaceCount", len(requests))
+	} else {
+		logger.Info("Found no active workspace referencing access strategy",
+			"accessStrategy", accessStrategy.Name,
+			"namespace", accessStrategy.Namespace)
 	}
 
 	return requests

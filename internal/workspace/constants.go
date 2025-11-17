@@ -20,9 +20,18 @@ const (
 	// LabelWorkspaceName is the label key for workspace name
 	LabelWorkspaceName = "workspace.jupyter.org/workspace-name"
 
+	// TemplateFinalizerName is the name of the finalizer placed on a template that is referenced by workspaces
+	TemplateFinalizerName = "workspace.jupyter.org/template-protection"
+
+	// AccessStrategyFinalizerName is the name of the finalizer place on an accessStrategy that is referenced by workspaces
+	AccessStrategyFinalizerName = "workspace.jupyter.org/accessstrategy-protection"
+
 	// ConflictRetryDelayMilliseconds is the base delay in milliseconds before retrying after a conflict
 	ConflictRetryDelayMilliseconds = 100
 
 	// ConflictRetryJitterMilliseconds is the maximum random jitter in milliseconds added to the retry delay
 	ConflictRetryJitterMilliseconds = 50
+
+	// WorkspacePageLimit defines the maximum number of Workspace returned by List(Workspace) call
+	WorkspacePageLimit int64 = 100
 )

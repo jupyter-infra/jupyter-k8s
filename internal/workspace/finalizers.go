@@ -2,12 +2,9 @@ package workspace
 
 import (
 	"context"
-	"math/rand"
-	"time"
 
 	"github.com/go-logr/logr"
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,14 +20,14 @@ func SafelyAddFinalizerToAccessStrategy(
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) error {
 
 	// Check if finalizer is already present
-	if controllerutil.ContainsFinalizer(accessStrategy, webhookconst.AccessStrategyFinalizerName) {
+	if controllerutil.ContainsFinalizer(accessStrategy, AccessStrategyFinalizerName) {
 		logger.V(1).Info("Finalizer already present on AccessStrategy")
 		return nil
 	}
 
 	// Add the finalizer
 	logger.Info("Adding finalizer to AccessStrategy")
-	controllerutil.AddFinalizer(accessStrategy, webhookconst.AccessStrategyFinalizerName)
+	controllerutil.AddFinalizer(accessStrategy, AccessStrategyFinalizerName)
 
 	// Try to update
 	updateErr := k8sClient.Update(ctx, accessStrategy)
@@ -45,9 +42,6 @@ func SafelyAddFinalizerToAccessStrategy(
 		return updateErr
 	}
 
-	// It's a conflict error, sleep with jitter before retry
-	sleepWithJitter()
-
 	// Get the latest version
 	latestAccessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{
@@ -59,7 +53,7 @@ func SafelyAddFinalizerToAccessStrategy(
 	}
 
 	// Check if finalizer is already present in the latest version
-	if controllerutil.ContainsFinalizer(latestAccessStrategy, webhookconst.AccessStrategyFinalizerName) {
+	if controllerutil.ContainsFinalizer(latestAccessStrategy, AccessStrategyFinalizerName) {
 		logger.Info("Finalizer already present in latest version of AccessStrategy")
 		return nil
 	}
@@ -82,14 +76,14 @@ func SafelyRemoveFinalizerFromAccessStrategy(
 	deletedOk bool) error {
 
 	// Check if finalizer is present
-	if !controllerutil.ContainsFinalizer(accessStrategy, webhookconst.AccessStrategyFinalizerName) {
+	if !controllerutil.ContainsFinalizer(accessStrategy, AccessStrategyFinalizerName) {
 		logger.V(1).Info("Finalizer not present on AccessStrategy")
 		return nil
 	}
 
 	// Remove the finalizer
 	logger.Info("Removing finalizer from AccessStrategy")
-	controllerutil.RemoveFinalizer(accessStrategy, webhookconst.AccessStrategyFinalizerName)
+	controllerutil.RemoveFinalizer(accessStrategy, AccessStrategyFinalizerName)
 
 	// Try to update
 	updateErr := k8sClient.Update(ctx, accessStrategy)
@@ -110,9 +104,6 @@ func SafelyRemoveFinalizerFromAccessStrategy(
 		return updateErr
 	}
 
-	// It's a conflict error, sleep with jitter before retry
-	sleepWithJitter()
-
 	// Get the latest version
 	latestAccessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{}
 	err := k8sClient.Get(ctx, types.NamespacedName{
@@ -131,7 +122,7 @@ func SafelyRemoveFinalizerFromAccessStrategy(
 	}
 
 	// Check if finalizer is already gone in the latest version
-	if !controllerutil.ContainsFinalizer(latestAccessStrategy, webhookconst.AccessStrategyFinalizerName) {
+	if !controllerutil.ContainsFinalizer(latestAccessStrategy, AccessStrategyFinalizerName) {
 		logger.Info("Finalizer already removed in latest version of AccessStrategy")
 		return nil
 	}
@@ -139,15 +130,4 @@ func SafelyRemoveFinalizerFromAccessStrategy(
 	// Finalizer is still present in the latest version, return the conflict error
 	logger.Error(updateErr, "Finalizer still present in latest version, returning conflict error")
 	return updateErr
-}
-
-// sleepWithJitter sleeps for a random period between base delay and base + jitter
-// to reduce contention when multiple processes are competing for the same resource.
-func sleepWithJitter() {
-	// Calculate sleep duration with jitter
-	jitter := rand.Intn(ConflictRetryJitterMilliseconds + 1)
-	sleepMs := ConflictRetryDelayMilliseconds + jitter
-
-	// Sleep for the calculated duration
-	time.Sleep(time.Duration(sleepMs) * time.Millisecond)
 }

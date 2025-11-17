@@ -184,7 +184,11 @@ func (rm *ResourceManager) ensureAccessResourceExists(
 				return fmt.Errorf("error getting expected spec: %w", err)
 			}
 
-			// If specs are different, update the resource
+			// If specs are different, update the access resource
+			// This captures two different scenarios
+			// case 1: the access resource was modified by another process (in spite of owner reference)
+			// case 2: the AccessStrategy modified the resource template, so that the actual resource
+			// no longer conforms to the resource defined in AccessStrategy
 			if existingFound && expectedFound && !reflect.DeepEqual(existingSpec, expectedSpec) {
 				logger.Info("AccessResource spec doesn't match template, updating",
 					"kind", existingObj.GetKind(),

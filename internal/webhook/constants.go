@@ -18,9 +18,3 @@ const (
 	DefaultClusterTemplateLabel = "workspace.jupyter.org/default-cluster-template"
 	DefaultServiceAccountLabel  = "workspace.jupyter.org/default-service-account"
 )
-
-// Finalizer constants
-const (
-	TemplateFinalizerName       = "workspace.jupyter.org/template-protection"
-	AccessStrategyFinalizerName = "workspace.jupyter.org/accessstrategy-protection"
-)

@@ -20,9 +20,7 @@ import (
 	"context"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -65,32 +63,25 @@ func (r *WorkspaceAccessStrategyReconciler) Reconcile(ctx context.Context, req c
 		return ctrl.Result{}, err
 	}
 
-	// Handle deletion
-	if !accessStrategy.DeletionTimestamp.IsZero() {
-		return r.handleDeletion(ctx, accessStrategy)
-	}
-
 	// Manage finalizer based on workspace usage (lazy finalizer pattern)
 	// Check if any active workspaces are using this AccessStrategy
-	workspaces, _, err := workspace.ListActiveWorkspacesByAccessStrategy(ctx, r.Client, accessStrategy.Name, accessStrategy.Namespace, "", 0)
+	hasFinalizer := controllerutil.ContainsFinalizer(accessStrategy, workspace.AccessStrategyFinalizerName)
+	hasWorkspaces, err := workspace.HasActiveWorkspacesWithAccessStrategy(ctx, r.Client, accessStrategy.Name, accessStrategy.Namespace)
 	if err != nil {
 		logger.Error(err, "Failed to list workspaces using AccessStrategy")
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 	}
 
-	hasFinalizer := controllerutil.ContainsFinalizer(accessStrategy, webhookconst.AccessStrategyFinalizerName)
-	hasWorkspaces := len(workspaces) > 0
-
 	logger.V(1).Info("Checking finalizer state",
 		"accessStrategyName", accessStrategy.Name,
 		"hasFinalizer", hasFinalizer,
-		"workspaceCount", len(workspaces))
+		"hasWorkspaces", hasWorkspaces)
 
 	// Case 1: Workspaces exist, but finalizer is missing → Add finalizer
 	if hasWorkspaces && !hasFinalizer {
 		logger.Info("Adding finalizer to AccessStrategy (workspaces are using it)",
-			"finalizer", webhookconst.AccessStrategyFinalizerName,
-			"workspaceCount", len(workspaces))
+			"finalizer", workspace.AccessStrategyFinalizerName,
+			"hasWorkspaces", hasWorkspaces)
 
 		// Use the safe utility to add finalizer (handles conflicts)
 		err = workspace.SafelyAddFinalizerToAccessStrategy(ctx, logger, r.Client, accessStrategy)
@@ -105,7 +96,7 @@ func (r *WorkspaceAccessStrategyReconciler) Reconcile(ctx context.Context, req c
 	// This handles the case where all workspaces were deleted
 	if !hasWorkspaces && hasFinalizer {
 		logger.Info("Removing finalizer from AccessStrategy (no workspaces using it)",
-			"finalizer", webhookconst.AccessStrategyFinalizerName)
+			"finalizer", workspace.AccessStrategyFinalizerName)
 
 		// Use the safe utility to remove finalizer (handles conflicts)
 		err := workspace.SafelyRemoveFinalizerFromAccessStrategy(ctx, logger, r.Client, accessStrategy, false)
@@ -118,58 +109,6 @@ func (r *WorkspaceAccessStrategyReconciler) Reconcile(ctx context.Context, req c
 
 	// Case 3: State is correct (both have workspaces+finalizer, or neither)
 	logger.V(1).Info("Finalizer state is correct, no action needed")
-	return ctrl.Result{}, nil
-}
-
-// handleDeletion handles deletion of AccessStrategy and manages finalizers
-// based on whether any workspaces are still using the AccessStrategy
-func (r *WorkspaceAccessStrategyReconciler) handleDeletion(ctx context.Context, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (ctrl.Result, error) {
-	logger := logf.FromContext(ctx)
-	logger.Info("Handling AccessStrategy deletion", "accessStrategyName", accessStrategy.Name)
-
-	if !controllerutil.ContainsFinalizer(accessStrategy, webhookconst.AccessStrategyFinalizerName) {
-		logger.Info("No finalizer present, allowing deletion", "accessStrategyName", accessStrategy.Name)
-		return ctrl.Result{}, nil
-	}
-
-	// Check if any workspaces are using this AccessStrategy
-	// Uses efficient label-based lookup via the cache (not direct API calls)
-	workspaces, _, err := workspace.ListActiveWorkspacesByAccessStrategy(ctx, r.Client, accessStrategy.Name, accessStrategy.Namespace, "", 0)
-	if err != nil {
-		logger.Error(err, "Failed to list workspaces using AccessStrategy")
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
-	}
-
-	if len(workspaces) > 0 {
-		logger.Info("AccessStrategy is in use, blocking deletion",
-			"accessStrategyName", accessStrategy.Name,
-			"exampleWorkspace", workspaces[0].Name,
-			"exampleWorkspaceNamespace", workspaces[0].Namespace,
-			"totalWorkspaces", len(workspaces))
-
-		// Record an event to notify users
-		msg := "Cannot delete AccessStrategy: in use by workspace(s)"
-		r.EventRecorder.Event(accessStrategy, corev1.EventTypeWarning, "AccessStrategyInUse", msg)
-
-		// Don't remove finalizer - block deletion
-		// Return nil error - we successfully determined AccessStrategy is in use
-		// Will be reconciled again when workspace changes
-		return ctrl.Result{RequeueAfter: LongRequeueDelay}, nil
-	}
-
-	// No workspaces using AccessStrategy - safe to delete
-	logger.Info("No workspaces using AccessStrategy, removing finalizer",
-		"accessStrategyName", accessStrategy.Name)
-
-	// Use the safe utility to remove finalizer (handles conflicts)
-	// Set deletedOk to true since we're in the deletion handler and
-	// it's fine if the resource is already gone
-	err = workspace.SafelyRemoveFinalizerFromAccessStrategy(ctx, logger, r.Client, accessStrategy, true)
-	if err != nil {
-		logger.Error(err, "Failed to remove finalizer from AccessStrategy",
-			"accessStrategyName", accessStrategy.Name)
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
-	}
 	return ctrl.Result{}, nil
 }
 
