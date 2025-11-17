@@ -17,7 +17,7 @@ data:
       redirectURIs:
       - https://{{ .Values.domain }}/oauth2/callback
       name: 'OAuth2 Proxy'
-      secret: {{ .Values.dex.oauth2ProxyClientSecret }}
+      secret: {{ include "defaulter.oauth2ProxyClientSecret" . }}
     - id: {{ .Values.dex.kubernetesClientId }}
       redirectURIs:
       {{- range .Values.dex.kubernetesClientRedirectPorts }}

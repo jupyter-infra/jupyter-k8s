@@ -78,7 +78,7 @@ dex:
   oauth2ProxyClientId: "oauth2-proxy"
   # Client secret for oauth2-proxy to authenticate with Dex (auto-generated if empty)
   # Generate with 'openssl rand -hex 16'
-  oauth2ProxyClientSecret: "15203aa672ded2f4bbc39182049ee0b9"
+  oauth2ProxyClientSecret: ""
 
   # Client ID for kubernetes to authenticate with Dex (auto-generated if empty)
   kubernetesClientId: "kubectl-oidc"
