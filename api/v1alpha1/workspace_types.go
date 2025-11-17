@@ -143,6 +143,7 @@ type WorkspaceSpec struct {
 	Storage *StorageSpec `json:"storage,omitempty"`
 
 	// Volumes specifies additional volumes to mount from existing PersistantVolumeClaims
+	// +kubebuilder:validation:XValidation:rule="!self.exists(v, v.name == 'workspace-storage')",message="volume name 'workspace-storage' is reserved"
 	Volumes []VolumeSpec `json:"volumes,omitempty"`
 
 	// ContainerConfig specifies container command and args configuration
