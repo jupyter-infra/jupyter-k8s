@@ -14,17 +14,7 @@ The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 */
 
-package controller
-
-// TemplateValidationResult contains the result of template validation
-type TemplateValidationResult struct {
-	// Valid indicates if the workspace configuration passes all template validations
-	Valid bool
-
-	// Violations contains details about any validation failures
-	// Empty slice if Valid is true
-	Violations []TemplateViolation
-}
+package v1alpha1
 
 // TemplateViolation describes a specific validation failure
 type TemplateViolation struct {

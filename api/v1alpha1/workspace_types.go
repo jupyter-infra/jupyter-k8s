@@ -239,9 +239,9 @@ type WorkspaceStatus struct {
 	//
 	// Standard condition types include:
 	// - "Available": the resource is fully functional and ready to use
-	// - "Progressing": the resource is being created or updated
+	// - "Progressing": the resource is being created, updated, or stopped
 	// - "Degraded": the resource failed to reach or maintain its desired state
-	// - "Valid": the workspace configuration passes all validation checks (template, quota, etc.)
+	// - "Stopped": the workspace has been stopped and resources scaled down
 	//
 	// The status of each condition is one of True, False, or Unknown.
 	// +listType=map
