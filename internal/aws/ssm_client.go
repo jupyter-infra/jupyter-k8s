@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -40,10 +41,9 @@ type SSMActivation struct {
 
 // SessionInfo contains SSM session connection details
 type SessionInfo struct {
-	SessionID    string `json:"sessionId"`
-	StreamURL    string `json:"streamUrl"`
-	TokenValue   string `json:"tokenValue"`
-	WebSocketURL string `json:"webSocketUrl"`
+	SessionID  string `json:"sessionId"`
+	StreamURL  string `json:"streamUrl"`
+	TokenValue string `json:"tokenValue"`
 }
 
 // SSMDocConfig contains configuration for creating SSM documents
@@ -81,6 +81,8 @@ func (s *SSMClient) GetRegion() string {
 
 // FindInstanceByPodUID finds SSM managed instance by pod UID tag
 func (c *SSMClient) FindInstanceByPodUID(ctx context.Context, podUID string) (string, error) {
+	logger := log.FromContext(ctx).WithName("ssm-client")
+
 	filters := []types.InstanceInformationStringFilter{
 		{
 			Key:    aws.String(WorkspacePodUIDTagKey),
@@ -97,9 +99,33 @@ func (c *SSMClient) FindInstanceByPodUID(ctx context.Context, podUID string) (st
 		return "", fmt.Errorf("no managed instance found with workspace-pod-uid tag: %s", podUID)
 	}
 
+	// If multiple instances found, warn and select the most recently registered
+	if len(instances) > 1 {
+		logger.Error(nil, "Multiple SSM managed instances found for pod - this is not expected, selecting most recent",
+			"podUID", podUID,
+			"instanceCount", len(instances))
+
+		// Sort by RegistrationDate descending (newest first)
+		sort.Slice(instances, func(i, j int) bool {
+			// Handle nil dates - put them at the end
+			if instances[i].RegistrationDate == nil {
+				return false
+			}
+			if instances[j].RegistrationDate == nil {
+				return true
+			}
+			return instances[i].RegistrationDate.After(*instances[j].RegistrationDate)
+		})
+	}
+
 	if instances[0].InstanceId == nil {
 		return "", fmt.Errorf("instance ID is nil for pod UID: %s", podUID)
 	}
+
+	logger.V(1).Info("Found SSM managed instance",
+		"podUID", podUID,
+		"instanceId", *instances[0].InstanceId,
+		"registrationDate", instances[0].RegistrationDate)
 
 	return *instances[0].InstanceId, nil
 }
@@ -143,8 +169,6 @@ func (c *SSMClient) StartSession(ctx context.Context, instanceID, documentName, 
 	if result.TokenValue != nil {
 		sessionInfo.TokenValue = *result.TokenValue
 	}
-
-	sessionInfo.WebSocketURL = fmt.Sprintf("wss://ssmmessages.%s.amazonaws.com/v1/data-channel/%s", c.region, *result.SessionId)
 
 	return sessionInfo, nil
 }
