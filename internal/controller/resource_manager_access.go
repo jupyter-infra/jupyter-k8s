@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
@@ -57,17 +58,69 @@ func (rm *ResourceManager) EnsureAccessResourcesExist(
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 	service *corev1.Service,
 ) error {
+	logger := logf.FromContext(ctx)
 	// The AccessResource MUST be in the Workspace namespace
 	// in order for the Workspace is the owner of the AccessResource
 	accessResourceNamespace := workspace.Namespace
 
+	// Track which resources are defined in the current AccessStrategy
+	currentResources := make(map[string]bool)
+
 	// ensure each of the resources defined in the accessStrategy exists
 	for _, resourceTemplate := range accessStrategy.Spec.AccessResourceTemplates {
+		// Build the lookup name that will be stored in status
+		lookupName := fmt.Sprintf("%s-%s", resourceTemplate.NamePrefix, workspace.Name)
+		// Track this resource as defined in the current AccessStrategy
+		resourceKey := fmt.Sprintf("%s/%s/%s", resourceTemplate.Kind, lookupName, accessResourceNamespace)
+		currentResources[resourceKey] = true
+
 		// Apply resource
 		err := rm.ensureAccessResourceExists(ctx, workspace, accessStrategy, service, &resourceTemplate, accessResourceNamespace)
 		if err != nil {
 			return err
 		}
+	}
+
+	// Check for resources that exist in status but are no longer in the AccessStrategy
+	// These need to be cleaned up
+	var resourcesToDelete []workspacev1alpha1.AccessResourceStatus
+	var resourcesToKeep []workspacev1alpha1.AccessResourceStatus
+
+	for _, resource := range workspace.Status.AccessResources {
+		resourceKey := fmt.Sprintf("%s/%s/%s", resource.Kind, resource.Name, resource.Namespace)
+		if !currentResources[resourceKey] {
+			// This resource is no longer in the AccessStrategy, mark for deletion
+			resourcesToDelete = append(resourcesToDelete, resource)
+			logger.Info("Found access resource to delete (no longer in AccessStrategy)",
+				"kind", resource.Kind,
+				"name", resource.Name,
+				"namespace", resource.Namespace)
+		} else {
+			// Keep resources that are still in the AccessStrategy
+			resourcesToKeep = append(resourcesToKeep, resource)
+		}
+	}
+
+	// Delete resources that are no longer in the AccessStrategy
+	resourcesDeleted := false
+	for _, resource := range resourcesToDelete {
+		resourceCopy := resource // Create a copy to avoid pointer issues in the loop
+		removed, err := rm.ensureAccessResourceDeleted(ctx, &resourceCopy)
+		if err != nil {
+			return fmt.Errorf("failed to delete removed access resource: %w", err)
+		}
+		if removed {
+			resourcesDeleted = true
+			logger.Info("Deleted access resource that was removed from AccessStrategy",
+				"kind", resourceCopy.Kind,
+				"name", resourceCopy.Name,
+				"namespace", resourceCopy.Namespace)
+		}
+	}
+
+	// Only update the status array if resources were actually deleted
+	if resourcesDeleted {
+		workspace.Status.AccessResources = resourcesToKeep
 	}
 
 	return nil
@@ -113,7 +166,50 @@ func (rm *ResourceManager) ensureAccessResourceExists(
 		}, existingObj)
 
 		if lookupError == nil {
-			// resource exists, all good
+			// Resource exists, but we need to check if it matches the current AccessStrategy template
+			// Build the expected resource from the current template
+			expectedObj, err := rm.accessResourcesBuilder.BuildUnstructuredResource(*resourceTemplate, workspace, accessStrategy, service)
+			if err != nil {
+				return fmt.Errorf("failed to build expected resource: %w", err)
+			}
+
+			// Compare the specs to detect changes
+			existingSpec, existingFound, err := unstructured.NestedFieldCopy(existingObj.Object, "spec")
+			if err != nil {
+				return fmt.Errorf("error getting existing spec: %w", err)
+			}
+
+			expectedSpec, expectedFound, err := unstructured.NestedFieldCopy(expectedObj.Object, "spec")
+			if err != nil {
+				return fmt.Errorf("error getting expected spec: %w", err)
+			}
+
+			// If specs are different, update the access resource
+			// This captures two different scenarios
+			// case 1: the access resource was modified by another process (in spite of owner reference)
+			// case 2: the AccessStrategy modified the resource template, so that the actual resource
+			// no longer conforms to the resource defined in AccessStrategy
+			if existingFound && expectedFound && !reflect.DeepEqual(existingSpec, expectedSpec) {
+				logger.Info("AccessResource spec doesn't match template, updating",
+					"kind", existingObj.GetKind(),
+					"name", existingObj.GetName(),
+					"namespace", existingObj.GetNamespace())
+
+				// Preserve metadata from existing object
+				expectedObj.SetResourceVersion(existingObj.GetResourceVersion())
+
+				// Update the resource
+				if err := rm.client.Update(ctx, expectedObj); err != nil {
+					return fmt.Errorf("failed to update access resource: %w", err)
+				}
+
+				logger.Info("Updated AccessResource to match template",
+					"kind", expectedObj.GetKind(),
+					"name", expectedObj.GetName(),
+					"namespace", expectedObj.GetNamespace())
+			}
+
+			// Resource exists and is now up to date
 			return nil
 		} else if !errors.IsNotFound(lookupError) {
 			// problem getting the resource: exit

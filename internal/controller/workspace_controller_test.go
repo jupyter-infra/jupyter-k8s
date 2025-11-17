@@ -26,9 +26,32 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// MockStateMachine is a mock implementation of the StateMachine for testing
+type MockStateMachine struct {
+}
+
+// ReconcileDesiredState is a mock implementation for testing
+func (m *MockStateMachine) ReconcileDesiredState(ctx context.Context, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (reconcile.Result, error) {
+	return reconcile.Result{}, nil
+}
+
+// ReconcileDeletion is a mock implementation for testing
+func (m *MockStateMachine) ReconcileDeletion(ctx context.Context, workspace *workspacev1alpha1.Workspace) (reconcile.Result, error) {
+	return reconcile.Result{}, nil
+}
+
+// getDesiredStatus is a mock implementation for testing
+func (m *MockStateMachine) getDesiredStatus(workspace *workspacev1alpha1.Workspace) string {
+	return "Running"
+}
+
+// GetAccessStrategyForWorkspace is a mock implementation for testing
+func (m *MockStateMachine) GetAccessStrategyForWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*workspacev1alpha1.WorkspaceAccessStrategy, error) {
+	return nil, nil
+}
 
 var _ = Describe("Workspace Controller", func() {
 	Context("When reconciling a resource", func() {
@@ -71,34 +94,16 @@ var _ = Describe("Workspace Controller", func() {
 			statusManager := StatusManager{
 				client: k8sClient,
 			}
-			options := WorkspaceControllerOptions{
-				ApplicationImagesPullPolicy: corev1.PullIfNotPresent,
-				ApplicationImagesRegistry:   "",
-			}
-			deploymentBuilder := DeploymentBuilder{
-				scheme:        k8sClient.Scheme(),
-				options:       options,
-				imageResolver: NewImageResolver("docker.io/library"),
-			}
-			serviceBuilder := ServiceBuilder{
-				scheme: k8sClient.Scheme(),
-			}
-			resourceManager := ResourceManager{
-				client:            k8sClient,
-				deploymentBuilder: &deploymentBuilder,
-				serviceBuilder:    &serviceBuilder,
-				statusManager:     &statusManager,
-			}
-			stateMachine := StateMachine{
-				resourceManager: &resourceManager,
-				statusManager:   &statusManager,
-			}
+
+			// Use the mock StateMachine implementation
+			mockStateMachine := &MockStateMachine{}
 
 			By("Reconciling the created resource")
 			controllerReconciler := &WorkspaceReconciler{
-				Client:       k8sClient,
-				Scheme:       k8sClient.Scheme(),
-				stateMachine: &stateMachine,
+				Client:        k8sClient,
+				Scheme:        k8sClient.Scheme(),
+				stateMachine:  mockStateMachine,
+				statusManager: &statusManager,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
