@@ -87,13 +87,8 @@ func (rm *ResourceManager) getPVC(ctx context.Context, workspace *workspacev1alp
 }
 
 // CreateDeployment creates a new deployment for the Workspace
-func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*appsv1.Deployment, error) {
+func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*appsv1.Deployment, error) {
 	logger := logf.FromContext(ctx)
-
-	accessStrategy, err := rm.GetAccessStrategyForWorkspace(ctx, workspace)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve access strategy for deployment: %w", err)
-	}
 
 	deployment, err := rm.deploymentBuilder.BuildDeploymentWithAccessStrategy(ctx, workspace, accessStrategy)
 	if err != nil {
@@ -185,28 +180,36 @@ func (rm *ResourceManager) deleteService(ctx context.Context, service *corev1.Se
 }
 
 // EnsureDeploymentExists creates a deployment if it doesn't exist, or updates it if the pod spec differs
-func (rm *ResourceManager) EnsureDeploymentExists(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*appsv1.Deployment, error) {
+func (rm *ResourceManager) EnsureDeploymentExists(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*appsv1.Deployment, error) {
 	deployment, err := rm.getDeployment(ctx, workspace)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return rm.createDeployment(ctx, workspace)
+			return rm.createDeployment(ctx, workspace, accessStrategy)
 		}
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
 
-	return rm.ensureDeploymentUpToDate(ctx, deployment, workspace)
+	return rm.ensureDeploymentUpToDate(ctx, deployment, workspace, accessStrategy)
 }
 
 // ensureDeploymentUpToDate checks if deployment needs update and updates it if necessary
-func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace) (*appsv1.Deployment, error) {
+func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*appsv1.Deployment, error) {
 	// Only perform updates when workspace is available to avoid interfering with creation
 	if !rm.statusManager.IsWorkspaceAvailable(workspace) {
 		return deployment, nil
 	}
 
-	accessStrategy, err := rm.GetAccessStrategyForWorkspace(ctx, workspace)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve access strategy for comparison: %w", err)
+	// Use the provided accessStrategy instead of fetching it again
+	if accessStrategy == nil && workspace.Spec.AccessStrategy != nil {
+		// This should not happen as it should be provided already, but handle it gracefully
+		var err error
+		accessStrategy, err = rm.GetAccessStrategyForWorkspace(ctx, workspace)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve access strategy for comparison: %w", err)
+		}
 	}
 
 	needsUpdate, err := rm.deploymentBuilder.NeedsUpdate(ctx, deployment, workspace, accessStrategy)
@@ -215,19 +218,24 @@ func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deploym
 	}
 
 	if needsUpdate {
-		return rm.updateDeployment(ctx, deployment, workspace)
+		return rm.updateDeployment(ctx, deployment, workspace, accessStrategy)
 	}
 
 	return deployment, nil
 }
 
 // updateDeployment updates an existing deployment with new pod spec
-func (rm *ResourceManager) updateDeployment(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace) (*appsv1.Deployment, error) {
+func (rm *ResourceManager) updateDeployment(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*appsv1.Deployment, error) {
 	logger := logf.FromContext(ctx)
 
-	accessStrategy, err := rm.GetAccessStrategyForWorkspace(ctx, workspace)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve access strategy for deployment: %w", err)
+	// Use the provided accessStrategy instead of fetching it again
+	if accessStrategy == nil && workspace.Spec.AccessStrategy != nil {
+		// This should not happen as it should be provided already, but handle it gracefully
+		var err error
+		accessStrategy, err = rm.GetAccessStrategyForWorkspace(ctx, workspace)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve access strategy for deployment: %w", err)
+		}
 	}
 
 	// Update the deployment spec using the builder with access strategy

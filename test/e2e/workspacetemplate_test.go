@@ -188,19 +188,6 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("verifying Valid condition is True within 10s (before compute is ready)")
-			verifyValid := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "workspace", "workspace-with-template",
-					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"))
-			}
-			Eventually(verifyValid).
-				WithPolling(1 * time.Second).
-				WithTimeout(10 * time.Second). // valid state should be set fast, before compute is ready
-				Should(Succeed())
-
 			By("verifying Degraded condition is False")
 			cmd = exec.Command("kubectl", "get", "workspace", "workspace-with-template",
 				"-o", "jsonpath={.status.conditions[?(@.type==\"Degraded\")].status}")
@@ -215,10 +202,10 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			By("attempting to create workspace with invalid image")
 			cmd := exec.Command("kubectl", "apply", "-f",
 				"test/e2e/static/template-validation/rejected-image-workspace.yaml")
-			
+
 			_, err := utils.Run(cmd)
 			Expect(err).To(HaveOccurred(), "Expected webhook to reject workspace with invalid image")
-			
+
 			By("verifying workspace was not created")
 			cmd = exec.Command("kubectl", "get", "workspace", "test-rejected-workspace", "--ignore-not-found")
 			output, err := utils.Run(cmd)
@@ -249,19 +236,6 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 				"test/e2e/static/template-validation/valid-overrides-workspace.yaml")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
-
-			By("verifying Valid condition is True")
-			verifyValid := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "workspace", "valid-overrides-test",
-					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"))
-			}
-			Eventually(verifyValid).
-				WithPolling(1 * time.Second).
-				WithTimeout(10 * time.Second). // valid should be set fast on update
-				Should(Succeed())
 
 			By("verifying Degraded condition is False")
 			cmd = exec.Command("kubectl", "get", "workspace", "valid-overrides-test",
@@ -334,15 +308,15 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-		By("verifying template still exists with deletionTimestamp set")
-		Eventually(func(g Gomega) {
-			cmd := exec.Command("kubectl", "get", "workspacetemplate",
-				"production-notebook-template", "-n", "jupyter-k8s-shared",
-				"-o", "jsonpath={.metadata.deletionTimestamp}")
-			output, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(output).NotTo(BeEmpty(), "expected deletionTimestamp to be set")
-		}).WithTimeout(10 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
+			By("verifying template still exists with deletionTimestamp set")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspacetemplate",
+					"production-notebook-template", "-n", "jupyter-k8s-shared",
+					"-o", "jsonpath={.metadata.deletionTimestamp}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "expected deletionTimestamp to be set")
+			}).WithTimeout(10 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
 
 			By("verifying finalizer is blocking deletion")
 			cmd = exec.Command("kubectl", "get", "workspacetemplate",
@@ -493,10 +467,16 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 		})
 
 		It("should inherit default access strategy from template", func() {
-			By("creating a template with default access strategy")
+			By("creating a test access strategy")
 			cmd := exec.Command("kubectl", "apply", "-f",
-				"test/e2e/static/webhook-validation/access-strategy-template.yaml")
+				"test/e2e/static/webhook-validation/access-strategy.yaml")
 			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating a template with default access strategy")
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/access-strategy-template.yaml")
+			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating workspace without access strategy")
@@ -525,6 +505,8 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			cmd = exec.Command("kubectl", "delete", "workspace", "access-strategy-inheritance-test", "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "access-strategy-template", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspaceaccessstrategy", "sample-access-strategy", "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 		})
 

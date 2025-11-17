@@ -20,9 +20,9 @@ func FindCondition(conditions *[]metav1.Condition, conditionType string) *metav1
 	return nil
 }
 
-// GetNewConditionsOrEmptyIfUnchanged returns the new list of conditions for Workspace.Status
-// or an empty list if there are no update needed.
-func GetNewConditionsOrEmptyIfUnchanged(
+// MergeConditionsIfChanged merges new conditions into the workspace's existing conditions.
+// Returns the merged condition list if changes are detected, or an empty list if no updates are needed.
+func MergeConditionsIfChanged(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
 	conditions *[]metav1.Condition) []metav1.Condition {

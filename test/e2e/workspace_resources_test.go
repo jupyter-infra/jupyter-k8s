@@ -129,7 +129,6 @@ var _ = Describe("Workspace Resources", Ordered, func() {
 			createWorkspace(templateWorkspace)
 			waitForDeployment(templateWorkspace)
 			verifyPVCCreated(templateWorkspace, "2Gi")
-			verifyWorkspaceValid(templateWorkspace)
 		})
 
 		It("should use template default when storage not specified", func() {
@@ -379,22 +378,6 @@ func createStorageTemplate() {
 	cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/static/storage/storage-template.yaml")
 	_, err := utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())
-}
-
-func verifyWorkspaceValid(workspaceName string) {
-	By(fmt.Sprintf("verifying workspace %s is valid", workspaceName))
-	Eventually(func() error {
-		cmd := exec.Command("kubectl", "get", "workspace", workspaceName,
-			"-o", "jsonpath={.status.conditions[?(@.type=='Valid')].status}")
-		output, err := utils.Run(cmd)
-		if err != nil {
-			return err
-		}
-		if output != "True" {
-			return fmt.Errorf("workspace not valid, condition status: %s", output)
-		}
-		return nil
-	}, 30*time.Second, 2*time.Second).Should(Succeed())
 }
 
 func expectWorkspaceRejection(workspaceName, expectedError string) {

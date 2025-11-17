@@ -636,6 +636,7 @@ apply-sample-routing:
 		set -e; \
 		. ./.env; \
 		export DOMAIN=$$DOMAIN; \
+		kubectl apply -f config/samples_routing/workspace_access_strategy.yaml --dry-run=client -o yaml | envsubst | kubectl apply -f -; \
 		kubectl apply -k config/samples_routing --dry-run=client -o yaml | envsubst | kubectl apply -f -; \
 	)
 
