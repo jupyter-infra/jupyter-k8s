@@ -28,6 +28,5 @@ spec:
   validationActions: [Deny]
   matchResources:
     namespaceSelector:
-      matchLabels:
-        hyperpod.aws.com/managed: "true"
+      matchExpressions: [ ]
 {{- end }}
