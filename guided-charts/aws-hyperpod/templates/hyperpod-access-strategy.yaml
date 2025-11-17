@@ -61,8 +61,8 @@ spec:
   {{- end }}
 
   # Deployment modifications for init container (always enabled)
-  deploymentSpecModifications:
-    podSpec:
+  deploymentModifications:
+    podModifications:
       {{- if .Values.remoteAccess.enabled }}
       additionalContainers:
         - name: "ssm-agent-sidecar"
@@ -100,10 +100,21 @@ spec:
             - name: workspace-base
               mountPath: /workspace_base_dir
 
-    primaryContainer:
-      volumeMounts:
-        - name: "workspace-base"
-          mountPath: "/opt/amazon/sagemaker/workspace"
+      primaryContainerModifications:
+        volumeMounts:
+          - name: "workspace-base"
+            mountPath: "/opt/amazon/sagemaker/workspace"
+        mergeEnv:
+          - name: WORKSPACE_NAMESPACE
+            valueTemplate: "{{`{{ .Workspace.Namespace }}`}}"
+          - name: WORKSPACE_NAME
+            valueTemplate: "{{`{{ .Workspace.Name }}`}}"
+          - name: WORKSPACE_ACCESS_TYPE
+            valueTemplate: "{{`{{ .Workspace.Spec.AccessType }}`}}"
+          - name: WORKSPACE_APP_TYPE
+            valueTemplate: "{{`{{ .Workspace.Spec.AppType }}`}}"
+          - name: JUPYTER_BASE_URL
+            valueTemplate: "/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/"
 
   {{- if .Values.remoteAccess.enabled }}
   # Controller-specific configuration (not injected into workspace containers)
@@ -111,15 +122,4 @@ spec:
     SSM_MANAGED_NODE_ROLE: "{{ .Values.remoteAccess.ssmManagedNodeRole }}"
     AWS_SSM_DOCUMENT_NAME: "{{ .Values.remoteAccess.ssmDocumentName }}"
   {{- end }}
-  mergeEnv:
-    - name: WORKSPACE_NAMESPACE
-      valueTemplate: "{{`{{ .Workspace.Namespace }}`}}"
-    - name: WORKSPACE_NAME
-      valueTemplate: "{{`{{ .Workspace.Name }}`}}"
-    - name: WORKSPACE_ACCESS_TYPE
-      valueTemplate: "{{`{{ .Workspace.Spec.AccessType }}`}}"
-    - name: WORKSPACE_APP_TYPE
-      valueTemplate: "{{`{{ .Workspace.Spec.AppType }}`}}"
-    - name: JUPYTER_BASE_URL
-      valueTemplate: "/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/"
 

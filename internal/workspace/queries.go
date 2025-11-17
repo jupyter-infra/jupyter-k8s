@@ -31,7 +31,7 @@ import (
 // These are defined here to avoid import cycles with the controller package
 const (
 	// Template labels
-	LabelWorkspaceTemplate          = "workspace.jupyter.org/template"
+	LabelWorkspaceTemplate          = "workspace.jupyter.org/template-name"
 	LabelWorkspaceTemplateNamespace = "workspace.jupyter.org/template-namespace"
 
 	// AccessStrategy labels
