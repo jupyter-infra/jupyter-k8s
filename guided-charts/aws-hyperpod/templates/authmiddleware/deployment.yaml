@@ -110,14 +110,6 @@ spec:
             value: "{{ .Values.clusterWebUI.auth.workspaceNameSubdomainRegex }}"
           - name: WORKSPACE_NAMESPACE_SUBDOMAIN_REGEX
             value: "{{ .Values.clusterWebUI.auth.workspaceNamespaceSubdomainRegex }}"
-          - name: CSRF_COOKIE_NAME
-            value: "{{ .Values.clusterWebUI.auth.csrfCookieName }}"
-          - name: CSRF_COOKIE_MAX_AGE
-            value: "{{ .Values.clusterWebUI.auth.csrfCookieMaxAge }}"
-          - name: CSRF_COOKIE_SECURE
-            value: "{{ .Values.clusterWebUI.auth.csrfCookieSecure }}"
-          - name: CSRF_AUTH_KEY
-            value: "{{ .Values.clusterWebUI.auth.csrfAuthKey }}"
           - name: ENABLE_OAUTH
             value: "{{ .Values.clusterWebUI.auth.oauthEnabled }}"
           - name: ENABLE_BEARER_URL_AUTH

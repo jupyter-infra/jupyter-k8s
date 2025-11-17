@@ -28,6 +28,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/test/utils"
 )
 
@@ -122,7 +123,7 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			"cpu-exceed-test", "valid-overrides-test",
 			"deletion-protection-test", "templateref-mutability-test",
 			"lazy-application-test", "cel-immutability-test",
-			"security-context-test",
+			"security-context-test", "owner-workspace", "volume-ownership-allowed-test",
 			"--ignore-not-found", "--timeout=60s")
 		_, _ = utils.Run(cmd)
 
@@ -645,6 +646,82 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			cmd = exec.Command("kubectl", "delete", "workspace", "custom-image-allowed-test")
 			_, _ = utils.Run(cmd)
 			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "custom-images-template")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should reject workspace referencing PVC owned by another workspace", func() {
+			By("creating first workspace to own a PVC")
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/owner-workspace.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			ownerPVCName := controller.GeneratePVCName("owner-workspace")
+			By(fmt.Sprintf("waiting for first workspace PVC %s to be created with owner reference", ownerPVCName))
+			Eventually(func(g Gomega) {
+				// Check PVC exists
+				cmd := exec.Command("kubectl", "get", "pvc", ownerPVCName, "-o", "jsonpath={.metadata.name}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal(ownerPVCName))
+
+				// Check PVC has owner reference to the workspace
+				cmd = exec.Command("kubectl", "get", "pvc", ownerPVCName, 
+					"-o", "jsonpath={.metadata.ownerReferences[0].name}")
+				output, err = utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("owner-workspace"))
+			}).WithTimeout(60 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
+			By("attempting to create second workspace that references the first workspace's PVC")
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/volume-ownership-violation-workspace.yaml")
+			output, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "Expected webhook to reject workspace referencing PVC owned by another workspace")
+			Expect(output).To(ContainSubstring("owned by another workspace"))
+
+			By("verifying second workspace was not created")
+			cmd = exec.Command("kubectl", "get", "workspace", "volume-ownership-violation-test", "--ignore-not-found")
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(BeEmpty())
+
+			By("cleaning up first workspace")
+			cmd = exec.Command("kubectl", "delete", "workspace", "owner-workspace", "--wait=true")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should allow workspace referencing unowned PVC", func() {
+			By("creating standalone PVC not owned by any workspace")
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/standalone-pvc.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for standalone PVC to be created")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pvc", "standalone-test-pvc", "-o", "jsonpath={.metadata.name}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("standalone-test-pvc"))
+			}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
+			By("creating workspace that references the standalone PVC")
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/volume-ownership-allowed-workspace.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Expected webhook to allow workspace referencing unowned PVC")
+
+			By("verifying workspace was created successfully")
+			cmd = exec.Command("kubectl", "get", "workspace", "volume-ownership-allowed-test", "-o", "jsonpath={.metadata.name}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("volume-ownership-allowed-test"))
+
+			By("cleaning up test resources")
+			cmd = exec.Command("kubectl", "delete", "workspace", "volume-ownership-allowed-test", "--wait=true")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "pvc", "standalone-test-pvc", "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 		})
 

@@ -96,13 +96,10 @@ func (s *Server) Start() error {
 	router.HandleFunc("/verify", s.handleVerify)
 	router.HandleFunc("/health", s.handleHealth)
 
-	// Skip CSRF protection
-	handler := s.csrfProtect()(router)
-
 	// Configure HTTP server
 	s.httpServer = &http.Server{
 		Addr:         fmt.Sprintf(":%d", s.config.Port),
-		Handler:      handler,
+		Handler:      router,
 		ReadTimeout:  s.config.ReadTimeout,
 		WriteTimeout: s.config.WriteTimeout,
 	}
@@ -143,16 +140,6 @@ func (s *Server) handleShutdown(idleConnsClosed chan struct{}) {
 	}
 
 	close(idleConnsClosed)
-}
-
-// csrfProtect returns middleware that applies appropriate CSRF protection based on endpoint
-func (s *Server) csrfProtect() func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Always skip CSRF
-			next.ServeHTTP(w, r)
-		})
-	}
 }
 
 // Handler methods are implemented in separate files:
