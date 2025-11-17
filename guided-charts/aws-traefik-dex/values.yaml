@@ -173,12 +173,6 @@ authmiddleware:
   pathRegexPattern: "^(/workspaces/[^/]+/[^/]+)(?:/.*)?$"
   workspaceNamespacePathRegex: "^/workspaces/([^/]+)/[^/]+"
   workspaceNamePathRegex: "^/workspaces/[^/]+/([^/]+)"
-  # CSRF configuration
-  # Required: must be provided as base64 encoded string (generate with: openssl rand -base64 32)
-  csrfAuthKey: ""
-  csrfCookieName: "workspace_csrf"
-  csrfCookieMaxAge: "1h"
-  csrfCookieSecure: "true"
   # Server configuration
   readTimeout: "10s"
   writeTimeout: "10s"
