@@ -64,7 +64,6 @@ type WorkspaceRunningReadiness struct {
 	computeReady         bool
 	serviceReady         bool
 	accessResourcesReady bool
-	TemplateValid        bool
 }
 
 // UpdateStartingStatus sets Available to false and Progressing to true
@@ -128,24 +127,15 @@ func (sm *StatusManager) UpdateStartingStatus(
 		"Workspace is starting",
 	)
 
-	// if we got here, validation passed
-	validCondition := NewCondition(
-		ConditionTypeValid,
-		metav1.ConditionTrue,
-		ReasonAllChecksPass,
-		"All validation checks passed",
-	)
-
 	// Apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
-		validCondition,
 	}
 
-	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
+	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
@@ -163,65 +153,7 @@ func (sm *StatusManager) UpdateErrorStatus(
 		reason,
 		message,
 	)
-	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &[]metav1.Condition{degradedCondition})
-	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
-}
-
-// SetInvalid sets the Valid condition to false when policy validation fails
-func (sm *StatusManager) SetInvalid(
-	ctx context.Context,
-	workspace *workspacev1alpha1.Workspace,
-	validation *TemplateValidationResult,
-	snapshotStatus *workspacev1alpha1.WorkspaceStatus) error {
-	// Build violation message
-	message := fmt.Sprintf("Validation failed: %d violation(s)", len(validation.Violations))
-	if len(validation.Violations) > 0 {
-		// Include first violation in message for visibility
-		v := validation.Violations[0]
-		message = fmt.Sprintf("%s. First: %s at %s (allowed: %s, actual: %s)",
-			message, v.Message, v.Field, v.Allowed, v.Actual)
-	}
-
-	validCondition := NewCondition(
-		ConditionTypeValid,
-		metav1.ConditionFalse,
-		ReasonTemplateViolation,
-		message,
-	)
-
-	// Policy violations are user errors, not system degradation
-	// Degraded is for system issues (controller failures, k8s API errors, etc.)
-	// Invalid config should only affect Available, not Degraded
-	degradedCondition := NewCondition(
-		ConditionTypeDegraded,
-		metav1.ConditionFalse,
-		ReasonTemplateViolation,
-		"No system errors detected",
-	)
-
-	availableCondition := NewCondition(
-		ConditionTypeAvailable,
-		metav1.ConditionFalse,
-		ReasonTemplateViolation,
-		"Validation failed",
-	)
-
-	// Set Progressing to false
-	progressingCondition := NewCondition(
-		ConditionTypeProgressing,
-		metav1.ConditionFalse,
-		ReasonTemplateViolation,
-		"Validation failed",
-	)
-
-	conditions := []metav1.Condition{
-		validCondition,
-		degradedCondition,
-		availableCondition,
-		progressingCondition,
-	}
-
-	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
+	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &[]metav1.Condition{degradedCondition})
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
@@ -262,24 +194,15 @@ func (sm *StatusManager) UpdateRunningStatus(
 		"Workspace is running",
 	)
 
-	// if we got here, validation passed
-	validCondition := NewCondition(
-		ConditionTypeValid,
-		metav1.ConditionTrue,
-		ReasonAllChecksPass,
-		"All validation checks passed",
-	)
-
 	// apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
-		validCondition,
 	}
 
-	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
+	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
@@ -352,24 +275,15 @@ func (sm *StatusManager) UpdateStoppingStatus(
 		stoppingMessage,
 	)
 
-	// if we got here, validation passed
-	validCondition := NewCondition(
-		ConditionTypeValid,
-		metav1.ConditionTrue,
-		ReasonAllChecksPass,
-		"All validation checks passed",
-	)
-
 	// Apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
-		validCondition,
 	}
 
-	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
+	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
@@ -384,8 +298,8 @@ func (sm *StatusManager) UpdateStoppedStatus(
 		availableCondition = NewCondition(
 			ConditionTypeAvailable,
 			metav1.ConditionFalse,
-			"Preempted",
-			"Workspace preempted due to resource contention",
+			ReasonPreempted,
+			PreemptedReason,
 		)
 	} else {
 		// ensure AvailableCondition is set to false with ReasonDesiredStateStopped
@@ -421,24 +335,18 @@ func (sm *StatusManager) UpdateStoppedStatus(
 		"Workspace is stopped",
 	)
 
-	// if we got here, validation passed
-	validCondition := NewCondition(
-		ConditionTypeValid,
-		metav1.ConditionTrue,
-		ReasonAllChecksPass,
-		"All validation checks passed",
-	)
-
 	// Apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
-		validCondition,
 	}
 
-	conditionsToUpdate := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &conditions)
+	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
+
+	// Clear resource names since all workspace resources have been deleted at this point.
+	// This prevents stale references and signals that no active resources exist.
 	workspace.Status.DeploymentName = ""
 	workspace.Status.ServiceName = ""
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)

@@ -109,6 +109,9 @@ func (db *DeploymentBuilder) buildDeploymentSpec(workspace *workspacev1alpha1.Wo
 
 	return appsv1.DeploymentSpec{
 		Replicas: &replicas,
+		Strategy: appsv1.DeploymentStrategy{
+			Type: appsv1.RecreateDeploymentStrategyType,
+		},
 		Selector: &metav1.LabelSelector{
 			MatchLabels: GenerateLabels(workspace.Name),
 		},

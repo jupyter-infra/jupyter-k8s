@@ -105,9 +105,6 @@ var _ = Describe("Workspace Status Transitions", Ordered, func() {
 			By("verifying desiredStatus is Running")
 			verifyDesiredStatus(runningWorkspace, "Running")
 
-			By("verifying Valid condition becomes True")
-			verifyStatusCondition(runningWorkspace, controller.ConditionTypeValid, "True")
-
 			By("verifying Deployment is created")
 			verifyResourceExists("deployment", controller.GenerateDeploymentName(runningWorkspace), true)
 
@@ -132,9 +129,6 @@ var _ = Describe("Workspace Status Transitions", Ordered, func() {
 
 			By("verifying desiredStatus is Stopped")
 			verifyDesiredStatus(stoppedWorkspace, "Stopped")
-
-			By("verifying Valid condition becomes True")
-			verifyStatusCondition(stoppedWorkspace, controller.ConditionTypeValid, "True")
 
 			By("verifying Available condition is False")
 			verifyStatusCondition(stoppedWorkspace, controller.ConditionTypeAvailable, "False")
