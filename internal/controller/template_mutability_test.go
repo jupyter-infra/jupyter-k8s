@@ -72,7 +72,7 @@ var _ = Describe("Template Mutability", func() {
 					Name:      "mutability-test-workspace",
 					Namespace: "default",
 					Labels: map[string]string{
-						"workspace.jupyter.org/template": template1.Name,
+						"workspace.jupyter.org/template-name": template1.Name,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
@@ -153,7 +153,7 @@ var _ = Describe("Template Mutability", func() {
 					Name:      "protection-test-workspace",
 					Namespace: "default",
 					Labels: map[string]string{
-						"workspace.jupyter.org/template":           template.Name,
+						"workspace.jupyter.org/template-name":      template.Name,
 						"workspace.jupyter.org/template-namespace": template.Namespace,
 					},
 				},
