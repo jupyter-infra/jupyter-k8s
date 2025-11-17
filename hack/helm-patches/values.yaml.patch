@@ -34,3 +34,8 @@ controllerManager:
   tolerations: []
   affinity: {}
   topologySpreadConstraints: []
+  # PodDisruptionBudget configuration
+  podDisruptionBudget:
+    enabled: false
+    # minAvailable: 1
+    # maxUnavailable: 1

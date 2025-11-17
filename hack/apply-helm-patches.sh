@@ -20,7 +20,16 @@ fi
 echo "Applying custom patches to Helm chart files..."
 echo "Using patches from ${PATCHES_DIR}"
 
-# Copy apiservice resources (kubebuilder helm plugin doesn't handle these)
+# Copy manager resources (including PodDisruptionBudget)
+if [ -d "${SCRIPT_DIR}/../config/manager" ]; then
+    echo "Copying additional manager resources..."
+    
+    # Copy PodDisruptionBudget if it exists
+    if [ -f "${SCRIPT_DIR}/../config/manager/poddisruptionbudget.yaml" ]; then
+        echo "Copying PodDisruptionBudget template..."
+        cp "${SCRIPT_DIR}/../config/manager/poddisruptionbudget.yaml" "${CHART_DIR}/templates/manager/"
+    fi
+fi
 if [ -d "${SCRIPT_DIR}/../config/apiservice" ]; then
     echo "Copying apiservice resources..."
     mkdir -p "${CHART_DIR}/templates/apiservice"
