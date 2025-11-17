@@ -14,6 +14,12 @@ import (
 	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
+// SSMRemoteAccessStrategyInterface defines the interface for SSM remote access operations
+type SSMRemoteAccessStrategyInterface interface {
+	SetupContainers(ctx context.Context, pod *corev1.Pod, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) error
+	CleanupSSMManagedNodes(ctx context.Context, pod *corev1.Pod) error
+}
+
 // Variables for dependency injection in tests
 var (
 	newSSMRemoteAccessStrategy = func(podExecUtil awsutil.PodExecInterface) (*awsutil.SSMRemoteAccessStrategy, error) {
@@ -26,7 +32,7 @@ var (
 type PodEventHandler struct {
 	client                  client.Client
 	resourceManager         *ResourceManager
-	ssmRemoteAccessStrategy *awsutil.SSMRemoteAccessStrategy
+	ssmRemoteAccessStrategy SSMRemoteAccessStrategyInterface
 }
 
 // NewPodEventHandler creates a new PodEventHandler
@@ -188,13 +194,26 @@ func (h *PodEventHandler) handlePodDeleted(ctx context.Context, pod *corev1.Pod,
 	logger := logf.FromContext(ctx).WithValues("pod", pod.Name, "workspace", workspaceName)
 	logger.Info("Workspace pod has been deleted", "podUID", pod.UID)
 
-	// Clean up SSM managed nodes for this pod
-	if h.ssmRemoteAccessStrategy == nil {
-		logger.Error(nil, "SSM remote access strategy not available - cannot cleanup SSM managed nodes")
-	} else {
-		if err := h.ssmRemoteAccessStrategy.CleanupSSMManagedNodes(ctx, pod); err != nil {
-			logger.Error(err, "Failed to cleanup SSM managed nodes")
+	// Check if this pod uses SSM remote access strategy by checking labels
+	// AccessStrategy labels are set by workspace reconciler and propagated: Workspace.labels -> Deployment.labels -> Pod.labels
+	accessStrategyName := pod.Labels[LabelAccessStrategyName]
+	if accessStrategyName == "" {
+		logger.V(1).Info("Pod has no access strategy label, skipping resource cleanup")
+		return
+	}
+
+	// TODO : retrieve the access strategy and check if podEventsHandler is aws
+	if accessStrategyName == "aws-ssm-remote-access" || accessStrategyName == "hyperpod-access-strategy" {
+		if h.ssmRemoteAccessStrategy == nil {
+			logger.Error(nil, "SSM remote access strategy not available - cannot cleanup SSM managed nodes")
+		} else {
+			if err := h.ssmRemoteAccessStrategy.CleanupSSMManagedNodes(ctx, pod); err != nil {
+				logger.Error(err, "Failed to cleanup SSM managed nodes")
+			}
 		}
+	} else {
+		logger.V(1).Info("Pod does not require resource cleanup, skipping",
+			"accessStrategy", accessStrategyName)
 	}
 }
 
