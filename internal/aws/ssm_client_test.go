@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -102,13 +103,15 @@ func TestSSMClient_FindInstanceByPodUID(t *testing.T) {
 			podUID: "test-pod-uid",
 			mockSetup: func(m *MockSSMClient) {
 				instanceID := testInstanceID
+				regDate := time.Now()
 				m.On("DescribeInstanceInformation", mock.Anything, mock.MatchedBy(func(input *ssm.DescribeInstanceInformationInput) bool {
 					return len(input.Filters) > 0 && *input.Filters[0].Key == WorkspacePodUIDTagKey
 				})).Return(
 					&ssm.DescribeInstanceInformationOutput{
 						InstanceInformationList: []types.InstanceInformation{
 							{
-								InstanceId: &instanceID,
+								InstanceId:       &instanceID,
+								RegistrationDate: &regDate,
 							},
 						},
 					}, nil)
@@ -129,6 +132,59 @@ func TestSSMClient_FindInstanceByPodUID(t *testing.T) {
 			},
 			want:    "",
 			wantErr: true,
+		},
+		{
+			name:   "multiple instances - returns most recent",
+			podUID: "test-pod-uid",
+			mockSetup: func(m *MockSSMClient) {
+				oldInstanceID := "mi-old-instance"
+				newInstanceID := "mi-new-instance"
+				oldDate := time.Now().Add(-1 * time.Hour)
+				newDate := time.Now()
+				m.On("DescribeInstanceInformation", mock.Anything, mock.MatchedBy(func(input *ssm.DescribeInstanceInformationInput) bool {
+					return len(input.Filters) > 0 && *input.Filters[0].Key == WorkspacePodUIDTagKey
+				})).Return(
+					&ssm.DescribeInstanceInformationOutput{
+						InstanceInformationList: []types.InstanceInformation{
+							{
+								InstanceId:       &oldInstanceID,
+								RegistrationDate: &oldDate,
+							},
+							{
+								InstanceId:       &newInstanceID,
+								RegistrationDate: &newDate,
+							},
+						},
+					}, nil)
+			},
+			want:    "mi-new-instance",
+			wantErr: false,
+		},
+		{
+			name:   "multiple instances with nil registration date",
+			podUID: "test-pod-uid",
+			mockSetup: func(m *MockSSMClient) {
+				instanceWithDate := "mi-with-date"
+				instanceNoDate := "mi-no-date"
+				regDate := time.Now()
+				m.On("DescribeInstanceInformation", mock.Anything, mock.MatchedBy(func(input *ssm.DescribeInstanceInformationInput) bool {
+					return len(input.Filters) > 0 && *input.Filters[0].Key == WorkspacePodUIDTagKey
+				})).Return(
+					&ssm.DescribeInstanceInformationOutput{
+						InstanceInformationList: []types.InstanceInformation{
+							{
+								InstanceId:       &instanceNoDate,
+								RegistrationDate: nil,
+							},
+							{
+								InstanceId:       &instanceWithDate,
+								RegistrationDate: &regDate,
+							},
+						},
+					}, nil)
+			},
+			want:    "mi-with-date",
+			wantErr: false,
 		},
 	}
 
@@ -192,10 +248,9 @@ func TestSSMClient_StartSession(t *testing.T) {
 					}, nil)
 			},
 			want: &SessionInfo{
-				SessionID:    testSessionID,
-				TokenValue:   "test-token",
-				StreamURL:    "wss://test-stream-url",
-				WebSocketURL: "wss://ssmmessages.us-east-1.amazonaws.com/v1/data-channel/" + testSessionID,
+				SessionID:  testSessionID,
+				TokenValue: "test-token",
+				StreamURL:  "wss://test-stream-url",
 			},
 			wantErr: false,
 		},
