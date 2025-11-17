@@ -13,6 +13,14 @@ clusterWebUI:
   # AWS Certificate Manager ARN for SSL/TLS termination at load balancer
   awsCertificateArn: ""
 
+  # ALB configuration
+  alb:
+    scheme: "internet-facing"  # or "internal"
+    targetType: "ip"
+    sslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06"
+    # Additional custom ALB annotations
+    annotations: {}
+
   # External DNS configuration
   externalDns:
     enabled: true
@@ -64,10 +72,6 @@ clusterWebUI:
     workspaceNameSubdomainRegex: "^([^-]+)-.*$"
     workspaceNamespaceSubdomainRegex: "^[^-]+-(.*)$"
     maxCookiePaths: "20"
-    csrfAuthKey: ""
-    csrfCookieName: "workspace_csrf"
-    csrfCookieMaxAge: "1h"
-    csrfCookieSecure: "true"
     readTimeout: "10s"
     writeTimeout: "10s"
     shutdownTimeout: "30s"

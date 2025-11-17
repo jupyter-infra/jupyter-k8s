@@ -31,7 +31,7 @@ const (
 	// LabelAccessStrategyNamespace is the label key for access strategy namespace
 	LabelAccessStrategyNamespace = "workspace.jupyter.org/access-strategy-namespace"
 	// LabelWorkspaceTemplate is the label key for workspace template name
-	LabelWorkspaceTemplate = "workspace.jupyter.org/template"
+	LabelWorkspaceTemplate = "workspace.jupyter.org/template-name"
 	// LabelWorkspaceTemplateNamespace is the label key for workspace template namespace
 	LabelWorkspaceTemplateNamespace = "workspace.jupyter.org/template-namespace"
 
@@ -52,12 +52,10 @@ const (
 	// AnnotationServiceAccountGroups is the annotation key for service account groups
 	AnnotationServiceAccountGroups = "workspace.jupyter.org/service-account-groups"
 
-	// PhaseCreating indicates the workspace is being created
-	PhaseCreating = "Creating"
-	// PhaseRunning indicates the workspace is running
-	PhaseRunning = "Running"
-	// PhaseStopped indicates the workspace is stopped
-	PhaseStopped = "Stopped"
+	// DesiredStateRunning indicates the workspace is running
+	DesiredStateRunning = "Running"
+	// DesiredStateStopped indicates the workspace is stopped
+	DesiredStateStopped = "Stopped"
 
 	// PreemptedReason is the reason for preempted workspaces
 	PreemptedReason = "Workspace preempted due to resource contention"

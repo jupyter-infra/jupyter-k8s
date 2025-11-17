@@ -57,9 +57,9 @@ func (sm *StateMachine) ReconcileDesiredState(
 	snapshotStatus := workspace.DeepCopy().Status
 
 	switch desiredStatus {
-	case PhaseStopped:
+	case DesiredStateStopped:
 		return sm.reconcileDesiredStoppedStatus(ctx, workspace, &snapshotStatus)
-	case "Running":
+	case DesiredStateRunning:
 		return sm.reconcileDesiredRunningStatus(ctx, workspace, &snapshotStatus, accessStrategy)
 	default:
 		err := fmt.Errorf("unknown desired status: %s", desiredStatus)
@@ -354,7 +354,7 @@ func (sm *StateMachine) stopWorkspaceDueToIdle(ctx context.Context, workspace *w
 		fmt.Sprintf("Stopping workspace due to idle timeout of %d minutes", idleConfig.IdleTimeoutInMinutes))
 
 	// Update desired status to trigger stop
-	workspace.Spec.DesiredStatus = PhaseStopped
+	workspace.Spec.DesiredStatus = DesiredStateStopped
 	if err := sm.resourceManager.client.Update(ctx, workspace); err != nil {
 		logger.Error(err, "Failed to update workspace desired status")
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err

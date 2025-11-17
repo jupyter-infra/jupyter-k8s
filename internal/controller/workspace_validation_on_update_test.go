@@ -80,7 +80,7 @@ var _ = Describe("Lazy Application", func() {
 				Name:      "lazy-app-workspace",
 				Namespace: "default",
 				Labels: map[string]string{
-					"workspace.jupyter.org/template": template.Name,
+					"workspace.jupyter.org/template-name": template.Name,
 				},
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{

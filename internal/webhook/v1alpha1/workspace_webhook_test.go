@@ -82,6 +82,7 @@ var _ = Describe("Workspace Webhook", func() {
 		validator = WorkspaceCustomValidator{
 			templateValidator:       NewTemplateValidator(mockClient, ""),
 			serviceAccountValidator: NewServiceAccountValidator(mockClient),
+			volumeValidator:         NewVolumeValidator(mockClient),
 		}
 		ctx = context.Background()
 	})
@@ -568,6 +569,47 @@ var _ = Describe("Workspace Webhook", func() {
 			})
 		})
 
+		Context("validateSecondaryStorages", func() {
+			It("should allow volumes when AllowSecondaryStorages is true", func() {
+				allowSecondaryStorages := true
+				template.Spec.AllowSecondaryStorages = &allowSecondaryStorages
+				volumes := []workspacev1alpha1.VolumeSpec{
+					{Name: "data", PersistentVolumeClaimName: "data-pvc", MountPath: "/data"},
+				}
+				violation := validateSecondaryStorages(volumes, template)
+				Expect(violation).To(BeNil())
+			})
+
+			It("should allow volumes when AllowSecondaryStorages is nil (default true)", func() {
+				template.Spec.AllowSecondaryStorages = nil
+				volumes := []workspacev1alpha1.VolumeSpec{
+					{Name: "data", PersistentVolumeClaimName: "data-pvc", MountPath: "/data"},
+				}
+				violation := validateSecondaryStorages(volumes, template)
+				Expect(violation).To(BeNil())
+			})
+
+			It("should reject volumes when AllowSecondaryStorages is false", func() {
+				allowSecondaryStorages := false
+				template.Spec.AllowSecondaryStorages = &allowSecondaryStorages
+				volumes := []workspacev1alpha1.VolumeSpec{
+					{Name: "data", PersistentVolumeClaimName: "data-pvc", MountPath: "/data"},
+				}
+				violation := validateSecondaryStorages(volumes, template)
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeSecondaryStorageNotAllowed))
+				Expect(violation.Field).To(Equal("spec.volumes"))
+			})
+
+			It("should allow empty volumes when AllowSecondaryStorages is false", func() {
+				allowSecondaryStorages := false
+				template.Spec.AllowSecondaryStorages = &allowSecondaryStorages
+				volumes := []workspacev1alpha1.VolumeSpec{}
+				violation := validateSecondaryStorages(volumes, template)
+				Expect(violation).To(BeNil())
+			})
+		})
+
 		Context("storageEqual", func() {
 			It("should return true for nil storages", func() {
 				Expect(storageEqual(nil, nil)).To(BeTrue())
@@ -966,6 +1008,7 @@ var _ = Describe("Workspace Webhook", func() {
 			// Create validator with template validator initialized
 			validatorWithTemplate = &WorkspaceCustomValidator{
 				templateValidator: NewTemplateValidator(k8sClient, "default"),
+				volumeValidator:   NewVolumeValidator(k8sClient),
 			}
 		})
 
@@ -979,7 +1022,7 @@ var _ = Describe("Workspace Webhook", func() {
 			// Old workspace with valid image and Running status
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.Image = testValidBaseNotebook // Valid
-			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.DesiredStatus = controller.DesiredStateRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -987,8 +1030,8 @@ var _ = Describe("Workspace Webhook", func() {
 
 			// New workspace with invalid image AND stopping
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.Image = testInvalidImage                // Invalid - violates template
-			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping
+			newWorkspace.Spec.Image = testInvalidImage                       // Invalid - violates template
+			newWorkspace.Spec.DesiredStatus = controller.DesiredStateStopped // Stopping
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: "default",
@@ -1010,7 +1053,7 @@ var _ = Describe("Workspace Webhook", func() {
 					corev1.ResourceCPU: resource.MustParse("500m"), // Valid
 				},
 			}
-			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.DesiredStatus = controller.DesiredStateRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1023,7 +1066,7 @@ var _ = Describe("Workspace Webhook", func() {
 					corev1.ResourceCPU: resource.MustParse("10"), // Invalid - exceeds max
 				},
 			}
-			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping
+			newWorkspace.Spec.DesiredStatus = controller.DesiredStateStopped // Stopping
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1041,7 +1084,7 @@ var _ = Describe("Workspace Webhook", func() {
 			// Old workspace with valid configuration and Running status
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.Image = testValidBaseNotebook // Valid
-			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.DesiredStatus = controller.DesiredStateRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1049,8 +1092,8 @@ var _ = Describe("Workspace Webhook", func() {
 
 			// New workspace - ONLY changing status to Stopped
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.Image = testValidBaseNotebook           // Same valid image
-			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping (only change)
+			newWorkspace.Spec.Image = testValidBaseNotebook                  // Same valid image
+			newWorkspace.Spec.DesiredStatus = controller.DesiredStateStopped // Stopping (only change)
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1068,7 +1111,7 @@ var _ = Describe("Workspace Webhook", func() {
 			// Old workspace is already non-compliant (e.g., template was updated after workspace creation)
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.Image = testInvalidImage // Invalid
-			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.DesiredStatus = controller.DesiredStateRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1076,8 +1119,8 @@ var _ = Describe("Workspace Webhook", func() {
 
 			// New workspace - ONLY changing status to Stopped, keeping same invalid image
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.Image = testInvalidImage                // Still invalid (unchanged)
-			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping (only change)
+			newWorkspace.Spec.Image = testInvalidImage                       // Still invalid (unchanged)
+			newWorkspace.Spec.DesiredStatus = controller.DesiredStateStopped // Stopping (only change)
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1097,7 +1140,7 @@ var _ = Describe("Workspace Webhook", func() {
 			oldWorkspace.Spec.Storage = &workspacev1alpha1.StorageSpec{
 				Size: resource.MustParse("10Gi"), // Valid (within 1Gi-100Gi bounds)
 			}
-			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.DesiredStatus = controller.DesiredStateRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1108,7 +1151,7 @@ var _ = Describe("Workspace Webhook", func() {
 			newWorkspace.Spec.Storage = &workspacev1alpha1.StorageSpec{
 				Size: resource.MustParse("500Gi"), // Invalid - exceeds max (100Gi)
 			}
-			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping
+			newWorkspace.Spec.DesiredStatus = controller.DesiredStateStopped // Stopping
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1126,7 +1169,7 @@ var _ = Describe("Workspace Webhook", func() {
 			// Old workspace with valid image
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.Image = testValidBaseNotebook // Valid
-			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.DesiredStatus = controller.DesiredStateRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1134,8 +1177,8 @@ var _ = Describe("Workspace Webhook", func() {
 
 			// New workspace with invalid image and NOT stopping
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.Image = testInvalidImage                // Invalid
-			newWorkspace.Spec.DesiredStatus = controller.PhaseRunning // Still Running
+			newWorkspace.Spec.Image = testInvalidImage                       // Invalid
+			newWorkspace.Spec.DesiredStatus = controller.DesiredStateRunning // Still Running
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
