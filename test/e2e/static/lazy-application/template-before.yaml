@@ -15,11 +15,12 @@ spec:
       cpu: "100m"
       memory: "128Mi"
   resourceBounds:
-    cpu:
-      min: "50m"
-      max: "2"  # Permissive initially
-    memory:
-      min: "64Mi"
-      max: "2Gi"
+    resources:
+      cpu:
+        min: "50m"
+        max: "2"  # Permissive initially
+      memory:
+        min: "64Mi"
+        max: "2Gi"
   primaryStorage:
     defaultSize: 1Gi

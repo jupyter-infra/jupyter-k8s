@@ -18,9 +18,10 @@ spec:
         path: "/api/status"
         port: 8888
   resourceBounds:
-    cpu:
-      min: "100m"
-      max: "2"
-    memory:
-      min: "128Mi"
-      max: "4Gi"
+    resources:
+      cpu:
+        min: "100m"
+        max: "2"
+      memory:
+        min: "128Mi"
+        max: "4Gi"
