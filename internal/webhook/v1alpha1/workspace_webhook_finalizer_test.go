@@ -29,7 +29,7 @@ import (
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
-	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
 // Tests are integrated into the main Webhook Suite via webhook_suite_test.go
@@ -72,7 +72,7 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
 			err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "default"}, updatedTemplate)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(controllerutil.ContainsFinalizer(updatedTemplate, webhookconst.TemplateFinalizerName)).To(BeFalse())
+			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeFalse())
 		})
 
 		It("should add finalizer when active workspace exists", func() {
@@ -117,7 +117,7 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
 			err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "default"}, updatedTemplate)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(controllerutil.ContainsFinalizer(updatedTemplate, webhookconst.TemplateFinalizerName)).To(BeTrue())
+			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeTrue())
 		})
 
 		It("should not add finalizer when all workspaces have DeletionTimestamp", func() {
@@ -168,7 +168,7 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
 			err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "default"}, updatedTemplate)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(controllerutil.ContainsFinalizer(updatedTemplate, webhookconst.TemplateFinalizerName)).To(BeFalse())
+			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeFalse())
 		})
 
 		It("should handle namespace filtering correctly", func() {
@@ -215,7 +215,7 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
 			err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "default"}, updatedTemplate)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(controllerutil.ContainsFinalizer(updatedTemplate, webhookconst.TemplateFinalizerName)).To(BeFalse())
+			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeFalse())
 		})
 
 		It("should skip finalizer addition when template does not exist", func() {
@@ -233,7 +233,7 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-template",
 					Namespace:  "default",
-					Finalizers: []string{webhookconst.TemplateFinalizerName},
+					Finalizers: []string{workspaceutil.TemplateFinalizerName},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Test Template",
@@ -271,7 +271,7 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
 			err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "default"}, updatedTemplate)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(controllerutil.ContainsFinalizer(updatedTemplate, webhookconst.TemplateFinalizerName)).To(BeTrue())
+			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeTrue())
 			Expect(updatedTemplate.Finalizers).To(HaveLen(1))
 		})
 
@@ -337,7 +337,7 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
 			err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "default"}, updatedTemplate)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(controllerutil.ContainsFinalizer(updatedTemplate, webhookconst.TemplateFinalizerName)).To(BeTrue())
+			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeTrue())
 		})
 	})
 })
