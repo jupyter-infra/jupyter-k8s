@@ -82,6 +82,7 @@ var _ = Describe("Workspace Webhook", func() {
 		validator = WorkspaceCustomValidator{
 			templateValidator:       NewTemplateValidator(mockClient, ""),
 			serviceAccountValidator: NewServiceAccountValidator(mockClient),
+			volumeValidator:         NewVolumeValidator(mockClient),
 		}
 		ctx = context.Background()
 	})
@@ -568,6 +569,47 @@ var _ = Describe("Workspace Webhook", func() {
 			})
 		})
 
+		Context("validateSecondaryStorages", func() {
+			It("should allow volumes when AllowSecondaryStorages is true", func() {
+				allowSecondaryStorages := true
+				template.Spec.AllowSecondaryStorages = &allowSecondaryStorages
+				volumes := []workspacev1alpha1.VolumeSpec{
+					{Name: "data", PersistentVolumeClaimName: "data-pvc", MountPath: "/data"},
+				}
+				violation := validateSecondaryStorages(volumes, template)
+				Expect(violation).To(BeNil())
+			})
+
+			It("should allow volumes when AllowSecondaryStorages is nil (default true)", func() {
+				template.Spec.AllowSecondaryStorages = nil
+				volumes := []workspacev1alpha1.VolumeSpec{
+					{Name: "data", PersistentVolumeClaimName: "data-pvc", MountPath: "/data"},
+				}
+				violation := validateSecondaryStorages(volumes, template)
+				Expect(violation).To(BeNil())
+			})
+
+			It("should reject volumes when AllowSecondaryStorages is false", func() {
+				allowSecondaryStorages := false
+				template.Spec.AllowSecondaryStorages = &allowSecondaryStorages
+				volumes := []workspacev1alpha1.VolumeSpec{
+					{Name: "data", PersistentVolumeClaimName: "data-pvc", MountPath: "/data"},
+				}
+				violation := validateSecondaryStorages(volumes, template)
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeSecondaryStorageNotAllowed))
+				Expect(violation.Field).To(Equal("spec.volumes"))
+			})
+
+			It("should allow empty volumes when AllowSecondaryStorages is false", func() {
+				allowSecondaryStorages := false
+				template.Spec.AllowSecondaryStorages = &allowSecondaryStorages
+				volumes := []workspacev1alpha1.VolumeSpec{}
+				violation := validateSecondaryStorages(volumes, template)
+				Expect(violation).To(BeNil())
+			})
+		})
+
 		Context("storageEqual", func() {
 			It("should return true for nil storages", func() {
 				Expect(storageEqual(nil, nil)).To(BeTrue())
@@ -966,6 +1008,7 @@ var _ = Describe("Workspace Webhook", func() {
 			// Create validator with template validator initialized
 			validatorWithTemplate = &WorkspaceCustomValidator{
 				templateValidator: NewTemplateValidator(k8sClient, "default"),
+				volumeValidator:   NewVolumeValidator(k8sClient),
 			}
 		})
 

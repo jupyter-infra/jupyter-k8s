@@ -226,9 +226,14 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace
 	templateGetter := NewTemplateGetter(mgr.GetClient())
 	serviceAccountValidator := NewServiceAccountValidator(mgr.GetClient())
 	serviceAccountDefaulter := NewServiceAccountDefaulter(mgr.GetClient())
+	volumeValidator := NewVolumeValidator(mgr.GetClient())
 
 	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.Workspace{}).
-		WithValidator(&WorkspaceCustomValidator{templateValidator: templateValidator, serviceAccountValidator: serviceAccountValidator}).
+		WithValidator(&WorkspaceCustomValidator{
+			templateValidator:       templateValidator,
+			serviceAccountValidator: serviceAccountValidator,
+			volumeValidator:         volumeValidator,
+		}).
 		WithDefaulter(&WorkspaceCustomDefaulter{
 			templateDefaulter:       templateDefaulter,
 			serviceAccountDefaulter: serviceAccountDefaulter,
@@ -342,6 +347,7 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 type WorkspaceCustomValidator struct {
 	templateValidator       *TemplateValidator
 	serviceAccountValidator *ServiceAccountValidator
+	volumeValidator         *VolumeValidator
 }
 
 var _ webhook.CustomValidator = &WorkspaceCustomValidator{}
@@ -356,6 +362,11 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, obj runti
 
 	// Validate template constraints
 	if err := v.templateValidator.ValidateCreateWorkspace(ctx, workspace); err != nil {
+		return nil, err
+	}
+
+	// Validate volume ownership (security check - applies to all users)
+	if err := v.volumeValidator.ValidateVolumeOwnership(ctx, workspace); err != nil {
 		return nil, err
 	}
 
@@ -436,6 +447,11 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 
 	// Validate template constraints for new workspace (only changed fields)
 	if err := v.templateValidator.ValidateUpdateWorkspace(ctx, oldWorkspace, newWorkspace); err != nil {
+		return nil, err
+	}
+
+	// Validate volume ownership (security check - applies to all users)
+	if err := v.volumeValidator.ValidateVolumeOwnership(ctx, newWorkspace); err != nil {
 		return nil, err
 	}
 

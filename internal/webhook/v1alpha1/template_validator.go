@@ -78,6 +78,11 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		}
 	}
 
+	// Validate secondary storage volumes
+	if violation := validateSecondaryStorages(workspace.Spec.Volumes, template); violation != nil {
+		violations = append(violations, *violation)
+	}
+
 	if len(violations) > 0 {
 		return fmt.Errorf("workspace violates template '%s' constraints: %s", workspace.Spec.TemplateRef.Name, formatViolations(violations))
 	}
