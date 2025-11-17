@@ -293,7 +293,7 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 			By("waiting for workspace to have template label")
 			verifyWorkspaceLabel := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "workspace", "deletion-protection-test",
-					"-o", "jsonpath={.metadata.labels.workspace\\.jupyter\\.org/template}")
+					"-o", "jsonpath={.metadata.labels.workspace\\.jupyter\\.org/template-name}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("production-notebook-template"), "workspace should have template label")
@@ -482,7 +482,7 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 
 			By("verifying template tracking label was added")
 			cmd = exec.Command("kubectl", "get", "workspace", "webhook-defaults-test",
-				"-o", "jsonpath={.metadata.labels['workspace\\.jupyter\\.org/template']}")
+				"-o", "jsonpath={.metadata.labels['workspace\\.jupyter\\.org/template-name']}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("production-notebook-template"))
