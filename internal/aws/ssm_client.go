@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
@@ -53,9 +54,27 @@ type SSMDocConfig struct {
 	Description string
 }
 
-// NewSSMClient creates a new SSM client
+// NewSSMClient creates a new SSM client with enhanced retry strategy
+//
+// Retry Configuration:
+//   - Mode: Standard (exponential backoff with jitter)
+//   - MaxAttempts: 5 (default: 3)
+//   - MaxBackoff: 30 seconds (default: 20 seconds)
+//
+// Retry timing: Immediate, ~1s, ~2s, ~4s, ~8s (total ~15 seconds)
+// Default timing: Immediate, ~1s, ~2s (total ~3 seconds)
+//
+// This configuration provides better resilience for cleanup operations and
+// handles transient throttling errors more effectively than the default.
 func NewSSMClient(ctx context.Context) (*SSMClient, error) {
-	cfg, err := config.LoadDefaultConfig(ctx)
+	cfg, err := config.LoadDefaultConfig(ctx,
+		config.WithRetryer(func() aws.Retryer {
+			return retry.NewStandard(func(o *retry.StandardOptions) {
+				o.MaxAttempts = 5
+				o.MaxBackoff = 30 * time.Second
+			})
+		}),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
