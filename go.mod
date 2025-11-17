@@ -9,7 +9,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.66.0
 	github.com/go-logr/logr v1.4.3
 	github.com/golang-jwt/jwt/v5 v5.2.2
-	github.com/gorilla/csrf v1.7.3
 	github.com/onsi/ginkgo/v2 v2.25.1
 	github.com/onsi/gomega v1.38.1
 	github.com/stretchr/testify v1.10.0

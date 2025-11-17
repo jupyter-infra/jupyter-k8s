@@ -7,10 +7,6 @@
 {{- fail "clusterWebUI.domain is required when clusterWebUI.enabled is true" }}
 {{- end }}
 
-{{- if and .Values.clusterWebUI.enabled (not .Values.clusterWebUI.auth.csrfAuthKey) }}
-{{- fail "clusterWebUI.auth.csrfAuthKey is required when clusterWebUI.enabled is true (generate with: openssl rand -base64 32)" }}
-{{- end }}
-
 {{- if and .Values.clusterWebUI.enabled (eq .Values.clusterWebUI.auth.jwtSigningType "kms") (not .Values.clusterWebUI.auth.kmsKeyId) }}
 {{- fail "clusterWebUI.auth.kmsKeyId is required when jwtSigningType is 'kms'" }}
 {{- end }}
