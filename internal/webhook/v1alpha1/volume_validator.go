@@ -25,7 +25,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 )
 
 // VolumeValidator handles volume validation for webhooks
@@ -49,7 +48,7 @@ func (vv *VolumeValidator) ValidateVolumeOwnership(ctx context.Context, workspac
 }
 
 // validateSecondaryStorages checks if secondary storage volumes are allowed by template
-func validateSecondaryStorages(volumes []workspacev1alpha1.VolumeSpec, template *workspacev1alpha1.WorkspaceTemplate) *controller.TemplateViolation {
+func validateSecondaryStorages(volumes []workspacev1alpha1.VolumeSpec, template *workspacev1alpha1.WorkspaceTemplate) *TemplateViolation {
 	// Skip validation if no volumes specified
 	if len(volumes) == 0 {
 		return nil
@@ -57,8 +56,8 @@ func validateSecondaryStorages(volumes []workspacev1alpha1.VolumeSpec, template 
 
 	// Check AllowSecondaryStorages setting (default is true if not specified)
 	if template.Spec.AllowSecondaryStorages != nil && !*template.Spec.AllowSecondaryStorages {
-		return &controller.TemplateViolation{
-			Type:    controller.ViolationTypeSecondaryStorageNotAllowed,
+		return &TemplateViolation{
+			Type:    ViolationTypeSecondaryStorageNotAllowed,
 			Field:   "spec.volumes",
 			Message: fmt.Sprintf("Template '%s' does not allow secondary storage volumes, but workspace specifies %d volume(s)", template.Name, len(volumes)),
 			Allowed: "no secondary volumes",
@@ -70,7 +69,7 @@ func validateSecondaryStorages(volumes []workspacev1alpha1.VolumeSpec, template 
 }
 
 // validateVolumeOwnership checks that volumes don't reference PVCs owned by other workspaces
-func validateVolumeOwnership(ctx context.Context, k8sClient client.Client, workspace *workspacev1alpha1.Workspace) *controller.TemplateViolation {
+func validateVolumeOwnership(ctx context.Context, k8sClient client.Client, workspace *workspacev1alpha1.Workspace) *TemplateViolation {
 	for _, volume := range workspace.Spec.Volumes {
 		// Get the PVC
 		pvc := &corev1.PersistentVolumeClaim{}
@@ -89,8 +88,8 @@ func validateVolumeOwnership(ctx context.Context, k8sClient client.Client, works
 			if ownerRef.APIVersion == "workspace.jupyter.org/v1alpha1" &&
 				ownerRef.Kind == "Workspace" &&
 				ownerRef.UID != workspace.UID {
-				return &controller.TemplateViolation{
-					Type:    controller.ViolationTypeVolumeOwnedByAnotherWorkspace,
+				return &TemplateViolation{
+					Type:    ViolationTypeVolumeOwnedByAnotherWorkspace,
 					Field:   fmt.Sprintf("spec.volumes[%s].persistentVolumeClaimName", volume.Name),
 					Message: fmt.Sprintf("Volume '%s' references PVC '%s' which is owned by another workspace '%s'", volume.Name, volume.PersistentVolumeClaimName, ownerRef.Name),
 					Allowed: "PVCs not owned by other workspaces",

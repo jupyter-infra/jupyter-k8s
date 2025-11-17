@@ -597,7 +597,7 @@ var _ = Describe("Workspace Webhook", func() {
 				}
 				violation := validateSecondaryStorages(volumes, template)
 				Expect(violation).NotTo(BeNil())
-				Expect(violation.Type).To(Equal(controller.ViolationTypeSecondaryStorageNotAllowed))
+				Expect(violation.Type).To(Equal(ViolationTypeSecondaryStorageNotAllowed))
 				Expect(violation.Field).To(Equal("spec.volumes"))
 			})
 
