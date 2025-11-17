@@ -15,6 +15,14 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// StateMachineInterface defines the interface for state machine operations
+type StateMachineInterface interface {
+	ReconcileDesiredState(ctx context.Context, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (ctrl.Result, error)
+	ReconcileDeletion(ctx context.Context, workspace *workspacev1alpha1.Workspace) (ctrl.Result, error)
+	getDesiredStatus(workspace *workspacev1alpha1.Workspace) string
+	GetAccessStrategyForWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*workspacev1alpha1.WorkspaceAccessStrategy, error)
+}
+
 // StateMachine handles the state transitions for Workspace
 type StateMachine struct {
 	resourceManager *ResourceManager
@@ -40,7 +48,9 @@ func NewStateMachine(
 
 // ReconcileDesiredState handles the state machine logic for Workspace
 func (sm *StateMachine) ReconcileDesiredState(
-	ctx context.Context, workspace *workspacev1alpha1.Workspace) (ctrl.Result, error) {
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
 	desiredStatus := sm.getDesiredStatus(workspace)
@@ -50,7 +60,7 @@ func (sm *StateMachine) ReconcileDesiredState(
 	case PhaseStopped:
 		return sm.reconcileDesiredStoppedStatus(ctx, workspace, &snapshotStatus)
 	case "Running":
-		return sm.reconcileDesiredRunningStatus(ctx, workspace, &snapshotStatus)
+		return sm.reconcileDesiredRunningStatus(ctx, workspace, &snapshotStatus, accessStrategy)
 	default:
 		err := fmt.Errorf("unknown desired status: %s", desiredStatus)
 		// Update error condition
@@ -68,6 +78,11 @@ func (sm *StateMachine) getDesiredStatus(workspace *workspacev1alpha1.Workspace)
 		return DefaultDesiredStatus
 	}
 	return workspace.Spec.DesiredStatus
+}
+
+// GetAccessStrategyForWorkspace retrieves the AccessStrategy for a workspace
+func (sm *StateMachine) GetAccessStrategyForWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*workspacev1alpha1.WorkspaceAccessStrategy, error) {
+	return sm.resourceManager.GetAccessStrategyForWorkspace(ctx, workspace)
 }
 
 func (sm *StateMachine) reconcileDesiredStoppedStatus(
@@ -185,7 +200,8 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 func (sm *StateMachine) reconcileDesiredRunningStatus(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
-	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (ctrl.Result, error) {
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 	logger.Info("Attempting to bring Workspace status to 'Running'")
 
@@ -201,7 +217,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	}
 
 	// EnsureDeploymentExists creates deployment if missing, or returns existing deployment
-	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace)
+	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace, accessStrategy)
 	if err != nil {
 		deployErr := fmt.Errorf("failed to ensure deployment exists: %w", err)
 		// Update error condition
@@ -236,7 +252,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		// ReconcileAccess returns nil (no error) only when it successfully initiated
 		// the creation of all AccessRessources.
 		// TODO: add probe and requeue https://github.com/jupyter-infra/jupyter-k8s/issues/36
-		if err := sm.ReconcileAccessForDesiredRunningStatus(ctx, workspace, service); err != nil {
+		if err := sm.ReconcileAccessForDesiredRunningStatus(ctx, workspace, service, accessStrategy); err != nil {
 			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
 		}
 
@@ -290,7 +306,7 @@ func (sm *StateMachine) handleIdleShutdownForRunningWorkspace(
 
 	logger.Info("Processing idle shutdown",
 		"enabled", idleConfig.Enabled,
-		"timeoutMinutes", idleConfig.TimeoutMinutes,
+		"idleTimeoutInMinutes", idleConfig.IdleTimeoutInMinutes,
 		"hasHTTPGet", idleConfig.Detection.HTTPGet != nil,
 		"workspace", workspace.Name,
 		"namespace", workspace.Namespace)
@@ -319,7 +335,7 @@ func (sm *StateMachine) handleIdleShutdownForRunningWorkspace(
 		logger.V(1).Info("Successfully checked idle status", "isIdle", result.IsIdle)
 		if result.IsIdle {
 			logger.Info("Workspace idle timeout reached, stopping workspace",
-				"timeout", idleConfig.TimeoutMinutes)
+				"timeout", idleConfig.IdleTimeoutInMinutes)
 			return sm.stopWorkspaceDueToIdle(ctx, workspace, idleConfig)
 		}
 	}
@@ -335,7 +351,7 @@ func (sm *StateMachine) stopWorkspaceDueToIdle(ctx context.Context, workspace *w
 
 	// Record event
 	sm.recorder.Event(workspace, corev1.EventTypeNormal, "IdleShutdown",
-		fmt.Sprintf("Stopping workspace due to idle timeout of %d minutes", idleConfig.TimeoutMinutes))
+		fmt.Sprintf("Stopping workspace due to idle timeout of %d minutes", idleConfig.IdleTimeoutInMinutes))
 
 	// Update desired status to trigger stop
 	workspace.Spec.DesiredStatus = PhaseStopped

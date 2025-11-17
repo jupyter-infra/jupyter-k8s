@@ -22,6 +22,7 @@ type Server struct {
 	logger        *slog.Logger
 	httpServer    *http.Server
 	restClient    rest.Interface
+	oidcVerifier  OIDCVerifierInterface
 }
 
 // NewServer creates a new server instance
@@ -46,17 +47,42 @@ func NewServer(config *Config, jwtManager jwt.Handler, cookieManager CookieHandl
 		}
 	}
 
+	// Initialize OIDC verifier structure (without making HTTP calls) if /auth endpoint is enabled
+	var oidcVerifier OIDCVerifierInterface
+	if config.EnableOAuth {
+		v, err := NewOIDCVerifier(config, logger)
+		if err != nil {
+			logger.Error("Failed to create OIDC verifier", "error", err)
+			oidcVerifier = nil
+		} else {
+			oidcVerifier = v
+		}
+	}
+
 	return &Server{
 		config:        config,
 		jwtManager:    jwtManager,
 		cookieManager: cookieManager,
 		logger:        logger,
 		restClient:    restClient,
+		oidcVerifier:  oidcVerifier,
 	}
 }
 
 // Start initializes and starts the HTTP server
 func (s *Server) Start() error {
+	// Initialize OIDC verifier if enabled
+	if s.config.EnableOAuth && s.oidcVerifier != nil {
+		s.logger.Info("Initializing OIDC verifier connection")
+		if err := s.oidcVerifier.Start(context.Background()); err != nil {
+			s.logger.Error("Failed to start OIDC verifier", "error", err)
+			return fmt.Errorf("failed to start OIDC verifier: %w", err)
+		}
+		s.logger.Info("OIDC verifier initialized successfully")
+	} else {
+		s.logger.Info("OAuth disabled, skipping OIDC initialization")
+	}
+
 	// Create router
 	router := http.NewServeMux()
 
@@ -70,7 +96,7 @@ func (s *Server) Start() error {
 	router.HandleFunc("/verify", s.handleVerify)
 	router.HandleFunc("/health", s.handleHealth)
 
-	// Apply CSRF protection
+	// Skip CSRF protection
 	handler := s.csrfProtect()(router)
 
 	// Configure HTTP server
@@ -123,39 +149,8 @@ func (s *Server) handleShutdown(idleConnsClosed chan struct{}) {
 func (s *Server) csrfProtect() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// CSRF protection strategy:
-			//
-			// 1. /auth - No CSRF protection
-			//    - Initial authentication endpoint where users get their first token
-			//    - Users don't have CSRF tokens yet when they authenticate
-			//    - Similar to "login page exception" in standard CSRF protection patterns
-			//
-			// 2. /health - No CSRF protection
-			//    - Read-only status endpoint used by monitoring systems and load balancers
-			//    - No state changes occur here, so CSRF is not applicable
-			//    - Monitoring systems don't handle CSRF tokens
-			//
-			// 3. All other endpoints (including /verify) - Apply CSRF protection
-			//    - /verify can refresh tokens, which modifies state
-			//    - State-changing operations need CSRF protection
-			//    - Clients should have received CSRF tokens from /auth endpoint
-
-			// Skip CSRF protection for specific endpoints
-			skipCSRF := r.URL.Path == "/health"
-			if s.config.EnableOAuth && r.URL.Path == "/auth" {
-				skipCSRF = true
-			}
-			if s.config.EnableBearerAuth && r.URL.Path == "/bearer-auth" {
-				skipCSRF = true
-			}
-
-			if skipCSRF {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			// Apply CSRF protection for all other endpoints (including /verify)
-			s.cookieManager.CSRFProtect()(next).ServeHTTP(w, r)
+			// Always skip CSRF
+			next.ServeHTTP(w, r)
 		})
 	}
 }

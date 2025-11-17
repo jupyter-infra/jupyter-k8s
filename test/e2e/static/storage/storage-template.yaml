@@ -1,0 +1,22 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: storage-template
+  namespace: default
+spec:
+  displayName: "Storage Template"
+  description: "Template with storage bounds for testing"
+  defaultImage: "jupyter/scipy-notebook:latest"
+  allowedImages:
+    - "jupyter/scipy-notebook:latest"
+  resourceBounds:
+    cpu:
+      min: "100m"
+      max: "2"
+    memory:
+      min: "128Mi"
+      max: "4Gi"
+  primaryStorage:
+    defaultSize: "1Gi"
+    minSize: "500Mi"
+    maxSize: "5Gi"

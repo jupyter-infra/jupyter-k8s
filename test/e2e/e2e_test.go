@@ -25,7 +25,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -34,80 +33,15 @@ import (
 	"github.com/jupyter-ai-contrib/jupyter-k8s/test/utils"
 )
 
-// namespace where the project is deployed in
+// Test constants
 const namespace = "jupyter-k8s-system"
-
-// serviceAccountName created for the project
 const serviceAccountName = "jupyter-k8s-controller-manager"
-
-// metricsServiceName is the name of the metrics service of the project
 const metricsServiceName = "jupyter-k8s-controller-manager-metrics-service"
-
-// metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
 const metricsRoleBindingName = "jupyter-k8s-metrics-binding"
+const webhookCertificateName = "jupyter-k8s-serving-cert"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
-
-	// Before running the tests, set up the environment by installing CRDs
-	// and deploying the controller. Namespace is created in BeforeSuite.
-	BeforeAll(func() {
-		By("installing CRDs")
-		cmd := exec.Command("make", "install")
-		_, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
-
-		By("deploying the controller-manager")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
-
-		// Set environment variables for e2e testing
-		By("setting controller environment variables")
-		envVars := []string{
-			"CONTROLLER_POD_SERVICE_ACCOUNT=jupyter-k8s-controller-manager",
-			"CONTROLLER_POD_NAMESPACE=jupyter-k8s-system",
-		}
-		for _, envVar := range envVars {
-			cmd = exec.Command("kubectl", "set", "env", "deployment/jupyter-k8s-controller-manager", envVar, "-n", namespace)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to set environment variable: %s", envVar))
-		}
-	})
-
-	// After all tests have been executed, clean up by deleting resources, undeploying the controller,
-	// and uninstalling CRDs. Namespace is deleted in AfterSuite.
-	// Resources must be deleted in reverse order of creation to properly process finalizers.
-	AfterAll(func() {
-		By("cleaning up the curl pod for metrics")
-		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
-		_, _ = utils.Run(cmd)
-
-		By("cleaning up all workspaces")
-		// Delete workspaces synchronously to ensure finalizers are processed
-		cmd = exec.Command("kubectl", "delete", "workspace", "--all", "-n", namespace, "--ignore-not-found", "--wait=true", "--timeout=180s")
-		_, _ = utils.Run(cmd)
-
-		By("undeploying the controller-manager")
-		// Undeploy controller BEFORE uninstalling CRDs to allow controller to process finalizers
-		// This follows K8s best practice: delete resources in reverse order of creation
-		cmd = exec.Command("make", "undeploy")
-		_, _ = utils.Run(cmd)
-
-		By("waiting for controller pod to be fully terminated")
-		// Ensure controller is completely stopped before deleting CRDs
-		Eventually(func(g Gomega) {
-			cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l", "control-plane=controller-manager", "-o", "name")
-			output, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(strings.TrimSpace(string(output))).To(BeEmpty())
-		}).WithTimeout(60 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
-
-		By("uninstalling CRDs")
-		// Delete CRDs last to avoid race conditions with controller finalizer processing
-		cmd = exec.Command("make", "uninstall")
-		_, _ = utils.Run(cmd)
-	})
 
 	// After each test, check for failures and collect logs, events,
 	// and pod descriptions for debugging.
@@ -145,9 +79,9 @@ var _ = Describe("Manager", Ordered, func() {
 			cmd = exec.Command("kubectl", "describe", "pod", controllerPodName, "-n", namespace)
 			podDescription, err := utils.Run(cmd)
 			if err == nil {
-				fmt.Println("Pod description:\n", podDescription)
+				_, _ = fmt.Fprintf(GinkgoWriter, "Pod description:\n %s", podDescription)
 			} else {
-				fmt.Println("Failed to describe controller pod")
+				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to describe controller pod")
 			}
 		}
 	})
@@ -232,7 +166,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("creating the curl-metrics pod to access the metrics endpoint")
 			cmd = exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
-				"--namespace", namespace,
+				"-n", namespace,
 				"--image=curlimages/curl:latest",
 				"--overrides",
 				fmt.Sprintf(`{
