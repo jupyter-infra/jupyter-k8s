@@ -432,9 +432,27 @@ func TestHandleWorkspacePodEvents_PodDeleted_WithSSMAccessStrategy(t *testing.T)
 	// Create mock SSM strategy
 	mockSSM := &mockSSMRemoteAccessStrategy{}
 
+	// Create access strategy with AWS pod events handler
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "aws-ssm-remote-access",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			PodEventsHandler: "aws",
+		},
+	}
+
+	// Create scheme and add our types
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+
 	// Create handler with mock SSM strategy
 	handler := &PodEventHandler{
-		client:                  fake.NewClientBuilder().Build(),
+		client: fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(accessStrategy).
+			Build(),
 		resourceManager:         &ResourceManager{},
 		ssmRemoteAccessStrategy: mockSSM,
 	}
@@ -471,9 +489,27 @@ func TestHandleWorkspacePodEvents_PodDeleted_WithHyperpodAccessStrategy(t *testi
 	// Create mock SSM strategy
 	mockSSM := &mockSSMRemoteAccessStrategy{}
 
+	// Create access strategy with AWS pod events handler
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "hyperpod-access-strategy",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			PodEventsHandler: "aws",
+		},
+	}
+
+	// Create scheme and add our types
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+
 	// Create handler with mock SSM strategy
 	handler := &PodEventHandler{
-		client:                  fake.NewClientBuilder().Build(),
+		client: fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(accessStrategy).
+			Build(),
 		resourceManager:         &ResourceManager{},
 		ssmRemoteAccessStrategy: mockSSM,
 	}
@@ -510,9 +546,27 @@ func TestHandleWorkspacePodEvents_PodDeleted_WithNonSSMAccessStrategy(t *testing
 	// Create mock SSM strategy
 	mockSSM := &mockSSMRemoteAccessStrategy{}
 
+	// Create access strategy with non-AWS pod events handler
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "some-other-access-strategy",
+			Namespace: "default",
+		},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			PodEventsHandler: "other",
+		},
+	}
+
+	// Create scheme and add our types
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+
 	// Create handler with mock SSM strategy
 	handler := &PodEventHandler{
-		client:                  fake.NewClientBuilder().Build(),
+		client: fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(accessStrategy).
+			Build(),
 		resourceManager:         &ResourceManager{},
 		ssmRemoteAccessStrategy: mockSSM,
 	}
