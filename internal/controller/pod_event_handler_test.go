@@ -428,14 +428,14 @@ func TestHandlePodRunning_WithPodEventsHandler(t *testing.T) {
 	}
 }
 
-func TestHandleWorkspacePodEvents_PodDeleted_WithSSMAccessStrategy(t *testing.T) {
+func TestHandleWorkspacePodEvents_PodDeleted_WithAWSHandler(t *testing.T) {
 	// Create mock SSM strategy
 	mockSSM := &mockSSMRemoteAccessStrategy{}
 
 	// Create access strategy with AWS pod events handler
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "aws-ssm-remote-access",
+			Name:      "aws-access-strategy",
 			Namespace: "default",
 		},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
@@ -457,7 +457,7 @@ func TestHandleWorkspacePodEvents_PodDeleted_WithSSMAccessStrategy(t *testing.T)
 		ssmRemoteAccessStrategy: mockSSM,
 	}
 
-	// Create deleted workspace pod with SSM access strategy label
+	// Create deleted workspace pod with AWS access strategy label
 	deletionTime := metav1.Now()
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -465,84 +465,27 @@ func TestHandleWorkspacePodEvents_PodDeleted_WithSSMAccessStrategy(t *testing.T)
 			Namespace: "test-namespace",
 			Labels: map[string]string{
 				workspaceutil.LabelWorkspaceName: "test-workspace",
-				LabelAccessStrategyName:          "aws-ssm-remote-access",
+				LabelAccessStrategyName:          "aws-access-strategy",
 				LabelAccessStrategyNamespace:     "default",
 			},
 			DeletionTimestamp: &deletionTime,
 		},
 	}
 
-	// Test handling deleted pod with SSM access strategy
+	// Test handling deleted pod with AWS handler
 	result := handler.HandleWorkspacePodEvents(context.Background(), pod)
 
 	if result != nil {
-		t.Error("Expected nil result for deleted pod with SSM access strategy")
+		t.Error("Expected nil result for deleted pod with AWS handler")
 	}
 
 	// Verify cleanup was called
 	if !mockSSM.cleanupCalled {
-		t.Error("Expected SSM cleanup to be called for pod with SSM access strategy")
+		t.Error("Expected SSM cleanup to be called for pod with AWS handler")
 	}
 }
 
-func TestHandleWorkspacePodEvents_PodDeleted_WithHyperpodAccessStrategy(t *testing.T) {
-	// Create mock SSM strategy
-	mockSSM := &mockSSMRemoteAccessStrategy{}
-
-	// Create access strategy with AWS pod events handler
-	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "hyperpod-access-strategy",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			PodEventsHandler: "aws",
-		},
-	}
-
-	// Create scheme and add our types
-	scheme := runtime.NewScheme()
-	_ = workspacev1alpha1.AddToScheme(scheme)
-
-	// Create handler with mock SSM strategy
-	handler := &PodEventHandler{
-		client: fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(accessStrategy).
-			Build(),
-		resourceManager:         &ResourceManager{},
-		ssmRemoteAccessStrategy: mockSSM,
-	}
-
-	// Create deleted workspace pod with Hyperpod access strategy label
-	deletionTime := metav1.Now()
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "workspace-pod",
-			Namespace: "test-namespace",
-			Labels: map[string]string{
-				workspaceutil.LabelWorkspaceName: "test-workspace",
-				LabelAccessStrategyName:          "hyperpod-access-strategy",
-				LabelAccessStrategyNamespace:     "default",
-			},
-			DeletionTimestamp: &deletionTime,
-		},
-	}
-
-	// Test handling deleted pod with Hyperpod access strategy
-	result := handler.HandleWorkspacePodEvents(context.Background(), pod)
-
-	if result != nil {
-		t.Error("Expected nil result for deleted pod with Hyperpod access strategy")
-	}
-
-	// Verify cleanup was called
-	if !mockSSM.cleanupCalled {
-		t.Error("Expected SSM cleanup to be called for pod with Hyperpod access strategy")
-	}
-}
-
-func TestHandleWorkspacePodEvents_PodDeleted_WithNonSSMAccessStrategy(t *testing.T) {
+func TestHandleWorkspacePodEvents_PodDeleted_WithNonAWSHandler(t *testing.T) {
 	// Create mock SSM strategy
 	mockSSM := &mockSSMRemoteAccessStrategy{}
 
@@ -571,7 +514,7 @@ func TestHandleWorkspacePodEvents_PodDeleted_WithNonSSMAccessStrategy(t *testing
 		ssmRemoteAccessStrategy: mockSSM,
 	}
 
-	// Create deleted workspace pod with non-SSM access strategy label
+	// Create deleted workspace pod with non-AWS access strategy label
 	deletionTime := metav1.Now()
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -586,16 +529,16 @@ func TestHandleWorkspacePodEvents_PodDeleted_WithNonSSMAccessStrategy(t *testing
 		},
 	}
 
-	// Test handling deleted pod with non-SSM access strategy
+	// Test handling deleted pod with non-AWS handler
 	result := handler.HandleWorkspacePodEvents(context.Background(), pod)
 
 	if result != nil {
-		t.Error("Expected nil result for deleted pod with non-SSM access strategy")
+		t.Error("Expected nil result for deleted pod with non-AWS handler")
 	}
 
 	// Verify cleanup was NOT called
 	if mockSSM.cleanupCalled {
-		t.Error("Expected SSM cleanup to NOT be called for pod with non-SSM access strategy")
+		t.Error("Expected SSM cleanup to NOT be called for pod with non-AWS handler")
 	}
 }
 
