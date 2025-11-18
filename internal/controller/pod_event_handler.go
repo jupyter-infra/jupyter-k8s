@@ -202,8 +202,25 @@ func (h *PodEventHandler) handlePodDeleted(ctx context.Context, pod *corev1.Pod,
 		return
 	}
 
-	// TODO : retrieve the access strategy and check if podEventsHandler is aws
-	if accessStrategyName == "aws-ssm-remote-access" || accessStrategyName == "hyperpod-access-strategy" {
+	accessStrategyNamespace := pod.Labels[LabelAccessStrategyNamespace]
+	if accessStrategyNamespace == "" {
+		logger.V(1).Info("Pod has no access strategy namespace label, skipping resource cleanup")
+		return
+	}
+
+	// Fetch the access strategy
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{}
+	err := h.client.Get(ctx, client.ObjectKey{
+		Name:      accessStrategyName,
+		Namespace: accessStrategyNamespace,
+	}, accessStrategy)
+	if err != nil {
+		logger.Error(err, "Failed to get access strategy, skipping resource cleanup")
+		return
+	}
+
+	// Handle AWS pod events (SSM remote access strategy)
+	if accessStrategy != nil && accessStrategy.Spec.PodEventsHandler == "aws" {
 		if h.ssmRemoteAccessStrategy == nil {
 			logger.Error(nil, "SSM remote access strategy not available - cannot cleanup SSM managed nodes")
 		} else {

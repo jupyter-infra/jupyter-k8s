@@ -93,6 +93,16 @@ spec:
                 description: ControllerConfig contains settings used by the controller
                   for strategy-specific operations
                 type: object
+              createConnectionContext:
+                additionalProperties:
+                  type: string
+                description: CreateConnectionContext contains configuration for the
+                  connection handler
+                type: object
+              createConnectionHandler:
+                description: CreateConnectionHandler specifies the handler for connection
+                  creation
+                type: string
               deploymentModifications:
                 description: DeploymentModifications defines modifications to apply
                   to workspace deployments
@@ -5170,6 +5180,16 @@ spec:
               displayName:
                 description: DisplayName is a human-readable name for this access
                   strategy
+                type: string
+              podEventsContext:
+                additionalProperties:
+                  type: string
+                description: PodEventsContext contains configuration for the pod events
+                  handler
+                type: object
+              podEventsHandler:
+                description: PodEventsHandler specifies the handler for pod lifecycle
+                  events
                 type: string
             required:
             - accessResourceTemplates
