@@ -42,11 +42,22 @@ controllerManager:
     seccompProfile:
       type: RuntimeDefault
   terminationGracePeriodSeconds: 10
+  serviceAccountName: jupyter-k8s-controller-manager
+
   # Controller pod scheduling configuration
   nodeSelector: {}
   tolerations: []
   affinity: {}
-  serviceAccountName: jupyter-k8s-controller-manager
+  topologySpreadConstraints: []
+  # PodDisruptionBudget configuration
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: null
+    maxUnavailable: null
+  # Pod metadata configuration (kubebuilder convention)
+  pod:
+    labels: {}
+    annotations: {}
 
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:
