@@ -185,9 +185,6 @@ func (s *ExtensionServer) NeedLeaderElection() bool {
 
 // createJWTManager creates a JWT manager from config (placeholder for KMS-based JWT)
 func createJWTManager(config *ExtensionConfig) (jwt.Signer, error) {
-	if config.KMSKeyID == "" {
-		return nil, fmt.Errorf("KMS key ID is required")
-	}
 	// This would normally create a KMS-based JWT manager
 	// For now, return the KMS JWT manager creation
 	return createKMSJWTManager(config)
