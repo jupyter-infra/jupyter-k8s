@@ -42,11 +42,22 @@ controllerManager:
     seccompProfile:
       type: RuntimeDefault
   terminationGracePeriodSeconds: 10
+  serviceAccountName: jupyter-k8s-controller-manager
+
   # Controller pod scheduling configuration
   nodeSelector: {}
   tolerations: []
   affinity: {}
-  serviceAccountName: jupyter-k8s-controller-manager
+  topologySpreadConstraints: []
+  # PodDisruptionBudget configuration
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: null
+    maxUnavailable: null
+  # Pod metadata configuration (kubebuilder convention)
+  pod:
+    labels: {}
+    annotations: {}
 
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:
@@ -95,6 +106,11 @@ application:
   imagesPullPolicy: IfNotPresent
   # Image registry for Workspaces controller
   imagesRegistry: "docker.io/library"
+
+# [WORKSPACE TEMPLATES]: Default workspace template configuration
+workspaceTemplates:
+  # Default namespace where workspace templates are stored
+  defaultNamespace: "jupyter-k8s-shared"
 
 # [WORKSPACE POD WATCHING]: Configure workspace pod event watching
 workspacePodWatching:

@@ -1,0 +1,23 @@
+{{- if .Values.controllerManager.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: jupyter-k8s-controller-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+    control-plane: controller-manager
+    workspace.jupyter.org/component: controller
+spec:
+  {{- if .Values.controllerManager.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.controllerManager.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.controllerManager.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.controllerManager.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "chart.selectorLabels" . | nindent 6 }}
+      control-plane: controller-manager
+      workspace.jupyter.org/component: controller
+{{- end }}

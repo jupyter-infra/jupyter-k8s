@@ -20,7 +20,16 @@ fi
 echo "Applying custom patches to Helm chart files..."
 echo "Using patches from ${PATCHES_DIR}"
 
-# Copy apiservice resources (kubebuilder helm plugin doesn't handle these)
+# Copy manager resources (including PodDisruptionBudget)
+if [ -d "${SCRIPT_DIR}/../config/manager" ]; then
+    echo "Copying additional manager resources..."
+    
+    # Copy PodDisruptionBudget if it exists
+    if [ -f "${SCRIPT_DIR}/../config/manager/poddisruptionbudget.yaml" ]; then
+        echo "Copying PodDisruptionBudget template..."
+        cp "${SCRIPT_DIR}/../config/manager/poddisruptionbudget.yaml" "${CHART_DIR}/templates/manager/"
+    fi
+fi
 if [ -d "${SCRIPT_DIR}/../config/apiservice" ]; then
     echo "Copying apiservice resources..."
     mkdir -p "${CHART_DIR}/templates/apiservice"
@@ -146,21 +155,32 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
         sed -i '/^# \[WORKSPACE POD WATCHING\]/,/^# \[/{ /^# \[WORKSPACE POD WATCHING\]/d; /^# \[/!d; }' "${CHART_DIR}/values.yaml"
     fi
 
-    # Add scheduling configuration to controllerManager section
-    if ! grep -q "nodeSelector:" "${CHART_DIR}/values.yaml"; then
-        echo "Adding scheduling configuration to controllerManager section"
-        # Add scheduling fields after terminationGracePeriodSeconds
+    # Add scheduling configuration to existing controllerManager section
+    if ! grep -q "topologySpreadConstraints:" "${CHART_DIR}/values.yaml"; then
+        echo "Adding scheduling configuration to existing controllerManager section"
+        # Add scheduling fields after serviceAccountName line
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # macOS sed requires different syntax for append command
-            sed -i '' '/terminationGracePeriodSeconds:/a\
+            sed -i '' '/serviceAccountName:/a\
+\
   # Controller pod scheduling configuration\
   nodeSelector: {}\
   tolerations: []\
-  affinity: {}
+  affinity: {}\
+  topologySpreadConstraints: []\
+  # PodDisruptionBudget configuration\
+  podDisruptionBudget:\
+    enabled: false\
+    minAvailable: null\
+    maxUnavailable: null\
+  # Pod metadata configuration (kubebuilder convention)\
+  pod:\
+    labels: {}\
+    annotations: {}
 ' "${CHART_DIR}/values.yaml"
         else
             # Linux sed
-            sed -i '/terminationGracePeriodSeconds:/a\  # Controller pod scheduling configuration\n  nodeSelector: {}\n  tolerations: []\n  affinity: {}' "${CHART_DIR}/values.yaml"
+            sed -i '/serviceAccountName:/a\\n  # Controller pod scheduling configuration\n  nodeSelector: {}\n  tolerations: []\n  affinity: {}\n  topologySpreadConstraints: []\n  # PodDisruptionBudget configuration\n  podDisruptionBudget:\n    enabled: false\n    minAvailable: null\n    maxUnavailable: null\n  # Pod metadata configuration (kubebuilder convention)\n  pod:\n    labels: {}\n    annotations: {}' "${CHART_DIR}/values.yaml"
         fi
     fi
 
@@ -198,6 +218,7 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
             {{- end }}\
             - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\
             - "--application-images-registry={{ .Values.application.imagesRegistry }}"\
+            - "--default-template-namespace={{ .Values.workspaceTemplates.defaultNamespace }}"\
             {{- if .Values.accessResources.traefik.enable }}\
             - "--watch-traefik"\
             {{- end}}\
@@ -212,7 +233,7 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
                     # Linux sed
                     sed -i '/args:/,/command:/ {
                     /command:/!d
-                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}\n            {{- if .Values.extensionApi.enable }}\n            - "--enable-extension-api"\n            {{- end}}\n            {{- if .Values.workspacePodWatching.enable }}\n            - "--enable-workspace-pod-watching"\n            {{- end}}
+                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            - "--default-template-namespace={{ .Values.workspaceTemplates.defaultNamespace }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}\n            {{- if .Values.extensionApi.enable }}\n            - "--enable-extension-api"\n            {{- end}}\n            {{- if .Values.workspacePodWatching.enable }}\n            - "--enable-workspace-pod-watching"\n            {{- end}}
                 }' "${MANAGER_YAML}"
                 fi
                 # Also add extension API volume mount if not already present
@@ -313,6 +334,27 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
     fi
 fi
 
+# Handle manager annotations patch - add podAnnotations support
+if [ -f "${PATCHES_DIR}/manager-annotations.yaml.patch" ]; then
+    MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
+    if [ -f "${MANAGER_YAML}" ]; then
+        echo "Adding podAnnotations support to manager.yaml..."
+        
+        # Check if annotations patch is already applied
+        if ! grep -q "controllerManager.pod.annotations" "${MANAGER_YAML}"; then
+            echo "Adding pod annotations templating"
+            
+            # Insert patch content after the default-container annotation
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                sed -i '' '/kubectl.kubernetes.io\/default-container: manager$/r '"${PATCHES_DIR}/manager-annotations.yaml.patch" "${MANAGER_YAML}"
+            else
+                sed -i '/kubectl.kubernetes.io\/default-container: manager$/r '"${PATCHES_DIR}/manager-annotations.yaml.patch" "${MANAGER_YAML}"
+            fi
+            echo "Successfully added podAnnotations support"
+        fi
+    fi
+fi
+
 # Handle manager scheduling patch
 if [ -f "${PATCHES_DIR}/manager-scheduling.yaml.patch" ]; then
     MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
@@ -323,42 +365,13 @@ if [ -f "${PATCHES_DIR}/manager-scheduling.yaml.patch" ]; then
         if ! grep -q "{{- with .Values.controllerManager.nodeSelector }}" "${MANAGER_YAML}"; then
             echo "Adding scheduling configuration to manager.yaml"
             
-            # Replace the scheduling section between serviceAccountName and securityContext
+            # Insert the patch content after serviceAccountName line
             if [[ "$OSTYPE" == "darwin"* ]]; then
-                # macOS sed - replace the section after serviceAccountName and before securityContext
-                sed -i '' '/serviceAccountName:/a\
-      {{- with .Values.controllerManager.nodeSelector }}\
-      nodeSelector:\
-        {{- toYaml . | nindent 8 }}\
-      {{- end }}\
-      {{- with .Values.controllerManager.tolerations }}\
-      tolerations:\
-        {{- toYaml . | nindent 8 }}\
-      {{- end }}\
-      {{- with .Values.controllerManager.affinity }}\
-      affinity:\
-        {{- toYaml . | nindent 8 }}\
-      {{- else }}\
-      affinity:\
-        nodeAffinity:\
-          requiredDuringSchedulingIgnoredDuringExecution:\
-            nodeSelectorTerms:\
-              - matchExpressions:\
-                - key: kubernetes.io/arch\
-                  operator: In\
-                  values:\
-                    - amd64\
-                    - arm64\
-                    - ppc64le\
-                    - s390x\
-                - key: kubernetes.io/os\
-                  operator: In\
-                  values:\
-                    - linux\
-      {{- end }}' "${MANAGER_YAML}"
+                # macOS sed - insert patch content after serviceAccountName
+                sed -i '' '/serviceAccountName:/r '"${PATCHES_DIR}/manager-scheduling.yaml.patch" "${MANAGER_YAML}"
             else
-                # Linux sed - replace the section after serviceAccountName and before securityContext
-                sed -i '/serviceAccountName:/a\      {{- with .Values.controllerManager.nodeSelector }}\n      nodeSelector:\n        {{- toYaml . | nindent 8 }}\n      {{- end }}\n      {{- with .Values.controllerManager.tolerations }}\n      tolerations:\n        {{- toYaml . | nindent 8 }}\n      {{- end }}\n      {{- with .Values.controllerManager.affinity }}\n      affinity:\n        {{- toYaml . | nindent 8 }}\n      {{- else }}\n      affinity:\n        nodeAffinity:\n          requiredDuringSchedulingIgnoredDuringExecution:\n            nodeSelectorTerms:\n              - matchExpressions:\n                - key: kubernetes.io/arch\n                  operator: In\n                  values:\n                    - amd64\n                    - arm64\n                    - ppc64le\n                    - s390x\n                - key: kubernetes.io/os\n                  operator: In\n                  values:\n                    - linux\n      {{- end }}' "${MANAGER_YAML}"
+                # Linux sed - insert patch content after serviceAccountName
+                sed -i '/serviceAccountName:/r '"${PATCHES_DIR}/manager-scheduling.yaml.patch" "${MANAGER_YAML}"
             fi
             echo "Successfully applied scheduling patch"
         else
