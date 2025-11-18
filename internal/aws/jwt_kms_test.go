@@ -15,9 +15,11 @@ import (
 
 // MockKMSClient implements a mock KMS client for testing
 type MockKMSClient struct {
-	dataKey       []byte
-	encryptedKey  []byte
-	decryptCalled bool
+	dataKey          []byte
+	encryptedKey     []byte
+	decryptCalled    bool
+	decryptCallCount int
+	decryptFunc      func(ctx context.Context, encryptedKey []byte) ([]byte, error)
 }
 
 func (m *MockKMSClient) GenerateDataKey(ctx context.Context, params *kms.GenerateDataKeyInput, optFns ...func(*kms.Options)) (*kms.GenerateDataKeyOutput, error) {
@@ -30,6 +32,19 @@ func (m *MockKMSClient) GenerateDataKey(ctx context.Context, params *kms.Generat
 
 func (m *MockKMSClient) Decrypt(ctx context.Context, params *kms.DecryptInput, optFns ...func(*kms.Options)) (*kms.DecryptOutput, error) {
 	m.decryptCalled = true
+	m.decryptCallCount++
+
+	if m.decryptFunc != nil {
+		plaintext, err := m.decryptFunc(ctx, params.CiphertextBlob)
+		if err != nil {
+			return nil, err
+		}
+		return &kms.DecryptOutput{
+			Plaintext: plaintext,
+			KeyId:     aws.String("test-key-id"),
+		}, nil
+	}
+
 	return &kms.DecryptOutput{
 		Plaintext: m.dataKey,
 		KeyId:     aws.String("test-key-id"),
@@ -207,8 +222,10 @@ func TestKMSJWTManager_CacheExpiry(t *testing.T) {
 		expiration:  1 * time.Millisecond, // Very short for testing
 	}
 
-	// Manually add an entry that will expire
-	manager.setCachedKey("test-hash", []byte("test-key"))
+	// Manually add an entry that will expire soon
+	keyHash := "test-hash"
+	manager.keyCache[keyHash] = []byte("test-key")
+	manager.cacheExpiry[keyHash] = time.Now().Add(2 * time.Millisecond) // Short expiry for test
 
 	// Verify key is cached
 	if len(manager.keyCache) != 1 {
@@ -223,6 +240,143 @@ func TestKMSJWTManager_CacheExpiry(t *testing.T) {
 	// Verify expired entries are cleaned up
 	if len(manager.keyCache) != 0 {
 		t.Errorf("Expected 0 cached keys after cleanup, got %d", len(manager.keyCache))
+	}
+}
+
+func TestKMSJWTManager_CacheEviction(t *testing.T) {
+	manager := &KMSJWTManager{
+		keyCache:       make(map[string][]byte),
+		cacheExpiry:    make(map[string]time.Time),
+		lastCleanup:    time.Now(),
+		maxCacheSize:   3, // Small cache for testing
+		evictBatchSize: 2, // Evict 2 at a time
+	}
+
+	now := time.Now()
+
+	// Add 3 keys with different expiry times (oldest first)
+	manager.keyCache["key1"] = []byte("value1")
+	manager.cacheExpiry["key1"] = now.Add(1 * time.Hour) // Expires first
+
+	manager.keyCache["key2"] = []byte("value2")
+	manager.cacheExpiry["key2"] = now.Add(2 * time.Hour) // Expires second
+
+	manager.keyCache["key3"] = []byte("value3")
+	manager.cacheExpiry["key3"] = now.Add(3 * time.Hour) // Expires last
+
+	// Verify cache is at capacity
+	if len(manager.keyCache) != 3 {
+		t.Errorf("Expected 3 cached keys, got %d", len(manager.keyCache))
+	}
+
+	// Add 4th key - should trigger eviction of 2 oldest
+	manager.setCachedKey("key4", []byte("value4"))
+
+	// Should have 2 keys remaining (key3 + key4)
+	if len(manager.keyCache) != 2 {
+		t.Errorf("Expected 2 cached keys after eviction, got %d", len(manager.keyCache))
+	}
+
+	// Verify oldest keys (key1, key2) were evicted, newest (key3, key4) remain
+	if _, exists := manager.keyCache["key1"]; exists {
+		t.Error("Expected key1 to be evicted")
+	}
+	if _, exists := manager.keyCache["key2"]; exists {
+		t.Error("Expected key2 to be evicted")
+	}
+	if _, exists := manager.keyCache["key3"]; !exists {
+		t.Error("Expected key3 to remain")
+	}
+	if _, exists := manager.keyCache["key4"]; !exists {
+		t.Error("Expected key4 to remain")
+	}
+}
+
+func TestKMSJWTManager_ConfigDefaults(t *testing.T) {
+	config := KMSJWTConfig{
+		KMSClient:  &KMSClient{},
+		KeyId:      "test-key",
+		Issuer:     "test-issuer",
+		Audience:   "test-audience",
+		Expiration: time.Hour,
+		// MaxCacheSize and EvictBatchSize left as 0 to test defaults
+	}
+
+	manager := NewKMSJWTManager(config)
+
+	if manager.maxCacheSize != defaultMaxCacheSize {
+		t.Errorf("Expected maxCacheSize to be %d, got %d", defaultMaxCacheSize, manager.maxCacheSize)
+	}
+
+	if manager.evictBatchSize != defaultEvictBatchSize {
+		t.Errorf("Expected evictBatchSize to be %d, got %d", defaultEvictBatchSize, manager.evictBatchSize)
+	}
+}
+
+func TestKMSJWTManager_CacheHit(t *testing.T) {
+	mockKMS := &MockKMSClient{
+		dataKey:      []byte("plaintext-key"),
+		encryptedKey: []byte("encrypted-key"),
+	}
+
+	kmsClient := &KMSClient{
+		client: mockKMS,
+		region: "us-east-1",
+	}
+
+	manager := NewKMSJWTManager(KMSJWTConfig{
+		KMSClient:  kmsClient,
+		KeyId:      "test-key",
+		Issuer:     "test-issuer",
+		Audience:   "test-audience",
+		Expiration: time.Hour,
+	})
+
+	// Generate token (should call KMS once)
+	token, err := manager.GenerateToken("user", []string{"group"}, "uid", nil, "/path", "domain", "bearer")
+	if err != nil {
+		t.Fatalf("Failed to generate token: %v", err)
+	}
+
+	// Reset decrypt call count
+	mockKMS.decryptCallCount = 0
+
+	// Validate same token (should hit cache, no KMS decrypt call)
+	_, err = manager.ValidateToken(token)
+	if err != nil {
+		t.Fatalf("Failed to validate token: %v", err)
+	}
+
+	// Verify KMS decrypt was not called (cache hit)
+	if mockKMS.decryptCallCount != 0 {
+		t.Errorf("Expected 0 KMS decrypt calls (cache hit), got %d", mockKMS.decryptCallCount)
+	}
+}
+
+func TestKMSJWTManager_NoEvictionWhenUnderLimit(t *testing.T) {
+	manager := &KMSJWTManager{
+		keyCache:       make(map[string][]byte),
+		cacheExpiry:    make(map[string]time.Time),
+		lastCleanup:    time.Now(),
+		maxCacheSize:   5, // Larger than what we'll add
+		evictBatchSize: 2,
+	}
+
+	// Add 3 keys (under the limit of 5)
+	manager.setCachedKey("key1", []byte("value1"))
+	manager.setCachedKey("key2", []byte("value2"))
+	manager.setCachedKey("key3", []byte("value3"))
+
+	// Verify all keys remain
+	if len(manager.keyCache) != 3 {
+		t.Errorf("Expected 3 cached keys, got %d", len(manager.keyCache))
+	}
+
+	// Verify specific keys exist
+	for _, key := range []string{"key1", "key2", "key3"} {
+		if _, exists := manager.keyCache[key]; !exists {
+			t.Errorf("Expected key %s to exist", key)
+		}
 	}
 }
 
