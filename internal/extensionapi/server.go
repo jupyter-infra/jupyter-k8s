@@ -11,6 +11,12 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	genericapiserver "k8s.io/apiserver/pkg/server"
+	"k8s.io/apiserver/pkg/server/mux"
+	genericoptions "k8s.io/apiserver/pkg/server/options"
+	"k8s.io/apiserver/pkg/util/compatibility"
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -20,6 +26,8 @@ import (
 
 var (
 	setupLog = log.Log.WithName("extension-api-server")
+	scheme   = runtime.NewScheme()
+	codecs   = serializer.NewCodecFactory(scheme)
 )
 
 // ExtensionServer represents the extension API HTTP server
@@ -29,23 +37,19 @@ type ExtensionServer struct {
 	sarClient     v1.SubjectAccessReviewInterface
 	signerFactory jwt.SignerFactory
 	logger        *logr.Logger
-	httpServer    interface {
-		ListenAndServe() error
-		ListenAndServeTLS(certFile, keyFile string) error
-		Shutdown(ctx context.Context) error
-	}
-	routes map[string]func(http.ResponseWriter, *http.Request)
-	mux    *http.ServeMux
+	genericServer *genericapiserver.GenericAPIServer
+	routes        map[string]func(http.ResponseWriter, *http.Request)
+	mux           *mux.PathRecorderMux
 }
 
-// newExtensionServer creates a new extension API server
-func newExtensionServer(
+// NewExtensionServer creates a new extension API server using GenericAPIServer
+func NewExtensionServer(
+	genericServer *genericapiserver.GenericAPIServer,
 	config *ExtensionConfig,
 	logger *logr.Logger,
 	k8sClient client.Client,
 	sarClient v1.SubjectAccessReviewInterface,
 	signerFactory jwt.SignerFactory) *ExtensionServer {
-	mux := http.NewServeMux()
 
 	server := &ExtensionServer{
 		config:        config,
@@ -54,13 +58,8 @@ func newExtensionServer(
 		sarClient:     sarClient,
 		signerFactory: signerFactory,
 		routes:        make(map[string]func(http.ResponseWriter, *http.Request)),
-		mux:           mux,
-		httpServer: &http.Server{
-			Addr:         fmt.Sprintf(":%d", config.ServerPort),
-			Handler:      mux,
-			ReadTimeout:  time.Duration(config.ReadTimeoutSeconds) * time.Second,
-			WriteTimeout: time.Duration(config.WriteTimeoutSeconds) * time.Second,
-		},
+		genericServer: genericServer,
+		mux:           genericServer.Handler.NonGoRestfulMux,
 	}
 
 	return server
@@ -150,7 +149,7 @@ func (s *ExtensionServer) registerNamespacedRoutes(resourceHandlers map[string]f
 	})
 
 	// Register the single wrapped handler for the namespaced path prefix
-	s.mux.HandleFunc(namespacedPathPrefix, wrappedHandler)
+	s.mux.HandlePrefix(namespacedPathPrefix, wrappedHandler)
 	setupLog.Info("Registered namespaced routes handler", "pathPrefix", namespacedPathPrefix)
 }
 
@@ -171,44 +170,11 @@ func (s *ExtensionServer) registerAllRoutes() {
 
 // Start starts the extension API server and implements the controller-runtime's Runnable interface
 func (s *ExtensionServer) Start(ctx context.Context) error {
-	setupLog.Info("Starting extension API server", "port", s.config.ServerPort, "disableTLS", s.config.DisableTLS)
+	setupLog.Info("Starting extension API server with GenericAPIServer")
 
-	// Error channel to capture server errors
-	errChan := make(chan error, 1)
-
-	// Start the server in a goroutine
-	go func() {
-		var err error
-
-		if s.config.DisableTLS {
-			// Start HTTP server
-			setupLog.Info("Starting server with HTTP (TLS disabled)")
-			err = s.httpServer.ListenAndServe()
-		} else {
-			// Configure TLS
-			// We don't need to set TLSConfig as it's handled by ListenAndServeTLS
-
-			// Start HTTPS server
-			setupLog.Info("Starting server with HTTPS", "certPath", s.config.CertPath, "keyPath", s.config.KeyPath)
-			err = s.httpServer.ListenAndServeTLS(s.config.CertPath, s.config.KeyPath)
-		}
-
-		if err != nil && err != http.ErrServerClosed {
-			setupLog.Error(err, "Extension API server failed")
-			errChan <- err
-		}
-	}()
-
-	// Wait for context cancellation or server error
-	select {
-	case <-ctx.Done():
-		// Context was canceled, gracefully shutdown the server
-		setupLog.Info("Shutting down extension API server due to context cancellation")
-		return s.Stop(context.Background())
-	case err := <-errChan:
-		// Server encountered an error
-		return fmt.Errorf("extension API server failed: %w", err)
-	}
+	// Prepare and run the GenericAPIServer
+	preparedServer := s.genericServer.PrepareRun()
+	return preparedServer.RunWithContext(ctx)
 }
 
 // NeedLeaderElection implements the LeaderElectionRunnable interface
@@ -217,10 +183,78 @@ func (s *ExtensionServer) NeedLeaderElection() bool {
 	return false
 }
 
-// Stop stops the extension API server
-func (s *ExtensionServer) Stop(ctx context.Context) error {
-	setupLog.Info("Shutting down extension API server")
-	return s.httpServer.Shutdown(ctx)
+// createSARClient creates a SubjectAccessReview client from manager
+func createSARClient(mgr ctrl.Manager) (v1.SubjectAccessReviewInterface, error) {
+	k8sClientset, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return nil, fmt.Errorf("failed to instantiate the sar client: %w", err)
+	}
+	return k8sClientset.AuthorizationV1().SubjectAccessReviews(), nil
+}
+
+// createRecommendedOptions creates GenericAPIServer options from config
+func createRecommendedOptions(config *ExtensionConfig) *genericoptions.RecommendedOptions {
+	recommendedOptions := genericoptions.NewRecommendedOptions(
+		"/unused",
+		nil, // No codec needed for our simple case
+	)
+
+	// Configure port and certificates
+	recommendedOptions.SecureServing.BindPort = config.ServerPort
+	recommendedOptions.SecureServing.ServerCert.CertDirectory = ""
+	recommendedOptions.SecureServing.ServerCert.CertKey.CertFile = config.CertPath
+	recommendedOptions.SecureServing.ServerCert.CertKey.KeyFile = config.KeyPath
+	recommendedOptions.SecureServing.ServerCert.PairName = "tls"
+
+	return recommendedOptions
+}
+
+// createGenericAPIServer creates a GenericAPIServer from options
+func createGenericAPIServer(recommendedOptions *genericoptions.RecommendedOptions) (*genericapiserver.GenericAPIServer, error) {
+	// Create server config
+	serverConfig := genericapiserver.NewRecommendedConfig(codecs)
+	serverConfig.EffectiveVersion = compatibility.DefaultBuildEffectiveVersion()
+
+	// Apply options to configure authentication automatically
+	if err := recommendedOptions.ApplyTo(serverConfig); err != nil {
+		return nil, fmt.Errorf("failed to apply recommended options: %w", err)
+	}
+
+	// Create GenericAPIServer
+	genericServer, err := serverConfig.Complete().New("extension-apiserver", genericapiserver.NewEmptyDelegate())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create generic API server: %w", err)
+	}
+
+	return genericServer, nil
+}
+
+func createJWTSignerFactory(config *ExtensionConfig) (jwt.SignerFactory, error) {
+	// Create KMS client and signer factory
+	ctx := context.Background()
+	kmsClient, err := aws.NewKMSClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create KMS client: %w", err)
+	}
+
+	signerFactory := aws.NewAWSSignerFactory(kmsClient, config.KMSKeyID, time.Minute*5)
+
+	return signerFactory, nil
+}
+
+// createExtensionServer creates and configures the extension server
+func createExtensionServer(genericServer *genericapiserver.GenericAPIServer, config *ExtensionConfig, logger *logr.Logger, k8sClient client.Client, sarClient v1.SubjectAccessReviewInterface, jwtSingerFactory jwt.SignerFactory) *ExtensionServer {
+	server := NewExtensionServer(genericServer, config, logger, k8sClient, sarClient, jwtSingerFactory)
+	server.registerAllRoutes()
+	return server
+}
+
+// addServerToManager adds the server to the controller manager
+func addServerToManager(mgr ctrl.Manager, server *ExtensionServer) error {
+	if err := mgr.Add(server); err != nil {
+		return fmt.Errorf("failed to add extension API server to manager: %w", err)
+	}
+	return nil
 }
 
 // SetupExtensionAPIServerWithManager sets up the extension API server and adds it to the manager
@@ -230,36 +264,30 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 		config = NewConfig()
 	}
 
-	// Retrieve the logger
 	logger := mgr.GetLogger().WithName("extension-api")
 
-	// Retrieve the k8s client
-	k8sClient := mgr.GetClient()
-
-	// Retrieve the sar client
-	clientSet, err := kubernetes.NewForConfig(mgr.GetConfig())
+	// Create JWT manager
+	signerFactory, err := createJWTSignerFactory(config)
 	if err != nil {
-		return fmt.Errorf("failed to instantiate the sar client: %w", err)
+		return err
 	}
-	sarClient := clientSet.AuthorizationV1().SubjectAccessReviews()
 
-	// Create KMS client and signer factory
-	ctx := context.Background()
-	kmsClient, err := aws.NewKMSClient(ctx)
+	// Create SAR client
+	sarClient, err := createSARClient(mgr)
 	if err != nil {
-		return fmt.Errorf("failed to create KMS client: %w", err)
+		return err
 	}
 
-	signerFactory := aws.NewAWSSignerFactory(kmsClient, config.KMSKeyID, time.Minute*5)
-
-	// Create server with config
-	server := newExtensionServer(config, &logger, k8sClient, sarClient, signerFactory)
-	server.registerAllRoutes()
-
-	// Add the server as a runnable to the manager
-	if err := mgr.Add(server); err != nil {
-		return fmt.Errorf("failed to add extension API server to manager: %w", err)
+	// Create GenericAPIServer
+	recommendedOptions := createRecommendedOptions(config)
+	genericServer, err := createGenericAPIServer(recommendedOptions)
+	if err != nil {
+		return err
 	}
 
-	return nil
+	// Create and configure extension server
+	server := createExtensionServer(genericServer, config, &logger, mgr.GetClient(), sarClient, signerFactory)
+
+	// Add server to manager
+	return addServerToManager(mgr, server)
 }
