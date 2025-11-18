@@ -330,7 +330,7 @@ func TestSetupContainers_FirstTimeSetup_NoStateFile(t *testing.T) {
 	pod := createTestPod(containerStatuses)
 	workspace := createTestWorkspace()
 	accessStrategy := createTestAccessStrategy(map[string]string{
-		"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
+		"ssmManagedNodeRole": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
 	})
 
 	// Execute
@@ -401,7 +401,7 @@ func TestSetupContainers_SidecarContainerRestart(t *testing.T) {
 	pod := createTestPod(containerStatuses)
 	workspace := createTestWorkspace()
 	accessStrategy := createTestAccessStrategy(map[string]string{
-		"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
+		"ssmManagedNodeRole": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
 	})
 
 	// Execute
@@ -450,7 +450,7 @@ func TestSetupContainers_NoRestartDetected_AlreadySetup(t *testing.T) {
 	pod := createTestPod(containerStatuses)
 	workspace := createTestWorkspace()
 	accessStrategy := createTestAccessStrategy(map[string]string{
-		"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
+		"ssmManagedNodeRole": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
 	})
 
 	// Execute
