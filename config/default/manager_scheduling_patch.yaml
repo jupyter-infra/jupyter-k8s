@@ -14,6 +14,9 @@ spec:
       # Default empty tolerations - can be overridden in overlays  
       tolerations: []
       
+      # Default empty topologySpreadConstraints - can be overridden in overlays
+      topologySpreadConstraints: []
+      
       # Keep the default affinity for arch/os compatibility
       # Can be completely overridden in overlays if needed
       affinity:

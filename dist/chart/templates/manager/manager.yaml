@@ -6,23 +6,22 @@ metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
     control-plane: controller-manager
-    workspace.jupyter.org/component: controller
 spec:
   replicas:  {{ .Values.controllerManager.replicas }}
   selector:
     matchLabels:
       {{- include "chart.selectorLabels" . | nindent 6 }}
       control-plane: controller-manager
-      workspace.jupyter.org/component: controller
   template:
     metadata:
       annotations:
         kubectl.kubernetes.io/default-container: manager
+        {{- with .Values.controllerManager.pod.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       labels:
         {{- include "chart.labels" . | nindent 8 }}
         control-plane: controller-manager
-        workspace.jupyter.org/component: controller
-      workspace.jupyter.org/component: controller
         {{- if and .Values.controllerManager.pod .Values.controllerManager.pod.labels }}
         {{- range $key, $value := .Values.controllerManager.pod.labels }}
         {{ $key }}: {{ $value }}
@@ -111,6 +110,10 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.controllerManager.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.controllerManager.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
@@ -131,7 +134,8 @@ spec:
                   operator: In
                   values:
                     - linux
-      {{- end }}      terminationGracePeriodSeconds: {{ .Values.controllerManager.terminationGracePeriodSeconds }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.controllerManager.terminationGracePeriodSeconds }}
       {{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable .Values.extensionApi.enable) }}
       volumes:
         {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}
