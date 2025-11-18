@@ -75,7 +75,7 @@ Then rebuild and redeploy the controller.
 **Case 4** should:
 - ❌ **FAIL** during workspace creation/update
 - ❌ Validation error: "idle shutdown overrides not allowed by template"
-- ❌ Workspace should not be created or should show validation failure condition
+- ❌ Workspace creation should be rejected by webhook with validation error
 
 ## Debugging
 

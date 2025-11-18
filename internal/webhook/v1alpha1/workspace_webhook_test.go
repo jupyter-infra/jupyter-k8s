@@ -82,6 +82,7 @@ var _ = Describe("Workspace Webhook", func() {
 		validator = WorkspaceCustomValidator{
 			templateValidator:       NewTemplateValidator(mockClient, ""),
 			serviceAccountValidator: NewServiceAccountValidator(mockClient),
+			volumeValidator:         NewVolumeValidator(mockClient),
 		}
 		ctx = context.Background()
 	})
@@ -491,7 +492,7 @@ var _ = Describe("Workspace Webhook", func() {
 			It("should reject image not in allowed list", func() {
 				violation := validateImageAllowed("malicious/image:latest", template)
 				Expect(violation).NotTo(BeNil())
-				Expect(violation.Type).To(Equal(controller.ViolationTypeImageNotAllowed))
+				Expect(violation.Type).To(Equal(ViolationTypeImageNotAllowed))
 				Expect(violation.Message).To(ContainSubstring("malicious/image:latest"))
 				Expect(violation.Message).To(ContainSubstring("test-template"))
 			})
@@ -506,7 +507,7 @@ var _ = Describe("Workspace Webhook", func() {
 				template.Spec.AllowedImages = []string{}
 				violation := validateImageAllowed("other/image:latest", template)
 				Expect(violation).NotTo(BeNil())
-				Expect(violation.Type).To(Equal(controller.ViolationTypeImageNotAllowed))
+				Expect(violation.Type).To(Equal(ViolationTypeImageNotAllowed))
 			})
 
 			It("should allow any image when AllowCustomImages is true", func() {
@@ -521,14 +522,14 @@ var _ = Describe("Workspace Webhook", func() {
 				template.Spec.AllowCustomImages = &allowCustomImages
 				violation := validateImageAllowed("malicious/image:latest", template)
 				Expect(violation).NotTo(BeNil())
-				Expect(violation.Type).To(Equal(controller.ViolationTypeImageNotAllowed))
+				Expect(violation.Type).To(Equal(ViolationTypeImageNotAllowed))
 			})
 
 			It("should enforce restrictions when AllowCustomImages is nil (default)", func() {
 				template.Spec.AllowCustomImages = nil
 				violation := validateImageAllowed("malicious/image:latest", template)
 				Expect(violation).NotTo(BeNil())
-				Expect(violation.Type).To(Equal(controller.ViolationTypeImageNotAllowed))
+				Expect(violation.Type).To(Equal(ViolationTypeImageNotAllowed))
 			})
 		})
 
@@ -548,7 +549,7 @@ var _ = Describe("Workspace Webhook", func() {
 			It("should reject storage below minimum", func() {
 				violation := validateStorageSize(resource.MustParse("500Mi"), template)
 				Expect(violation).NotTo(BeNil())
-				Expect(violation.Type).To(Equal(controller.ViolationTypeStorageExceeded))
+				Expect(violation.Type).To(Equal(ViolationTypeStorageExceeded))
 				Expect(violation.Message).To(ContainSubstring("below minimum"))
 				Expect(violation.Message).To(ContainSubstring("test-template"))
 			})
@@ -556,7 +557,7 @@ var _ = Describe("Workspace Webhook", func() {
 			It("should reject storage above maximum", func() {
 				violation := validateStorageSize(resource.MustParse("20Gi"), template)
 				Expect(violation).NotTo(BeNil())
-				Expect(violation.Type).To(Equal(controller.ViolationTypeStorageExceeded))
+				Expect(violation.Type).To(Equal(ViolationTypeStorageExceeded))
 				Expect(violation.Message).To(ContainSubstring("exceeds maximum"))
 				Expect(violation.Message).To(ContainSubstring("test-template"))
 			})
@@ -564,6 +565,47 @@ var _ = Describe("Workspace Webhook", func() {
 			It("should allow any size when no storage config", func() {
 				template.Spec.PrimaryStorage = nil
 				violation := validateStorageSize(resource.MustParse("100Gi"), template)
+				Expect(violation).To(BeNil())
+			})
+		})
+
+		Context("validateSecondaryStorages", func() {
+			It("should allow volumes when AllowSecondaryStorages is true", func() {
+				allowSecondaryStorages := true
+				template.Spec.AllowSecondaryStorages = &allowSecondaryStorages
+				volumes := []workspacev1alpha1.VolumeSpec{
+					{Name: "data", PersistentVolumeClaimName: "data-pvc", MountPath: "/data"},
+				}
+				violation := validateSecondaryStorages(volumes, template)
+				Expect(violation).To(BeNil())
+			})
+
+			It("should allow volumes when AllowSecondaryStorages is nil (default true)", func() {
+				template.Spec.AllowSecondaryStorages = nil
+				volumes := []workspacev1alpha1.VolumeSpec{
+					{Name: "data", PersistentVolumeClaimName: "data-pvc", MountPath: "/data"},
+				}
+				violation := validateSecondaryStorages(volumes, template)
+				Expect(violation).To(BeNil())
+			})
+
+			It("should reject volumes when AllowSecondaryStorages is false", func() {
+				allowSecondaryStorages := false
+				template.Spec.AllowSecondaryStorages = &allowSecondaryStorages
+				volumes := []workspacev1alpha1.VolumeSpec{
+					{Name: "data", PersistentVolumeClaimName: "data-pvc", MountPath: "/data"},
+				}
+				violation := validateSecondaryStorages(volumes, template)
+				Expect(violation).NotTo(BeNil())
+				Expect(violation.Type).To(Equal(ViolationTypeSecondaryStorageNotAllowed))
+				Expect(violation.Field).To(Equal("spec.volumes"))
+			})
+
+			It("should allow empty volumes when AllowSecondaryStorages is false", func() {
+				allowSecondaryStorages := false
+				template.Spec.AllowSecondaryStorages = &allowSecondaryStorages
+				volumes := []workspacev1alpha1.VolumeSpec{}
+				violation := validateSecondaryStorages(volumes, template)
 				Expect(violation).To(BeNil())
 			})
 		})
@@ -613,17 +655,19 @@ var _ = Describe("Workspace Webhook", func() {
 		Context("validateResourceBounds", func() {
 			BeforeEach(func() {
 				template.Spec.ResourceBounds = &workspacev1alpha1.ResourceBounds{
-					CPU: &workspacev1alpha1.ResourceRange{
-						Min: resource.MustParse("100m"),
-						Max: resource.MustParse("2"),
-					},
-					Memory: &workspacev1alpha1.ResourceRange{
-						Min: resource.MustParse("128Mi"),
-						Max: resource.MustParse("4Gi"),
-					},
-					GPU: &workspacev1alpha1.ResourceRange{
-						Min: resource.MustParse("0"),
-						Max: resource.MustParse("4"),
+					Resources: map[corev1.ResourceName]workspacev1alpha1.ResourceRange{
+						corev1.ResourceCPU: {
+							Min: resource.MustParse("100m"),
+							Max: resource.MustParse("2"),
+						},
+						corev1.ResourceMemory: {
+							Min: resource.MustParse("128Mi"),
+							Max: resource.MustParse("4Gi"),
+						},
+						corev1.ResourceName("nvidia.com/gpu"): {
+							Min: resource.MustParse("0"),
+							Max: resource.MustParse("4"),
+						},
 					},
 				}
 			})
@@ -647,7 +691,7 @@ var _ = Describe("Workspace Webhook", func() {
 				}
 				violations := validateResourceBounds(resources, template)
 				Expect(violations).To(HaveLen(1))
-				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+				Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 				Expect(violations[0].Message).To(ContainSubstring("below minimum"))
 				Expect(violations[0].Message).To(ContainSubstring("test-template"))
 			})
@@ -660,7 +704,7 @@ var _ = Describe("Workspace Webhook", func() {
 				}
 				violations := validateResourceBounds(resources, template)
 				Expect(violations).To(HaveLen(1))
-				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+				Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 				Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
 				Expect(violations[0].Message).To(ContainSubstring("test-template"))
 			})
@@ -673,7 +717,7 @@ var _ = Describe("Workspace Webhook", func() {
 				}
 				violations := validateResourceBounds(resources, template)
 				Expect(violations).To(HaveLen(1))
-				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+				Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 				Expect(violations[0].Message).To(ContainSubstring("below minimum"))
 			})
 
@@ -685,7 +729,7 @@ var _ = Describe("Workspace Webhook", func() {
 				}
 				violations := validateResourceBounds(resources, template)
 				Expect(violations).To(HaveLen(1))
-				Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+				Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 				Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
 			})
 
@@ -741,7 +785,7 @@ var _ = Describe("Workspace Webhook", func() {
 				})
 
 				It("should reject GPU below minimum", func() {
-					template.Spec.ResourceBounds.GPU = &workspacev1alpha1.ResourceRange{
+					template.Spec.ResourceBounds.Resources[corev1.ResourceName("nvidia.com/gpu")] = workspacev1alpha1.ResourceRange{
 						Min: resource.MustParse("1"),
 						Max: resource.MustParse("4"),
 					}
@@ -752,7 +796,7 @@ var _ = Describe("Workspace Webhook", func() {
 					}
 					violations := validateResourceBounds(resources, template)
 					Expect(violations).To(HaveLen(1))
-					Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+					Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 					Expect(violations[0].Message).To(ContainSubstring("below minimum"))
 					Expect(violations[0].Message).To(ContainSubstring("test-template"))
 				})
@@ -765,13 +809,13 @@ var _ = Describe("Workspace Webhook", func() {
 					}
 					violations := validateResourceBounds(resources, template)
 					Expect(violations).To(HaveLen(1))
-					Expect(violations[0].Type).To(Equal(controller.ViolationTypeResourceExceeded))
+					Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 					Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
 					Expect(violations[0].Message).To(ContainSubstring("test-template"))
 				})
 
 				It("should allow GPU when no GPU bounds specified", func() {
-					template.Spec.ResourceBounds.GPU = nil
+					delete(template.Spec.ResourceBounds.Resources, corev1.ResourceName("nvidia.com/gpu"))
 					resources := corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("100"),
@@ -793,6 +837,228 @@ var _ = Describe("Workspace Webhook", func() {
 					Expect(violations).To(HaveLen(1))
 					Expect(violations[0].Field).To(Equal("spec.resources.requests.nvidia.com/gpu"))
 					Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
+				})
+			})
+
+			Context("Multi-vendor GPU support", func() {
+				BeforeEach(func() {
+					template.Spec.ResourceBounds = &workspacev1alpha1.ResourceBounds{
+						Resources: map[corev1.ResourceName]workspacev1alpha1.ResourceRange{
+							corev1.ResourceName("amd.com/gpu"): {
+								Min: resource.MustParse("0"),
+								Max: resource.MustParse("2"),
+							},
+							corev1.ResourceName("intel.com/gpu"): {
+								Min: resource.MustParse("0"),
+								Max: resource.MustParse("1"),
+							},
+						},
+					}
+				})
+
+				It("should allow AMD GPU within bounds", func() {
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceName("amd.com/gpu"): resource.MustParse("1"),
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(BeEmpty())
+				})
+
+				It("should reject AMD GPU above maximum", func() {
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceName("amd.com/gpu"): resource.MustParse("3"),
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(HaveLen(1))
+					Expect(violations[0].Field).To(Equal("spec.resources.requests.amd.com/gpu"))
+					Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
+				})
+
+				It("should allow Intel GPU within bounds", func() {
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceName("intel.com/gpu"): resource.MustParse("1"),
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(BeEmpty())
+				})
+
+				It("should reject Intel GPU above maximum", func() {
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceName("intel.com/gpu"): resource.MustParse("2"),
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(HaveLen(1))
+					Expect(violations[0].Field).To(Equal("spec.resources.requests.intel.com/gpu"))
+					Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
+				})
+
+				It("should validate multiple GPU types simultaneously", func() {
+					template.Spec.ResourceBounds.Resources[corev1.ResourceName("nvidia.com/gpu")] = workspacev1alpha1.ResourceRange{
+						Min: resource.MustParse("0"),
+						Max: resource.MustParse("4"),
+					}
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("2"), // Valid
+							corev1.ResourceName("amd.com/gpu"):    resource.MustParse("1"), // Valid
+							corev1.ResourceName("intel.com/gpu"):  resource.MustParse("2"), // Invalid - exceeds max
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(HaveLen(1))
+					Expect(violations[0].Field).To(Equal("spec.resources.requests.intel.com/gpu"))
+				})
+			})
+
+			Context("NVIDIA MIG profile support", func() {
+				BeforeEach(func() {
+					template.Spec.ResourceBounds = &workspacev1alpha1.ResourceBounds{
+						Resources: map[corev1.ResourceName]workspacev1alpha1.ResourceRange{
+							corev1.ResourceName("nvidia.com/mig-1g.5gb"): {
+								Min: resource.MustParse("0"),
+								Max: resource.MustParse("2"),
+							},
+							corev1.ResourceName("nvidia.com/mig-2g.10gb"): {
+								Min: resource.MustParse("0"),
+								Max: resource.MustParse("1"),
+							},
+						},
+					}
+				})
+
+				It("should allow MIG 1g.5gb within bounds", func() {
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceName("nvidia.com/mig-1g.5gb"): resource.MustParse("1"),
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(BeEmpty())
+				})
+
+				It("should reject MIG 1g.5gb above maximum", func() {
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceName("nvidia.com/mig-1g.5gb"): resource.MustParse("3"),
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(HaveLen(1))
+					Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
+				})
+
+				It("should allow MIG 2g.10gb within bounds", func() {
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceName("nvidia.com/mig-2g.10gb"): resource.MustParse("1"),
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(BeEmpty())
+				})
+
+				It("should validate multiple MIG profiles independently", func() {
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceName("nvidia.com/mig-1g.5gb"):  resource.MustParse("2"), // Valid
+							corev1.ResourceName("nvidia.com/mig-2g.10gb"): resource.MustParse("2"), // Invalid
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(HaveLen(1))
+					Expect(violations[0].Field).To(Equal("spec.resources.requests.nvidia.com/mig-2g.10gb"))
+				})
+			})
+
+			Context("Edge cases and advanced scenarios", func() {
+				It("should allow unbounded resources (not in template bounds)", func() {
+					template.Spec.ResourceBounds = &workspacev1alpha1.ResourceBounds{
+						Resources: map[corev1.ResourceName]workspacev1alpha1.ResourceRange{
+							corev1.ResourceCPU: {
+								Min: resource.MustParse("100m"),
+								Max: resource.MustParse("2"),
+							},
+						},
+					}
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:                    resource.MustParse("1"),     // Bounded - valid
+							corev1.ResourceMemory:                 resource.MustParse("100Gi"), // Unbounded - allowed
+							corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("100"),   // Unbounded - allowed
+							corev1.ResourceName("custom.io/tpu"):  resource.MustParse("1000"),  // Unbounded - allowed
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(BeEmpty())
+				})
+
+				It("should validate mixed standard and extended resources", func() {
+					template.Spec.ResourceBounds = &workspacev1alpha1.ResourceBounds{
+						Resources: map[corev1.ResourceName]workspacev1alpha1.ResourceRange{
+							corev1.ResourceCPU: {
+								Min: resource.MustParse("100m"),
+								Max: resource.MustParse("2"),
+							},
+							corev1.ResourceMemory: {
+								Min: resource.MustParse("128Mi"),
+								Max: resource.MustParse("4Gi"),
+							},
+							corev1.ResourceName("nvidia.com/gpu"): {
+								Min: resource.MustParse("0"),
+								Max: resource.MustParse("2"),
+							},
+							corev1.ResourceName("custom.io/accelerator"): {
+								Min: resource.MustParse("0"),
+								Max: resource.MustParse("1"),
+							},
+						},
+					}
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:                           resource.MustParse("500m"),
+							corev1.ResourceMemory:                        resource.MustParse("1Gi"),
+							corev1.ResourceName("nvidia.com/gpu"):        resource.MustParse("1"),
+							corev1.ResourceName("custom.io/accelerator"): resource.MustParse("1"),
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(BeEmpty())
+				})
+
+				It("should report multiple violations for multiple resources", func() {
+					template.Spec.ResourceBounds = &workspacev1alpha1.ResourceBounds{
+						Resources: map[corev1.ResourceName]workspacev1alpha1.ResourceRange{
+							corev1.ResourceCPU: {
+								Min: resource.MustParse("100m"),
+								Max: resource.MustParse("2"),
+							},
+							corev1.ResourceMemory: {
+								Min: resource.MustParse("128Mi"),
+								Max: resource.MustParse("4Gi"),
+							},
+							corev1.ResourceName("nvidia.com/gpu"): {
+								Min: resource.MustParse("0"),
+								Max: resource.MustParse("2"),
+							},
+						},
+					}
+					resources := corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:                    resource.MustParse("10"),   // Exceeds max
+							corev1.ResourceMemory:                 resource.MustParse("50Mi"), // Below min
+							corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("5"),    // Exceeds max
+						},
+					}
+					violations := validateResourceBounds(resources, template)
+					Expect(violations).To(HaveLen(3))
 				})
 			})
 		})
@@ -950,9 +1216,11 @@ var _ = Describe("Workspace Webhook", func() {
 					DefaultImage:  testValidBaseNotebook,
 					AllowedImages: []string{testValidBaseNotebook},
 					ResourceBounds: &workspacev1alpha1.ResourceBounds{
-						CPU: &workspacev1alpha1.ResourceRange{
-							Min: resource.MustParse("100m"),
-							Max: resource.MustParse("1"),
+						Resources: map[corev1.ResourceName]workspacev1alpha1.ResourceRange{
+							corev1.ResourceCPU: {
+								Min: resource.MustParse("100m"),
+								Max: resource.MustParse("1"),
+							},
 						},
 					},
 					PrimaryStorage: &workspacev1alpha1.StorageConfig{
@@ -966,6 +1234,7 @@ var _ = Describe("Workspace Webhook", func() {
 			// Create validator with template validator initialized
 			validatorWithTemplate = &WorkspaceCustomValidator{
 				templateValidator: NewTemplateValidator(k8sClient, "default"),
+				volumeValidator:   NewVolumeValidator(k8sClient),
 			}
 		})
 
@@ -979,7 +1248,7 @@ var _ = Describe("Workspace Webhook", func() {
 			// Old workspace with valid image and Running status
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.Image = testValidBaseNotebook // Valid
-			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.DesiredStatus = controller.DesiredStateRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -987,8 +1256,8 @@ var _ = Describe("Workspace Webhook", func() {
 
 			// New workspace with invalid image AND stopping
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.Image = testInvalidImage                // Invalid - violates template
-			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping
+			newWorkspace.Spec.Image = testInvalidImage                       // Invalid - violates template
+			newWorkspace.Spec.DesiredStatus = controller.DesiredStateStopped // Stopping
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: "default",
@@ -1010,7 +1279,7 @@ var _ = Describe("Workspace Webhook", func() {
 					corev1.ResourceCPU: resource.MustParse("500m"), // Valid
 				},
 			}
-			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.DesiredStatus = controller.DesiredStateRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1023,7 +1292,7 @@ var _ = Describe("Workspace Webhook", func() {
 					corev1.ResourceCPU: resource.MustParse("10"), // Invalid - exceeds max
 				},
 			}
-			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping
+			newWorkspace.Spec.DesiredStatus = controller.DesiredStateStopped // Stopping
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1041,7 +1310,7 @@ var _ = Describe("Workspace Webhook", func() {
 			// Old workspace with valid configuration and Running status
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.Image = testValidBaseNotebook // Valid
-			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.DesiredStatus = controller.DesiredStateRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1049,8 +1318,8 @@ var _ = Describe("Workspace Webhook", func() {
 
 			// New workspace - ONLY changing status to Stopped
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.Image = testValidBaseNotebook           // Same valid image
-			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping (only change)
+			newWorkspace.Spec.Image = testValidBaseNotebook                  // Same valid image
+			newWorkspace.Spec.DesiredStatus = controller.DesiredStateStopped // Stopping (only change)
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1068,7 +1337,7 @@ var _ = Describe("Workspace Webhook", func() {
 			// Old workspace is already non-compliant (e.g., template was updated after workspace creation)
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.Image = testInvalidImage // Invalid
-			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.DesiredStatus = controller.DesiredStateRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1076,8 +1345,8 @@ var _ = Describe("Workspace Webhook", func() {
 
 			// New workspace - ONLY changing status to Stopped, keeping same invalid image
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.Image = testInvalidImage                // Still invalid (unchanged)
-			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping (only change)
+			newWorkspace.Spec.Image = testInvalidImage                       // Still invalid (unchanged)
+			newWorkspace.Spec.DesiredStatus = controller.DesiredStateStopped // Stopping (only change)
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1097,7 +1366,7 @@ var _ = Describe("Workspace Webhook", func() {
 			oldWorkspace.Spec.Storage = &workspacev1alpha1.StorageSpec{
 				Size: resource.MustParse("10Gi"), // Valid (within 1Gi-100Gi bounds)
 			}
-			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.DesiredStatus = controller.DesiredStateRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1108,7 +1377,7 @@ var _ = Describe("Workspace Webhook", func() {
 			newWorkspace.Spec.Storage = &workspacev1alpha1.StorageSpec{
 				Size: resource.MustParse("500Gi"), // Invalid - exceeds max (100Gi)
 			}
-			newWorkspace.Spec.DesiredStatus = controller.PhaseStopped // Stopping
+			newWorkspace.Spec.DesiredStatus = controller.DesiredStateStopped // Stopping
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1126,7 +1395,7 @@ var _ = Describe("Workspace Webhook", func() {
 			// Old workspace with valid image
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.Image = testValidBaseNotebook // Valid
-			oldWorkspace.Spec.DesiredStatus = controller.PhaseRunning
+			oldWorkspace.Spec.DesiredStatus = controller.DesiredStateRunning
 			oldWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,
@@ -1134,8 +1403,8 @@ var _ = Describe("Workspace Webhook", func() {
 
 			// New workspace with invalid image and NOT stopping
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Spec.Image = testInvalidImage                // Invalid
-			newWorkspace.Spec.DesiredStatus = controller.PhaseRunning // Still Running
+			newWorkspace.Spec.Image = testInvalidImage                       // Invalid
+			newWorkspace.Spec.DesiredStatus = controller.DesiredStateRunning // Still Running
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
 				Namespace: template.Namespace,

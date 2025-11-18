@@ -1,5 +1,5 @@
 // Package authmiddleware provides JWT-based authentication and authorization middleware
-// for Jupyter-k8s workspaces, handling user identity, cookie management, and CSRF protection.
+// for Jupyter-k8s workspaces, handling user identity and cookie management.
 package authmiddleware
 
 import (
@@ -50,16 +50,6 @@ const (
 	EnvPathRegexPattern            = "PATH_REGEX_PATTERN"
 	EnvWorkspaceNamespacePathRegex = "WORKSPACE_NAMESPACE_PATH_REGEX"
 	EnvWorkspaceNamePathRegex      = "WORKSPACE_NAME_PATH_REGEX"
-
-	// CSRF configuration
-	EnvCsrfAuthKey    = "CSRF_AUTH_KEY"
-	EnvCsrfCookieName = "CSRF_COOKIE_NAME"
-	// Note: CSRF cookies use the same CookiePath and CookieDomain as auth cookies
-	EnvCsrfCookieMaxAge   = "CSRF_COOKIE_MAX_AGE"
-	EnvCsrfCookieSecure   = "CSRF_COOKIE_SECURE"
-	EnvCsrfFieldName      = "CSRF_FIELD_NAME"
-	EnvCsrfHeaderName     = "CSRF_HEADER_NAME"
-	EnvCsrfTrustedOrigins = "CSRF_TRUSTED_ORIGINS"
 
 	// OIDC configuration
 	EnvOidcUsernamePrefix  = "OIDC_USERNAME_PREFIX"
@@ -113,15 +103,6 @@ const (
 	DefaultWorkspaceNamespaceSubdomainRegex = `^([^-]+)-.*`
 	DefaultWorkspaceNameSubdomainRegex      = `^[^-]+-(.*)$`
 
-	// CSRF defaults
-	DefaultCsrfCookieName = "workspace_csrf"
-	// Note: CSRF cookies use the same CookiePath and CookieDomain as auth cookies
-	DefaultCsrfCookieMaxAge = 1 * time.Hour
-	DefaultCsrfCookieSecure = true
-	DefaultCsrfFieldName    = "csrf_token"
-	DefaultCsrfHeaderName   = "X-CSRF-Token"
-	// DefaultCsrfTrustedOrigins is a slice, defined in createDefaultConfig
-
 	// OIDC configuration
 	DefaultOidcUsernamePrefix  = "github:"
 	DefaultOidcGroupsPrefix    = "github:"
@@ -170,16 +151,6 @@ type Config struct {
 	WorkspaceNamespaceSubdomainRegex string // Regex pattern to extract workspace namespace from subdomain
 	WorkspaceNameSubdomainRegex      string // Regex pattern to extract workspace name from subdomain
 
-	// CSRF configuration
-	CSRFAuthKey    string
-	CSRFCookieName string
-	// Note: CSRF cookies use the same CookiePath and CookieDomain as auth cookies
-	CSRFCookieMaxAge   time.Duration
-	CSRFCookieSecure   bool
-	CSRFFieldName      string
-	CSRFHeaderName     string
-	CSRFTrustedOrigins []string
-
 	// OIDC configuration
 	OidcUsernamePrefix  string
 	OidcGroupsPrefix    string
@@ -207,10 +178,6 @@ func NewConfig() (*Config, error) {
 	}
 
 	if err := applyPathConfig(config); err != nil {
-		return nil, err
-	}
-
-	if err := applyCSRFConfig(config); err != nil {
 		return nil, err
 	}
 
@@ -262,13 +229,6 @@ func createDefaultConfig() *Config {
 		RoutingMode:                      DefaultRoutingMode,
 		WorkspaceNamespaceSubdomainRegex: DefaultWorkspaceNamespaceSubdomainRegex,
 		WorkspaceNameSubdomainRegex:      DefaultWorkspaceNameSubdomainRegex,
-
-		// CSRF defaults
-		CSRFCookieName:   DefaultCsrfCookieName,
-		CSRFCookieMaxAge: DefaultCsrfCookieMaxAge,
-		CSRFCookieSecure: DefaultCsrfCookieSecure,
-		CSRFFieldName:    DefaultCsrfFieldName,
-		CSRFHeaderName:   DefaultCsrfHeaderName,
 
 		// OIDC defaults
 		OidcUsernamePrefix:  DefaultOidcUsernamePrefix,
@@ -463,50 +423,6 @@ func applyCookieConfig(config *Config) error {
 
 	if cookieSameSite := os.Getenv(EnvCookieSameSite); cookieSameSite != "" {
 		config.CookieSameSite = cookieSameSite
-	}
-
-	return nil
-}
-
-// applyCSRFConfig applies CSRF-related environment variable overrides
-func applyCSRFConfig(config *Config) error {
-	// Required CSRF auth key
-	if csrfAuthKey := os.Getenv(EnvCsrfAuthKey); csrfAuthKey != "" {
-		config.CSRFAuthKey = csrfAuthKey
-	} else {
-		return fmt.Errorf("%s environment variable must be set", EnvCsrfAuthKey)
-	}
-
-	if csrfCookieName := os.Getenv(EnvCsrfCookieName); csrfCookieName != "" {
-		config.CSRFCookieName = csrfCookieName
-	}
-
-	if csrfCookieMaxAge := os.Getenv(EnvCsrfCookieMaxAge); csrfCookieMaxAge != "" {
-		d, err := time.ParseDuration(csrfCookieMaxAge)
-		if err != nil {
-			return fmt.Errorf("invalid %s: %w", EnvCsrfCookieMaxAge, err)
-		}
-		config.CSRFCookieMaxAge = d
-	}
-
-	if csrfCookieSecure := os.Getenv(EnvCsrfCookieSecure); csrfCookieSecure != "" {
-		secure, err := strconv.ParseBool(csrfCookieSecure)
-		if err != nil {
-			return fmt.Errorf("invalid %s: %w", EnvCsrfCookieSecure, err)
-		}
-		config.CSRFCookieSecure = secure
-	}
-
-	if csrfFieldName := os.Getenv(EnvCsrfFieldName); csrfFieldName != "" {
-		config.CSRFFieldName = csrfFieldName
-	}
-
-	if csrfHeaderName := os.Getenv(EnvCsrfHeaderName); csrfHeaderName != "" {
-		config.CSRFHeaderName = csrfHeaderName
-	}
-
-	if csrfTrustedOrigins := os.Getenv(EnvCsrfTrustedOrigins); csrfTrustedOrigins != "" {
-		config.CSRFTrustedOrigins = splitAndTrim(csrfTrustedOrigins, ",")
 	}
 
 	return nil

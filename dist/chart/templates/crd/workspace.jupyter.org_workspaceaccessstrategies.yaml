@@ -99,22 +99,13 @@ spec:
                 description: ControllerConfig contains settings used by the controller
                   for strategy-specific operations
                 type: object
-              createConnectionContext:
-                additionalProperties:
-                  type: string
-                description: CreateConnectionContext contains configuration for the
-                  connection handler
-                type: object
-              createConnectionHandler:
-                description: CreateConnectionHandler specifies the handler for connection
-                  creation
-                type: string
-              deploymentSpecModifications:
-                description: DeploymentSpecModifications defines modifications to
-                  apply to workspace deployments
+              deploymentModifications:
+                description: DeploymentModifications defines modifications to apply
+                  to workspace deployments
                 properties:
-                  podSpec:
-                    description: PodSpec modifications to apply to the pod template
+                  podModifications:
+                    description: PodModifications describes modifications to apply
+                      to the pod template
                     properties:
                       additionalContainers:
                         description: AdditionalContainers to add to the pod (sidecars)
@@ -3188,6 +3179,97 @@ spec:
                           - name
                           type: object
                         type: array
+                      primaryContainerModifications:
+                        description: PrimaryContainerModifications to apply to the
+                          primary container
+                        properties:
+                          mergeEnv:
+                            description: |-
+                              MergeEnv defines environment variables to be added to the main container
+                              These will be merged with any existing env vars in the Workspace's container
+                            items:
+                              description: AccessEnvTemplate defines a template for
+                                environment variables
+                              properties:
+                                name:
+                                  description: Name of the environment variable
+                                  type: string
+                                valueTemplate:
+                                  description: |-
+                                    ValueTemplate is a template string for the value
+                                    Can use variables from the Workspace or AccessStrategy objects
+                                    but not the Service object
+                                  type: string
+                              required:
+                              - name
+                              - valueTemplate
+                              type: object
+                            type: array
+                          volumeMounts:
+                            description: VolumeMounts to add to the primary container
+                            items:
+                              description: VolumeMount describes a mounting of a Volume
+                                within a container.
+                              properties:
+                                mountPath:
+                                  description: |-
+                                    Path within the container at which the volume should be mounted.  Must
+                                    not contain ':'.
+                                  type: string
+                                mountPropagation:
+                                  description: |-
+                                    mountPropagation determines how mounts are propagated from the host
+                                    to container and the other way around.
+                                    When not set, MountPropagationNone is used.
+                                    This field is beta in 1.10.
+                                    When RecursiveReadOnly is set to IfPossible or to Enabled, MountPropagation must be None or unspecified
+                                    (which defaults to None).
+                                  type: string
+                                name:
+                                  description: This must match the Name of a Volume.
+                                  type: string
+                                readOnly:
+                                  description: |-
+                                    Mounted read-only if true, read-write otherwise (false or unspecified).
+                                    Defaults to false.
+                                  type: boolean
+                                recursiveReadOnly:
+                                  description: |-
+                                    RecursiveReadOnly specifies whether read-only mounts should be handled
+                                    recursively.
+
+                                    If ReadOnly is false, this field has no meaning and must be unspecified.
+
+                                    If ReadOnly is true, and this field is set to Disabled, the mount is not made
+                                    recursively read-only.  If this field is set to IfPossible, the mount is made
+                                    recursively read-only, if it is supported by the container runtime.  If this
+                                    field is set to Enabled, the mount is made recursively read-only if it is
+                                    supported by the container runtime, otherwise the pod will not be started and
+                                    an error will be generated to indicate the reason.
+
+                                    If this field is set to IfPossible or Enabled, MountPropagation must be set to
+                                    None (or be unspecified, which defaults to None).
+
+                                    If this field is not specified, it is treated as an equivalent of Disabled.
+                                  type: string
+                                subPath:
+                                  description: |-
+                                    Path within the volume from which the container's volume should be mounted.
+                                    Defaults to "" (volume's root).
+                                  type: string
+                                subPathExpr:
+                                  description: |-
+                                    Expanded path within the volume from which the container's volume should be mounted.
+                                    Behaves similarly to SubPath but environment variable references $(VAR_NAME) are expanded using the container's environment.
+                                    Defaults to "" (volume's root).
+                                    SubPathExpr and SubPath are mutually exclusive.
+                                  type: string
+                              required:
+                              - mountPath
+                              - name
+                              type: object
+                            type: array
+                        type: object
                       volumes:
                         description: Volumes to add to the pod
                         items:
@@ -5090,105 +5172,10 @@ spec:
                           type: object
                         type: array
                     type: object
-                  primaryContainer:
-                    description: PrimaryContainer modifications to apply to the primary
-                      container
-                    properties:
-                      volumeMounts:
-                        description: VolumeMounts to add to the primary container
-                        items:
-                          description: VolumeMount describes a mounting of a Volume
-                            within a container.
-                          properties:
-                            mountPath:
-                              description: |-
-                                Path within the container at which the volume should be mounted.  Must
-                                not contain ':'.
-                              type: string
-                            mountPropagation:
-                              description: |-
-                                mountPropagation determines how mounts are propagated from the host
-                                to container and the other way around.
-                                When not set, MountPropagationNone is used.
-                                This field is beta in 1.10.
-                                When RecursiveReadOnly is set to IfPossible or to Enabled, MountPropagation must be None or unspecified
-                                (which defaults to None).
-                              type: string
-                            name:
-                              description: This must match the Name of a Volume.
-                              type: string
-                            readOnly:
-                              description: |-
-                                Mounted read-only if true, read-write otherwise (false or unspecified).
-                                Defaults to false.
-                              type: boolean
-                            recursiveReadOnly:
-                              description: |-
-                                RecursiveReadOnly specifies whether read-only mounts should be handled
-                                recursively.
-
-                                If ReadOnly is false, this field has no meaning and must be unspecified.
-
-                                If ReadOnly is true, and this field is set to Disabled, the mount is not made
-                                recursively read-only.  If this field is set to IfPossible, the mount is made
-                                recursively read-only, if it is supported by the container runtime.  If this
-                                field is set to Enabled, the mount is made recursively read-only if it is
-                                supported by the container runtime, otherwise the pod will not be started and
-                                an error will be generated to indicate the reason.
-
-                                If this field is set to IfPossible or Enabled, MountPropagation must be set to
-                                None (or be unspecified, which defaults to None).
-
-                                If this field is not specified, it is treated as an equivalent of Disabled.
-                              type: string
-                            subPath:
-                              description: |-
-                                Path within the volume from which the container's volume should be mounted.
-                                Defaults to "" (volume's root).
-                              type: string
-                            subPathExpr:
-                              description: |-
-                                Expanded path within the volume from which the container's volume should be mounted.
-                                Behaves similarly to SubPath but environment variable references $(VAR_NAME) are expanded using the container's environment.
-                                Defaults to "" (volume's root).
-                                SubPathExpr and SubPath are mutually exclusive.
-                              type: string
-                          required:
-                          - mountPath
-                          - name
-                          type: object
-                        type: array
-                    type: object
                 type: object
               displayName:
                 description: DisplayName is a human-readable name for this access
                   strategy
-                type: string
-              mergeEnv:
-                description: |-
-                  MergeEnv defines environment variables to be added to the main container
-                  These will be merged with any existing env vars in the Workspace's container
-                items:
-                  description: AccessEnvTemplate defines a template for environment
-                    variables
-                  properties:
-                    name:
-                      description: Name of the environment variable
-                      type: string
-                    valueTemplate:
-                      description: |-
-                        ValueTemplate is a template string for the value
-                        Can use variables from the Workspace or AccessStrategy objects
-                        but not the Service object
-                      type: string
-                  required:
-                  - name
-                  - valueTemplate
-                  type: object
-                type: array
-              podEventsHandler:
-                description: PodEventsHandler specifies the handler for pod lifecycle
-                  events
                 type: string
             required:
             - accessResourceTemplates

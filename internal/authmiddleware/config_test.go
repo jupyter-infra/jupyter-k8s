@@ -14,15 +14,9 @@ func TestNewConfigDefault(t *testing.T) {
 	if err := os.Setenv(EnvJwtSigningKey, "test-signing-key"); err != nil {
 		t.Fatalf("Failed to set environment variable %s: %v", EnvJwtSigningKey, err)
 	}
-	if err := os.Setenv(EnvCsrfAuthKey, "test-csrf-key"); err != nil {
-		t.Fatalf("Failed to set environment variable %s: %v", EnvCsrfAuthKey, err)
-	}
 	defer func() {
 		if err := os.Unsetenv(EnvJwtSigningKey); err != nil {
 			t.Logf("Failed to unset environment variable %s: %v", EnvJwtSigningKey, err)
-		}
-		if err := os.Unsetenv(EnvCsrfAuthKey); err != nil {
-			t.Logf("Failed to unset environment variable %s: %v", EnvCsrfAuthKey, err)
 		}
 	}()
 
@@ -36,7 +30,6 @@ func TestNewConfigDefault(t *testing.T) {
 	checkAuthDefaults(t, config)
 	checkCookieDefaults(t, config)
 	checkPathDefaults(t, config)
-	checkCSRFDefaults(t, config)
 	checkOIDCDefaults(t, config)
 }
 
@@ -117,28 +110,6 @@ func checkPathDefaults(t *testing.T, config *Config) {
 	}
 }
 
-func checkCSRFDefaults(t *testing.T, config *Config) {
-	if config.CSRFAuthKey != "test-csrf-key" {
-		t.Errorf("Expected CSRFAuthKey to be %s, got %s", "test-csrf-key", config.CSRFAuthKey)
-	}
-	if config.CSRFCookieName != DefaultCsrfCookieName {
-		t.Errorf("Expected CSRFCookieName to be %s, got %s", DefaultCsrfCookieName, config.CSRFCookieName)
-	}
-	// CSRF cookies now use the same path as regular cookies (config.CookiePath)
-	if config.CSRFCookieMaxAge != DefaultCsrfCookieMaxAge {
-		t.Errorf("Expected CSRFCookieMaxAge to be %v, got %v", DefaultCsrfCookieMaxAge, config.CSRFCookieMaxAge)
-	}
-	if config.CSRFCookieSecure != DefaultCsrfCookieSecure {
-		t.Errorf("Expected CSRFCookieSecure to be %t, got %t", DefaultCsrfCookieSecure, config.CSRFCookieSecure)
-	}
-	if config.CSRFFieldName != DefaultCsrfFieldName {
-		t.Errorf("Expected CSRFFieldName to be %s, got %s", DefaultCsrfFieldName, config.CSRFFieldName)
-	}
-	if config.CSRFHeaderName != DefaultCsrfHeaderName {
-		t.Errorf("Expected CSRFHeaderName to be %s, got %s", DefaultCsrfHeaderName, config.CSRFHeaderName)
-	}
-}
-
 // checkOIDCDefaults verifies the default OIDC configuration values
 func checkOIDCDefaults(t *testing.T, config *Config) {
 	if config.OidcUsernamePrefix != DefaultOidcUsernamePrefix {
@@ -206,15 +177,6 @@ func TestNewConfigEnvOverrides(t *testing.T) {
 	setEnv(t, EnvWorkspaceNamespacePathRegex, "^/custom/([^/]+)/workspaces/[^/]+")
 	setEnv(t, EnvWorkspaceNamePathRegex, "^/custom/[^/]+/workspaces/([^/]+)")
 
-	// CSRF configuration
-	setEnv(t, EnvCsrfAuthKey, "custom-csrf-key")
-	setEnv(t, EnvCsrfCookieName, "custom_csrf")
-	setEnv(t, EnvCsrfCookieMaxAge, "45m")
-	setEnv(t, EnvCsrfCookieSecure, "false")
-	setEnv(t, EnvCsrfFieldName, "custom_token")
-	setEnv(t, EnvCsrfHeaderName, "X-Custom-CSRF")
-	setEnv(t, EnvCsrfTrustedOrigins, "https://trusted1.com,https://trusted2.com")
-
 	// OIDC configuration
 	setEnv(t, EnvOidcUsernamePrefix, "oidc:")
 	setEnv(t, EnvOidcGroupsPrefix, "oidc-group:")
@@ -230,9 +192,6 @@ func TestNewConfigEnvOverrides(t *testing.T) {
 		EnvCookieName, EnvCookieSecure, EnvCookieDomain, EnvCookiePath,
 		EnvCookieMaxAge, EnvCookieHttpOnly, EnvCookieSameSite,
 		EnvPathRegexPattern, EnvWorkspaceNamespacePathRegex, EnvWorkspaceNamePathRegex,
-		EnvCsrfAuthKey, EnvCsrfCookieName,
-		EnvCsrfCookieMaxAge, EnvCsrfCookieSecure, EnvCsrfFieldName, EnvCsrfHeaderName,
-		EnvCsrfTrustedOrigins,
 		EnvOidcUsernamePrefix, EnvOidcGroupsPrefix,
 		EnvOIDCIssuerURL, EnvOIDCClientID, EnvOIDCInitTimeoutSecs,
 	}
@@ -254,9 +213,6 @@ func TestNewConfigEnvOverrides(t *testing.T) {
 
 	// Check path configuration
 	checkPathConfig(t, config)
-
-	// Check CSRF configuration
-	checkCSRFConfig(t, config)
 
 	// Check OIDC configuration
 	checkOIDCConfig(t, config)
@@ -345,32 +301,6 @@ func checkPathConfig(t *testing.T, config *Config) {
 	}
 }
 
-func checkCSRFConfig(t *testing.T, config *Config) {
-	if config.CSRFAuthKey != "custom-csrf-key" {
-		t.Errorf("Expected CSRFAuthKey to be custom-csrf-key, got %s", config.CSRFAuthKey)
-	}
-	if config.CSRFCookieName != "custom_csrf" {
-		t.Errorf("Expected CSRFCookieName to be custom_csrf, got %s", config.CSRFCookieName)
-	}
-	// CSRF cookies now use the same path and domain as regular cookies
-	// (config.CookiePath which is "/custom" and config.CookieDomain which is "some.example.com")
-	if config.CSRFCookieMaxAge != 45*time.Minute {
-		t.Errorf("Expected CSRFCookieMaxAge to be 45m, got %v", config.CSRFCookieMaxAge)
-	}
-	if config.CSRFCookieSecure != false {
-		t.Errorf("Expected CSRFCookieSecure to be false, got %t", config.CSRFCookieSecure)
-	}
-	if config.CSRFFieldName != "custom_token" {
-		t.Errorf("Expected CSRFFieldName to be custom_token, got %s", config.CSRFFieldName)
-	}
-	if config.CSRFHeaderName != "X-Custom-CSRF" {
-		t.Errorf("Expected CSRFHeaderName to be X-Custom-CSRF, got %s", config.CSRFHeaderName)
-	}
-	if len(config.CSRFTrustedOrigins) != 2 || config.CSRFTrustedOrigins[0] != "https://trusted1.com" || config.CSRFTrustedOrigins[1] != "https://trusted2.com" {
-		t.Errorf("Expected CSRFTrustedOrigins to be [https://trusted1.com https://trusted2.com], got %v", config.CSRFTrustedOrigins)
-	}
-}
-
 // checkOIDCConfig validates that OIDC configuration values are set as expected
 func checkOIDCConfig(t *testing.T, config *Config) {
 	if config.OidcUsernamePrefix != "oidc:" {
@@ -436,15 +366,9 @@ func TestOIDCInitTimeoutConfig(t *testing.T) {
 			if err := os.Setenv(EnvJwtSigningKey, "test-signing-key"); err != nil {
 				t.Fatalf("Failed to set environment variable %s: %v", EnvJwtSigningKey, err)
 			}
-			if err := os.Setenv(EnvCsrfAuthKey, "test-csrf-key"); err != nil {
-				t.Fatalf("Failed to set environment variable %s: %v", EnvCsrfAuthKey, err)
-			}
 			defer func() {
 				if err := os.Unsetenv(EnvJwtSigningKey); err != nil {
 					t.Logf("Failed to unset environment variable %s: %v", EnvJwtSigningKey, err)
-				}
-				if err := os.Unsetenv(EnvCsrfAuthKey); err != nil {
-					t.Logf("Failed to unset environment variable %s: %v", EnvCsrfAuthKey, err)
 				}
 			}()
 

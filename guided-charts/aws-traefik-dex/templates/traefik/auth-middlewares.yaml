@@ -52,9 +52,6 @@ spec:
   forwardAuth:
     address: "http://authmiddleware.{{ .Values.namespace }}:8080/auth"
     trustForwardHeader: true
-    addAuthCookiesToResponse:
-      - "{{ $.Values.authmiddleware.cookieName }}"
-      - "{{ .Values.authmiddleware.csrfCookieName }}"
     authRequestHeaders:
       - "Cookie"
       - "X-Forwarded-Uri"
@@ -78,9 +75,6 @@ spec:
   forwardAuth:
     address: "http://authmiddleware.{{ .Values.namespace }}:8080/verify"
     trustForwardHeader: true
-    addAuthCookiesToResponse:
-      - "{{ $.Values.authmiddleware.cookieName }}"
-      - "{{ .Values.authmiddleware.csrfCookieName }}"
     authRequestHeaders:
       - "Cookie"
       - "X-Forwarded-Uri"

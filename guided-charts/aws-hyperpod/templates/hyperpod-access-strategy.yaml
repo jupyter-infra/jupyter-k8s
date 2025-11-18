@@ -62,7 +62,7 @@ spec:
 
   createConnectionHandler: "aws"
   podEventsHandler: "aws"
-  
+
   {{- if or .Values.clusterWebUI.enabled .Values.remoteAccess.enabled }}
   createConnectionContext:
     {{- if .Values.clusterWebUI.enabled }}
@@ -78,14 +78,14 @@ spec:
   {{- end }}
 
   # Deployment modifications for SSM remote access
-  deploymentSpecModifications:
-    podSpec:
+  deploymentModifications:
+    podModifications:
       {{- if .Values.remoteAccess.enabled }}
       additionalContainers:
         - name: "ssm-agent-sidecar"
           image: "{{ .Values.remoteAccess.ssmSidecarImage.containerRegistry }}/{{ .Values.remoteAccess.ssmSidecarImage.repository }}:{{ .Values.remoteAccess.ssmSidecarImage.tag }}"
           command:
-            - /opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-remote-access
+            - /opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-sidecar-container
           resources:
             requests:
               cpu: "100m"
@@ -96,6 +96,17 @@ spec:
           volumeMounts:
             - name: "workspace-base"
               mountPath: "/opt/amazon/sagemaker/workspace"
+          startupProbe:
+            exec:
+              command: ["/usr/local/bin/ssm-agent-health-check.sh"]
+            initialDelaySeconds: 1
+            periodSeconds: 1
+            failureThreshold: 300
+          livenessProbe:
+            exec:
+              command: ["/usr/local/bin/ssm-agent-health-check.sh"]
+            periodSeconds: 10
+            failureThreshold: 6
           readinessProbe:
             exec:
               command: ["test", "-f", "/tmp/ssm-registered"]
@@ -117,20 +128,19 @@ spec:
             - name: workspace-base
               mountPath: /workspace_base_dir
 
-    primaryContainer:
-      volumeMounts:
-        - name: "workspace-base"
-          mountPath: "/opt/amazon/sagemaker/workspace"
-
-  mergeEnv:
-    - name: WORKSPACE_NAMESPACE
-      valueTemplate: "{{`{{ .Workspace.Namespace }}`}}"
-    - name: WORKSPACE_NAME
-      valueTemplate: "{{`{{ .Workspace.Name }}`}}"
-    - name: WORKSPACE_ACCESS_TYPE
-      valueTemplate: "{{`{{ .Workspace.Spec.AccessType }}`}}"
-    - name: WORKSPACE_APP_TYPE
-      valueTemplate: "{{`{{ .Workspace.Spec.AppType }}`}}"
-    - name: JUPYTER_BASE_URL
-      valueTemplate: "/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/"
+      primaryContainerModifications:
+        volumeMounts:
+          - name: "workspace-base"
+            mountPath: "/opt/amazon/sagemaker/workspace"
+        mergeEnv:
+          - name: WORKSPACE_NAMESPACE
+            valueTemplate: "{{`{{ .Workspace.Namespace }}`}}"
+          - name: WORKSPACE_NAME
+            valueTemplate: "{{`{{ .Workspace.Name }}`}}"
+          - name: WORKSPACE_ACCESS_TYPE
+            valueTemplate: "{{`{{ .Workspace.Spec.AccessType }}`}}"
+          - name: WORKSPACE_APP_TYPE
+            valueTemplate: "{{`{{ .Workspace.Spec.AppType }}`}}"
+          - name: JUPYTER_BASE_URL
+            valueTemplate: "/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/"
 

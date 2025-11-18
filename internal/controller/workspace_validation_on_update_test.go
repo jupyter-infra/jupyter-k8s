@@ -59,13 +59,15 @@ var _ = Describe("Lazy Application", func() {
 					},
 				},
 				ResourceBounds: &workspacev1alpha1.ResourceBounds{
-					CPU: &workspacev1alpha1.ResourceRange{
-						Min: resource.MustParse("50m"),
-						Max: resource.MustParse("2"),
-					},
-					Memory: &workspacev1alpha1.ResourceRange{
-						Min: resource.MustParse("64Mi"),
-						Max: resource.MustParse("2Gi"),
+					Resources: map[corev1.ResourceName]workspacev1alpha1.ResourceRange{
+						corev1.ResourceCPU: {
+							Min: resource.MustParse("50m"),
+							Max: resource.MustParse("2"),
+						},
+						corev1.ResourceMemory: {
+							Min: resource.MustParse("64Mi"),
+							Max: resource.MustParse("2Gi"),
+						},
 					},
 				},
 				PrimaryStorage: &workspacev1alpha1.StorageConfig{
@@ -80,7 +82,7 @@ var _ = Describe("Lazy Application", func() {
 				Name:      "lazy-app-workspace",
 				Namespace: "default",
 				Labels: map[string]string{
-					"workspace.jupyter.org/template": template.Name,
+					"workspace.jupyter.org/template-name": template.Name,
 				},
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
@@ -114,7 +116,10 @@ var _ = Describe("Lazy Application", func() {
 
 		updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updatedTemplate)).To(Succeed())
-		updatedTemplate.Spec.ResourceBounds.CPU.Max = resource.MustParse("500m")
+		updatedTemplate.Spec.ResourceBounds.Resources[corev1.ResourceCPU] = workspacev1alpha1.ResourceRange{
+			Min: resource.MustParse("50m"),
+			Max: resource.MustParse("500m"),
+		}
 		Expect(k8sClient.Update(ctx, updatedTemplate)).To(Succeed())
 
 		time.Sleep(100 * time.Millisecond)

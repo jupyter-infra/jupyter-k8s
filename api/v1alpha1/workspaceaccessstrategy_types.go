@@ -49,19 +49,15 @@ type AccessEnvTemplate struct {
 	ValueTemplate string `json:"valueTemplate"`
 }
 
-// DeploymentSpecModifications defines modifications to apply to deployment spec
-type DeploymentSpecModifications struct {
-	// PodSpec modifications to apply to the pod template
+// DeploymentModifications defines modifications to apply to deployment spec
+type DeploymentModifications struct {
+	// PodModifications describes modifications to apply to the pod template
 	// +optional
-	PodSpec *PodSpecModifications `json:"podSpec,omitempty"`
-
-	// PrimaryContainer modifications to apply to the primary container
-	// +optional
-	PrimaryContainer *PrimaryContainerModifications `json:"primaryContainer,omitempty"`
+	PodModifications *PodModifications `json:"podModifications,omitempty"`
 }
 
-// PodSpecModifications defines pod-level modifications
-type PodSpecModifications struct {
+// PodModifications defines pod-level modifications
+type PodModifications struct {
 	// AdditionalContainers to add to the pod (sidecars)
 	// +optional
 	AdditionalContainers []corev1.Container `json:"additionalContainers,omitempty"`
@@ -73,6 +69,10 @@ type PodSpecModifications struct {
 	// InitContainers to add to the pod
 	// +optional
 	InitContainers []corev1.Container `json:"initContainers,omitempty"`
+
+	// PrimaryContainerModifications to apply to the primary container
+	// +optional
+	PrimaryContainerModifications *PrimaryContainerModifications `json:"primaryContainerModifications,omitempty"`
 }
 
 // PrimaryContainerModifications defines modifications for the primary container
@@ -80,6 +80,11 @@ type PrimaryContainerModifications struct {
 	// VolumeMounts to add to the primary container
 	// +optional
 	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+
+	// MergeEnv defines environment variables to be added to the main container
+	// These will be merged with any existing env vars in the Workspace's container
+	// +optional
+	MergeEnv []AccessEnvTemplate `json:"mergeEnv,omitempty"`
 }
 
 // WorkspaceAccessStrategySpec defines the desired state of WorkspaceAccessStrategy
@@ -89,11 +94,6 @@ type WorkspaceAccessStrategySpec struct {
 
 	// AccessResourceTemplates defines templates for resources created in the routes namespace
 	AccessResourceTemplates []AccessResourceTemplate `json:"accessResourceTemplates"`
-
-	// MergeEnv defines environment variables to be added to the main container
-	// These will be merged with any existing env vars in the Workspace's container
-	// +optional
-	MergeEnv []AccessEnvTemplate `json:"mergeEnv,omitempty"`
 
 	// AccessURLTemplate is a template string for constructing the workspace access URL
 	// Template variables include .Workspace and .AccessStrategy objects
@@ -128,9 +128,9 @@ type WorkspaceAccessStrategySpec struct {
 	// +optional
 	PodEventsContext map[string]string `json:"podEventsContext,omitempty"`
 
-	// DeploymentSpecModifications defines modifications to apply to workspace deployments
+	// DeploymentModifications defines modifications to apply to workspace deployments
 	// +optional
-	DeploymentSpecModifications *DeploymentSpecModifications `json:"deploymentSpecModifications,omitempty"`
+	DeploymentModifications *DeploymentModifications `json:"deploymentModifications,omitempty"`
 }
 
 // WorkspaceAccessStrategyStatus defines the observed state of WorkspaceAccessStrategy

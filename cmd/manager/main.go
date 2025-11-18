@@ -169,6 +169,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := controller.SetupWorkspaceAccessStrategyController(mgr); err != nil {
+		setupLog.Error(err, "Error setting up workspace access strategy controller")
+		os.Exit(1)
+	}
+
 	setupLog.Info("Starting manager")
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "Error running manager")
