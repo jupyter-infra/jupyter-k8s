@@ -537,10 +537,10 @@ var _ = Describe("Server", func() {
 	})
 
 	Context("Helper Functions", func() {
-		Describe("createJWTManager", func() {
+		Describe("createJWTSignerFactory", func() {
 			It("Should not fail startup with empty KMS key ID", func() {
 				config := NewConfig(WithKMSKeyID(""))
-				_, err := createJWTManager(config)
+				_, err := createJWTSignerFactory(config)
 				// Should not fail startup due to empty KMS key ID
 				if err != nil {
 					Skip("Requires AWS KMS setup")
@@ -575,7 +575,7 @@ var _ = Describe("Server", func() {
 					},
 				}
 
-				server := createExtensionServer(genericServer, config, &logger, k8sClient, sarClient, &mockJWTManager{})
+				server := createExtensionServer(genericServer, config, &logger, k8sClient, sarClient, &mockSignerFactory{signer: &mockSigner{token: "test-token"}})
 
 				Expect(server).NotTo(BeNil())
 				Expect(server.config).To(Equal(config))
@@ -601,7 +601,7 @@ var _ = Describe("Server", func() {
 				config := NewConfig(WithKMSKeyID("test-key"))
 
 				// This may or may not fail depending on environment
-				_, _ = createKMSJWTManager(config)
+				_, _ = createJWTSignerFactory(config)
 
 				// We just want to test the code path is executed
 				Expect(true).To(BeTrue())
@@ -831,9 +831,9 @@ var _ = Describe("ServerWithManager", func() {
 			options := createRecommendedOptions(config)
 			Expect(options.SecureServing.BindPort).To(Equal(9999))
 
-			// Test createJWTManager with empty KMS key ID - should not fail startup
+			// Test createJWTSignerFactory with empty KMS key ID - should not fail startup
 			config = NewConfig(WithKMSKeyID(""))
-			_, err := createJWTManager(config)
+			_, err := createJWTSignerFactory(config)
 			// Should not fail startup due to empty KMS key ID
 			if err != nil {
 				Skip("Requires AWS KMS setup")

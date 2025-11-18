@@ -35,7 +35,7 @@ type ExtensionServer struct {
 	config        *ExtensionConfig
 	k8sClient     client.Client
 	sarClient     v1.SubjectAccessReviewInterface
-	signerFactory    jwt.SignerFactory
+	signerFactory jwt.SignerFactory
 	logger        *logr.Logger
 	genericServer *genericapiserver.GenericAPIServer
 	routes        map[string]func(http.ResponseWriter, *http.Request)
@@ -183,13 +183,6 @@ func (s *ExtensionServer) NeedLeaderElection() bool {
 	return false
 }
 
-// createJWTManager creates a JWT manager from config (placeholder for KMS-based JWT)
-func createJWTManager(config *ExtensionConfig) (jwt.Signer, error) {
-	// This would normally create a KMS-based JWT manager
-	// For now, return the KMS JWT manager creation
-	return createKMSJWTManager(config)
-}
-
 // createSARClient creates a SubjectAccessReview client from manager
 func createSARClient(mgr ctrl.Manager) (v1.SubjectAccessReviewInterface, error) {
 	k8sClientset, err := kubernetes.NewForConfig(mgr.GetConfig())
@@ -236,6 +229,7 @@ func createGenericAPIServer(recommendedOptions *genericoptions.RecommendedOption
 	return genericServer, nil
 }
 
+func createJWTSignerFactory(config *ExtensionConfig) (jwt.SignerFactory, error) {
 	// Create KMS client and signer factory
 	ctx := context.Background()
 	kmsClient, err := aws.NewKMSClient(ctx)
@@ -245,12 +239,12 @@ func createGenericAPIServer(recommendedOptions *genericoptions.RecommendedOption
 
 	signerFactory := aws.NewAWSSignerFactory(kmsClient, config.KMSKeyID, time.Minute*5)
 
-	return jwtManager, nil
+	return signerFactory, nil
 }
 
 // createExtensionServer creates and configures the extension server
-func createExtensionServer(genericServer *genericapiserver.GenericAPIServer, config *ExtensionConfig, logger *logr.Logger, k8sClient client.Client, sarClient v1.SubjectAccessReviewInterface, jwtManager jwt.Signer) *ExtensionServer {
-	server := NewExtensionServer(genericServer, config, logger, k8sClient, sarClient, signerFactory)
+func createExtensionServer(genericServer *genericapiserver.GenericAPIServer, config *ExtensionConfig, logger *logr.Logger, k8sClient client.Client, sarClient v1.SubjectAccessReviewInterface, jwtSingerFactory jwt.SignerFactory) *ExtensionServer {
+	server := NewExtensionServer(genericServer, config, logger, k8sClient, sarClient, jwtSingerFactory)
 	server.registerAllRoutes()
 	return server
 }
@@ -273,7 +267,7 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	logger := mgr.GetLogger().WithName("extension-api")
 
 	// Create JWT manager
-	jwtManager, err := createJWTManager(config)
+	signerFactory, err := createJWTSignerFactory(config)
 	if err != nil {
 		return err
 	}
@@ -292,7 +286,7 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	}
 
 	// Create and configure extension server
-	server := createExtensionServer(genericServer, config, &logger, mgr.GetClient(), sarClient, jwtManager)
+	server := createExtensionServer(genericServer, config, &logger, mgr.GetClient(), sarClient, signerFactory)
 
 	// Add server to manager
 	return addServerToManager(mgr, server)
