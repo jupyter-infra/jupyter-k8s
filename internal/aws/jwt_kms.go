@@ -28,18 +28,18 @@ var (
 
 // KMSJWTManager handles JWT token creation and validation using AWS KMS envelope encryption
 type KMSJWTManager struct {
-	kmsClient      *KMSClient
-	keyId          string
-	issuer         string
-	audience       string
-	expiration     time.Duration
+	kmsClient         *KMSClient
+	keyId             string
+	issuer            string
+	audience          string
+	expiration        time.Duration
 	encryptionContext map[string]string
-	keyCache       map[string][]byte
-	cacheExpiry    map[string]time.Time
-	lastCleanup    time.Time
-	cacheMutex     sync.RWMutex
-	maxCacheSize   int
-	evictBatchSize int
+	keyCache          map[string][]byte
+	cacheExpiry       map[string]time.Time
+	lastCleanup       time.Time
+	cacheMutex        sync.RWMutex
+	maxCacheSize      int
+	evictBatchSize    int
 }
 
 // KMSJWTConfig contains configuration for KMS JWT manager
@@ -50,8 +50,8 @@ type KMSJWTConfig struct {
 	Audience          string
 	Expiration        time.Duration
 	EncryptionContext map[string]string
-	MaxCacheSize   int
-	EvictBatchSize int
+	MaxCacheSize      int
+	EvictBatchSize    int
 }
 
 // NewKMSJWTManager creates a new KMSJWTManager
@@ -67,12 +67,12 @@ func NewKMSJWTManager(config KMSJWTConfig) *KMSJWTManager {
 	}
 
 	return &KMSJWTManager{
-		kmsClient:      config.KMSClient,
-		keyId:          config.KeyId,
-		issuer:         config.Issuer,
-		audience:       config.Audience,
-		expiration:     config.Expiration,
-		encryptionContext: config.EncryptionContext,keyCache:       make(map[string][]byte),
+		kmsClient:         config.KMSClient,
+		keyId:             config.KeyId,
+		issuer:            config.Issuer,
+		audience:          config.Audience,
+		expiration:        config.Expiration,
+		encryptionContext: config.EncryptionContext, keyCache: make(map[string][]byte),
 		cacheExpiry:    make(map[string]time.Time),
 		lastCleanup:    time.Now(),
 		maxCacheSize:   maxSize,
