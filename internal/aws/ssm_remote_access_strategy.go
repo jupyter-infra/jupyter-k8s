@@ -55,6 +55,10 @@ const (
 	SSMRegistrationScript        = "/usr/local/bin/register-ssm.sh"
 	RemoteAccessServerScriptPath = "/opt/amazon/sagemaker/workspace/remote-access/start-remote-access-server.sh"
 
+	// Connection context keys for SSM operations
+	SSMManagedNodeRoleKey = "ssmManagedNodeRole"
+	SSMDocumentNameKey    = "ssmDocumentName"
+
 	// Remote access server configuration
 	RemoteAccessServerPort = "2222"
 )
@@ -398,14 +402,14 @@ func (s *SSMRemoteAccessStrategy) createSSMActivation(ctx context.Context, pod *
 		return "", "", fmt.Errorf("SSM client not available")
 	}
 
-	// Get IAM role from access strategy controller configuration
+	// Get IAM role from access strategy connection context
 	var iamRole string
-	if accessStrategy.Spec.ControllerConfig != nil {
-		iamRole = accessStrategy.Spec.ControllerConfig["SSM_MANAGED_NODE_ROLE"]
+	if accessStrategy.Spec.CreateConnectionContext != nil {
+		iamRole = accessStrategy.Spec.CreateConnectionContext[SSMManagedNodeRoleKey]
 	}
 
 	if iamRole == "" {
-		return "", "", fmt.Errorf("SSM_MANAGED_NODE_ROLE not found in access strategy")
+		return "", "", fmt.Errorf("%s not found in access strategy", SSMManagedNodeRoleKey)
 	}
 
 	// Get EKS cluster ARN from environment variable
@@ -453,14 +457,14 @@ func (s *SSMRemoteAccessStrategy) GenerateVSCodeConnectionURL(ctx context.Contex
 
 	logger.Info("Found managed instance for pod", "podUID", podUID, "instanceID", instanceID)
 
-	// Get SSM document name from access strategy controller configuration
+	// Get SSM document name from access strategy connection context
 	var documentName string
-	if accessStrategy.Spec.ControllerConfig != nil {
-		documentName = accessStrategy.Spec.ControllerConfig["SSM_DOCUMENT_NAME"]
+	if accessStrategy.Spec.CreateConnectionContext != nil {
+		documentName = accessStrategy.Spec.CreateConnectionContext[SSMDocumentNameKey]
 	}
 
 	if documentName == "" {
-		return "", fmt.Errorf("SSM_DOCUMENT_NAME not found in access strategy")
+		return "", fmt.Errorf("%s not found in access strategy", SSMDocumentNameKey)
 	}
 
 	// Start SSM session

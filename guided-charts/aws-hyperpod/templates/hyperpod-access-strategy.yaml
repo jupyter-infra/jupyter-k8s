@@ -60,7 +60,24 @@ spec:
   bearerAuthURLTemplate: "https://{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.clusterWebUI.domain }}/bearer-auth"
   {{- end }}
 
-  # Deployment modifications for init container (always enabled)
+  createConnectionHandler: "aws"
+  podEventsHandler: "aws"
+
+  {{- if or .Values.clusterWebUI.enabled .Values.remoteAccess.enabled }}
+  createConnectionContext:
+    {{- if .Values.clusterWebUI.enabled }}
+    kmsKeyId: "{{ .Values.clusterWebUI.auth.kmsKeyId }}"
+    {{- if .Values.clusterWebUI.auth.kmsEncryptionContext.enabled }}
+    encryptionContext: '{"sagemaker:component":"amazon-sagemaker-spaces","sagemaker:eks-cluster-arn":"{{ .Values.clusterWebUI.auth.kmsEncryptionContext.eksClusterArn }}"}'
+    {{- end }}
+    {{- end }}
+    {{- if .Values.remoteAccess.enabled }}
+    ssmManagedNodeRole: "{{ .Values.remoteAccess.ssmManagedNodeRole }}"
+    ssmDocumentName: "{{ .Values.remoteAccess.ssmDocumentName }}"
+    {{- end }}
+  {{- end }}
+
+  # Deployment modifications for SSM remote access
   deploymentModifications:
     podModifications:
       {{- if .Values.remoteAccess.enabled }}
@@ -126,11 +143,4 @@ spec:
             valueTemplate: "{{`{{ .Workspace.Spec.AppType }}`}}"
           - name: JUPYTER_BASE_URL
             valueTemplate: "/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/"
-
-  {{- if .Values.remoteAccess.enabled }}
-  # Controller-specific configuration (not injected into workspace containers)
-  controllerConfig:
-    SSM_MANAGED_NODE_ROLE: "{{ .Values.remoteAccess.ssmManagedNodeRole }}"
-    AWS_SSM_DOCUMENT_NAME: "{{ .Values.remoteAccess.ssmDocumentName }}"
-  {{- end }}
 

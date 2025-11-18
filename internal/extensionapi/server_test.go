@@ -181,7 +181,7 @@ var _ = Describe("Server", func() {
 		sarClient = clientSet.AuthorizationV1().SubjectAccessReviews()
 
 		// Create mock JWT manager
-		mockJWT := &mockJWTManager{token: "test-token"}
+		mockSignerFactory := &mockSignerFactory{signer: &mockSigner{token: "test-token"}}
 
 		// Create the server using NewExtensionServer
 		genericServer := &genericapiserver.GenericAPIServer{
@@ -189,7 +189,7 @@ var _ = Describe("Server", func() {
 				NonGoRestfulMux: mux.NewPathRecorderMux("test"),
 			},
 		}
-		server = NewExtensionServer(genericServer, config, &logger, k8sClient, sarClient, mockJWT)
+		server = NewExtensionServer(genericServer, config, &logger, k8sClient, sarClient, mockSignerFactory)
 		server.registerAllRoutes()
 
 		// Create a minimal fake routes server without automatic route registration
@@ -512,13 +512,13 @@ var _ = Describe("Server", func() {
 		})
 
 		It("Should return 404 for paths with insufficient parts", func() {
-			mockJWT := &mockJWTManager{token: "test-token"}
+			mockSignerFactory := &mockSignerFactory{signer: &mockSigner{token: "test-token"}}
 			genericServer := &genericapiserver.GenericAPIServer{
 				Handler: &genericapiserver.APIServerHandler{
 					NonGoRestfulMux: mux.NewPathRecorderMux("test"),
 				},
 			}
-			server := NewExtensionServer(genericServer, config, &logger, k8sClient, sarClient, mockJWT)
+			server := NewExtensionServer(genericServer, config, &logger, k8sClient, sarClient, mockSignerFactory)
 
 			resourceHandlers := map[string]func(http.ResponseWriter, *http.Request){
 				"test": func(w http.ResponseWriter, _ *http.Request) {

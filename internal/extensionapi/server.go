@@ -35,7 +35,7 @@ type ExtensionServer struct {
 	config        *ExtensionConfig
 	k8sClient     client.Client
 	sarClient     v1.SubjectAccessReviewInterface
-	jwtManager    jwt.Signer
+	signerFactory    jwt.SignerFactory
 	logger        *logr.Logger
 	genericServer *genericapiserver.GenericAPIServer
 	routes        map[string]func(http.ResponseWriter, *http.Request)
@@ -49,14 +49,14 @@ func NewExtensionServer(
 	logger *logr.Logger,
 	k8sClient client.Client,
 	sarClient v1.SubjectAccessReviewInterface,
-	jwtManager jwt.Signer) *ExtensionServer {
+	signerFactory jwt.SignerFactory) *ExtensionServer {
 
 	server := &ExtensionServer{
 		config:        config,
 		logger:        logger,
 		k8sClient:     k8sClient,
 		sarClient:     sarClient,
-		jwtManager:    jwtManager,
+		signerFactory: signerFactory,
 		routes:        make(map[string]func(http.ResponseWriter, *http.Request)),
 		genericServer: genericServer,
 		mux:           genericServer.Handler.NonGoRestfulMux,
@@ -236,28 +236,21 @@ func createGenericAPIServer(recommendedOptions *genericoptions.RecommendedOption
 	return genericServer, nil
 }
 
-// createKMSJWTManager creates a KMS-based JWT manager from config
-func createKMSJWTManager(config *ExtensionConfig) (jwt.Signer, error) {
+	// Create KMS client and signer factory
 	ctx := context.Background()
 	kmsClient, err := aws.NewKMSClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create KMS client: %w", err)
 	}
 
-	jwtManager := aws.NewKMSJWTManager(aws.KMSJWTConfig{
-		KMSClient:  kmsClient,
-		KeyId:      config.KMSKeyID,
-		Issuer:     "jupyter-k8s",
-		Audience:   "workspace-users", // todo make this configurable
-		Expiration: time.Minute * 5,   // 5 minute bootstrap token expiration
-	})
+	signerFactory := aws.NewAWSSignerFactory(kmsClient, config.KMSKeyID, time.Minute*5)
 
 	return jwtManager, nil
 }
 
 // createExtensionServer creates and configures the extension server
 func createExtensionServer(genericServer *genericapiserver.GenericAPIServer, config *ExtensionConfig, logger *logr.Logger, k8sClient client.Client, sarClient v1.SubjectAccessReviewInterface, jwtManager jwt.Signer) *ExtensionServer {
-	server := NewExtensionServer(genericServer, config, logger, k8sClient, sarClient, jwtManager)
+	server := NewExtensionServer(genericServer, config, logger, k8sClient, sarClient, signerFactory)
 	server.registerAllRoutes()
 	return server
 }
