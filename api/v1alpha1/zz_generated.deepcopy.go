@@ -487,6 +487,20 @@ func (in *WorkspaceAccessStrategySpec) DeepCopyInto(out *WorkspaceAccessStrategy
 			(*out)[key] = val
 		}
 	}
+	if in.CreateConnectionContext != nil {
+		in, out := &in.CreateConnectionContext, &out.CreateConnectionContext
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
+	if in.PodEventsContext != nil {
+		in, out := &in.PodEventsContext, &out.PodEventsContext
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.DeploymentModifications != nil {
 		in, out := &in.DeploymentModifications, &out.DeploymentModifications
 		*out = new(DeploymentModifications)

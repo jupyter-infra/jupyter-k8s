@@ -56,6 +56,11 @@ clusterWebUI:
         memory: 256Mi
     jwtSigningType: "kms"
     kmsKeyId: ""
+    # KMS encryption context configuration
+    kmsEncryptionContext:
+      enabled: false
+      # EKS cluster ARN for encryption context (required when enabled: true)
+      eksClusterArn: ""
     jwtIssuer: "jupyter-k8s-auth"
     jwtAudience: "workspace-users"
     jwtExpiration: "12h"

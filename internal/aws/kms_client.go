@@ -53,13 +53,14 @@ func (k *KMSClient) GetRegion() string {
 }
 
 // GenerateDataKey generates a new data key using the configured key spec
-func (k *KMSClient) GenerateDataKey(ctx context.Context, keyId string) ([]byte, []byte, error) {
+func (k *KMSClient) GenerateDataKey(ctx context.Context, keyId string, encryptionContext map[string]string) ([]byte, []byte, error) {
 	logger := log.FromContext(ctx).WithName("kms-client")
-	logger.Info("Generating data key", "keyId", keyId, "keySpec", k.keySpec, "region", k.region)
+	logger.Info("Generating data key", "keyId", keyId, "keySpec", k.keySpec, "region", k.region, "encryptionContext", encryptionContext)
 
 	input := &kms.GenerateDataKeyInput{
-		KeyId:   &keyId,
-		KeySpec: k.keySpec,
+		KeyId:             &keyId,
+		KeySpec:           k.keySpec,
+		EncryptionContext: encryptionContext,
 	}
 
 	result, err := k.client.GenerateDataKey(ctx, input)
@@ -78,12 +79,13 @@ func (k *KMSClient) GenerateDataKey(ctx context.Context, keyId string) ([]byte, 
 }
 
 // Decrypt decrypts the given ciphertext using KMS
-func (k *KMSClient) Decrypt(ctx context.Context, ciphertextBlob []byte) ([]byte, error) {
+func (k *KMSClient) Decrypt(ctx context.Context, ciphertextBlob []byte, encryptionContext map[string]string) ([]byte, error) {
 	logger := log.FromContext(ctx).WithName("kms-client")
-	logger.Info("Decrypting data", "ciphertextLength", len(ciphertextBlob), "region", k.region)
+	logger.Info("Decrypting data", "ciphertextLength", len(ciphertextBlob), "region", k.region, "encryptionContext", encryptionContext)
 
 	input := &kms.DecryptInput{
-		CiphertextBlob: ciphertextBlob,
+		CiphertextBlob:    ciphertextBlob,
+		EncryptionContext: encryptionContext,
 	}
 
 	result, err := k.client.Decrypt(ctx, input)

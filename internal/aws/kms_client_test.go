@@ -32,7 +32,7 @@ func TestKMSClient_GenerateDataKey(t *testing.T) {
 	client := NewKMSWrapper(mockKMS, "us-east-1")
 
 	// Test GenerateDataKey
-	plaintext, encrypted, err := client.GenerateDataKey(context.Background(), "test-key-id")
+	plaintext, encrypted, err := client.GenerateDataKey(context.Background(), "test-key-id", nil)
 	if err != nil {
 		t.Fatalf("GenerateDataKey failed: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestKMSClient_Decrypt(t *testing.T) {
 	client := NewKMSWrapper(mockKMS, "us-east-1")
 
 	// Test Decrypt
-	plaintext, err := client.Decrypt(context.Background(), []byte("some-encrypted-blob"))
+	plaintext, err := client.Decrypt(context.Background(), []byte("some-encrypted-blob"), nil)
 	if err != nil {
 		t.Fatalf("Decrypt failed: %v", err)
 	}

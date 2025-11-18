@@ -33,6 +33,7 @@ type KMSJWTManager struct {
 	issuer         string
 	audience       string
 	expiration     time.Duration
+	encryptionContext map[string]string
 	keyCache       map[string][]byte
 	cacheExpiry    map[string]time.Time
 	lastCleanup    time.Time
@@ -43,11 +44,12 @@ type KMSJWTManager struct {
 
 // KMSJWTConfig contains configuration for KMS JWT manager
 type KMSJWTConfig struct {
-	KMSClient      *KMSClient
-	KeyId          string
-	Issuer         string
-	Audience       string
-	Expiration     time.Duration
+	KMSClient         *KMSClient
+	KeyId             string
+	Issuer            string
+	Audience          string
+	Expiration        time.Duration
+	EncryptionContext map[string]string
 	MaxCacheSize   int
 	EvictBatchSize int
 }
@@ -70,7 +72,7 @@ func NewKMSJWTManager(config KMSJWTConfig) *KMSJWTManager {
 		issuer:         config.Issuer,
 		audience:       config.Audience,
 		expiration:     config.Expiration,
-		keyCache:       make(map[string][]byte),
+		encryptionContext: config.EncryptionContext,keyCache:       make(map[string][]byte),
 		cacheExpiry:    make(map[string]time.Time),
 		lastCleanup:    time.Now(),
 		maxCacheSize:   maxSize,
@@ -92,7 +94,7 @@ func (m *KMSJWTManager) GenerateToken(
 	now := time.Now().UTC()
 
 	// Generate data key for this token
-	plaintextKey, encryptedKey, err := m.kmsClient.GenerateDataKey(ctx, m.keyId)
+	plaintextKey, encryptedKey, err := m.kmsClient.GenerateDataKey(ctx, m.keyId, m.encryptionContext)
 	if err != nil {
 		log.Printf("KMS: Failed to generate data key: %v", err)
 		return "", fmt.Errorf("failed to generate data key: %w", err)
@@ -174,7 +176,7 @@ func (m *KMSJWTManager) ValidateToken(tokenString string) (*jwt.Claims, error) {
 		m.cleanupExpiredKeys()
 
 		// Cache miss - decrypt with KMS
-		plaintextKey, err = m.kmsClient.Decrypt(ctx, encryptedKey)
+		plaintextKey, err = m.kmsClient.Decrypt(ctx, encryptedKey, m.encryptionContext)
 		if err != nil {
 			log.Printf("KMS: Failed to decrypt data key: %v", err)
 			return nil, fmt.Errorf("failed to decrypt data key: %w", err)

@@ -263,13 +263,13 @@ func createTestWorkspace() *workspacev1alpha1.Workspace {
 	}
 }
 
-func createTestAccessStrategy(controllerConfig map[string]string) *workspacev1alpha1.WorkspaceAccessStrategy {
+func createTestAccessStrategy(connectionContext map[string]string) *workspacev1alpha1.WorkspaceAccessStrategy {
 	return &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "aws-ssm-remote-access",
 		},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			ControllerConfig: controllerConfig,
+			CreateConnectionContext: connectionContext,
 		},
 	}
 }
@@ -330,7 +330,7 @@ func TestSetupContainers_FirstTimeSetup_NoStateFile(t *testing.T) {
 	pod := createTestPod(containerStatuses)
 	workspace := createTestWorkspace()
 	accessStrategy := createTestAccessStrategy(map[string]string{
-		"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
+		"ssmManagedNodeRole": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
 	})
 
 	// Execute
@@ -401,7 +401,7 @@ func TestSetupContainers_SidecarContainerRestart(t *testing.T) {
 	pod := createTestPod(containerStatuses)
 	workspace := createTestWorkspace()
 	accessStrategy := createTestAccessStrategy(map[string]string{
-		"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
+		"ssmManagedNodeRole": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
 	})
 
 	// Execute
@@ -450,7 +450,7 @@ func TestSetupContainers_NoRestartDetected_AlreadySetup(t *testing.T) {
 	pod := createTestPod(containerStatuses)
 	workspace := createTestWorkspace()
 	accessStrategy := createTestAccessStrategy(map[string]string{
-		"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
+		"ssmManagedNodeRole": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
 	})
 
 	// Execute
@@ -495,7 +495,7 @@ func TestSetupContainers_SidecarNotRunning(t *testing.T) {
 	pod := createTestPod(containerStatuses)
 	workspace := createTestWorkspace()
 	accessStrategy := createTestAccessStrategy(map[string]string{
-		"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
+		"ssmManagedNodeRole": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
 	})
 
 	// Execute
@@ -544,7 +544,7 @@ func TestSetupContainers_SetupInProgress(t *testing.T) {
 	pod := createTestPod(containerStatuses)
 	workspace := createTestWorkspace()
 	accessStrategy := createTestAccessStrategy(map[string]string{
-		"SSM_MANAGED_NODE_ROLE": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
+		"ssmManagedNodeRole": "arn:aws:iam::123456789012:role/SSMManagedInstanceCore",
 	})
 
 	// Execute
@@ -652,7 +652,7 @@ func TestGenerateVSCodeConnectionURL_Success(t *testing.T) {
 
 	// Create access strategy with SSM document name
 	accessStrategy := createTestAccessStrategy(map[string]string{
-		"SSM_DOCUMENT_NAME": "test-document",
+		"ssmDocumentName": "test-document",
 	})
 
 	url, err := strategy.GenerateVSCodeConnectionURL(context.Background(), "test-workspace", "default", "test-pod-uid", "arn:aws:eks:us-east-1:123456789012:cluster/test", accessStrategy)
@@ -680,7 +680,7 @@ func TestGenerateVSCodeConnectionURL_StartSessionError(t *testing.T) {
 
 	// Create access strategy with SSM document name
 	accessStrategy := createTestAccessStrategy(map[string]string{
-		"SSM_DOCUMENT_NAME": "test-document",
+		"ssmDocumentName": "test-document",
 	})
 
 	url, err := strategy.GenerateVSCodeConnectionURL(context.Background(), "test-workspace", "default", "test-pod-uid", "arn:aws:eks:us-east-1:123456789012:cluster/test", accessStrategy)
