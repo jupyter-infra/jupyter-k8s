@@ -142,8 +142,8 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 	// Special case: If ONLY DesiredStatus changed to Stopped, allow without validation
 	// This enables users to stop workspaces without validation (emergency shutdown, cost savings)
 	// However, if other spec fields also changed, those changes must be validated
-	if newWorkspace.Spec.DesiredStatus == controller.PhaseStopped &&
-		oldWorkspace.Spec.DesiredStatus != controller.PhaseStopped &&
+	if newWorkspace.Spec.DesiredStatus == controller.DesiredStateStopped &&
+		oldWorkspace.Spec.DesiredStatus != controller.DesiredStateStopped &&
 		onlyDesiredStatusChanged(&oldWorkspace.Spec, &newWorkspace.Spec) {
 		workspacelog.Info("Allowing workspace stop without template validation (status-only change)", "workspace", newWorkspace.Name)
 		return nil

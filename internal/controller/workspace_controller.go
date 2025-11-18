@@ -228,7 +228,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Only fetch AccessStrategy if desiredStatus is not Stopped and workspace has AccessStrategy defined
 	var accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
-	if desiredStatus != PhaseStopped && workspace.Spec.AccessStrategy != nil {
+	if desiredStatus != DesiredStateStopped && workspace.Spec.AccessStrategy != nil {
 		accessStrategy, err = r.stateMachine.GetAccessStrategyForWorkspace(ctx, workspace)
 		if err != nil {
 			logger.Error(err, "Failed to get AccessStrategy")
