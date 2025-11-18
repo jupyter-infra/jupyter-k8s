@@ -149,6 +149,14 @@ test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expect
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
 
+.PHONY: cleanup-test-e2e-images
+cleanup-test-e2e-images: ## Remove e2e test images to force rebuild
+	@echo "Removing e2e test images..."
+	@$(CONTAINER_TOOL) rmi jupyter.org/jupyter-k8s:v0.0.1 2>/dev/null || true
+
+.PHONY: test-e2e-clean
+test-e2e-clean: cleanup-test-e2e cleanup-test-e2e-images test-e2e ## Full cleanup and rerun e2e tests
+
 .PHONY: lint
 lint: golangci-lint helm-lint ## Run golangci-lint linter
 	$(GOLANGCI_LINT) run
@@ -231,8 +239,7 @@ helm-lint: ## Lint the Helm chart
 		--set githubRbac.orgs[0].name=some-org \
 		--set githubRbac.orgs[0].teams[0]=ace-devs \
 		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
-		--set authmiddleware.jwtSigningKey=some-signing-key \
-		--set authmiddleware.csrfAuthKey=some-auth-key
+		--set authmiddleware.jwtSigningKey=some-signing-key
 
 .PHONY: helm-test
 helm-test: ## Test the Helm chart with helm template
@@ -263,8 +270,7 @@ helm-test-aws-traefik-dex: ## Test the Helm chart with guided mode (aws-traefik-
 		--set githubRbac.orgs[0].name=some-org \
 		--set githubRbac.orgs[0].teams[0]=ace-devs \
 		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
-		--set authmiddleware.jwtSigningKey=some-signing-key \
-		--set authmiddleware.csrfAuthKey=some-auth-key
+		--set authmiddleware.jwtSigningKey=some-signing-key
 	# Clean up temporary chart directory
 	rm -rf /tmp/helm-test-chart
 	# Run helm tests to verify resources
@@ -330,6 +336,15 @@ setup-kind: ## Set up a Kind cluster for development if it does not exist
 	else \
 		echo "cert-manager is already installed, skipping installation"; \
 	fi
+
+.PHONY: test-e2e-focus
+test-e2e-focus: setup-test-e2e manifests generate fmt vet ## Run specific e2e tests using FOCUS parameter. Usage: make test-e2e-focus FOCUS="Primary Storage"
+	@if [ -z "$(FOCUS)" ]; then \
+		echo "Error: FOCUS parameter is required. Usage: make test-e2e-focus FOCUS=\"Primary Storage\""; \
+		exit 1; \
+	fi
+	KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -ginkgo.v -ginkgo.focus="$(FOCUS)"
+	$(MAKE) cleanup-test-e2e
 
 .PHONY: teardown-kind
 teardown-kind: ## Tear down the Kind cluster, registry, and clean up images
@@ -535,8 +550,7 @@ deploy-aws-traefik-dex-internal:
 			--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
 			--set authmiddleware.repository=$(ECR_REGISTRY) \
 			--set authmiddleware.imageName=$(ECR_REPOSITORY_AUTH) \
-			--set authmiddleware.jwtSigningKey=$$JWT_SIGNING_KEY \
-			--set authmiddleware.csrfAuthKey=$$CSRF_AUTH_KEY"; \
+			--set authmiddleware.jwtSigningKey=$$JWT_SIGNING_KEY
 		\
 		if [ ! -z "$$DEX_OAUTH2_SECRET" ]; then \
 			HELM_ARGS="$$HELM_ARGS --set dex.oauth2ProxyClientSecret=$$DEX_OAUTH2_SECRET"; \
@@ -619,6 +633,7 @@ apply-sample-routing:
 		set -e; \
 		. ./.env; \
 		export DOMAIN=$$DOMAIN; \
+		kubectl apply -f config/samples_routing/workspace_access_strategy.yaml --dry-run=client -o yaml | envsubst | kubectl apply -f -; \
 		kubectl apply -k config/samples_routing --dry-run=client -o yaml | envsubst | kubectl apply -f -; \
 	)
 

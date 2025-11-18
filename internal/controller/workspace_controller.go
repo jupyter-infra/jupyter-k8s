@@ -36,6 +36,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	mngr "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // GVKWatch represents a Group-Version-Kind to watch
@@ -72,14 +73,14 @@ type WorkspaceControllerOptions struct {
 type WorkspaceReconciler struct {
 	client.Client
 	Scheme          *runtime.Scheme
-	stateMachine    *StateMachine
+	stateMachine    StateMachineInterface
 	statusManager   *StatusManager
 	podEventHandler *PodEventHandler
 	options         WorkspaceControllerOptions
 }
 
 // SetStateMachine sets the state machine for testing purposes
-func (r *WorkspaceReconciler) SetStateMachine(sm *StateMachine) {
+func (r *WorkspaceReconciler) SetStateMachine(sm StateMachineInterface) {
 	r.stateMachine = sm
 }
 
@@ -100,6 +101,8 @@ func (r *WorkspaceReconciler) SetStateMachine(sm *StateMachine) {
 // move the current state of the cluster closer to the desired state.
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
+//
+// nolint:gocyclo
 func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 	logger.Info("Starting reconciliation", "workspace", req.NamespacedName)
@@ -120,77 +123,121 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return r.stateMachine.ReconcileDeletion(ctx, workspace)
 	}
 
+	// Consolidated function to ensure labels are set correctly
+	// and perform at most one update
+	needsUpdate := false
+	finalizerAdded := false
+	labelsChanged := map[string]string{}
+	labelsRemoved := []string{}
+
 	// Add finalizer if missing (for new workspaces)
 	if !controllerutil.ContainsFinalizer(workspace, WorkspaceFinalizerName) {
 		logger.Info("Adding finalizer to workspace")
 		controllerutil.AddFinalizer(workspace, WorkspaceFinalizerName)
-		if err := r.Update(ctx, workspace); err != nil {
-			logger.Error(err, "Failed to add finalizer")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true}, nil
+		needsUpdate = true
+		finalizerAdded = true
 	}
 
-	// Ensure template labels are set or removed based on templateRef
+	// Initialize labels map if needed
+	if workspace.Labels == nil {
+		workspace.Labels = make(map[string]string)
+	}
+
+	// Handle template labels
 	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
 		// Template is referenced - ensure both labels are set
-		if workspace.Labels == nil {
-			workspace.Labels = make(map[string]string)
-		}
-
 		templateName := workspace.Spec.TemplateRef.Name
 		templateNamespace := workspaceutil.GetTemplateRefNamespace(workspace)
 
-		needsUpdate := false
 		if workspace.Labels[workspaceutil.LabelWorkspaceTemplate] != templateName {
 			workspace.Labels[workspaceutil.LabelWorkspaceTemplate] = templateName
+			labelsChanged[workspaceutil.LabelWorkspaceTemplate] = templateName
 			needsUpdate = true
 		}
 		if workspace.Labels[workspaceutil.LabelWorkspaceTemplateNamespace] != templateNamespace {
 			workspace.Labels[workspaceutil.LabelWorkspaceTemplateNamespace] = templateNamespace
+			labelsChanged[workspaceutil.LabelWorkspaceTemplateNamespace] = templateNamespace
 			needsUpdate = true
-		}
-
-		if needsUpdate {
-			logger.Info("Adding/updating template labels",
-				"template", templateName,
-				"templateNamespace", templateNamespace)
-			if err := r.Update(ctx, workspace); err != nil {
-				logger.Error(err, "Failed to update workspace with template labels")
-				return ctrl.Result{}, err
-			}
-			logger.Info("Successfully updated template labels")
-			// Requeue to process with updated labels
-			return ctrl.Result{Requeue: true}, nil
 		}
 	} else {
 		// Template is not referenced - ensure labels are removed
-		if workspace.Labels != nil {
-			needsUpdate := false
-			if _, hasTemplateLabel := workspace.Labels[workspaceutil.LabelWorkspaceTemplate]; hasTemplateLabel {
-				delete(workspace.Labels, workspaceutil.LabelWorkspaceTemplate)
-				needsUpdate = true
-			}
-			if _, hasNamespaceLabel := workspace.Labels[workspaceutil.LabelWorkspaceTemplateNamespace]; hasNamespaceLabel {
-				delete(workspace.Labels, workspaceutil.LabelWorkspaceTemplateNamespace)
-				needsUpdate = true
-			}
-
-			if needsUpdate {
-				logger.Info("Removing template labels (no template reference)")
-				if err := r.Update(ctx, workspace); err != nil {
-					logger.Error(err, "Failed to remove template labels")
-					return ctrl.Result{}, err
-				}
-				logger.Info("Successfully removed template labels")
-				// Requeue to process with updated labels
-				return ctrl.Result{Requeue: true}, nil
-			}
+		if _, hasTemplateLabel := workspace.Labels[workspaceutil.LabelWorkspaceTemplate]; hasTemplateLabel {
+			delete(workspace.Labels, workspaceutil.LabelWorkspaceTemplate)
+			labelsRemoved = append(labelsRemoved, workspaceutil.LabelWorkspaceTemplate)
+			needsUpdate = true
+		}
+		if _, hasNamespaceLabel := workspace.Labels[workspaceutil.LabelWorkspaceTemplateNamespace]; hasNamespaceLabel {
+			delete(workspace.Labels, workspaceutil.LabelWorkspaceTemplateNamespace)
+			labelsRemoved = append(labelsRemoved, workspaceutil.LabelWorkspaceTemplateNamespace)
+			needsUpdate = true
 		}
 	}
 
-	// Delegate to state machine for business logic
-	result, err := r.stateMachine.ReconcileDesiredState(ctx, workspace)
+	// Handle AccessStrategy labels
+	if workspace.Spec.AccessStrategy != nil && workspace.Spec.AccessStrategy.Name != "" {
+		// AccessStrategy is referenced - ensure both labels are set
+		accessStrategyName := workspace.Spec.AccessStrategy.Name
+		accessStrategyNamespace := workspace.Namespace
+		if workspace.Spec.AccessStrategy.Namespace != "" {
+			accessStrategyNamespace = workspace.Spec.AccessStrategy.Namespace
+		}
+
+		if workspace.Labels[LabelAccessStrategyName] != accessStrategyName {
+			workspace.Labels[LabelAccessStrategyName] = accessStrategyName
+			labelsChanged[LabelAccessStrategyName] = accessStrategyName
+			needsUpdate = true
+		}
+		if workspace.Labels[LabelAccessStrategyNamespace] != accessStrategyNamespace {
+			workspace.Labels[LabelAccessStrategyNamespace] = accessStrategyNamespace
+			labelsChanged[LabelAccessStrategyNamespace] = accessStrategyNamespace
+			needsUpdate = true
+		}
+	} else {
+		// AccessStrategy is not referenced - ensure labels are removed
+		if _, hasAccessStrategyLabel := workspace.Labels[LabelAccessStrategyName]; hasAccessStrategyLabel {
+			delete(workspace.Labels, LabelAccessStrategyName)
+			labelsRemoved = append(labelsRemoved, LabelAccessStrategyName)
+			needsUpdate = true
+		}
+		if _, hasNamespaceLabel := workspace.Labels[LabelAccessStrategyNamespace]; hasNamespaceLabel {
+			delete(workspace.Labels, LabelAccessStrategyNamespace)
+			labelsRemoved = append(labelsRemoved, LabelAccessStrategyNamespace)
+			needsUpdate = true
+		}
+	}
+
+	// Perform a single update if any labels or finalizer have changed
+	if needsUpdate {
+		logger.Info("Updating workspace labels",
+			"finalizerAdded", finalizerAdded,
+			"labelsChanged", labelsChanged,
+			"labelsRemoved", labelsRemoved,
+		)
+
+		if err := r.Update(ctx, workspace); err != nil {
+			logger.Error(err, "Failed to update workspace labels or finalizers")
+			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+		}
+		logger.Info("Successfully updated workspace labels or finalizers")
+		// Requeue to process with updated labels and/or finalizer
+		return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
+	}
+
+	// Get desired status to decide if we need to fetch AccessStrategy
+	desiredStatus := r.stateMachine.getDesiredStatus(workspace)
+
+	// Only fetch AccessStrategy if desiredStatus is not Stopped and workspace has AccessStrategy defined
+	var accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
+	if desiredStatus != DesiredStateStopped && workspace.Spec.AccessStrategy != nil {
+		accessStrategy, err = r.stateMachine.GetAccessStrategyForWorkspace(ctx, workspace)
+		if err != nil {
+			logger.Error(err, "Failed to get AccessStrategy")
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Delegate to state machine for business logic, passing the accessStrategy
+	result, err := r.stateMachine.ReconcileDesiredState(ctx, workspace, accessStrategy)
 	if err != nil {
 		logger.Error(err, "Failed to reconcile desired state")
 		return ctrl.Result{}, err
@@ -208,6 +255,13 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.PersistentVolumeClaim{})
+
+	// Watch for changes to AccessStrategy resources to trigger reconciliation
+	// of Workspaces that reference them
+	builder.Watches(
+		&workspacev1alpha1.WorkspaceAccessStrategy{},
+		handler.EnqueueRequestsFromMapFunc(r.accessStrategyEventHandler),
+	)
 
 	// Conditionally watch pods based on configuration
 	if r.options.EnableWorkspacePodWatching {
@@ -319,4 +373,46 @@ func (r *WorkspaceReconciler) getWorkspace(ctx context.Context, req ctrl.Request
 	workspace := &workspacev1alpha1.Workspace{}
 	err := r.Get(ctx, req.NamespacedName, workspace)
 	return workspace, err
+}
+
+// accessStrategyEventHandler maps AccessStrategy events to Workspace reconciliation requests
+func (r *WorkspaceReconciler) accessStrategyEventHandler(ctx context.Context, obj client.Object) []reconcile.Request {
+	logger := logf.FromContext(ctx)
+	accessStrategy, ok := obj.(*workspacev1alpha1.WorkspaceAccessStrategy)
+	if !ok {
+		// Not an AccessStrategy
+		return nil
+	}
+
+	logger.Info("Handling AccessStrategy event",
+		"accessStrategy", accessStrategy.Name,
+		"namespace", accessStrategy.Namespace)
+
+	// Find all Workspaces that reference this AccessStrategy
+	requests, listErr := workspaceutil.GetWorkspaceReconciliationRequestsForAccessStrategy(
+		ctx,
+		r.Client,
+		accessStrategy.Name,
+		accessStrategy.Namespace)
+	if listErr != nil {
+		logger.Error(
+			listErr,
+			"Failed to list Workspaces associated with access strategy",
+			"accessStrategy", accessStrategy.Name,
+			"namespace", accessStrategy.Namespace)
+		return nil
+	}
+
+	if len(requests) > 0 {
+		logger.Info("Found active workspaces referencing access strategy",
+			"accessStrategy", accessStrategy.Name,
+			"namespace", accessStrategy.Namespace,
+			"workspaceCount", len(requests))
+	} else {
+		logger.Info("Found no active workspace referencing access strategy",
+			"accessStrategy", accessStrategy.Name,
+			"namespace", accessStrategy.Namespace)
+	}
+
+	return requests
 }

@@ -31,9 +31,12 @@ const (
 	// LabelAccessStrategyNamespace is the label key for access strategy namespace
 	LabelAccessStrategyNamespace = "workspace.jupyter.org/access-strategy-namespace"
 	// LabelWorkspaceTemplate is the label key for workspace template name
-	LabelWorkspaceTemplate = "workspace.jupyter.org/template"
+	LabelWorkspaceTemplate = "workspace.jupyter.org/template-name"
 	// LabelWorkspaceTemplateNamespace is the label key for workspace template namespace
 	LabelWorkspaceTemplateNamespace = "workspace.jupyter.org/template-namespace"
+
+	// LabelComponent is the label key for component identification
+	LabelComponent = "workspace.jupyter.org/component"
 
 	// AppLabelValue is the label value for app label
 	AppLabelValue = "jupyter"
@@ -49,12 +52,10 @@ const (
 	// AnnotationServiceAccountGroups is the annotation key for service account groups
 	AnnotationServiceAccountGroups = "workspace.jupyter.org/service-account-groups"
 
-	// PhaseCreating indicates the workspace is being created
-	PhaseCreating = "Creating"
-	// PhaseRunning indicates the workspace is running
-	PhaseRunning = "Running"
-	// PhaseStopped indicates the workspace is stopped
-	PhaseStopped = "Stopped"
+	// DesiredStateRunning indicates the workspace is running
+	DesiredStateRunning = "Running"
+	// DesiredStateStopped indicates the workspace is stopped
+	DesiredStateStopped = "Stopped"
 
 	// PreemptedReason is the reason for preempted workspaces
 	PreemptedReason = "Workspace preempted due to resource contention"
@@ -84,7 +85,7 @@ const (
 	IdleCheckInterval = 5 * time.Minute
 
 	// WorkspaceFinalizerName is the finalizer name for workspace cleanup protection
-	WorkspaceFinalizerName = "workspace.jupyter.org/cleanup-protection"
+	WorkspaceFinalizerName = "workspace.jupyter.org/workspace-protection"
 
 	// ControllerPodNamespaceEnv is the environment variable for the controller pod namespace
 	ControllerPodNamespaceEnv = "CONTROLLER_POD_NAMESPACE"
@@ -116,5 +117,6 @@ func GenerateLabels(workspaceName string) map[string]string {
 	return map[string]string{
 		AppLabel:                         AppLabelValue,
 		workspaceutil.LabelWorkspaceName: workspaceName,
+		LabelComponent:                   "workspace",
 	}
 }

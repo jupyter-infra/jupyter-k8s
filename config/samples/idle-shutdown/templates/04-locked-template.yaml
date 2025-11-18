@@ -21,7 +21,7 @@ spec:
   # Locked idle shutdown - no overrides allowed
   defaultIdleShutdown:
     enabled: true
-    timeoutMinutes: 2  # Short timeout for testing
+    idleTimeoutInMinutes: 2  # Short timeout for testing
     detection:
       httpGet:
         path: "/api/idle"

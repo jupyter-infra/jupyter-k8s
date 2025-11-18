@@ -1,3 +1,4 @@
+{{- if .Values.clusterWebUI.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -12,7 +13,8 @@ spec:
     app: traefik
     component: router
   ports:
-  - port: 443
-    name: websecure
+  - port: 80
+    name: web
     targetPort: web
     protocol: TCP
+{{- end }}

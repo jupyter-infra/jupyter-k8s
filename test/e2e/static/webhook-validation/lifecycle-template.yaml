@@ -12,15 +12,16 @@ spec:
         command: ["/bin/sh", "-c", "echo started"]
   defaultIdleShutdown:
     enabled: true
-    timeoutMinutes: 30
+    idleTimeoutInMinutes: 30
     detection:
       httpGet:
         path: "/api/status"
         port: 8888
   resourceBounds:
-    cpu:
-      min: "100m"
-      max: "2"
-    memory:
-      min: "128Mi"
-      max: "4Gi"
+    resources:
+      cpu:
+        min: "100m"
+        max: "2"
+      memory:
+        min: "128Mi"
+        max: "4Gi"

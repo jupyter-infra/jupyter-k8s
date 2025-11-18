@@ -1,4 +1,4 @@
-{{- if .Values.traefik.enabled }}
+{{- if .Values.clusterWebUI.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -9,19 +9,23 @@ metadata:
     component: router
   annotations:
     kubernetes.io/ingress.class: alb
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/scheme: {{ .Values.clusterWebUI.alb.scheme | quote }}
+    alb.ingress.kubernetes.io/target-type: {{ .Values.clusterWebUI.alb.targetType | quote }}
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
-    {{- if .Values.awsCertificateArn }}
-    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.awsCertificateArn | quote }}
+    alb.ingress.kubernetes.io/ssl-policy: {{ .Values.clusterWebUI.alb.sslPolicy | quote }}
+    {{- if .Values.clusterWebUI.awsCertificateArn }}
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.clusterWebUI.awsCertificateArn | quote }}
     {{- end }}
-    {{- if .Values.externalDns.enabled }}
-    external-dns.alpha.kubernetes.io/hostname: "{{ .Values.domain }},*.{{ .Values.domain }}"
+    {{- if .Values.clusterWebUI.externalDns.enabled }}
+    external-dns.alpha.kubernetes.io/hostname: "{{ .Values.clusterWebUI.domain }},*.{{ .Values.clusterWebUI.domain }}"
+    {{- end }}
+    {{- range $key, $value := .Values.clusterWebUI.alb.annotations }}
+    {{ $key }}: {{ $value | quote }}
     {{- end }}
 spec:
   rules:
-  - host: {{ .Values.domain }}
+  - host: {{ .Values.clusterWebUI.domain }}
     http:
       paths:
       - path: /
@@ -30,8 +34,8 @@ spec:
           service:
             name: traefik
             port:
-              number: 443
-  - host: "*.{{ .Values.domain }}"
+              number: 80
+  - host: "*.{{ .Values.clusterWebUI.domain }}"
     http:
       paths:
       - path: /
@@ -40,5 +44,5 @@ spec:
           service:
             name: traefik
             port:
-              number: 443
+              number: 80
 {{- end }}

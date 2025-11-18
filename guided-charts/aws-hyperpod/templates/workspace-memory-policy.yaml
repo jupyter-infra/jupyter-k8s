@@ -1,5 +1,5 @@
 {{- if .Values.remoteAccess.enabled }}
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
   name: hyperpod-workspace-memory-policy
@@ -19,7 +19,7 @@ spec:
       quantity(object.spec.resources.requests.memory).isGreaterThan(quantity("8Gi"))
     message: "HyperPod workspace requires minimum 8GB memory for remote access functionality"
 ---
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
   name: hyperpod-workspace-memory-binding
@@ -28,6 +28,5 @@ spec:
   validationActions: [Deny]
   matchResources:
     namespaceSelector:
-      matchLabels:
-        hyperpod.aws.com/managed: "true"
+      matchExpressions: [ ]
 {{- end }}

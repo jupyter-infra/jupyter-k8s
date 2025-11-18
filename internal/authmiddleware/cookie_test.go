@@ -40,18 +40,12 @@ func TestNewCookieManagerSameSite(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			config := &Config{
-				CookieName:       "test_auth",
-				CookieSecure:     true,
-				CookiePath:       "/",
-				CookieMaxAge:     1 * time.Hour,
-				CookieHTTPOnly:   true,
-				CookieSameSite:   tc.sameSite,
-				CSRFAuthKey:      "01234567890123456789012345678901", // 32-byte key
-				CSRFCookieName:   "test_csrf",
-				CSRFFieldName:    "csrf_token",
-				CSRFHeaderName:   "X-CSRF-Token",
-				CSRFCookieMaxAge: 1 * time.Hour,
-				CSRFCookieSecure: true,
+				CookieName:     "test_auth",
+				CookieSecure:   true,
+				CookiePath:     "/",
+				CookieMaxAge:   1 * time.Hour,
+				CookieHTTPOnly: true,
+				CookieSameSite: tc.sameSite,
 			}
 
 			manager, err := NewCookieManager(config)
@@ -67,12 +61,6 @@ func TestNewCookieManagerSameSite(t *testing.T) {
 				t.Fatalf("Failed to create cookie manager: %v", err)
 			}
 
-			if manager.csrfProtect == nil {
-				t.Errorf("CSRF protect function is nil")
-			}
-
-			// We can't directly test the CSRF protect options since they're wrapped inside the function,
-			// but we can verify that the manager fields are correctly set
 			var expectedHttpSameSite http.SameSite
 			switch tc.sameSite {
 			case "strict":
@@ -102,9 +90,6 @@ func TestDynamicCookiePath(t *testing.T) {
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
 		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		CSRFAuthKey:      "01234567890123456789012345678901", // 32-byte key
-		CSRFCookieName:   "test_csrf",
-		CSRFFieldName:    "csrf_token",
 	}
 
 	// Create a cookie manager
@@ -189,7 +174,6 @@ func TestCookieWithDifferentPathsButSameApp(t *testing.T) {
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
 		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		CSRFAuthKey:      "01234567890123456789012345678901", // 32-byte key
 	}
 
 	// Create a cookie manager
@@ -249,7 +233,6 @@ func TestSetCookieNameAndPath(t *testing.T) {
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
 		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		CSRFAuthKey:      "01234567890123456789012345678901", // 32-byte key
 	}
 
 	// Create a cookie manager
@@ -366,7 +349,6 @@ func TestGetCookieWithPath(t *testing.T) {
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
 		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		CSRFAuthKey:      "01234567890123456789012345678901", // 32-byte key
 	}
 
 	// Create a cookie manager
@@ -435,7 +417,6 @@ func TestGetCookieNotFound(t *testing.T) {
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
 		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		CSRFAuthKey:      "01234567890123456789012345678901", // 32-byte key
 	}
 
 	// Create a cookie manager
@@ -468,7 +449,6 @@ func TestClearCookie(t *testing.T) {
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
 		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		CSRFAuthKey:      "01234567890123456789012345678901", // 32-byte key
 	}
 
 	// Create a cookie manager

@@ -275,6 +275,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "WorkspaceTemplate")
 		os.Exit(1)
 	}
+
+	if err := controller.SetupWorkspaceAccessStrategyController(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WorkspaceAccessStrategy")
+		os.Exit(1)
+	}
 	// Set up Workspace webhook (enabled by default, controlled by ENABLE_WORKSPACE_WEBHOOK)
 	// nolint:goconst
 	if os.Getenv("ENABLE_WORKSPACE_WEBHOOK") != "false" {

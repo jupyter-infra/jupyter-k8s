@@ -55,7 +55,7 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		return err
 	}
 
-	var violations []controller.TemplateViolation
+	var violations []TemplateViolation
 
 	// Validate image
 	if workspace.Spec.Image != "" {
@@ -76,6 +76,11 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		if violation := validateStorageSize(workspace.Spec.Storage.Size, template); violation != nil {
 			violations = append(violations, *violation)
 		}
+	}
+
+	// Validate secondary storage volumes
+	if violation := validateSecondaryStorages(workspace.Spec.Volumes, template); violation != nil {
+		violations = append(violations, *violation)
 	}
 
 	if len(violations) > 0 {
@@ -137,8 +142,8 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 	// Special case: If ONLY DesiredStatus changed to Stopped, allow without validation
 	// This enables users to stop workspaces without validation (emergency shutdown, cost savings)
 	// However, if other spec fields also changed, those changes must be validated
-	if newWorkspace.Spec.DesiredStatus == controller.PhaseStopped &&
-		oldWorkspace.Spec.DesiredStatus != controller.PhaseStopped &&
+	if newWorkspace.Spec.DesiredStatus == controller.DesiredStateStopped &&
+		oldWorkspace.Spec.DesiredStatus != controller.DesiredStateStopped &&
 		onlyDesiredStatusChanged(&oldWorkspace.Spec, &newWorkspace.Spec) {
 		workspacelog.Info("Allowing workspace stop without template validation (status-only change)", "workspace", newWorkspace.Name)
 		return nil
@@ -152,7 +157,7 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 }
 
 // formatViolations formats template violations into a readable error message
-func formatViolations(violations []controller.TemplateViolation) string {
+func formatViolations(violations []TemplateViolation) string {
 	if len(violations) == 0 {
 		return ""
 	}

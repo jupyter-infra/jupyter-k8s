@@ -111,3 +111,27 @@ func splitString(s, sep string) []string {
 	result = append(result, string(parts[last:]))
 	return result
 }
+
+// EnsureSubsetOf returns (true, []) if smallArray is subset of largeArray
+// (false, missingEntriesInLargeArray) otherwise.
+func EnsureSubsetOf(smallArray []string, largeArray []string) (bool, []string) {
+	if len(largeArray) == 0 && len(smallArray) > 0 {
+		return false, smallArray
+	} else if len(smallArray) == 0 {
+		return true, []string{}
+	}
+
+	set := make(map[string]bool)
+	for _, v := range largeArray {
+		set[v] = true
+	}
+
+	var missingEntries []string
+	for _, v := range smallArray {
+		if !set[v] {
+			missingEntries = append(missingEntries, v)
+		}
+	}
+
+	return len(missingEntries) == 0, missingEntries
+}

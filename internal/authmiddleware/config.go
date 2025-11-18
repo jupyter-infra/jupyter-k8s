@@ -1,5 +1,5 @@
 // Package authmiddleware provides JWT-based authentication and authorization middleware
-// for Jupyter-k8s workspaces, handling user identity, cookie management, and CSRF protection.
+// for Jupyter-k8s workspaces, handling user identity and cookie management.
 package authmiddleware
 
 import (
@@ -50,19 +50,12 @@ const (
 	EnvWorkspaceNamespacePathRegex = "WORKSPACE_NAMESPACE_PATH_REGEX"
 	EnvWorkspaceNamePathRegex      = "WORKSPACE_NAME_PATH_REGEX"
 
-	// CSRF configuration
-	EnvCsrfAuthKey    = "CSRF_AUTH_KEY"
-	EnvCsrfCookieName = "CSRF_COOKIE_NAME"
-	// Note: CSRF cookies use the same CookiePath and CookieDomain as auth cookies
-	EnvCsrfCookieMaxAge   = "CSRF_COOKIE_MAX_AGE"
-	EnvCsrfCookieSecure   = "CSRF_COOKIE_SECURE"
-	EnvCsrfFieldName      = "CSRF_FIELD_NAME"
-	EnvCsrfHeaderName     = "CSRF_HEADER_NAME"
-	EnvCsrfTrustedOrigins = "CSRF_TRUSTED_ORIGINS"
-
 	// OIDC configuration
-	EnvOidcUsernamePrefix = "OIDC_USERNAME_PREFIX"
-	EnvOidcGroupsPrefix   = "OIDC_GROUPS_PREFIX"
+	EnvOidcUsernamePrefix  = "OIDC_USERNAME_PREFIX"
+	EnvOidcGroupsPrefix    = "OIDC_GROUPS_PREFIX"
+	EnvOIDCIssuerURL       = "OIDC_ISSUER_URL"
+	EnvOIDCClientID        = "OIDC_CLIENT_ID"
+	EnvOIDCInitTimeoutSecs = "OIDC_INIT_TIMEOUT_SECONDS"
 )
 
 // JWT signing types
@@ -109,18 +102,10 @@ const (
 	DefaultWorkspaceNamespaceSubdomainRegex = `^([^-]+)-.*`
 	DefaultWorkspaceNameSubdomainRegex      = `^[^-]+-(.*)$`
 
-	// CSRF defaults
-	DefaultCsrfCookieName = "workspace_csrf"
-	// Note: CSRF cookies use the same CookiePath and CookieDomain as auth cookies
-	DefaultCsrfCookieMaxAge = 1 * time.Hour
-	DefaultCsrfCookieSecure = true
-	DefaultCsrfFieldName    = "csrf_token"
-	DefaultCsrfHeaderName   = "X-CSRF-Token"
-	// DefaultCsrfTrustedOrigins is a slice, defined in createDefaultConfig
-
 	// OIDC configuration
-	DefaultOidcUsernamePrefix = "github:"
-	DefaultOidcGroupsPrefix   = "github:"
+	DefaultOidcUsernamePrefix  = "github:"
+	DefaultOidcGroupsPrefix    = "github:"
+	DefaultOIDCInitTimeoutSecs = 30
 )
 
 // Config holds all configuration for the workspaces-auth service
@@ -164,19 +149,12 @@ type Config struct {
 	WorkspaceNamespaceSubdomainRegex string // Regex pattern to extract workspace namespace from subdomain
 	WorkspaceNameSubdomainRegex      string // Regex pattern to extract workspace name from subdomain
 
-	// CSRF configuration
-	CSRFAuthKey    string
-	CSRFCookieName string
-	// Note: CSRF cookies use the same CookiePath and CookieDomain as auth cookies
-	CSRFCookieMaxAge   time.Duration
-	CSRFCookieSecure   bool
-	CSRFFieldName      string
-	CSRFHeaderName     string
-	CSRFTrustedOrigins []string
-
 	// OIDC configuration
-	OidcUsernamePrefix string
-	OidcGroupsPrefix   string
+	OidcUsernamePrefix  string
+	OidcGroupsPrefix    string
+	OIDCIssuerURL       string
+	OIDCClientID        string
+	OIDCInitTimeoutSecs int
 }
 
 // NewConfig creates a Config with values from environment variables
@@ -201,11 +179,9 @@ func NewConfig() (*Config, error) {
 		return nil, err
 	}
 
-	if err := applyCSRFConfig(config); err != nil {
+	if err := applyOidcConfig(config); err != nil {
 		return nil, err
 	}
-
-	applyOidcConfig(config)
 
 	return config, nil
 }
@@ -252,16 +228,10 @@ func createDefaultConfig() *Config {
 		WorkspaceNamespaceSubdomainRegex: DefaultWorkspaceNamespaceSubdomainRegex,
 		WorkspaceNameSubdomainRegex:      DefaultWorkspaceNameSubdomainRegex,
 
-		// CSRF defaults
-		CSRFCookieName:   DefaultCsrfCookieName,
-		CSRFCookieMaxAge: DefaultCsrfCookieMaxAge,
-		CSRFCookieSecure: DefaultCsrfCookieSecure,
-		CSRFFieldName:    DefaultCsrfFieldName,
-		CSRFHeaderName:   DefaultCsrfHeaderName,
-
 		// OIDC defaults
-		OidcUsernamePrefix: DefaultOidcUsernamePrefix,
-		OidcGroupsPrefix:   DefaultOidcGroupsPrefix,
+		OidcUsernamePrefix:  DefaultOidcUsernamePrefix,
+		OidcGroupsPrefix:    DefaultOidcGroupsPrefix,
+		OIDCInitTimeoutSecs: DefaultOIDCInitTimeoutSecs,
 	}
 }
 
@@ -452,52 +422,8 @@ func applyCookieConfig(config *Config) error {
 	return nil
 }
 
-// applyCSRFConfig applies CSRF-related environment variable overrides
-func applyCSRFConfig(config *Config) error {
-	// Required CSRF auth key
-	if csrfAuthKey := os.Getenv(EnvCsrfAuthKey); csrfAuthKey != "" {
-		config.CSRFAuthKey = csrfAuthKey
-	} else {
-		return fmt.Errorf("%s environment variable must be set", EnvCsrfAuthKey)
-	}
-
-	if csrfCookieName := os.Getenv(EnvCsrfCookieName); csrfCookieName != "" {
-		config.CSRFCookieName = csrfCookieName
-	}
-
-	if csrfCookieMaxAge := os.Getenv(EnvCsrfCookieMaxAge); csrfCookieMaxAge != "" {
-		d, err := time.ParseDuration(csrfCookieMaxAge)
-		if err != nil {
-			return fmt.Errorf("invalid %s: %w", EnvCsrfCookieMaxAge, err)
-		}
-		config.CSRFCookieMaxAge = d
-	}
-
-	if csrfCookieSecure := os.Getenv(EnvCsrfCookieSecure); csrfCookieSecure != "" {
-		secure, err := strconv.ParseBool(csrfCookieSecure)
-		if err != nil {
-			return fmt.Errorf("invalid %s: %w", EnvCsrfCookieSecure, err)
-		}
-		config.CSRFCookieSecure = secure
-	}
-
-	if csrfFieldName := os.Getenv(EnvCsrfFieldName); csrfFieldName != "" {
-		config.CSRFFieldName = csrfFieldName
-	}
-
-	if csrfHeaderName := os.Getenv(EnvCsrfHeaderName); csrfHeaderName != "" {
-		config.CSRFHeaderName = csrfHeaderName
-	}
-
-	if csrfTrustedOrigins := os.Getenv(EnvCsrfTrustedOrigins); csrfTrustedOrigins != "" {
-		config.CSRFTrustedOrigins = splitAndTrim(csrfTrustedOrigins, ",")
-	}
-
-	return nil
-}
-
 // applyOidcConfig applies OIDC-related environment variable overrides
-func applyOidcConfig(config *Config) {
+func applyOidcConfig(config *Config) error {
 	if oidcUsernamePrefix := os.Getenv(EnvOidcUsernamePrefix); oidcUsernamePrefix != "" {
 		config.OidcUsernamePrefix = oidcUsernamePrefix
 	}
@@ -505,4 +431,30 @@ func applyOidcConfig(config *Config) {
 	if oidcGroupsPrefix := os.Getenv(EnvOidcGroupsPrefix); oidcGroupsPrefix != "" {
 		config.OidcGroupsPrefix = oidcGroupsPrefix
 	}
+
+	if oidcIssuerURL := os.Getenv(EnvOIDCIssuerURL); oidcIssuerURL != "" {
+		config.OIDCIssuerURL = oidcIssuerURL
+	}
+
+	if oidcClientID := os.Getenv(EnvOIDCClientID); oidcClientID != "" {
+		config.OIDCClientID = oidcClientID
+	}
+
+	if oidcInitTimeoutSecs := os.Getenv(EnvOIDCInitTimeoutSecs); oidcInitTimeoutSecs != "" {
+		timeoutSecs, err := strconv.Atoi(oidcInitTimeoutSecs)
+		if err != nil {
+			return fmt.Errorf("invalid %s: %w", EnvOIDCInitTimeoutSecs, err)
+		}
+		if timeoutSecs <= 0 {
+			return fmt.Errorf("%s must be a positive integer, got %d", EnvOIDCInitTimeoutSecs, timeoutSecs)
+		}
+		config.OIDCInitTimeoutSecs = timeoutSecs
+	}
+
+	// Ensure OIDCInitTimeoutSecs is always positive, even if using the default
+	if config.OIDCInitTimeoutSecs <= 0 {
+		config.OIDCInitTimeoutSecs = 30 // Fallback to a reasonable default
+	}
+
+	return nil
 }

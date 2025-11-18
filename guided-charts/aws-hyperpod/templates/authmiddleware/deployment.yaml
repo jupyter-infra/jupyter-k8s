@@ -1,14 +1,16 @@
-{{- if .Values.authmiddleware.enabled }}
+{{- if .Values.clusterWebUI.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: authmiddleware
+  name: workspace-auth-middleware
   namespace: {{ .Values.namespace }}
   labels:
+    {{- include "jupyter-k8s-aws-hyperpod.labels" . | nindent 4 }}
     app: authmiddleware
     component: auth
+    workspace.jupyter.org/component: authmiddleware
 spec:
-  replicas: {{ .Values.authmiddleware.replicas }}
+  replicas: {{ .Values.clusterWebUI.auth.replicas }}
   selector:
     matchLabels:
       app: authmiddleware
@@ -22,22 +24,24 @@ spec:
   template:
     metadata:
       labels:
+        {{- include "jupyter-k8s-aws-hyperpod.labels" . | nindent 8 }}
         app: authmiddleware
         component: auth
+        workspace.jupyter.org/component: authmiddleware
     spec:
       serviceAccountName: jupyter-k8s-authmiddleware
       terminationGracePeriodSeconds: 30
       containers:
-      - image: {{ .Values.authmiddleware.repository }}/{{ .Values.authmiddleware.imageName }}:{{ .Values.authmiddleware.imageTag }}
-        imagePullPolicy: {{ .Values.authmiddleware.imagePullPolicy }}
+      - image: {{ .Values.clusterWebUI.auth.repository }}/{{ .Values.clusterWebUI.auth.imageName }}:{{ .Values.clusterWebUI.auth.imageTag }}
+        imagePullPolicy: {{ .Values.clusterWebUI.auth.imagePullPolicy }}
         name: authmiddleware
         resources:
           requests:
-            cpu: {{ .Values.authmiddleware.resources.requests.cpu }}
-            memory: {{ .Values.authmiddleware.resources.requests.memory }}
+            cpu: {{ .Values.clusterWebUI.auth.resources.requests.cpu }}
+            memory: {{ .Values.clusterWebUI.auth.resources.requests.memory }}
           limits:
-            cpu: {{ .Values.authmiddleware.resources.limits.cpu }}
-            memory: {{ .Values.authmiddleware.resources.limits.memory }}
+            cpu: {{ .Values.clusterWebUI.auth.resources.limits.cpu }}
+            memory: {{ .Values.clusterWebUI.auth.resources.limits.memory }}
         readinessProbe:
           httpGet:
             path: /health
@@ -65,59 +69,51 @@ spec:
           - name: PORT
             value: "8080"
           - name: READ_TIMEOUT
-            value: "{{ .Values.authmiddleware.readTimeout }}"
+            value: "{{ .Values.clusterWebUI.auth.readTimeout }}"
           - name: WRITE_TIMEOUT
-            value: "{{ .Values.authmiddleware.writeTimeout }}"
+            value: "{{ .Values.clusterWebUI.auth.writeTimeout }}"
           - name: SHUTDOWN_TIMEOUT
-            value: "{{ .Values.authmiddleware.shutdownTimeout }}"
+            value: "{{ .Values.clusterWebUI.auth.shutdownTimeout }}"
           - name: JWT_SIGNING_TYPE
-            value: "{{ .Values.authmiddleware.jwtSigningType }}"
+            value: "{{ .Values.clusterWebUI.auth.jwtSigningType }}"
           - name: KMS_KEY_ID
-            value: "{{ .Values.authmiddleware.kmsKeyId }}"
+            value: "{{ .Values.clusterWebUI.auth.kmsKeyId }}"
           - name: JWT_ISSUER
-            value: "{{ .Values.authmiddleware.jwtIssuer }}"
+            value: "{{ .Values.clusterWebUI.auth.jwtIssuer }}"
           - name: JWT_AUDIENCE
-            value: "{{ .Values.authmiddleware.jwtAudience }}"
+            value: "{{ .Values.clusterWebUI.auth.jwtAudience }}"
           - name: JWT_EXPIRATION
-            value: "{{ .Values.authmiddleware.jwtExpiration }}"
+            value: "{{ .Values.clusterWebUI.auth.jwtExpiration }}"
           - name: JWT_REFRESH_WINDOW
-            value: "{{ .Values.authmiddleware.jwtRefreshWindow }}"
+            value: "{{ .Values.clusterWebUI.auth.jwtRefreshWindow }}"
           - name: JWT_REFRESH_HORIZON
-            value: "{{ .Values.authmiddleware.jwtRefreshHorizon }}"
+            value: "{{ .Values.clusterWebUI.auth.jwtRefreshHorizon }}"
           - name: COOKIE_NAME
-            value: "{{ .Values.authmiddleware.cookieName }}"
+            value: "{{ .Values.clusterWebUI.auth.cookieName }}"
           - name: COOKIE_SECURE
-            value: "{{ .Values.authmiddleware.cookieSecure }}"
+            value: "{{ .Values.clusterWebUI.auth.cookieSecure }}"
           - name: COOKIE_DOMAIN
-            value: "{{ .Values.domain }}"
+            value: "{{ .Values.clusterWebUI.domain }}"
           - name: COOKIE_PATH
-            value: "{{ .Values.authmiddleware.cookiePath }}"
+            value: "{{ .Values.clusterWebUI.auth.cookiePath }}"
           - name: COOKIE_MAX_AGE
-            value: "{{ .Values.authmiddleware.cookieMaxAge }}"
+            value: "{{ .Values.clusterWebUI.auth.cookieMaxAge }}"
           - name: COOKIE_HTTP_ONLY
-            value: "{{ .Values.authmiddleware.cookieHttpOnly }}"
+            value: "{{ .Values.clusterWebUI.auth.cookieHttpOnly }}"
           - name: COOKIE_SAME_SITE
-            value: "{{ .Values.authmiddleware.cookieSameSite }}"
+            value: "{{ .Values.clusterWebUI.auth.cookieSameSite }}"
           - name: PATH_REGEX_PATTERN
-            value: "{{ .Values.authmiddleware.pathRegexPattern }}"
+            value: "{{ .Values.clusterWebUI.auth.pathRegexPattern }}"
           - name: ROUTING_MODE
-            value: "{{ .Values.authmiddleware.routingMode }}"
+            value: "{{ .Values.clusterWebUI.auth.routingMode }}"
           - name: WORKSPACE_NAME_SUBDOMAIN_REGEX
-            value: "{{ .Values.authmiddleware.workspaceNameSubdomainRegex }}"
+            value: "{{ .Values.clusterWebUI.auth.workspaceNameSubdomainRegex }}"
           - name: WORKSPACE_NAMESPACE_SUBDOMAIN_REGEX
-            value: "{{ .Values.authmiddleware.workspaceNamespaceSubdomainRegex }}"
-          - name: CSRF_COOKIE_NAME
-            value: "{{ .Values.authmiddleware.csrfCookieName }}"
-          - name: CSRF_COOKIE_MAX_AGE
-            value: "{{ .Values.authmiddleware.csrfCookieMaxAge }}"
-          - name: CSRF_COOKIE_SECURE
-            value: "{{ .Values.authmiddleware.csrfCookieSecure }}"
-          - name: CSRF_AUTH_KEY
-            value: "{{ .Values.authmiddleware.csrfAuthKey }}"
+            value: "{{ .Values.clusterWebUI.auth.workspaceNamespaceSubdomainRegex }}"
           - name: ENABLE_OAUTH
-            value: "{{ .Values.authmiddleware.oauthEnabled }}"
+            value: "{{ .Values.clusterWebUI.auth.oauthEnabled }}"
           - name: ENABLE_BEARER_URL_AUTH
-            value: "{{ .Values.authmiddleware.enableBearerAuth }}"
+            value: "{{ .Values.clusterWebUI.auth.enableBearerAuth }}"
         volumeMounts:
           - name: tmp
             mountPath: /tmp

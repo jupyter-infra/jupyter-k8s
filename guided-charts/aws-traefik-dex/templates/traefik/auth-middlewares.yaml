@@ -52,9 +52,6 @@ spec:
   forwardAuth:
     address: "http://authmiddleware.{{ .Values.namespace }}:8080/auth"
     trustForwardHeader: true
-    addAuthCookiesToResponse:
-      - "{{ $.Values.authmiddleware.cookieName }}"
-      - "{{ .Values.authmiddleware.csrfCookieName }}"
     authRequestHeaders:
       - "Cookie"
       - "X-Forwarded-Uri"
@@ -64,6 +61,7 @@ spec:
       - "X-Auth-Request-Email"
       - "X-Auth-Request-Groups"
       - "X-Auth-Request-Preferred-Username"
+      - "Authorization"
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -77,9 +75,6 @@ spec:
   forwardAuth:
     address: "http://authmiddleware.{{ .Values.namespace }}:8080/verify"
     trustForwardHeader: true
-    addAuthCookiesToResponse:
-      - "{{ $.Values.authmiddleware.cookieName }}"
-      - "{{ .Values.authmiddleware.csrfCookieName }}"
     authRequestHeaders:
       - "Cookie"
       - "X-Forwarded-Uri"

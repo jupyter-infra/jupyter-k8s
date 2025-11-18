@@ -28,17 +28,16 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/test/utils"
 )
 
 var _ = Describe("WorkspaceTemplate", Ordered, func() {
-	var controllerPodName string
-
 	// Helper functions for workspace management
 	findWorkspacesUsingTemplate := func(templateName string) ([]string, error) {
 		// Use label selector to find workspaces by template
 		// Labels persist during deletion, unlike spec.templateRef which gets cleared
-		labelSelector := fmt.Sprintf("workspace.jupyter.org/template=%s", templateName)
+		labelSelector := fmt.Sprintf("workspace.jupyter.org/template-name=%s", templateName)
 		cmd := exec.Command("kubectl", "get", "workspace", "-l", labelSelector, "-o", "jsonpath={.items[*].metadata.name}")
 		output, err := utils.Run(cmd)
 		if err != nil {
@@ -93,82 +92,8 @@ var _ = Describe("WorkspaceTemplate", Ordered, func() {
 	}
 
 	BeforeAll(func() {
-		By("installing CRDs")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Installing CRDs...\n")
-		cmd := exec.Command("make", "install")
-		_, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
-
-		By("deploying the controller-manager")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Deploying controller manager...\n")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to deploy controller")
-
-		// Set environment variables for e2e testing
-		By("setting controller environment variables")
-		envVars := []string{
-			"CONTROLLER_POD_SERVICE_ACCOUNT=jupyter-k8s-controller-manager",
-			"CONTROLLER_POD_NAMESPACE=jupyter-k8s-system",
-		}
-		for _, envVar := range envVars {
-			cmd = exec.Command("kubectl", "set", "env", "deployment/jupyter-k8s-controller-manager", envVar, "-n", namespace)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to set environment variable: %s", envVar))
-		}
-
-		By("waiting for controller-manager to be ready")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for controller manager pod...\n")
-		verifyControllerUp := func(g Gomega) {
-			cmd := exec.Command("kubectl", "get",
-				"pods", "-l", "control-plane=controller-manager",
-				"-o", "go-template={{ range .items }}"+
-					"{{ if not .metadata.deletionTimestamp }}"+
-					"{{ .metadata.name }}"+
-					"{{ \"\\n\" }}{{ end }}{{ end }}",
-				"-n", namespace,
-			)
-			podOutput, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred())
-			podNames := utils.GetNonEmptyLines(podOutput)
-			g.Expect(podNames).To(HaveLen(1), "expected 1 controller pod running")
-			controllerPodName = podNames[0]
-
-			// Check pod is Ready (not just Running) - ensures webhook server is initialized
-			cmd = exec.Command("kubectl", "get",
-				"pods", controllerPodName, "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}",
-				"-n", namespace,
-			)
-			readyStatus, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(readyStatus).To(Equal("True"), "expected controller pod to be Ready (webhook server initialized)")
-		}
-		Eventually(verifyControllerUp, 2*time.Minute).Should(Succeed())
-
-		By("waiting for webhook server to be ready")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for webhook server to accept requests...\n")
-		verifyWebhookReady := func(g Gomega) {
-			// Verify mutating webhook configuration has CA bundle injected
-			cmd := exec.Command("kubectl", "get", "mutatingwebhookconfiguration",
-				"jupyter-k8s-mutating-webhook-configuration",
-				"-o", "jsonpath={.webhooks[0].clientConfig.caBundle}")
-			caBundle, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(caBundle).NotTo(BeEmpty(), "webhook CA bundle should be injected by cert-manager")
-
-			// Verify webhook endpoint is reachable by attempting a dry-run resource creation
-			testWorkspaceYaml := `apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: webhook-readiness-test
-spec:
-  displayName: "Webhook Readiness Test"`
-			cmd = exec.Command("sh", "-c",
-				fmt.Sprintf("echo '%s' | kubectl apply --dry-run=server -f -", testWorkspaceYaml))
-			_, err = utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred(), "webhook server should respond to admission requests")
-		}
-		Eventually(verifyWebhookReady, 30*time.Second, 2*time.Second).Should(Succeed())
+		var cmd *exec.Cmd
+		var err error
 
 		By("installing WorkspaceTemplate samples")
 		_, _ = fmt.Fprintf(GinkgoWriter, "Creating jupyter-k8s-shared namespace...\n")
@@ -198,7 +123,7 @@ spec:
 			"cpu-exceed-test", "valid-overrides-test",
 			"deletion-protection-test", "templateref-mutability-test",
 			"lazy-application-test", "cel-immutability-test",
-			"security-context-test",
+			"security-context-test", "owner-workspace", "volume-ownership-allowed-test",
 			"--ignore-not-found", "--timeout=60s")
 		_, _ = utils.Run(cmd)
 
@@ -228,18 +153,6 @@ spec:
 			"lazy-application-template",
 			"immutability-test-template",
 			"--ignore-not-found", "--wait=false")
-		_, _ = utils.Run(cmd)
-
-		By("uninstalling CRDs")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CRDs (this deletes all CRs and allows controller to handle finalizers)...\n")
-		cmd = exec.Command("make", "uninstall")
-		cmd.Args = append(cmd.Args, "--timeout=300s")
-		_, _ = utils.Run(cmd)
-
-		By("undeploying the controller-manager")
-		_, _ = fmt.Fprintf(GinkgoWriter, "Undeploying controller manager...\n")
-		cmd = exec.Command("make", "undeploy")
-		cmd.Args = append(cmd.Args, "--timeout=300s")
 		_, _ = utils.Run(cmd)
 	})
 
@@ -276,19 +189,6 @@ spec:
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("verifying Valid condition is True within 10s (before compute is ready)")
-			verifyValid := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "workspace", "workspace-with-template",
-					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"))
-			}
-			Eventually(verifyValid).
-				WithPolling(1 * time.Second).
-				WithTimeout(10 * time.Second). // valid state should be set fast, before compute is ready
-				Should(Succeed())
-
 			By("verifying Degraded condition is False")
 			cmd = exec.Command("kubectl", "get", "workspace", "workspace-with-template",
 				"-o", "jsonpath={.status.conditions[?(@.type==\"Degraded\")].status}")
@@ -303,10 +203,10 @@ spec:
 			By("attempting to create workspace with invalid image")
 			cmd := exec.Command("kubectl", "apply", "-f",
 				"test/e2e/static/template-validation/rejected-image-workspace.yaml")
-			
+
 			_, err := utils.Run(cmd)
 			Expect(err).To(HaveOccurred(), "Expected webhook to reject workspace with invalid image")
-			
+
 			By("verifying workspace was not created")
 			cmd = exec.Command("kubectl", "get", "workspace", "test-rejected-workspace", "--ignore-not-found")
 			output, err := utils.Run(cmd)
@@ -338,19 +238,6 @@ spec:
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("verifying Valid condition is True")
-			verifyValid := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "workspace", "valid-overrides-test",
-					"-o", "jsonpath={.status.conditions[?(@.type==\"Valid\")].status}")
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"))
-			}
-			Eventually(verifyValid).
-				WithPolling(1 * time.Second).
-				WithTimeout(10 * time.Second). // valid should be set fast on update
-				Should(Succeed())
-
 			By("verifying Degraded condition is False")
 			cmd = exec.Command("kubectl", "get", "workspace", "valid-overrides-test",
 				"-o", "jsonpath={.status.conditions[?(@.type==\"Degraded\")].status}")
@@ -381,7 +268,7 @@ spec:
 			By("waiting for workspace to have template label")
 			verifyWorkspaceLabel := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "workspace", "deletion-protection-test",
-					"-o", "jsonpath={.metadata.labels.workspace\\.jupyter\\.org/template}")
+					"-o", "jsonpath={.metadata.labels.workspace\\.jupyter\\.org/template-name}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("production-notebook-template"), "workspace should have template label")
@@ -423,13 +310,14 @@ spec:
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying template still exists with deletionTimestamp set")
-			time.Sleep(2 * time.Second)
-			cmd = exec.Command("kubectl", "get", "workspacetemplate",
-				"production-notebook-template", "-n", "jupyter-k8s-shared",
-				"-o", "jsonpath={.metadata.deletionTimestamp}")
-			output, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(output).NotTo(BeEmpty(), "expected deletionTimestamp to be set")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "workspacetemplate",
+					"production-notebook-template", "-n", "jupyter-k8s-shared",
+					"-o", "jsonpath={.metadata.deletionTimestamp}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "expected deletionTimestamp to be set")
+			}).WithTimeout(10 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
 
 			By("verifying finalizer is blocking deletion")
 			cmd = exec.Command("kubectl", "get", "workspacetemplate",
@@ -569,7 +457,7 @@ spec:
 
 			By("verifying template tracking label was added")
 			cmd = exec.Command("kubectl", "get", "workspace", "webhook-defaults-test",
-				"-o", "jsonpath={.metadata.labels['workspace\\.jupyter\\.org/template']}")
+				"-o", "jsonpath={.metadata.labels['workspace\\.jupyter\\.org/template-name']}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("production-notebook-template"))
@@ -580,10 +468,16 @@ spec:
 		})
 
 		It("should inherit default access strategy from template", func() {
-			By("creating a template with default access strategy")
+			By("creating a test access strategy")
 			cmd := exec.Command("kubectl", "apply", "-f",
-				"test/e2e/static/webhook-validation/access-strategy-template.yaml")
+				"test/e2e/static/webhook-validation/access-strategy.yaml")
 			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating a template with default access strategy")
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/access-strategy-template.yaml")
+			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating workspace without access strategy")
@@ -612,6 +506,8 @@ spec:
 			cmd = exec.Command("kubectl", "delete", "workspace", "access-strategy-inheritance-test", "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "access-strategy-template", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "workspaceaccessstrategy", "sample-access-strategy", "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 		})
 
@@ -696,7 +592,7 @@ spec:
 			Expect(output).To(Equal("true"))
 
 			cmd = exec.Command("kubectl", "get", "workspace", "lifecycle-test",
-				"-o", "jsonpath={.spec.idleShutdown.timeoutMinutes}")
+				"-o", "jsonpath={.spec.idleShutdown.idleTimeoutInMinutes}")
 			output, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("30"))
@@ -750,6 +646,82 @@ spec:
 			cmd = exec.Command("kubectl", "delete", "workspace", "custom-image-allowed-test")
 			_, _ = utils.Run(cmd)
 			cmd = exec.Command("kubectl", "delete", "workspacetemplate", "custom-images-template")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should reject workspace referencing PVC owned by another workspace", func() {
+			By("creating first workspace to own a PVC")
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/owner-workspace.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			ownerPVCName := controller.GeneratePVCName("owner-workspace")
+			By(fmt.Sprintf("waiting for first workspace PVC %s to be created with owner reference", ownerPVCName))
+			Eventually(func(g Gomega) {
+				// Check PVC exists
+				cmd := exec.Command("kubectl", "get", "pvc", ownerPVCName, "-o", "jsonpath={.metadata.name}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal(ownerPVCName))
+
+				// Check PVC has owner reference to the workspace
+				cmd = exec.Command("kubectl", "get", "pvc", ownerPVCName, 
+					"-o", "jsonpath={.metadata.ownerReferences[0].name}")
+				output, err = utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("owner-workspace"))
+			}).WithTimeout(60 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
+			By("attempting to create second workspace that references the first workspace's PVC")
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/volume-ownership-violation-workspace.yaml")
+			output, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "Expected webhook to reject workspace referencing PVC owned by another workspace")
+			Expect(output).To(ContainSubstring("owned by another workspace"))
+
+			By("verifying second workspace was not created")
+			cmd = exec.Command("kubectl", "get", "workspace", "volume-ownership-violation-test", "--ignore-not-found")
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(BeEmpty())
+
+			By("cleaning up first workspace")
+			cmd = exec.Command("kubectl", "delete", "workspace", "owner-workspace", "--wait=true")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should allow workspace referencing unowned PVC", func() {
+			By("creating standalone PVC not owned by any workspace")
+			cmd := exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/standalone-pvc.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for standalone PVC to be created")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pvc", "standalone-test-pvc", "-o", "jsonpath={.metadata.name}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("standalone-test-pvc"))
+			}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
+			By("creating workspace that references the standalone PVC")
+			cmd = exec.Command("kubectl", "apply", "-f",
+				"test/e2e/static/webhook-validation/volume-ownership-allowed-workspace.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Expected webhook to allow workspace referencing unowned PVC")
+
+			By("verifying workspace was created successfully")
+			cmd = exec.Command("kubectl", "get", "workspace", "volume-ownership-allowed-test", "-o", "jsonpath={.metadata.name}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("volume-ownership-allowed-test"))
+
+			By("cleaning up test resources")
+			cmd = exec.Command("kubectl", "delete", "workspace", "volume-ownership-allowed-test", "--wait=true")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "pvc", "standalone-test-pvc", "--ignore-not-found")
 			_, _ = utils.Run(cmd)
 		})
 

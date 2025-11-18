@@ -32,7 +32,7 @@ func TestFindCondition(t *testing.T) {
 	assert.Nil(t, result)
 }
 
-func TestGetNewConditionsOrEmptyIfUnchanged(t *testing.T) {
+func TestMergeConditionsIfChanged(t *testing.T) {
 	ctx := context.Background()
 	workspace := &workspacev1alpha1.Workspace{}
 	workspace.Status.Conditions = []metav1.Condition{
@@ -44,7 +44,7 @@ func TestGetNewConditionsOrEmptyIfUnchanged(t *testing.T) {
 	newConditions := []metav1.Condition{
 		{Type: "New", Status: metav1.ConditionTrue, Reason: "NewReason", Message: "New message"},
 	}
-	result := GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &newConditions)
+	result := MergeConditionsIfChanged(ctx, workspace, &newConditions)
 	assert.Len(t, result, 3) // 2 existing + 1 new
 
 	// Check that both existing conditions are preserved
@@ -65,7 +65,7 @@ func TestGetNewConditionsOrEmptyIfUnchanged(t *testing.T) {
 	updateConditions := []metav1.Condition{
 		{Type: "ToUpdate", Status: metav1.ConditionTrue, Reason: "NewReason", Message: "Updated message"},
 	}
-	result = GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &updateConditions)
+	result = MergeConditionsIfChanged(ctx, workspace, &updateConditions)
 	assert.Len(t, result, 2) // Both existing conditions, one updated
 
 	// Find the updated condition
@@ -85,6 +85,6 @@ func TestGetNewConditionsOrEmptyIfUnchanged(t *testing.T) {
 	unchangedConditions := []metav1.Condition{
 		{Type: "Existing", Status: metav1.ConditionTrue, Reason: "InitialReason", Message: "Initial message"},
 	}
-	result = GetNewConditionsOrEmptyIfUnchanged(ctx, workspace, &unchangedConditions)
+	result = MergeConditionsIfChanged(ctx, workspace, &unchangedConditions)
 	assert.Empty(t, result, "Should return empty slice when no changes")
 }

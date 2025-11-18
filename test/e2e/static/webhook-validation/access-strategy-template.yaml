@@ -10,9 +10,10 @@ spec:
     name: "test-access-strategy"
     namespace: "default"
   resourceBounds:
-    cpu:
-      min: "100m"
-      max: "2"
-    memory:
-      min: "128Mi"
-      max: "4Gi"
+    resources:
+      cpu:
+        min: "100m"
+        max: "2"
+      memory:
+        min: "128Mi"
+        max: "4Gi"

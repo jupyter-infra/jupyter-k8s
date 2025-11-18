@@ -91,7 +91,7 @@ dex:
     - 8000
     - 18000
     - 9800
-    
+
 # Github OAuth configuration
 github:
   # GitHub OAuth client ID (required)
@@ -173,13 +173,12 @@ authmiddleware:
   pathRegexPattern: "^(/workspaces/[^/]+/[^/]+)(?:/.*)?$"
   workspaceNamespacePathRegex: "^/workspaces/([^/]+)/[^/]+"
   workspaceNamePathRegex: "^/workspaces/[^/]+/([^/]+)"
-  # CSRF configuration
-  # Required: must be provided as base64 encoded string (generate with: openssl rand -base64 32)
-  csrfAuthKey: ""
-  csrfCookieName: "workspace_csrf"
-  csrfCookieMaxAge: "1h"
-  csrfCookieSecure: "true"
   # Server configuration
   readTimeout: "10s"
   writeTimeout: "10s"
   shutdownTimeout: "30s"
+  # Bearer auth configuration
+  enableOauth: true
+  enableBearerAuth: false
+  # Timeout in seconds for OIDC provider initialization
+  oidcInitTimeoutSecs: 30

@@ -1,0 +1,11 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-exceed-storage-bounds
+spec:
+  displayName: "Workspace Exceeding Storage Bounds"
+  templateRef:
+    name: storage-template
+  desiredStatus: Running
+  storage:
+    size: "10Gi"  # Exceeds template max of 5Gi

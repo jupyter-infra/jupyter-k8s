@@ -1,3 +1,4 @@
+{{- if .Values.clusterWebUI.enabled }}
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -10,13 +11,12 @@ spec:
     browserXssFilter: true
     contentTypeNosniff: true
     forceSTSHeader: true
-    sslHost: {{ .Values.domain }}
+    sslHost: {{ .Values.clusterWebUI.domain }}
     stsIncludeSubdomains: true
     stsPreload: true
     frameDeny: false
     customFrameOptionsValue: "SAMEORIGIN"
 ---
-{{- if .Values.authmiddleware.enabled }}
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -30,8 +30,7 @@ spec:
     address: "http://authmiddleware.{{ .Values.namespace }}:8080/bearer-auth"
     trustForwardHeader: true
     addAuthCookiesToResponse:
-      - "{{ .Values.authmiddleware.cookieName }}"
-      - "{{ .Values.authmiddleware.csrfCookieName }}"
+      - "{{ $.Values.authmiddleware.cookieName }}"
     authRequestHeaders:
       - "Cookie"
       - "X-Forwarded-Uri"
@@ -51,14 +50,12 @@ spec:
     address: "http://authmiddleware.{{ .Values.namespace }}:8080/verify"
     trustForwardHeader: true
     addAuthCookiesToResponse:
-      - "{{ .Values.authmiddleware.cookieName }}"
-      - "{{ .Values.authmiddleware.csrfCookieName }}"
+      - "{{ $.Values.authmiddleware.cookieName }}"
     authRequestHeaders:
       - "Cookie"
       - "X-Forwarded-Uri"
       - "X-Forwarded-Host"
       - "X-Forwarded-Proto"
-{{- end }}
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -70,7 +67,7 @@ metadata:
     component: auth
 spec:
   redirectRegex:
-{{- if eq .Values.authmiddleware.routingMode "subdomain" }}
+{{- if eq .Values.clusterWebUI.auth.routingMode "subdomain" }}
     regex: "^(https?://[^/]+)/?$"
     replacement: "${1}/bearer-auth"
 {{- else }}
@@ -90,10 +87,11 @@ metadata:
 spec:
   redirectRegex:
     permanent: false
-{{- if eq .Values.authmiddleware.routingMode "subdomain" }}
+{{- if eq .Values.clusterWebUI.auth.routingMode "subdomain" }}
     regex: "^(https?://[^/]+)/bearer-auth.*$"
     replacement: "${1}/"
 {{- else }}
     regex: "^(https?://[^/]+/workspaces/[^/]+/[^/]+)/bearer-auth.*$"
     replacement: "${1}/"
+{{- end }}
 {{- end }}
