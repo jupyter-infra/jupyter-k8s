@@ -218,6 +218,7 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
             {{- end }}\
             - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\
             - "--application-images-registry={{ .Values.application.imagesRegistry }}"\
+            - "--default-template-namespace={{ .Values.workspaceTemplates.defaultNamespace }}"\
             {{- if .Values.accessResources.traefik.enable }}\
             - "--watch-traefik"\
             {{- end}}\
@@ -232,7 +233,7 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
                     # Linux sed
                     sed -i '/args:/,/command:/ {
                     /command:/!d
-                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}\n            {{- if .Values.extensionApi.enable }}\n            - "--enable-extension-api"\n            {{- end}}\n            {{- if .Values.workspacePodWatching.enable }}\n            - "--enable-workspace-pod-watching"\n            {{- end}}
+                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            - "--default-template-namespace={{ .Values.workspaceTemplates.defaultNamespace }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}\n            {{- if .Values.extensionApi.enable }}\n            - "--enable-extension-api"\n            {{- end}}\n            {{- if .Values.workspacePodWatching.enable }}\n            - "--enable-workspace-pod-watching"\n            {{- end}}
                 }' "${MANAGER_YAML}"
                 fi
                 # Also add extension API volume mount if not already present
