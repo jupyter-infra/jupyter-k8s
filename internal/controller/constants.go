@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
@@ -40,6 +41,28 @@ const (
 
 	// AppLabelValue is the label value for app label
 	AppLabelValue = "jupyter"
+
+	// KubernetesAppNameLabel is the Kubernetes recommended label for application name
+	KubernetesAppNameLabel = "app.kubernetes.io/name"
+	// KubernetesAppInstanceLabel is the Kubernetes recommended label for application instance
+	KubernetesAppInstanceLabel = "app.kubernetes.io/instance"
+	// KubernetesAppVersionLabel is the Kubernetes recommended label for application version
+	KubernetesAppVersionLabel = "app.kubernetes.io/version"
+	// KubernetesAppComponentLabel is the Kubernetes recommended label for application component
+	KubernetesAppComponentLabel = "app.kubernetes.io/component"
+	// KubernetesAppPartOfLabel is the Kubernetes recommended label for application part-of
+	KubernetesAppPartOfLabel = "app.kubernetes.io/part-of"
+	// KubernetesAppManagedByLabel is the Kubernetes recommended label for application managed-by
+	KubernetesAppManagedByLabel = "app.kubernetes.io/managed-by"
+
+	// KubernetesAppNameValue is the value for the Kubernetes app name label
+	KubernetesAppNameValue = "jupyter"
+	// KubernetesAppComponentValue is the value for the Kubernetes app component label
+	KubernetesAppComponentValue = "workspace"
+	// KubernetesAppPartOfValue is the value for the Kubernetes app part-of label
+	KubernetesAppPartOfValue = "jupyter-k8s"
+	// KubernetesAppManagedByValue is the value for the Kubernetes app managed-by label
+	KubernetesAppManagedByValue = "jupyter-k8s"
 
 	// AnnotationCreatedBy is the annotation key for tracking resource creator
 	AnnotationCreatedBy = "workspace.jupyter.org/created-by"
@@ -112,11 +135,32 @@ func GeneratePVCName(workspaceName string) string {
 	return fmt.Sprintf("%s-%s-pvc", ResourcePrefix, workspaceName)
 }
 
-// GenerateLabels creates consistent labels for resources
+// GenerateLabels creates consistent labels for resources with Kubernetes recommended labels
 func GenerateLabels(workspaceName string) map[string]string {
-	return map[string]string{
+	labels := map[string]string{
+		// Existing custom labels
 		AppLabel:                         AppLabelValue,
 		workspaceutil.LabelWorkspaceName: workspaceName,
 		LabelComponent:                   "workspace",
+	}
+
+	// Add Kubernetes recommended labels
+	for k, v := range GenerateKubernetesRecommendedLabels(workspaceName) {
+		labels[k] = v
+	}
+
+	return labels
+}
+
+// GenerateKubernetesRecommendedLabels creates Kubernetes recommended labels
+// See: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
+func GenerateKubernetesRecommendedLabels(workspaceName string) map[string]string {
+	return map[string]string{
+		KubernetesAppNameLabel:      AppLabelValue,
+		KubernetesAppInstanceLabel:  workspaceName,
+		KubernetesAppVersionLabel:   workspacev1alpha1.GroupVersion.Version,
+		KubernetesAppComponentLabel: KubernetesAppComponentValue,
+		KubernetesAppPartOfLabel:    KubernetesAppPartOfValue,
+		KubernetesAppManagedByLabel: KubernetesAppManagedByValue,
 	}
 }
