@@ -196,6 +196,14 @@ var _ = BeforeSuite(func() {
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to deploy controller-manager")
 
+	By("creating extension API authentication RoleBinding")
+	cmd = exec.Command("kubectl", "create", "rolebinding", "jupyter-k8s-extension-api-auth",
+		"-n", "kube-system",
+		"--role=extension-apiserver-authentication-reader",
+		fmt.Sprintf("--serviceaccount=%s:jupyter-k8s-controller-manager", namespace))
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to create extension API auth RoleBinding")
+
 	By("waiting for controller deployment to be available")
 	cmd = exec.Command("kubectl", "wait", "deployment/jupyter-k8s-controller-manager",
 		"-n", namespace, "--for=condition=Available", "--timeout=3m")
