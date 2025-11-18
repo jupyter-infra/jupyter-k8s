@@ -177,8 +177,8 @@ func (h *PodEventHandler) handlePodRunning(ctx context.Context, pod *corev1.Pod,
 		return
 	}
 
-	// Handle SSM remote access strategy
-	if accessStrategy != nil && (accessStrategy.Name == "aws-ssm-remote-access" || accessStrategy.Name == "hyperpod-access-strategy") {
+	// Handle AWS pod events (SSM remote access strategy)
+	if accessStrategy != nil && accessStrategy.Spec.PodEventsHandler == "aws" {
 		if h.ssmRemoteAccessStrategy == nil {
 			logger.Error(nil, "SSM remote access strategy not available - cannot setup containers")
 		} else {

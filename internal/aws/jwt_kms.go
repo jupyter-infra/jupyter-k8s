@@ -22,37 +22,40 @@ var (
 
 // KMSJWTManager handles JWT token creation and validation using AWS KMS envelope encryption
 type KMSJWTManager struct {
-	kmsClient   *KMSClient
-	keyId       string
-	issuer      string
-	audience    string
-	expiration  time.Duration
-	keyCache    map[string][]byte    // encrypted_key_hash -> plaintext_key
-	cacheExpiry map[string]time.Time // encrypted_key_hash -> expiry_time
-	lastCleanup time.Time
-	cacheMutex  sync.RWMutex
+	kmsClient         *KMSClient
+	keyId             string
+	issuer            string
+	audience          string
+	expiration        time.Duration
+	encryptionContext map[string]string
+	keyCache          map[string][]byte    // encrypted_key_hash -> plaintext_key
+	cacheExpiry       map[string]time.Time // encrypted_key_hash -> expiry_time
+	lastCleanup       time.Time
+	cacheMutex        sync.RWMutex
 }
 
 // KMSJWTConfig contains configuration for KMS JWT manager
 type KMSJWTConfig struct {
-	KMSClient  *KMSClient
-	KeyId      string
-	Issuer     string
-	Audience   string
-	Expiration time.Duration
+	KMSClient         *KMSClient
+	KeyId             string
+	Issuer            string
+	Audience          string
+	Expiration        time.Duration
+	EncryptionContext map[string]string
 }
 
 // NewKMSJWTManager creates a new KMSJWTManager
 func NewKMSJWTManager(config KMSJWTConfig) *KMSJWTManager {
 	return &KMSJWTManager{
-		kmsClient:   config.KMSClient,
-		keyId:       config.KeyId,
-		issuer:      config.Issuer,
-		audience:    config.Audience,
-		expiration:  config.Expiration,
-		keyCache:    make(map[string][]byte),
-		cacheExpiry: make(map[string]time.Time),
-		lastCleanup: time.Now(),
+		kmsClient:         config.KMSClient,
+		keyId:             config.KeyId,
+		issuer:            config.Issuer,
+		audience:          config.Audience,
+		expiration:        config.Expiration,
+		encryptionContext: config.EncryptionContext,
+		keyCache:          make(map[string][]byte),
+		cacheExpiry:       make(map[string]time.Time),
+		lastCleanup:       time.Now(),
 	}
 }
 
@@ -70,7 +73,7 @@ func (m *KMSJWTManager) GenerateToken(
 	now := time.Now().UTC()
 
 	// Generate data key for this token
-	plaintextKey, encryptedKey, err := m.kmsClient.GenerateDataKey(ctx, m.keyId)
+	plaintextKey, encryptedKey, err := m.kmsClient.GenerateDataKey(ctx, m.keyId, m.encryptionContext)
 	if err != nil {
 		log.Printf("KMS: Failed to generate data key: %v", err)
 		return "", fmt.Errorf("failed to generate data key: %w", err)
@@ -152,7 +155,7 @@ func (m *KMSJWTManager) ValidateToken(tokenString string) (*jwt.Claims, error) {
 		m.cleanupExpiredKeys()
 
 		// Cache miss - decrypt with KMS
-		plaintextKey, err = m.kmsClient.Decrypt(ctx, encryptedKey)
+		plaintextKey, err = m.kmsClient.Decrypt(ctx, encryptedKey, m.encryptionContext)
 		if err != nil {
 			log.Printf("KMS: Failed to decrypt data key: %v", err)
 			return nil, fmt.Errorf("failed to decrypt data key: %w", err)
