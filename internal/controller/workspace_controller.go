@@ -237,13 +237,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Delegate to state machine for business logic, passing the accessStrategy
-	result, err := r.stateMachine.ReconcileDesiredState(ctx, workspace, accessStrategy)
-	if err != nil {
-		logger.Error(err, "Failed to reconcile desired state")
-		return ctrl.Result{}, err
-	}
-
-	return result, nil
+	return r.stateMachine.ReconcileDesiredState(ctx, workspace, accessStrategy)
 }
 
 // SetupWithManager sets up the controller with the Manager.

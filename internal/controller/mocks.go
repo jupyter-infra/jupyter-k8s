@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -10,9 +11,11 @@ import (
 type MockClient struct {
 	client.Client
 	getFunc    func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error
+	listFunc   func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
 	createFunc func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error
 	updateFunc func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error
 	deleteFunc func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error
+	scheme     *runtime.Scheme
 }
 
 // Get provides a mock for k8s client get() method
@@ -21,6 +24,14 @@ func (m *MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.O
 		return m.getFunc(ctx, key, obj, opts...)
 	}
 	return m.Client.Get(ctx, key, obj, opts...)
+}
+
+// List provides a mock for k8s client list() method
+func (m *MockClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	if m.listFunc != nil {
+		return m.listFunc(ctx, list, opts...)
+	}
+	return m.Client.List(ctx, list, opts...)
 }
 
 // Create provides a mock for k8s client create() method
@@ -45,4 +56,32 @@ func (m *MockClient) Delete(ctx context.Context, obj client.Object, opts ...clie
 		return m.deleteFunc(ctx, obj, opts...)
 	}
 	return m.Client.Delete(ctx, obj, opts...)
+}
+
+// Scheme returns the mock client's scheme
+func (m *MockClient) Scheme() *runtime.Scheme {
+	return m.scheme
+}
+
+// FakeEventRecorder is a simple fake event recorder for testing
+type FakeEventRecorder struct {
+	Events []string
+}
+
+// Event records a normal event with the given type, reason and message
+func (f *FakeEventRecorder) Event(object runtime.Object, eventtype, reason, message string) {
+	if f.Events == nil {
+		f.Events = []string{}
+	}
+	f.Events = append(f.Events, eventtype+" "+reason+" "+message)
+}
+
+// Eventf records a normal event with the given type, reason and formatted message
+func (f *FakeEventRecorder) Eventf(object runtime.Object, eventtype, reason, messageFmt string, args ...interface{}) {
+	f.Event(object, eventtype, reason, messageFmt)
+}
+
+// AnnotatedEventf records an event with annotations
+func (f *FakeEventRecorder) AnnotatedEventf(object runtime.Object, annotations map[string]string, eventtype, reason, messageFmt string, args ...interface{}) {
+	f.Event(object, eventtype, reason, messageFmt)
 }
