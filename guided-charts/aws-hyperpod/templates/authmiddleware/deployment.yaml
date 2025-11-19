@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: workspace-auth-middleware
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "jupyter-k8s-aws-hyperpod.labels" . | nindent 4 }}
     app: authmiddleware
