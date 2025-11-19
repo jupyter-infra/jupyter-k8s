@@ -62,12 +62,10 @@ func ListActiveWorkspacesByTemplate(
 
 	workspaceList := &workspacev1alpha1.WorkspaceList{}
 
-	// Build label selector - namespace is optional for backwards compatibility
+	// Build label selector
 	labels := map[string]string{
-		LabelWorkspaceTemplate: templateName,
-	}
-	if templateNamespace != "" {
-		labels[LabelWorkspaceTemplateNamespace] = templateNamespace
+		LabelWorkspaceTemplate:          templateName,
+		LabelWorkspaceTemplateNamespace: templateNamespace,
 	}
 
 	listOptions := []client.ListOption{
@@ -143,7 +141,7 @@ func ListActiveWorkspacesByTemplate(
 func HasActiveWorkspacesWithTemplate(ctx context.Context, k8sClient client.Client, templateName string, templateNamespace string) (bool, error) {
 	workspaceList := &workspacev1alpha1.WorkspaceList{}
 
-	// Build label selector - namespace is optional for backwards compatibility
+	// Build label selector
 	labels := map[string]string{
 		LabelWorkspaceTemplate:          templateName,
 		LabelWorkspaceTemplateNamespace: templateNamespace,

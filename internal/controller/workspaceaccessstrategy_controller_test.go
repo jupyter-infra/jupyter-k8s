@@ -322,7 +322,7 @@ var _ = Describe("AccessStrategy controller", func() {
 			Expect(updateCalled).To(BeFalse(), "Update should not be called when no finalizer and no workspaces")
 		})
 
-		It("Should return an error and requeue if fetching the workspaces referencing the AccessStrategy fails", func() {
+		It("Should return an error if fetching the workspaces referencing the AccessStrategy fails", func() {
 			// Set up mock client behavior
 			mockClient.getFunc = func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 				if key.Name == accessStrategy.Name && key.Namespace == accessStrategy.Namespace {
@@ -343,10 +343,10 @@ var _ = Describe("AccessStrategy controller", func() {
 			// Verify results
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to list workspaces"))
-			Expect(result).To(Equal(ctrl.Result{RequeueAfter: PollRequeueDelay}))
+			Expect(result).To(Equal(ctrl.Result{}))
 		})
 
-		It("Should return an error and requeue if Updating the AccessStrategy to add the finalizer fails", func() {
+		It("Should return an error if Updating the AccessStrategy to add the finalizer fails", func() {
 			// Set up mock client behavior - AccessStrategy without finalizer
 			accessStrategyWithoutFinalizer := accessStrategy.DeepCopy()
 
@@ -390,10 +390,10 @@ var _ = Describe("AccessStrategy controller", func() {
 			// Verify results
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("update failed"))
-			Expect(result).To(Equal(ctrl.Result{RequeueAfter: PollRequeueDelay}))
+			Expect(result).To(Equal(ctrl.Result{}))
 		})
 
-		It("Should return an error and requeue if Updating the AccessStrategy to remove the finalizer fails", func() {
+		It("Should return an error if Updating the AccessStrategy to remove the finalizer fails", func() {
 			// Set up mock client behavior - AccessStrategy with finalizer
 			accessStrategyWithFinalizer := accessStrategy.DeepCopy()
 			controllerutil.AddFinalizer(accessStrategyWithFinalizer, workspace.AccessStrategyFinalizerName)
@@ -422,7 +422,7 @@ var _ = Describe("AccessStrategy controller", func() {
 			// Verify results
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("update failed"))
-			Expect(result).To(Equal(ctrl.Result{RequeueAfter: PollRequeueDelay}))
+			Expect(result).To(Equal(ctrl.Result{}))
 		})
 	})
 

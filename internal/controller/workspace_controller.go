@@ -216,7 +216,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		if err := r.Update(ctx, workspace); err != nil {
 			logger.Error(err, "Failed to update workspace labels or finalizers")
-			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+			return ctrl.Result{}, err
 		}
 		logger.Info("Successfully updated workspace labels or finalizers")
 		// Requeue to process with updated labels and/or finalizer

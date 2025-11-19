@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"time"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
@@ -76,23 +75,18 @@ func (m *MockStateMachine) GetAccessStrategyForWorkspace(ctx context.Context, wo
 
 // generateUniqueName generates a unique resource name for tests
 func generateUniqueName(prefix string) string {
-	return fmt.Sprintf("%s-%d", prefix, rand.Intn(10000))
+	return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano())
 }
 
 var _ = Describe("Workspace Controller", func() {
 	Context("When reconciling a non-deleting Workspace", func() {
 		// Using default namespace for workspaces to avoid permission issues
 		const (
-			workspaceNamespace = "default"
-		)
-
-		// Use variables instead of constants for names we need to make unique
-		var (
-			workspaceName           string
-			accessStrategyName      string
-			accessStrategyNamespace string
-			templateName            string
-			templateNamespace       string
+			workspaceNamespace      = "default"
+			accessStrategyName      = "test-access-strategy"
+			accessStrategyNamespace = "strategy-namespace"
+			templateName            = "test-template"
+			templateNamespace       = "template-namespace"
 		)
 
 		var (
@@ -100,6 +94,9 @@ var _ = Describe("Workspace Controller", func() {
 			workspace      *workspacev1alpha1.Workspace
 			accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
 			workspaceKey   types.NamespacedName
+
+			// Use variable instead of constant for workspace name to ensure uniqueness
+			workspaceName string
 		)
 
 		BeforeEach(func() {
@@ -107,10 +104,6 @@ var _ = Describe("Workspace Controller", func() {
 
 			// Generate unique names to avoid conflicts between test runs
 			workspaceName = generateUniqueName("test-workspace")
-			accessStrategyName = generateUniqueName("test-access-strategy")
-			accessStrategyNamespace = generateUniqueName("strategy-namespace")
-			templateName = generateUniqueName("test-template")
-			templateNamespace = generateUniqueName("template-namespace")
 
 			workspaceKey = types.NamespacedName{
 				Name:      workspaceName,
