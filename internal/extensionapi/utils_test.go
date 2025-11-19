@@ -7,6 +7,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apiserver/pkg/authentication/user"
+	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
 var _ = Describe("Utils", func() {
@@ -130,37 +132,79 @@ var _ = Describe("Utils", func() {
 		)
 	})
 
-	Context("GetUserFromHeaders", func() {
-		It("Should return user from X-User header", func() {
+	Context("GetUser", func() {
+		It("Should return user from Kubernetes request context when available", func() {
 			req := httptest.NewRequest("GET", "/test", nil)
-			req.Header.Set("X-User", "test-user")
 
-			user := GetUserFromHeaders(req)
-			Expect(user).To(Equal("test-user"))
+			// Simulate Kubernetes authentication context
+			userInfo := &user.DefaultInfo{Name: "k8s-authenticated-user"}
+			ctx := request.WithUser(req.Context(), userInfo)
+			req = req.WithContext(ctx)
+
+			user := GetUser(req)
+			Expect(user).To(Equal("k8s-authenticated-user"))
 		})
 
-		It("Should return user from X-Remote-User header when X-User is not present", func() {
+		It("Should fallback to X-User header when Kubernetes context is not available", func() {
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.Header.Set("X-User", "header-user")
+
+			user := GetUser(req)
+			Expect(user).To(Equal("header-user"))
+		})
+
+		It("Should prioritize Kubernetes context over headers (anti-spoofing)", func() {
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.Header.Set("X-User", "spoofed-user")
+			req.Header.Set("X-Remote-User", "another-spoofed-user")
+
+			// Simulate Kubernetes authentication context
+			userInfo := &user.DefaultInfo{Name: "real-k8s-user"}
+			ctx := request.WithUser(req.Context(), userInfo)
+			req = req.WithContext(ctx)
+
+			user := GetUser(req)
+			Expect(user).To(Equal("real-k8s-user"))
+		})
+
+		It("Should return user from X-Remote-User header when X-User is not present and no K8s context", func() {
 			req := httptest.NewRequest("GET", "/test", nil)
 			req.Header.Set("X-Remote-User", "remote-user")
 
-			user := GetUserFromHeaders(req)
+			user := GetUser(req)
 			Expect(user).To(Equal("remote-user"))
 		})
 
-		It("Should prioritize X-User over X-Remote-User", func() {
+		It("Should return empty string when no user info is available", func() {
 			req := httptest.NewRequest("GET", "/test", nil)
-			req.Header.Set("X-User", "primary-user")
-			req.Header.Set("X-Remote-User", "secondary-user")
 
-			user := GetUserFromHeaders(req)
-			Expect(user).To(Equal("primary-user"))
+			user := GetUser(req)
+			Expect(user).To(Equal(""))
 		})
 
-		It("Should return empty string when no user headers are present", func() {
+		It("Should handle nil user info in Kubernetes context", func() {
 			req := httptest.NewRequest("GET", "/test", nil)
+			req.Header.Set("X-User", "fallback-user")
 
-			user := GetUserFromHeaders(req)
-			Expect(user).To(Equal(""))
+			// Simulate Kubernetes context with nil user info
+			ctx := request.WithUser(req.Context(), nil)
+			req = req.WithContext(ctx)
+
+			user := GetUser(req)
+			Expect(user).To(Equal("fallback-user"))
+		})
+
+		It("Should handle empty username in Kubernetes context", func() {
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.Header.Set("X-User", "fallback-user")
+
+			// Simulate Kubernetes context with empty username
+			userInfo := &user.DefaultInfo{Name: ""}
+			ctx := request.WithUser(req.Context(), userInfo)
+			req = req.WithContext(ctx)
+
+			user := GetUser(req)
+			Expect(user).To(Equal("fallback-user"))
 		})
 	})
 })

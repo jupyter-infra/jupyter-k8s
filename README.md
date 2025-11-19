@@ -93,7 +93,7 @@ Templates are enforced by admission webhooks during workspace creation/update. I
 
 **Validation Rules**
 - Allowed Images: Only container images in the `allowedImages` list are permitted
-- Resource Bounds: CPU, memory, and GPU requests/limits must be within `resourceBounds` (min/max)
+- Resource Bounds: Resource requests/limits (cpu, memory, nvidia.com/gpu, amd.com/gpu, etc.) must be within `resourceBounds` (min/max)
 - Storage Bounds: Workspace storage must be within `primaryStorage.minSize` and `maxSize`
 
 **Cluster-Scoped Templates**

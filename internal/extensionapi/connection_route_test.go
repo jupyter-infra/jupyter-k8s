@@ -72,9 +72,9 @@ func TestGenerateWebUIURL(t *testing.T) {
 
 	config := &ExtensionConfig{Domain: "https://test.com"}
 	server := &ExtensionServer{
-		config:     config,
-		jwtManager: &mockJWTManager{token: "test-token"},
-		k8sClient:  fakeClient,
+		config:        config,
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
+		k8sClient:     fakeClient,
 	}
 
 	req := httptest.NewRequest("POST", "/test", nil)
@@ -98,16 +98,25 @@ func TestGenerateWebUIURL(t *testing.T) {
 
 const testUser = "test-user"
 
-// mockJWTManager for testing
-type mockJWTManager struct {
+// mockSignerFactory for testing
+type mockSignerFactory struct {
+	signer *mockSigner
+}
+
+func (m *mockSignerFactory) CreateSigner(accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (jwt.Signer, error) {
+	return m.signer, nil
+}
+
+// mockSigner for testing
+type mockSigner struct {
 	token string
 }
 
-func (m *mockJWTManager) GenerateToken(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string) (string, error) {
+func (m *mockSigner) GenerateToken(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string) (string, error) {
 	return m.token, nil
 }
 
-func (m *mockJWTManager) ValidateToken(tokenString string) (*jwt.Claims, error) {
+func (m *mockSigner) ValidateToken(tokenString string) (*jwt.Claims, error) {
 	return nil, nil
 }
 
@@ -636,10 +645,10 @@ func TestHandleConnectionCreateWithWorkspace(t *testing.T) {
 	logger := ctrl.Log.WithName("test")
 
 	server := &ExtensionServer{
-		config:     &ExtensionConfig{ClusterId: "test"},
-		k8sClient:  client,
-		logger:     &logger,
-		jwtManager: &mockJWTManager{token: "test-token"},
+		config:        &ExtensionConfig{ClusterId: "test"},
+		k8sClient:     client,
+		logger:        &logger,
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
 	}
 
 	req := connectionv1alpha1.WorkspaceConnectionRequest{
@@ -690,9 +699,9 @@ func TestGenerateWebUIBearerTokenURL(t *testing.T) {
 
 	config := &ExtensionConfig{Domain: "https://test.com"}
 	server := &ExtensionServer{
-		config:     config,
-		jwtManager: &mockJWTManager{token: "test-token"},
-		k8sClient:  fakeClient,
+		config:        config,
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
+		k8sClient:     fakeClient,
 	}
 
 	req := httptest.NewRequest("POST", "/test", nil)
@@ -744,9 +753,9 @@ func TestGenerateWebUIBearerTokenURL_SubdomainRouting(t *testing.T) {
 
 	config := &ExtensionConfig{Domain: "https://example.com"}
 	server := &ExtensionServer{
-		config:     config,
-		jwtManager: &mockJWTManager{token: "test-token"},
-		k8sClient:  fakeClient,
+		config:        config,
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
+		k8sClient:     fakeClient,
 	}
 
 	req := httptest.NewRequest("POST", "/test", nil)
@@ -785,9 +794,9 @@ func TestGenerateWebUIBearerTokenURL_NoAccessStrategy(t *testing.T) {
 
 	config := &ExtensionConfig{Domain: "https://example.com"}
 	server := &ExtensionServer{
-		config:     config,
-		jwtManager: &mockJWTManager{token: "test-token"},
-		k8sClient:  fakeClient,
+		config:        config,
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
+		k8sClient:     fakeClient,
 	}
 
 	req := httptest.NewRequest("POST", "/test", nil)
@@ -835,9 +844,9 @@ func TestGenerateWebUIBearerTokenURL_MissingTemplate(t *testing.T) {
 
 	config := &ExtensionConfig{Domain: "https://example.com"}
 	server := &ExtensionServer{
-		config:     config,
-		jwtManager: &mockJWTManager{token: "test-token"},
-		k8sClient:  fakeClient,
+		config:        config,
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
+		k8sClient:     fakeClient,
 	}
 
 	req := httptest.NewRequest("POST", "/test", nil)
@@ -888,7 +897,7 @@ func TestGetUserFromHeaders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("X-Remote-User", testUser)
 
-	user := GetUserFromHeaders(req)
+	user := GetUser(req)
 	if user != testUser {
 		t.Errorf("expected %s, got %s", testUser, user)
 	}

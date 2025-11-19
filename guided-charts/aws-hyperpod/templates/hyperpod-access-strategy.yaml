@@ -60,7 +60,24 @@ spec:
   bearerAuthURLTemplate: "https://{{`{{ .Workspace.Name }}`}}-{{`{{ b32encode .Workspace.Namespace }}`}}.{{ .Values.clusterWebUI.domain }}/bearer-auth"
   {{- end }}
 
-  # Deployment modifications for init container (always enabled)
+  createConnectionHandler: "aws"
+  podEventsHandler: "aws"
+
+  {{- if or .Values.clusterWebUI.enabled .Values.remoteAccess.enabled }}
+  createConnectionContext:
+    {{- if .Values.clusterWebUI.enabled }}
+    kmsKeyId: "{{ .Values.clusterWebUI.auth.kmsKeyId }}"
+    {{- if .Values.clusterWebUI.auth.kmsEncryptionContext.enabled }}
+    encryptionContext: '{"sagemaker:component":"amazon-sagemaker-spaces","sagemaker:eks-cluster-arn":"{{ .Values.clusterWebUI.auth.kmsEncryptionContext.eksClusterArn }}"}'
+    {{- end }}
+    {{- end }}
+    {{- if .Values.remoteAccess.enabled }}
+    ssmManagedNodeRole: "{{ .Values.remoteAccess.ssmManagedNodeRole }}"
+    ssmDocumentName: "{{ .Values.remoteAccess.ssmDocumentName }}"
+    {{- end }}
+  {{- end }}
+
+  # Deployment modifications for SSM remote access
   deploymentModifications:
     podModifications:
       {{- if .Values.remoteAccess.enabled }}
@@ -68,7 +85,7 @@ spec:
         - name: "ssm-agent-sidecar"
           image: "{{ .Values.remoteAccess.ssmSidecarImage.containerRegistry }}/{{ .Values.remoteAccess.ssmSidecarImage.repository }}:{{ .Values.remoteAccess.ssmSidecarImage.tag }}"
           command:
-            - /opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-remote-access
+            - /opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-sidecar-container
           resources:
             requests:
               cpu: "100m"
@@ -79,6 +96,17 @@ spec:
           volumeMounts:
             - name: "workspace-base"
               mountPath: "/opt/amazon/sagemaker/workspace"
+          startupProbe:
+            exec:
+              command: ["/usr/local/bin/ssm-agent-health-check.sh"]
+            initialDelaySeconds: 1
+            periodSeconds: 1
+            failureThreshold: 300
+          livenessProbe:
+            exec:
+              command: ["/usr/local/bin/ssm-agent-health-check.sh"]
+            periodSeconds: 10
+            failureThreshold: 6
           readinessProbe:
             exec:
               command: ["test", "-f", "/tmp/ssm-registered"]

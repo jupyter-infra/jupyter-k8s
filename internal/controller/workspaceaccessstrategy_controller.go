@@ -69,7 +69,7 @@ func (r *WorkspaceAccessStrategyReconciler) Reconcile(ctx context.Context, req c
 	hasWorkspaces, err := workspace.HasActiveWorkspacesWithAccessStrategy(ctx, r.Client, accessStrategy.Name, accessStrategy.Namespace)
 	if err != nil {
 		logger.Error(err, "Failed to list workspaces using AccessStrategy")
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+		return ctrl.Result{}, err
 	}
 
 	logger.V(1).Info("Checking finalizer state",
@@ -87,7 +87,7 @@ func (r *WorkspaceAccessStrategyReconciler) Reconcile(ctx context.Context, req c
 		err = workspace.SafelyAddFinalizerToAccessStrategy(ctx, logger, r.Client, accessStrategy)
 		if err != nil {
 			logger.Error(err, "Failed to add finalizer to AccessStrategy")
-			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
@@ -102,7 +102,7 @@ func (r *WorkspaceAccessStrategyReconciler) Reconcile(ctx context.Context, req c
 		err := workspace.SafelyRemoveFinalizerFromAccessStrategy(ctx, logger, r.Client, accessStrategy, false)
 		if err != nil {
 			logger.Error(err, "Failed to remove finalizer from AccessStrategy")
-			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}

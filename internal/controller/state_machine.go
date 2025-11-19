@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 
@@ -67,6 +66,7 @@ func (sm *StateMachine) ReconcileDesiredState(
 		if statusErr := sm.statusManager.UpdateErrorStatus(
 			ctx, workspace, ReasonDeploymentError, err.Error(), &snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: LongRequeueDelay}, err
 	}
@@ -110,7 +110,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 			ctx, workspace, ReasonDeploymentError, err.Error(), snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+		return ctrl.Result{}, err
 	}
 
 	// Ensure service is deleted - this is an asynchronous operation
@@ -124,7 +124,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 			ctx, workspace, ReasonServiceError, err.Error(), snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+		return ctrl.Result{}, err
 	}
 
 	// Check if resources are fully deleted (asynchronous deletion check)
@@ -140,7 +140,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 				ctx, workspace, ReasonServiceError, accessError.Error(), snapshotStatus); statusErr != nil {
 				logger.Error(statusErr, "Failed to update error status")
 			}
-			return ctrl.Result{RequeueAfter: PollRequeueDelay}, accessError
+			return ctrl.Result{}, accessError
 		} else if !accessResourcesDeleted {
 			// AccessResources are not fully deleted, requeue
 			readiness := WorkspaceStoppingReadiness{
@@ -149,7 +149,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 				accessResourcesStopped: accessResourcesDeleted,
 			}
 			if err := sm.statusManager.UpdateStoppingStatus(ctx, workspace, readiness, snapshotStatus); err != nil {
-				return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+				return ctrl.Result{}, err
 			}
 			return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
 		} else {
@@ -164,7 +164,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 			}
 
 			if err := sm.statusManager.UpdateStoppedStatus(ctx, workspace, snapshotStatus); err != nil {
-				return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
 		}
@@ -181,7 +181,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 		}
 		if err := sm.statusManager.UpdateStoppingStatus(
 			ctx, workspace, readiness, snapshotStatus); err != nil {
-			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+			return ctrl.Result{}, err
 		}
 		// Requeue to check deletion progress again later
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
@@ -194,7 +194,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 		ctx, workspace, ReasonDeploymentError, err.Error(), snapshotStatus); statusErr != nil {
 		logger.Error(statusErr, "Failed to update error status")
 	}
-	return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+	return ctrl.Result{}, err
 }
 
 func (sm *StateMachine) reconcileDesiredRunningStatus(
@@ -213,7 +213,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 			ctx, workspace, ReasonDeploymentError, pvcErr.Error(), snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, pvcErr
+		return ctrl.Result{}, pvcErr
 	}
 
 	// EnsureDeploymentExists creates deployment if missing, or returns existing deployment
@@ -225,7 +225,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 			ctx, workspace, ReasonDeploymentError, deployErr.Error(), snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, deployErr
+		return ctrl.Result{}, deployErr
 	}
 
 	// Ensure service exists
@@ -238,7 +238,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 			ctx, workspace, ReasonServiceError, serviceErr.Error(), snapshotStatus); statusErr != nil {
 			logger.Error(statusErr, "Failed to update error status")
 		}
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, serviceErr
+		return ctrl.Result{}, serviceErr
 	}
 
 	// Check if resources are fully ready (asynchronous readiness check)
@@ -253,7 +253,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		// the creation of all AccessRessources.
 		// TODO: add probe and requeue https://github.com/jupyter-infra/jupyter-k8s/issues/36
 		if err := sm.ReconcileAccessForDesiredRunningStatus(ctx, workspace, service, accessStrategy); err != nil {
-			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+			return ctrl.Result{}, err
 		}
 
 		// Then only update to running status
@@ -263,7 +263,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceRunning", "Workspace is now running")
 
 		if err := sm.statusManager.UpdateRunningStatus(ctx, workspace, snapshotStatus); err != nil {
-			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+			return ctrl.Result{}, err
 		}
 
 		// Handle idle shutdown for running workspaces
@@ -282,7 +282,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	}
 	if err := sm.statusManager.UpdateStartingStatus(
 		ctx, workspace, readiness, snapshotStatus); err != nil {
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+		return ctrl.Result{}, err
 	}
 
 	// Requeue to check resource readiness again later
@@ -357,13 +357,13 @@ func (sm *StateMachine) stopWorkspaceDueToIdle(ctx context.Context, workspace *w
 	workspace.Spec.DesiredStatus = DesiredStateStopped
 	if err := sm.resourceManager.client.Update(ctx, workspace); err != nil {
 		logger.Error(err, "Failed to update workspace desired status")
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+		return ctrl.Result{}, err
 	}
 
 	logger.Info("Updated workspace desired status to Stopped")
 
 	// Requeue after a minimal wait
-	return ctrl.Result{RequeueAfter: 10 * time.Millisecond}, nil
+	return ctrl.Result{RequeueAfter: MinimalRequeueDelay}, nil
 }
 
 // isAtLeastOneWorkspacePodReady checks if workspace pods are ready for idle checking
@@ -409,14 +409,14 @@ func (sm *StateMachine) ReconcileDeletion(ctx context.Context, workspace *worksp
 	// Update status to Deleting
 	if err := sm.statusManager.UpdateDeletingStatus(ctx, workspace); err != nil {
 		logger.Error(err, "Failed to update deleting status")
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+		return ctrl.Result{}, err
 	}
 
 	// Clean up all workspace resources via resource manager
 	allDeleted, err := sm.resourceManager.CleanupAllResources(ctx, workspace)
 	if err != nil {
 		logger.Error(err, "Failed to cleanup workspace resources")
-		return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+		return ctrl.Result{}, err
 	}
 	if !allDeleted {
 		logger.Info("Resources still being deleted, will retry")

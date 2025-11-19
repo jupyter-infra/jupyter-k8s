@@ -19,12 +19,13 @@ spec:
       cpu: "1"
       memory: "2Gi"
   resourceBounds:
-    cpu:
-      min: "250m"
-      max: "2"
-    memory:
-      min: "512Mi"
-      max: "4Gi"
+    resources:
+      cpu:
+        min: "250m"
+        max: "2"
+      memory:
+        min: "512Mi"
+        max: "4Gi"
   primaryStorage:
     defaultSize: 5Gi
     minSize: 1Gi

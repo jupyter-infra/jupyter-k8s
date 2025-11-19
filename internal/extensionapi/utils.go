@@ -7,6 +7,7 @@ import (
 	"regexp"
 
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/stringutil"
+	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
 // WriteError writes an error response in JSON format
@@ -42,13 +43,22 @@ func GetNamespaceFromPath(path string) (string, error) {
 	return "", fmt.Errorf("cannot find the namespace in URL")
 }
 
-// GetUserFromHeaders extracts the user from request headers
-func GetUserFromHeaders(r *http.Request) string {
+// GetUser extracts the user from Kubernetes request context or falls back to headers
+func GetUser(r *http.Request) string {
+	// Try to get user info from Kubernetes request context first
+	if userInfo, ok := request.UserFrom(r.Context()); ok {
+		if userInfo != nil && userInfo.GetName() != "" {
+			return stringutil.SanitizeUsername(userInfo.GetName())
+		}
+	}
+
+	// Fallback to headers for backward compatibility
 	if user := r.Header.Get(HeaderUser); user != "" {
 		return stringutil.SanitizeUsername(user)
 	}
 	if user := r.Header.Get(HeaderRemoteUser); user != "" {
 		return stringutil.SanitizeUsername(user)
 	}
+
 	return ""
 }

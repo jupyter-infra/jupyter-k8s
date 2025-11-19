@@ -6,7 +6,7 @@ namespace: jupyter-k8s-system
 # [CLUSTER WEB UI]: Web interface configuration
 clusterWebUI:
   enabled: false
-  
+
   # Full domain for the application (required)
   domain: ""
 
@@ -50,12 +50,17 @@ clusterWebUI:
     resources:
       limits:
         cpu: 200m
-        memory: 128Mi
+        memory: 256Mi
       requests:
         cpu: 200m
-        memory: 128Mi
+        memory: 256Mi
     jwtSigningType: "kms"
     kmsKeyId: ""
+    # KMS encryption context configuration
+    kmsEncryptionContext:
+      enabled: false
+      # EKS cluster ARN for encryption context (required when enabled: true)
+      eksClusterArn: ""
     jwtIssuer: "jupyter-k8s-auth"
     jwtAudience: "workspace-users"
     jwtExpiration: "12h"

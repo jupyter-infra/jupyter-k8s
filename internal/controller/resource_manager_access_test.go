@@ -18,6 +18,13 @@ import (
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 )
 
+// Constants for the test
+const (
+	resourceName             = "test-route-test-workspace"
+	obsoleteMiddlewareName   = "obsolete-middleware-test-workspace"
+	obsoleteIngressRouteName = "obsolete-route-test-workspace"
+)
+
 var _ = Describe("ResourceManagerForAccess", func() {
 	var (
 		ctx                    context.Context
@@ -278,6 +285,179 @@ var _ = Describe("ResourceManagerForAccess", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("create failed"))
 		})
+
+		It("Should delete resources referenced in Workspace.status but not in Access Strategy", func() {
+			// Add resources to the workspace status - some in workspace namespace, some in different namespace
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{
+				{
+					Kind:       "IngressRoute",
+					APIVersion: "traefik.io/v1alpha1",
+					Name:       resourceName, // This one matches current template and is in correct namespace - should be kept
+					Namespace:  workspace.Namespace,
+				},
+				{
+					Kind:       "Middleware", // Not in current templates - should be deleted
+					APIVersion: "traefik.io/v1alpha1",
+					Name:       obsoleteMiddlewareName,
+					Namespace:  workspace.Namespace,
+				},
+				{
+					Kind:       "IngressRoute", // Not in current templates - should be deleted
+					APIVersion: "traefik.io/v1alpha1",
+					Name:       obsoleteIngressRouteName,
+					Namespace:  workspace.Namespace,
+				},
+			}
+
+			// Modify the accessStrategy to only include the IngressRoute template
+			// This will make the Middleware obsolete
+			accessStrategy.Spec.AccessResourceTemplates = []workspacev1alpha1.AccessResourceTemplate{
+				{
+					Kind:       "IngressRoute",
+					ApiVersion: "traefik.io/v1alpha1",
+					NamePrefix: "test-route",
+					Template:   "spec:\\n  routes:\\n  - match: Host(`example.com`) && PathPrefix(`/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}`)",
+				},
+			}
+
+			// Track resource deletions
+			deletedResources := []string{}
+			mockK8sClient.deleteFunc = func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+				deletedResources = append(deletedResources, obj.GetName()+":"+obj.GetNamespace())
+				return nil
+			}
+
+			// For Get operations, return resources as if they exist
+			mockK8sClient.getFunc = func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				u := obj.(*unstructured.Unstructured)
+				u.SetName(key.Name)
+				u.SetNamespace(key.Namespace)
+				u.SetAPIVersion("traefik.io/v1alpha1")
+				switch key.Name {
+				case resourceName:
+					u.SetKind("IngressRoute")
+				case obsoleteMiddlewareName:
+					u.SetKind("Middleware")
+				case obsoleteIngressRouteName:
+					u.SetKind("IngressRoute")
+				}
+				return nil
+			}
+
+			// Call the function under test
+			err := resourceManager.EnsureAccessResourcesExist(ctx, workspace, accessStrategy, service)
+
+			// Verify results
+			Expect(err).NotTo(HaveOccurred())
+
+			// Resources that should be deleted
+			middlewareName := obsoleteMiddlewareName + ":" + workspace.Namespace
+			obsoleteRoute := obsoleteIngressRouteName + ":" + workspace.Namespace
+
+			// Resource that should be kept
+			resourceCorrectNamespace := resourceName + ":" + workspace.Namespace
+
+			// Verify deletions
+			Expect(deletedResources).To(ContainElement(middlewareName), "Should delete obsolete Middleware resource")
+			Expect(deletedResources).To(ContainElement(obsoleteRoute), "Should delete obsolete IngressRoute resource")
+			Expect(deletedResources).NotTo(ContainElement(resourceCorrectNamespace), "Should NOT delete resource matching current template in correct namespace")
+
+			// Verify the workspace status was updated to remove the obsolete resources
+			for _, resource := range workspace.Status.AccessResources {
+				resourceKey := resource.Name + ":" + resource.Namespace
+				Expect(resourceKey).NotTo(Equal(middlewareName), "Obsolete Middleware should be removed from status")
+				Expect(resourceKey).NotTo(Equal(obsoleteRoute), "Obsolete IngressRoute should be removed from status")
+			}
+
+			// Verify the resource that should be kept is still in status
+			foundCorrectResource := false
+			for _, resource := range workspace.Status.AccessResources {
+				if resource.Name == resourceName && resource.Namespace == workspace.Namespace {
+					foundCorrectResource = true
+					break
+				}
+			}
+			Expect(foundCorrectResource).To(BeTrue(), "Resource matching current template in correct namespace should be kept in status")
+		})
+
+		It("Should return an error if deleting an access resource fails", func() {
+			// Add resources to the workspace status - some in workspace namespace, some in different namespace
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{
+				{
+					Kind:       "IngressRoute",
+					APIVersion: "traefik.io/v1alpha1",
+					Name:       resourceName, // This one matches current template and is in correct namespace - should be kept
+					Namespace:  workspace.Namespace,
+				},
+				{
+					Kind:       "Middleware", // This one is not in current templates and should be deleted
+					APIVersion: "traefik.io/v1alpha1",
+					Name:       obsoleteMiddlewareName,
+					Namespace:  workspace.Namespace, // Use workspace namespace for consistency
+				},
+			}
+
+			// Modify the accessStrategy to only include the IngressRoute template
+			// This will make the Middleware obsolete
+			accessStrategy.Spec.AccessResourceTemplates = []workspacev1alpha1.AccessResourceTemplate{
+				{
+					Kind:       "IngressRoute",
+					ApiVersion: "traefik.io/v1alpha1",
+					NamePrefix: "test-route",
+					Template:   "spec:\\n  routes:\\n  - match: Host(`example.com`) && PathPrefix(`/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}`)",
+				},
+			}
+
+			// For Get operations, return resources as if they exist
+			mockK8sClient.getFunc = func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				u := obj.(*unstructured.Unstructured)
+				u.SetName(key.Name)
+				u.SetNamespace(key.Namespace)
+				u.SetAPIVersion("traefik.io/v1alpha1")
+				switch key.Name {
+				case resourceName:
+					u.SetKind("IngressRoute")
+				case obsoleteMiddlewareName:
+					u.SetKind("Middleware")
+				}
+				return nil
+			}
+
+			// Set up delete to fail for the middleware
+			mockK8sClient.deleteFunc = func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+				if obj.GetName() == obsoleteMiddlewareName {
+					return fmt.Errorf("delete failed: resource in use")
+				}
+				return nil
+			}
+
+			// Call the function under test
+			err := resourceManager.EnsureAccessResourcesExist(ctx, workspace, accessStrategy, service)
+
+			// Verify results
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("delete failed: resource in use"))
+
+			// Verify the status was not updated (obsolete resource still present)
+			foundObsoleteMiddleware := false
+			for _, resource := range workspace.Status.AccessResources {
+				if resource.Name == obsoleteMiddlewareName {
+					foundObsoleteMiddleware = true
+					break
+				}
+			}
+			Expect(foundObsoleteMiddleware).To(BeTrue(), "Obsolete resource should still be in status after delete fails")
+
+			// Verify that the workspace status includes the resource we want
+			Expect(workspace.Status.AccessResources).To(ContainElement(
+				workspacev1alpha1.AccessResourceStatus{
+					Kind:       "Middleware",
+					APIVersion: "traefik.io/v1alpha1",
+					Name:       obsoleteMiddlewareName,
+					Namespace:  workspace.Namespace, // Updated to workspace namespace
+				},
+			), "Status should still include the obsolete middleware that failed to delete")
+		})
 	})
 
 	Context("ensureAccessResourceExists.ResourceReferencedInStatus", func() {
@@ -287,8 +467,8 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				{
 					Kind:       "IngressRoute",
 					APIVersion: "traefik.io/v1alpha1",
-					Name:       "test-route-test-workspace",
-					Namespace:  "resource-namespace",
+					Name:       resourceName,
+					Namespace:  workspace.Namespace,
 				},
 			}
 		})
@@ -296,7 +476,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 		It("Should return nil when found in Workspace.Status.AccessResources", func() {
 			// Set up the mock client to return the resource
 			mockK8sClient.getFunc = func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-				if key.Name == "test-route-test-workspace" && key.Namespace == "resource-namespace" {
+				if key.Name == resourceName && key.Namespace == workspace.Namespace {
 					// Return success to indicate resource was found
 					return nil
 				}
@@ -310,7 +490,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
@@ -332,7 +512,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
@@ -359,7 +539,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
@@ -390,7 +570,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
@@ -422,7 +602,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
@@ -455,7 +635,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
@@ -489,13 +669,151 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to set controller reference"))
 			Expect(workspace.Status.AccessResources).To(BeEmpty())
+		})
+
+		It("Should mutate an existing resource if it does not match the template", func() {
+			// Set up the mock client to return an existing resource with different spec
+			mockK8sClient.getFunc = func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if key.Name == resourceName && key.Namespace == workspace.Namespace {
+					u := obj.(*unstructured.Unstructured)
+					u.SetAPIVersion("traefik.io/v1alpha1")
+					u.SetKind("IngressRoute")
+					u.SetName(key.Name)
+					u.SetNamespace(key.Namespace)
+					u.SetResourceVersion("1")
+
+					// Set a different spec than what the template would generate
+					err := unstructured.SetNestedField(u.Object, map[string]interface{}{
+						"routes": []interface{}{
+							map[string]interface{}{
+								"match": "Host(`old-domain.com`) && PathPrefix(`/old-path`)",
+							},
+						},
+					}, "spec")
+					if err != nil {
+						return err
+					}
+					return nil
+				}
+				return fmt.Errorf("unexpected key: %v", key)
+			}
+
+			// Track update calls
+			updateCalled := false
+			var updatedSpec map[string]interface{}
+			mockK8sClient.updateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+				updateCalled = true
+
+				// Extract and store the spec for verification
+				u := obj.(*unstructured.Unstructured)
+				spec, found, err := unstructured.NestedFieldCopy(u.Object, "spec")
+				if err != nil || !found {
+					return fmt.Errorf("spec not found or error: %v", err)
+				}
+				updatedSpec = spec.(map[string]interface{})
+				return nil
+			}
+
+			// Add a resource to workspace status to match the one we're testing
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{
+				{
+					Kind:       "IngressRoute",
+					APIVersion: "traefik.io/v1alpha1",
+					Name:       resourceName,
+					Namespace:  workspace.Namespace,
+				},
+			}
+
+			// Call the function under test
+			err := resourceManager.ensureAccessResourceExists(
+				ctx,
+				workspace,
+				accessStrategy,
+				service,
+				&accessStrategy.Spec.AccessResourceTemplates[0],
+				workspace.Namespace,
+			)
+
+			// Verify the results
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updateCalled).To(BeTrue(), "Update should have been called")
+
+			// Verify that the spec was updated to match the template
+			Expect(updatedSpec).NotTo(BeNil())
+			routes, found, _ := unstructured.NestedSlice(updatedSpec, "routes")
+			Expect(found).To(BeTrue(), "Routes field should exist")
+			Expect(routes).To(HaveLen(1))
+
+			route := routes[0].(map[string]interface{})
+			matchExpr, found, _ := unstructured.NestedString(route, "match")
+			Expect(found).To(BeTrue(), "Match field should exist")
+			Expect(matchExpr).To(ContainSubstring("example.com"))
+			Expect(matchExpr).To(ContainSubstring("/workspaces/test-namespace/test-workspace"))
+		})
+
+		It("Should return error if updating the resource fails", func() {
+			// Set up the mock client to return an existing resource with different spec
+			mockK8sClient.getFunc = func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if key.Name == resourceName && key.Namespace == workspace.Namespace {
+					u := obj.(*unstructured.Unstructured)
+					u.SetAPIVersion("traefik.io/v1alpha1")
+					u.SetKind("IngressRoute")
+					u.SetName(key.Name)
+					u.SetNamespace(key.Namespace)
+					u.SetResourceVersion("1")
+
+					// Set a different spec than what the template would generate
+					err := unstructured.SetNestedField(u.Object, map[string]interface{}{
+						"routes": []interface{}{
+							map[string]interface{}{
+								"match": "Host(`old-domain.com`) && PathPrefix(`/old-path`)",
+							},
+						},
+					}, "spec")
+					if err != nil {
+						return err
+					}
+					return nil
+				}
+				return fmt.Errorf("unexpected key: %v", key)
+			}
+
+			// Set up the mock client to fail on update
+			mockK8sClient.updateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+				return fmt.Errorf("update failed: resource locked")
+			}
+
+			// Add a resource to workspace status to match the one we're testing
+			workspace.Status.AccessResources = []workspacev1alpha1.AccessResourceStatus{
+				{
+					Kind:       "IngressRoute",
+					APIVersion: "traefik.io/v1alpha1",
+					Name:       resourceName,
+					Namespace:  workspace.Namespace,
+				},
+			}
+
+			// Call the function under test
+			err := resourceManager.ensureAccessResourceExists(
+				ctx,
+				workspace,
+				accessStrategy,
+				service,
+				&accessStrategy.Spec.AccessResourceTemplates[0],
+				workspace.Namespace,
+			)
+
+			// Verify the results
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to update access resource"))
+			Expect(err.Error()).To(ContainSubstring("update failed: resource locked"))
 		})
 	})
 
@@ -528,7 +846,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
@@ -555,7 +873,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
@@ -578,7 +896,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
@@ -604,7 +922,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
@@ -635,7 +953,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
@@ -682,7 +1000,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
@@ -705,7 +1023,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
@@ -735,7 +1053,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
@@ -767,7 +1085,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				accessStrategy,
 				service,
 				&accessStrategy.Spec.AccessResourceTemplates[0],
-				"resource-namespace",
+				workspace.Namespace,
 			)
 
 			// Verify the results
@@ -790,7 +1108,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 				Kind:       "IngressRoute",
 				APIVersion: "traefik.io/v1alpha1",
 				Name:       "test-route-test-workspace",
-				Namespace:  "resource-namespace",
+				Namespace:  workspace.Namespace,
 			}
 		})
 
@@ -954,19 +1272,19 @@ var _ = Describe("ResourceManagerForAccess", func() {
 					Kind:       "IngressRoute",
 					APIVersion: "traefik.io/v1alpha1",
 					Name:       "test-route-1",
-					Namespace:  "resource-namespace",
+					Namespace:  workspace.Namespace,
 				},
 				{
 					Kind:       "Middleware",
 					APIVersion: "traefik.io/v1alpha1",
 					Name:       "test-middleware-1",
-					Namespace:  "resource-namespace",
+					Namespace:  workspace.Namespace,
 				},
 				{
 					Kind:       "IngressRoute",
 					APIVersion: "traefik.io/v1alpha1",
 					Name:       "test-route-2",
-					Namespace:  "resource-namespace",
+					Namespace:  workspace.Namespace,
 				},
 			}
 
@@ -1023,7 +1341,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 					Kind:       "IngressRoute",
 					APIVersion: "traefik.io/v1alpha1",
 					Name:       "test-route-1",
-					Namespace:  "resource-namespace",
+					Namespace:  workspace.Namespace,
 				},
 			}
 
@@ -1050,7 +1368,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 					Kind:       "IngressRoute",
 					APIVersion: "traefik.io/v1alpha1",
 					Name:       "test-route-1",
-					Namespace:  "resource-namespace",
+					Namespace:  workspace.Namespace,
 				},
 			}
 
@@ -1108,7 +1426,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 					Kind:       "IngressRoute",
 					APIVersion: "traefik.io/v1alpha1",
 					Name:       "test-route-1",
-					Namespace:  "resource-namespace",
+					Namespace:  workspace.Namespace,
 				},
 			}
 

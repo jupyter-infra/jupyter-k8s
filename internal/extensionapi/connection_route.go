@@ -34,15 +34,40 @@ func (n *noOpPodExec) ExecInPod(ctx context.Context, pod *corev1.Pod, containerN
 // generateWebUIBearerTokenURL generates a Web UI connection URL with JWT token
 // Returns (connectionType, connectionURL, error)
 func (s *ExtensionServer) generateWebUIBearerTokenURL(r *http.Request, workspaceName, namespace string) (string, string, error) {
-	user := GetUserFromHeaders(r)
+	user := GetUser(r)
 	if user == "" {
 		return "", "", fmt.Errorf("user information not found in request headers")
 	}
 
-	// Generate webUI URL
-	webUIURL, err := s.generateBearerAuthWebUIURL(workspaceName, namespace)
+	// Get workspace and access strategy for signer configuration
+	ws, err := s.getWorkspace(namespace, workspaceName)
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("failed to get workspace: %w", err)
+	}
+
+	accessStrategy, err := s.getAccessStrategy(ws)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get access strategy: %w", err)
+	}
+
+	// Require AccessStrategy with BearerAuthURLTemplate
+	if accessStrategy == nil {
+		return "", "", fmt.Errorf("no AccessStrategy configured for workspace")
+	}
+	if accessStrategy.Spec.BearerAuthURLTemplate == "" {
+		return "", "", fmt.Errorf("BearerAuthURLTemplate not configured in AccessStrategy")
+	}
+
+	// Create signer based on access strategy
+	signer, err := s.signerFactory.CreateSigner(accessStrategy)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create signer: %w", err)
+	}
+
+	// Generate URL from template
+	webUIURL, err := s.renderBearerAuthURL(accessStrategy.Spec.BearerAuthURLTemplate, ws, accessStrategy)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to render bearer auth URL: %w", err)
 	}
 
 	// Parse URL to extract domain and path for JWT claims
@@ -62,8 +87,8 @@ func (s *ExtensionServer) generateWebUIBearerTokenURL(r *http.Request, workspace
 		}
 	}
 
-	// Generate JWT token with domain and path
-	token, err := s.jwtManager.GenerateToken(user, []string{}, user, map[string][]string{}, path, domain, jwt.TokenTypeBootstrap)
+	// Generate JWT token with domain and path using access strategy-specific signer
+	token, err := signer.GenerateToken(user, []string{}, user, map[string][]string{}, path, domain, jwt.TokenTypeBootstrap)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate JWT token: %w", err)
 	}
@@ -265,7 +290,7 @@ func (s *ExtensionServer) generateVSCodeURL(r *http.Request, workspaceName, name
 
 // checkWorkspaceAuthorization checks if the user is authorized to access the workspace
 func (s *ExtensionServer) checkWorkspaceAuthorization(r *http.Request, workspaceName, namespace string) (*WorkspaceAdmissionResult, error) {
-	user := GetUserFromHeaders(r)
+	user := GetUser(r)
 	if user == "" {
 		return nil, fmt.Errorf("user not found in request headers")
 	}
@@ -293,35 +318,4 @@ func (s *ExtensionServer) renderBearerAuthURL(templateStr string, ws *workspacev
 	}
 
 	return result.String(), nil
-}
-
-// generateBearerAuthWebUIURL fetches workspace and access strategy, then generates the bearer auth URL
-func (s *ExtensionServer) generateBearerAuthWebUIURL(workspaceName, namespace string) (string, error) {
-	// Fetch workspace to get AccessStrategy reference
-	ws, err := s.getWorkspace(namespace, workspaceName)
-	if err != nil {
-		return "", fmt.Errorf("failed to get workspace: %w", err)
-	}
-
-	// Fetch AccessStrategy
-	accessStrategy, err := s.getAccessStrategy(ws)
-	if err != nil {
-		return "", fmt.Errorf("failed to get access strategy: %w", err)
-	}
-
-	// Require AccessStrategy with BearerAuthURLTemplate
-	if accessStrategy == nil {
-		return "", fmt.Errorf("no AccessStrategy configured for workspace")
-	}
-	if accessStrategy.Spec.BearerAuthURLTemplate == "" {
-		return "", fmt.Errorf("BearerAuthURLTemplate not configured in AccessStrategy")
-	}
-
-	// Generate URL from template
-	webUIURL, err := s.renderBearerAuthURL(accessStrategy.Spec.BearerAuthURLTemplate, ws, accessStrategy)
-	if err != nil {
-		return "", fmt.Errorf("failed to render bearer auth URL: %w", err)
-	}
-
-	return webUIURL, nil
 }
