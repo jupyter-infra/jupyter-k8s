@@ -48,7 +48,7 @@ spec:
         - --provider=oidc
         - --provider-display-name=GitHub
         - --client-id={{ .Values.dex.oauth2ProxyClientId }}
-        - --client-secret={{ .Values.dex.oauth2ProxyClientSecret }}
+        - --client-secret={{ include "defaulter.oauth2ProxyClientSecret" . }}
         - --cookie-secret=$(COOKIE_SECRET)
         - --email-domain=*
         - --whitelist-domain={{ .Values.domain }}
