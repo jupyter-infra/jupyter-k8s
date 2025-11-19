@@ -108,10 +108,6 @@ type WorkspaceAccessStrategySpec struct {
 	// +optional
 	BearerAuthURLTemplate string `json:"bearerAuthURLTemplate,omitempty"`
 
-	// ControllerConfig contains settings used by the controller for strategy-specific operations
-	// +optional
-	ControllerConfig map[string]string `json:"controllerConfig,omitempty"`
-
 	// CreateConnectionHandler specifies the handler for connection creation
 	// +optional
 	CreateConnectionHandler string `json:"createConnectionHandler,omitempty"`

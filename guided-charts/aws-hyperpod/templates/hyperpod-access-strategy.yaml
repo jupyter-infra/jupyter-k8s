@@ -143,11 +143,3 @@ spec:
             valueTemplate: "{{`{{ .Workspace.Spec.AppType }}`}}"
           - name: JUPYTER_BASE_URL
             valueTemplate: "/workspaces/{{`{{ .Workspace.Namespace }}`}}/{{`{{ .Workspace.Name }}`}}/"
-
-  {{- if .Values.remoteAccess.enabled }}
-  # Controller-specific configuration (not injected into workspace containers)
-  controllerConfig:
-    SSM_MANAGED_NODE_ROLE: "{{ .Values.remoteAccess.ssmManagedNodeRole }}"
-    AWS_SSM_DOCUMENT_NAME: "{{ .Values.remoteAccess.ssmDocumentName }}"
-  {{- end }}
-
