@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -36,12 +37,15 @@ import (
 	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
 	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
+	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
 )
 
 // Test constants
 const (
 	testInvalidImage      = "malicious/hacked:latest"
 	testValidBaseNotebook = "jupyter/base-notebook:latest"
+	testDefaultNamespace  = "default"
+	testStrategyName      = "test-strategy"
 )
 
 // createUserContext creates a context with user information for testing
@@ -63,7 +67,7 @@ var _ = Describe("Workspace Webhook", func() {
 		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-workspace",
-				Namespace: "default",
+				Namespace: testDefaultNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
 				DisplayName:   "Test Workspace",
@@ -78,6 +82,7 @@ var _ = Describe("Workspace Webhook", func() {
 			templateDefaulter:       NewTemplateDefaulter(mockClient, ""),
 			serviceAccountDefaulter: NewServiceAccountDefaulter(mockClient),
 			templateGetter:          NewTemplateGetter(mockClient),
+			client:                  mockClient, // Add client field for testing
 		}
 		validator = WorkspaceCustomValidator{
 			templateValidator:       NewTemplateValidator(mockClient, ""),
@@ -145,6 +150,136 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(workspace.Annotations).NotTo(HaveKey(controller.AnnotationCreatedBy))
 			Expect(workspace.Annotations).To(HaveKey(controller.AnnotationLastUpdatedBy))
 			Expect(workspace.Annotations[controller.AnnotationLastUpdatedBy]).To(Equal("update-user"))
+		})
+
+		It("should call Get(AccessStrategy) and Update(AccessStrategy) with finalizer", func() {
+			// Create a test workspace with AccessStrategy reference
+			workspace.Spec.AccessStrategy = &workspacev1alpha1.AccessStrategyRef{
+				Name:      testStrategyName,
+				Namespace: testDefaultNamespace,
+			}
+
+			// Create a context with user info for CREATE operation
+			userCtx := createUserContext(ctx, "CREATE", "test-user")
+
+			// Create an access strategy for the test
+			accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      testStrategyName,
+					Namespace: testDefaultNamespace,
+					// No finalizers initially
+				},
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					DisplayName: "Test Strategy",
+				},
+			}
+
+			// Create a tracking client to monitor calls
+			getCalled := false
+			updateCalled := false
+			var updatedObj client.Object
+
+			mockClient := &MockClientWithTracking{
+				Client: &MockClient{},
+				getFunc: func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+					if key.Name == testStrategyName && key.Namespace == testDefaultNamespace {
+						getCalled = true
+						accessStrategy.DeepCopyInto(obj.(*workspacev1alpha1.WorkspaceAccessStrategy))
+						return nil
+					}
+					return nil
+				},
+				updateFunc: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+					if as, ok := obj.(*workspacev1alpha1.WorkspaceAccessStrategy); ok && as.Name == testStrategyName {
+						updateCalled = true
+						accessStrategyCopy := as.DeepCopy()
+						updatedObj = accessStrategyCopy
+						return nil
+					}
+					return nil
+				},
+			}
+
+			// Use our mock client in the defaulter
+			defaulter.client = mockClient
+
+			// Call the defaulter
+			err := defaulter.Default(userCtx, workspace)
+
+			// Verify no errors
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify that Get was called for AccessStrategy
+			Expect(getCalled).To(BeTrue(), "Get should be called for AccessStrategy")
+
+			// Verify that Update was called
+			Expect(updateCalled).To(BeTrue(), "Update should be called to add finalizer")
+
+			// Verify that finalizer was added
+			updatedAccessStrategy, ok := updatedObj.(*workspacev1alpha1.WorkspaceAccessStrategy)
+			Expect(ok).To(BeTrue())
+
+			finalizerName := workspaceutil.AccessStrategyFinalizerName
+			hasExpectedFinalizer := false
+			for _, finalizer := range updatedAccessStrategy.Finalizers {
+				if finalizer == finalizerName {
+					hasExpectedFinalizer = true
+					break
+				}
+			}
+			Expect(hasExpectedFinalizer).To(BeTrue(), "Finalizer should be added to AccessStrategy")
+		})
+
+		It("should return an error if Update(AccessStrategy) fails", func() {
+			// Create a test workspace with AccessStrategy reference
+			workspace.Spec.AccessStrategy = &workspacev1alpha1.AccessStrategyRef{
+				Name:      testStrategyName,
+				Namespace: testDefaultNamespace,
+			}
+
+			// Create a context with user info for CREATE operation
+			userCtx := createUserContext(ctx, "CREATE", "test-user")
+
+			// Create an access strategy for the test
+			accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      testStrategyName,
+					Namespace: testDefaultNamespace,
+					// No finalizers initially
+				},
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					DisplayName: "Test Strategy",
+				},
+			}
+
+			// Create a client that successfully gets the AccessStrategy but fails on update
+			mockClient := &MockClientWithTracking{
+				Client: &MockClient{},
+				getFunc: func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+					if key.Name == testStrategyName && key.Namespace == testDefaultNamespace {
+						accessStrategy.DeepCopyInto(obj.(*workspacev1alpha1.WorkspaceAccessStrategy))
+						return nil
+					}
+					return nil
+				},
+				updateFunc: func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+					if as, ok := obj.(*workspacev1alpha1.WorkspaceAccessStrategy); ok && as.Name == testStrategyName {
+						return fmt.Errorf("simulated update error")
+					}
+					return nil
+				},
+			}
+
+			// Use our mock client in the defaulter
+			defaulter.client = mockClient
+
+			// Call the defaulter
+			err := defaulter.Default(userCtx, workspace)
+
+			// Verify that the error was returned
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("simulated update error"))
+			Expect(err.Error()).To(ContainSubstring("failed to add finalizer to AccessStrategy"))
 		})
 	})
 
@@ -1209,7 +1344,7 @@ var _ = Describe("Workspace Webhook", func() {
 			template = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "strict-template",
-					Namespace: "default",
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:   "Strict Template",
@@ -1480,4 +1615,54 @@ func (m *MockClient) IsObjectNamespaced(obj runtime.Object) (bool, error) {
 
 func (m *MockClient) SubResource(subResource string) client.SubResourceClient {
 	return nil
+}
+
+// MockClientWithTracking allows tracking of specific client operations for testing
+type MockClientWithTracking struct {
+	client.Client
+	getFunc    func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error
+	updateFunc func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error
+	listFunc   func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
+	createFunc func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error
+	deleteFunc func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error
+}
+
+// Get overrides the Client Get method to track calls
+func (m *MockClientWithTracking) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if m.getFunc != nil {
+		return m.getFunc(ctx, key, obj, opts...)
+	}
+	return m.Client.Get(ctx, key, obj, opts...)
+}
+
+// Update overrides the Client Update method to track calls
+func (m *MockClientWithTracking) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if m.updateFunc != nil {
+		return m.updateFunc(ctx, obj, opts...)
+	}
+	return m.Client.Update(ctx, obj, opts...)
+}
+
+// List overrides the Client List method to track calls
+func (m *MockClientWithTracking) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	if m.listFunc != nil {
+		return m.listFunc(ctx, list, opts...)
+	}
+	return m.Client.List(ctx, list, opts...)
+}
+
+// Create overrides the Client Create method to track calls
+func (m *MockClientWithTracking) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	if m.createFunc != nil {
+		return m.createFunc(ctx, obj, opts...)
+	}
+	return m.Client.Create(ctx, obj, opts...)
+}
+
+// Delete overrides the Client Delete method to track calls
+func (m *MockClientWithTracking) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	if m.deleteFunc != nil {
+		return m.deleteFunc(ctx, obj, opts...)
+	}
+	return m.Client.Delete(ctx, obj, opts...)
 }
