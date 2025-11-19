@@ -76,6 +76,8 @@ const (
 	// DefaultDesiredStatus is the default desired status for workspaces
 	DefaultDesiredStatus = "Running"
 
+	// MinimalRequeueDelay is the delay for near-immediate requeue
+	MinimalRequeueDelay = 10 * time.Millisecond
 	// PollRequeueDelay is the delay for polling reconciliation
 	PollRequeueDelay = 200 * time.Millisecond
 	// LongRequeueDelay is the delay for long reconciliation cycles

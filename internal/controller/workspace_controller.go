@@ -216,7 +216,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		if err := r.Update(ctx, workspace); err != nil {
 			logger.Error(err, "Failed to update workspace labels or finalizers")
-			return ctrl.Result{RequeueAfter: PollRequeueDelay}, err
+			return ctrl.Result{}, err
 		}
 		logger.Info("Successfully updated workspace labels or finalizers")
 		// Requeue to process with updated labels and/or finalizer
@@ -237,13 +237,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Delegate to state machine for business logic, passing the accessStrategy
-	result, err := r.stateMachine.ReconcileDesiredState(ctx, workspace, accessStrategy)
-	if err != nil {
-		logger.Error(err, "Failed to reconcile desired state")
-		return ctrl.Result{}, err
-	}
-
-	return result, nil
+	return r.stateMachine.ReconcileDesiredState(ctx, workspace, accessStrategy)
 }
 
 // SetupWithManager sets up the controller with the Manager.

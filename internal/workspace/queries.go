@@ -27,18 +27,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// Label constants for tracking workspace references
-// These are defined here to avoid import cycles with the controller package
-const (
-	// Template labels
-	LabelWorkspaceTemplate          = "workspace.jupyter.org/template-name"
-	LabelWorkspaceTemplateNamespace = "workspace.jupyter.org/template-namespace"
-
-	// AccessStrategy labels
-	LabelAccessStrategyName      = "workspace.jupyter.org/access-strategy-name"
-	LabelAccessStrategyNamespace = "workspace.jupyter.org/access-strategy-namespace"
-)
-
 // GetTemplateRefNamespace returns the namespace for a workspace's template reference,
 // defaulting to the workspace's namespace if not specified
 func GetTemplateRefNamespace(ws *workspacev1alpha1.Workspace) string {
@@ -74,12 +62,10 @@ func ListActiveWorkspacesByTemplate(
 
 	workspaceList := &workspacev1alpha1.WorkspaceList{}
 
-	// Build label selector - namespace is optional for backwards compatibility
+	// Build label selector
 	labels := map[string]string{
-		LabelWorkspaceTemplate: templateName,
-	}
-	if templateNamespace != "" {
-		labels[LabelWorkspaceTemplateNamespace] = templateNamespace
+		LabelWorkspaceTemplate:          templateName,
+		LabelWorkspaceTemplateNamespace: templateNamespace,
 	}
 
 	listOptions := []client.ListOption{
@@ -155,12 +141,10 @@ func ListActiveWorkspacesByTemplate(
 func HasActiveWorkspacesWithTemplate(ctx context.Context, k8sClient client.Client, templateName string, templateNamespace string) (bool, error) {
 	workspaceList := &workspacev1alpha1.WorkspaceList{}
 
-	// Build label selector - namespace is optional for backwards compatibility
+	// Build label selector
 	labels := map[string]string{
-		LabelWorkspaceTemplate: templateName,
-	}
-	if templateNamespace != "" {
-		labels[LabelWorkspaceTemplateNamespace] = templateNamespace
+		LabelWorkspaceTemplate:          templateName,
+		LabelWorkspaceTemplateNamespace: templateNamespace,
 	}
 
 	if err := k8sClient.List(ctx, workspaceList, client.MatchingLabels(labels)); err != nil {
