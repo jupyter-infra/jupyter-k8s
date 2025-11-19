@@ -356,17 +356,13 @@ func TestGenerateVSCodeURLWithPod(t *testing.T) {
 		},
 	}
 
-	// Create access strategy with SSM document name
+	// Create access strategy
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-strategy",
 			Namespace: "default",
 		},
-		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			ControllerConfig: map[string]string{
-				"SSM_DOCUMENT_NAME": "test-document",
-			},
-		},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{},
 	}
 
 	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(pod, workspace, accessStrategy).Build()
@@ -541,17 +537,13 @@ func TestGenerateVSCodeURLSSMSuccess(t *testing.T) {
 		},
 	}
 
-	// Create access strategy with SSM document name
+	// Create access strategy
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-strategy",
 			Namespace: "default",
 		},
-		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			ControllerConfig: map[string]string{
-				"SSM_DOCUMENT_NAME": "test-document",
-			},
-		},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{},
 	}
 
 	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(pod, workspace, accessStrategy).Build()
@@ -999,17 +991,13 @@ func TestGenerateVSCodeURL_MissingSSMDocumentName(t *testing.T) {
 		},
 	}
 
-	// Create access strategy WITHOUT SSM_DOCUMENT_NAME
+	// Create access strategy
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-strategy",
 			Namespace: "default",
 		},
-		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			ControllerConfig: map[string]string{
-				// Missing SSM_DOCUMENT_NAME
-			},
-		},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{},
 	}
 
 	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(pod, workspace, accessStrategy).Build()
@@ -1030,8 +1018,6 @@ func TestGenerateVSCodeURL_MissingSSMDocumentName(t *testing.T) {
 	_, _, err := server.generateVSCodeURL(req, "test-workspace", "default")
 
 	if err == nil {
-		t.Error("expected error for missing SSM_DOCUMENT_NAME")
+		t.Error("expected error from SSM strategy creation")
 	}
-	// The error could be from SSM strategy creation or from missing document name
-	// Either is acceptable for this test
 }
