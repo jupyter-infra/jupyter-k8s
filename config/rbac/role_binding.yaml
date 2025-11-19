@@ -12,4 +12,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: jupyter-k8s-controller-manager
-  namespace: jupyter-k8s-system
+  namespace: system
