@@ -550,8 +550,7 @@ deploy-aws-traefik-dex-internal:
 			--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
 			--set authmiddleware.repository=$(ECR_REGISTRY) \
 			--set authmiddleware.imageName=$(ECR_REPOSITORY_AUTH) \
-			--set authmiddleware.jwtSigningKey=$$JWT_SIGNING_KEY
-		\
+			--set authmiddleware.jwtSigningKey=$$JWT_SIGNING_KEY"; \
 		if [ ! -z "$$DEX_OAUTH2_SECRET" ]; then \
 			HELM_ARGS="$$HELM_ARGS --set dex.oauth2ProxyClientSecret=$$DEX_OAUTH2_SECRET"; \
 		fi; \

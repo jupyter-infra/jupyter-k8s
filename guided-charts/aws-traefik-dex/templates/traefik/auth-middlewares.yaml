@@ -7,6 +7,8 @@ spec:
   forwardAuth:
     address: http://oauth2-proxy.{{ .Values.namespace }}:4180
     trustForwardHeader: true
+    addAuthCookiesToResponse:
+      - "{{ $.Values.authmiddleware.cookieName }}"
     authResponseHeaders:
       - X-Auth-Request-Access-Token
       - Authorization
@@ -52,6 +54,8 @@ spec:
   forwardAuth:
     address: "http://authmiddleware.{{ .Values.namespace }}:8080/auth"
     trustForwardHeader: true
+    addAuthCookiesToResponse:
+      - "{{ $.Values.authmiddleware.cookieName }}"
     authRequestHeaders:
       - "Cookie"
       - "X-Forwarded-Uri"
