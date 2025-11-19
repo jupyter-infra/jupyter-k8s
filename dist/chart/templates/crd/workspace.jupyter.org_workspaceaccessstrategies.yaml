@@ -93,12 +93,6 @@ spec:
                   Template variables include .Workspace and .AccessStrategy objects
                   Used by the extension API to generate initial authentication URLs
                 type: string
-              controllerConfig:
-                additionalProperties:
-                  type: string
-                description: ControllerConfig contains settings used by the controller
-                  for strategy-specific operations
-                type: object
               createConnectionContext:
                 additionalProperties:
                   type: string

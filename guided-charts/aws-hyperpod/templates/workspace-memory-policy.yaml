@@ -16,7 +16,7 @@ spec:
       has(object.spec.resources) && 
       has(object.spec.resources.requests) && 
       has(object.spec.resources.requests.memory) &&
-      quantity(object.spec.resources.requests.memory).isGreaterThan(quantity("8Gi"))
+      !quantity(object.spec.resources.requests.memory).isLessThan(quantity("8Gi"))
     message: "HyperPod workspace requires minimum 8GB memory for remote access functionality"
 ---
 apiVersion: admissionregistration.k8s.io/v1
