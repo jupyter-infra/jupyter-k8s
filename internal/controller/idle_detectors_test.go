@@ -129,7 +129,7 @@ func TestHTTPGetDetector_CheckIdle_Success_NotIdle(t *testing.T) {
 HTTP Status: 200`, recentTime)
 
 	mockExecUtil.On("ExecInPod",
-		ctx, pod, "",
+		ctx, pod, "workspace",
 		mock.AnythingOfType("[]string"), // Don't match exact command, just verify it's called
 		"").Return(curlOutput, nil)
 
@@ -160,7 +160,7 @@ func TestHTTPGetDetector_CheckIdle_Success_IsIdle(t *testing.T) {
 HTTP Status: 200`, oldTime)
 
 	mockExecUtil.On("ExecInPod",
-		ctx, pod, "",
+		ctx, pod, "workspace",
 		mock.AnythingOfType("[]string"),
 		"").Return(curlOutput, nil)
 
@@ -189,7 +189,7 @@ func TestHTTPGetDetector_CheckIdle_HTTP404_PermanentFailure(t *testing.T) {
 	curlOutput := `HTTP Status: 404`
 
 	mockExecUtil.On("ExecInPod",
-		ctx, pod, "",
+		ctx, pod, "workspace",
 		mock.AnythingOfType("[]string"),
 		"").Return(curlOutput, nil)
 
@@ -217,7 +217,7 @@ func TestHTTPGetDetector_CheckIdle_ConnectionRefused_TemporaryFailure(t *testing
 
 	// Mock connection refused error (curl exit code 7)
 	mockExecUtil.On("ExecInPod",
-		ctx, pod, "",
+		ctx, pod, "workspace",
 		mock.AnythingOfType("[]string"),
 		"").Return("", errors.New("command terminated with exit code 7"))
 
@@ -261,7 +261,7 @@ func TestHTTPGetDetector_CheckIdle_HTTP500_TemporaryFailure(t *testing.T) {
 			curlOutput := fmt.Sprintf(`HTTP Status: %s`, tc.statusCode)
 
 			mockExecUtil.On("ExecInPod",
-				ctx, pod, "",
+				ctx, pod, "workspace",
 				mock.AnythingOfType("[]string"),
 				"").Return(curlOutput, nil)
 
