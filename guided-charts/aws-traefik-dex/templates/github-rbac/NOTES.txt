@@ -55,7 +55,7 @@ Access is granted based on the configuration in values.yaml:
    - Creates a single role "github-workspace-orgs-role" for all organizations and teams
    - Teams are formatted as: {{ .Values.dex.oidcGroupPrefix }}<organization>:<team>
    - Organizations without teams are formatted as: {{ .Values.dex.oidcGroupPrefix }}<organization>
-   - Example: github:jupyter-ai-contrib:jupyter-k8s-writer
+   - Example: github:jupyter-infra:workspace-users
    {{- else }}
    - Currently disabled. Set githubRbac.createOrgsRole: true to enable.
    {{- end }}

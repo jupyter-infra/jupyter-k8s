@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/authmiddleware"
+	"github.com/jupyter-infra/jupyter-k8s/internal/authmiddleware"
 )
 
 func main() {

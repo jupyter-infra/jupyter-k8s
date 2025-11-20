@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"regexp"
 
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/stringutil"
+	"github.com/jupyter-infra/jupyter-k8s/internal/stringutil"
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
 

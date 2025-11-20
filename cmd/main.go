@@ -1,19 +1,3 @@
-/*
-Copyright 2025.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 // entry point for the jupyter-k8s operator
 package main
 
@@ -40,10 +24,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/extensionapi"
-	webhookv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
+	"github.com/jupyter-infra/jupyter-k8s/internal/extensionapi"
+	webhookv1alpha1 "github.com/jupyter-infra/jupyter-k8s/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	jwt5 "github.com/golang-jwt/jwt/v5"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
+	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 )
 
 const (

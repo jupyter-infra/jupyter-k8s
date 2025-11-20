@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
+	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 	"github.com/stretchr/testify/require"
 )
 

@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/go-logr/logr"
-	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	authorizationv1 "k8s.io/api/authorization/v1"

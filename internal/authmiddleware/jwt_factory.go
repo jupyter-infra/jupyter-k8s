@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
+	"github.com/jupyter-infra/jupyter-k8s/internal/aws"
+	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 )
 
 // NewJWTHandler creates a jwt.Handler based on the configured signing type

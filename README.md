@@ -209,7 +209,7 @@ Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
 the project, i.e.:
 
 ```sh
-kubectl apply -f https://raw.githubusercontent.com/jupyter-ai-contrib/jupyter-k8s/<tag or branch>/dist/install.yaml
+kubectl apply -f https://raw.githubusercontent.com/jupyter-infra/jupyter-k8s/<tag or branch>/dist/install.yaml
 ```
 
 ### By providing a Helm Chart
