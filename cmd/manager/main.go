@@ -1,3 +1,8 @@
+/*
+Copyright (c) Amazon Web Services
+Distributed under the terms of the MIT license
+*/
+
 // entry point for the jupyter-k8s operator manager
 package main
 

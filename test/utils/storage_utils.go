@@ -1,3 +1,8 @@
+/*
+Copyright (c) Amazon Web Services
+Distributed under the terms of the MIT license
+*/
+
 //revive:disable:var-naming
 package utils
 
