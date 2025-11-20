@@ -3,7 +3,6 @@ Copyright (c) Amazon Web Services
 Distributed under the terms of the MIT license
 */
 
-
 // Package extensionapi provides extension API server functionality.
 package extensionapi
 
