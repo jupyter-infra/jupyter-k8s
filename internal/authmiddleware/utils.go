@@ -1,3 +1,8 @@
+/*
+Copyright (c) Amazon Web Services
+Distributed under the terms of the MIT license
+*/
+
 package authmiddleware
 
 // URL and group parsing helper functions

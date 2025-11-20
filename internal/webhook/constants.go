@@ -1,3 +1,8 @@
+/*
+Copyright (c) Amazon Web Services
+Distributed under the terms of the MIT license
+*/
+
 // Package webhook provides constants and utilities for webhook validation.
 package webhook
 
