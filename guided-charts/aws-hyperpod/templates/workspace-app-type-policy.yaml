@@ -1,4 +1,4 @@
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
   name: hyperpod-workspace-app-type-policy
@@ -13,10 +13,10 @@ spec:
   validations:
   - expression: |
       !has(object.spec.appType) || 
-      (object.spec.appType == "jupyter" || object.spec.appType == "code-editor")
+      (object.spec.appType == "jupyterlab" || object.spec.appType == "code-editor")
     message: "Workspace app type must be either 'jupyterlab' or 'code-editor'"
 ---
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
   name: hyperpod-workspace-app-type-binding

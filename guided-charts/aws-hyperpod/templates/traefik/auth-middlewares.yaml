@@ -30,7 +30,7 @@ spec:
     address: "http://authmiddleware.{{ .Values.namespace }}:8080/bearer-auth"
     trustForwardHeader: true
     addAuthCookiesToResponse:
-      - "{{ $.Values.authmiddleware.cookieName }}"
+      - "{{ $.Values.clusterWebUI.auth.cookieName }}"
     authRequestHeaders:
       - "Cookie"
       - "X-Forwarded-Uri"
@@ -50,7 +50,7 @@ spec:
     address: "http://authmiddleware.{{ .Values.namespace }}:8080/verify"
     trustForwardHeader: true
     addAuthCookiesToResponse:
-      - "{{ $.Values.authmiddleware.cookieName }}"
+      - "{{ $.Values.clusterWebUI.auth.cookieName }}"
     authRequestHeaders:
       - "Cookie"
       - "X-Forwarded-Uri"

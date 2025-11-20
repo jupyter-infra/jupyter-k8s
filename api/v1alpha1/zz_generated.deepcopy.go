@@ -480,13 +480,6 @@ func (in *WorkspaceAccessStrategySpec) DeepCopyInto(out *WorkspaceAccessStrategy
 		*out = make([]AccessResourceTemplate, len(*in))
 		copy(*out, *in)
 	}
-	if in.ControllerConfig != nil {
-		in, out := &in.ControllerConfig, &out.ControllerConfig
-		*out = make(map[string]string, len(*in))
-		for key, val := range *in {
-			(*out)[key] = val
-		}
-	}
 	if in.CreateConnectionContext != nil {
 		in, out := &in.CreateConnectionContext, &out.CreateConnectionContext
 		*out = make(map[string]string, len(*in))
