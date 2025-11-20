@@ -7,7 +7,6 @@ Distributed under the terms of the MIT license
 */
 
 
-
 package e2e
 
 import (
