@@ -1,3 +1,8 @@
+/*
+Copyright (c) Amazon Web Services
+Distributed under the terms of the MIT license
+*/
+
 // Package workspace provides utilities for workspace operations.
 package workspace
 

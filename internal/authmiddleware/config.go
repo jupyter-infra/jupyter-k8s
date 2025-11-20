@@ -1,3 +1,8 @@
+/*
+Copyright (c) Amazon Web Services
+Distributed under the terms of the MIT license
+*/
+
 // Package authmiddleware provides JWT-based authentication and authorization middleware
 // for Jupyter-k8s workspaces, handling user identity and cookie management.
 package authmiddleware

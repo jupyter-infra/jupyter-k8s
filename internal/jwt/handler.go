@@ -1,3 +1,8 @@
+/*
+Copyright (c) Amazon Web Services
+Distributed under the terms of the MIT license
+*/
+
 // Package jwt provides JWT token management with pluggable signing strategies.
 // It supports both standard HMAC signing and AWS KMS-based signing through
 // a common Handler interface.

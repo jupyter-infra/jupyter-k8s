@@ -1,6 +1,11 @@
 //go:build e2e
 // +build e2e
 
+/*
+Copyright (c) Amazon Web Services
+Distributed under the terms of the MIT license
+*/
+
 package e2e
 
 import (

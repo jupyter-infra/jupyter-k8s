@@ -1,3 +1,8 @@
+/*
+Copyright (c) Amazon Web Services
+Distributed under the terms of the MIT license
+*/
+
 // Package main provides the entry point for the authmiddleware service that
 // handles JWT-based authentication and authorization for Jupyter-k8s workspaces.
 package main

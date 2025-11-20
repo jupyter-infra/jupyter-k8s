@@ -1,3 +1,8 @@
+/*
+Copyright (c) Amazon Web Services
+Distributed under the terms of the MIT license
+*/
+
 package controller
 
 import (
@@ -85,7 +90,9 @@ func (h *HTTPGetDetector) CheckIdle(ctx context.Context, workspaceName string, p
 
 	logger.V(1).Info("Calling idle endpoint", "port", port, "path", httpGetConfig.Path)
 
-	output, err := h.execUtil.ExecInPod(ctx, pod, "", cmd, "")
+	// Always execute in the workspace container
+	const workspaceContainerName = "workspace"
+	output, err := h.execUtil.ExecInPod(ctx, pod, workspaceContainerName, cmd, "")
 	if err != nil {
 		// Handle curl exit codes - connection refused (temporary failure)
 		if strings.Contains(err.Error(), "exit code 7") {
