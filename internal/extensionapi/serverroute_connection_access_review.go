@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"strings"
 
-	connectionv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
+	connectionv1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/connection/v1alpha1"
 	authorizationv1 "k8s.io/api/authorization/v1"
 )
 

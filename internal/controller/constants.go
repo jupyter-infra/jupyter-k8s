@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
+	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
 const (

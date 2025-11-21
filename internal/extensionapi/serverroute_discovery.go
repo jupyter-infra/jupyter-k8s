@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"net/http"
 
-	connectionv1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
+	connectionv1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/connection/v1alpha1"
 )
 
 // handleDiscovery responds with API resource discovery information

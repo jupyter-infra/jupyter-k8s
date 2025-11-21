@@ -20,11 +20,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/stringutil"
-	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
-	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
+	"github.com/jupyter-infra/jupyter-k8s/internal/stringutil"
+	webhookconst "github.com/jupyter-infra/jupyter-k8s/internal/webhook"
+	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
 // log is for logging in this package.

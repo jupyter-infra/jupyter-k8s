@@ -8,7 +8,7 @@ package v1alpha1
 import (
 	"k8s.io/apimachinery/pkg/api/equality"
 
-	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
 
 // specChanged detects if any spec field changed between old and new workspace

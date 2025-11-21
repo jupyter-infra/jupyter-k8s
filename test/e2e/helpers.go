@@ -6,6 +6,7 @@ Copyright (c) Amazon Web Services
 Distributed under the terms of the MIT license
 */
 
+
 package e2e
 
 import (
@@ -14,7 +15,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 
-	"github.com/jupyter-ai-contrib/jupyter-k8s/test/utils"
+	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 )
 
 // kubectlGet retrieves a Kubernetes resource with optional JSONPath query

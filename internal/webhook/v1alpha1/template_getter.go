@@ -11,8 +11,8 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	webhookconst "github.com/jupyter-infra/jupyter-k8s/internal/webhook"
 )
 
 // TemplateGetter handles template retrieval and workspace mutation

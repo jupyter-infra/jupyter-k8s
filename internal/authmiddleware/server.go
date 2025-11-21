@@ -14,7 +14,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
+	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )

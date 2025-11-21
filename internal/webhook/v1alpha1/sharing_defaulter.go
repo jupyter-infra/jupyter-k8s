@@ -6,8 +6,8 @@ Distributed under the terms of the MIT license
 package v1alpha1
 
 import (
-	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	webhookconst "github.com/jupyter-infra/jupyter-k8s/internal/webhook"
 )
 
 // setWorkspaceDefaults sets default values for OwnershipType and AccessType
