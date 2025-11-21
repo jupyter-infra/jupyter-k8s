@@ -50,19 +50,19 @@ if [ -d "${SCRIPT_DIR}/../config/apiservice" ]; then
                 # Replace hardcoded namespace with {{ .Release.Namespace }}
                 # Also replace hardcoded cert reference with {{ .Release.Namespace }}
                 cat "$file" | \
-                    sed 's/cert-manager.io\/inject-ca-from: jupyter-k8s-system\/extension-server-cert/cert-manager.io\/inject-ca-from: {{ .Release.Namespace }}\/extension-server-cert/' | \
-                    sed 's/namespace: jupyter-k8s-system/namespace: {{ .Release.Namespace }}/' >> "$target"
+                    sed 's/cert-manager.io\/inject-ca-from: system\/extension-server-cert/cert-manager.io\/inject-ca-from: {{ .Release.Namespace }}\/extension-server-cert/' | \
+                    sed 's/namespace: system/namespace: {{ .Release.Namespace }}/' >> "$target"
             elif [[ "$filename" == "certificate.yaml" ]]; then
                 # Replace hardcoded namespace with {{ .Release.Namespace }}
                 # Also replace hardcoded DNS names with templated values
                 cat "$file" | \
-                    sed 's/namespace: jupyter-k8s-system/namespace: {{ .Release.Namespace }}/' | \
-                    sed 's/- extension-server.jupyter-k8s-system.svc/- extension-server.{{ .Release.Namespace }}.svc/' | \
-                    sed 's/- extension-server.jupyter-k8s-system.svc.cluster.local/- extension-server.{{ .Release.Namespace }}.svc.cluster.local/' >> "$target"
+                    sed 's/namespace: system/namespace: {{ .Release.Namespace }}/' | \
+                    sed 's/- extension-server.system.svc/- extension-server.{{ .Release.Namespace }}.svc/' | \
+                    sed 's/- extension-server.system.svc.cluster.local/- extension-server.{{ .Release.Namespace }}.svc.cluster.local/' >> "$target"
             elif [[ "$filename" == "service.yaml" ]]; then
                 # Replace hardcoded namespace with {{ .Release.Namespace }}
                 cat "$file" | \
-                    sed 's/namespace: jupyter-k8s-system/namespace: {{ .Release.Namespace }}/' >> "$target"
+                    sed 's/namespace: system/namespace: {{ .Release.Namespace }}/' >> "$target"
             else
                 cat "$file" >> "$target"
             fi

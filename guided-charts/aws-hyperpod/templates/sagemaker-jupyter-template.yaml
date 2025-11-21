@@ -2,7 +2,7 @@ apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
   name: sagemaker-jupyter-template
-  namespace: jupyter-k8s-shared
+  namespace: {{ .Release.Namespace }}
   labels:
     app.kubernetes.io/name: jupyter-k8s-aws-hyperpod
     app.kubernetes.io/instance: {{ .Release.Name }}

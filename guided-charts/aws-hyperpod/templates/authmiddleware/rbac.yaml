@@ -4,7 +4,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: jupyter-k8s-authmiddleware
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     app: authmiddleware
     component: auth
@@ -26,5 +26,5 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: jupyter-k8s-authmiddleware
-    namespace: {{ .Values.namespace }}
+    namespace: {{ .Release.Namespace }}
 {{- end }}
