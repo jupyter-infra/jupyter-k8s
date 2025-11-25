@@ -8,7 +8,7 @@ package aws_traefik_dex_test
 import (
 	"path/filepath"
 
-	"github.com/jupyter-ai-contrib/jupyter-k8s/test/helm"
+	"github.com/jupyter-infra/jupyter-k8s/test/helm"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )

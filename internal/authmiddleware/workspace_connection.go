@@ -13,9 +13,9 @@ import (
 	"net/http"
 	"regexp"
 
-	v1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/connection/v1alpha1"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
+	v1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/connection/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
+	"github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

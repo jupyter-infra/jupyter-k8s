@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/jupyter-ai-contrib/jupyter-k8s/test/helm"
+	"github.com/jupyter-infra/jupyter-k8s/test/helm"
 )
 
 // Test suite for verifying Helm chart resources match config resources

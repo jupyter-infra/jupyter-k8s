@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/aws"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
+	"github.com/jupyter-infra/jupyter-k8s/internal/aws"
+	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	genericapiserver "k8s.io/apiserver/pkg/server"

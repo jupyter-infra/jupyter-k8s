@@ -10,8 +10,8 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
 // DefaultApplicator applies defaults for a specific field or group of fields

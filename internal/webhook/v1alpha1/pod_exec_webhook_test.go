@@ -20,8 +20,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
-	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
+	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
+	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
 var _ = Describe("PodExec Webhook", func() {

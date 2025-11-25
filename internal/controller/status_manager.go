@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"reflect"
 
-	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

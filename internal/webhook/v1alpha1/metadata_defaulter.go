@@ -6,9 +6,9 @@ Distributed under the terms of the MIT license
 package v1alpha1
 
 import (
-	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
-	workspacequery "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
+	workspacequery "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
 // applyMetadataDefaults applies metadata defaults (labels and annotations) from template to workspace

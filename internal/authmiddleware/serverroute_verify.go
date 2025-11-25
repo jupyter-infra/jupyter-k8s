@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
+	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 )
 
 // handleVerify handles token verification requests

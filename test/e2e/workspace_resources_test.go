@@ -6,6 +6,7 @@ Copyright (c) Amazon Web Services
 Distributed under the terms of the MIT license
 */
 
+
 package e2e
 
 import (
@@ -17,8 +18,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/test/utils"
+	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
+	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 )
 
 const (

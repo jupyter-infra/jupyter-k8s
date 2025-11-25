@@ -1,4 +1,4 @@
-module github.com/jupyter-ai-contrib/jupyter-k8s
+module github.com/jupyter-infra/jupyter-k8s
 
 go 1.24.5
 

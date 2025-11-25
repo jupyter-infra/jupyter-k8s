@@ -12,8 +12,8 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	webhookconst "github.com/jupyter-infra/jupyter-k8s/internal/webhook"
 )
 
 var _ = Describe("TemplateGetter", func() {

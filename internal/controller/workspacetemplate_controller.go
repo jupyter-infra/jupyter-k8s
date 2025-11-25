@@ -20,8 +20,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
 const (

@@ -15,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 	jwt5 "github.com/golang-jwt/jwt/v5"
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/jwt"
+	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 )
 
 // MockKMSClient implements a mock KMS client for testing

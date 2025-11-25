@@ -12,8 +12,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	webhookconst "github.com/jupyter-ai-contrib/jupyter-k8s/internal/webhook"
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	webhookconst "github.com/jupyter-infra/jupyter-k8s/internal/webhook"
 )
 
 // ServiceAccountDefaulter handles finding default service accounts

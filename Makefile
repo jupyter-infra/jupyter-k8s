@@ -147,7 +147,13 @@ test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expect
 
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
-	@$(KIND) delete cluster --name $(KIND_CLUSTER)
+	$(KIND) delete cluster --name=$(KIND_CLUSTER) || { \
+		echo "Failed to delete cluster normally. Attempting manual cleanup..."; \
+		echo "Removing container $(KIND_CLUSTER)-control-plane directly..."; \
+		$(CONTAINER_TOOL) rm -f $(KIND_CLUSTER)-control-plane || true; \
+		echo "Retrying cluster deletion..."; \
+		$(KIND) delete cluster --name=$(KIND_CLUSTER) || echo "Cluster deletion completed with manual cleanup"; \
+	}
 
 .PHONY: cleanup-test-e2e-images
 cleanup-test-e2e-images: ## Remove e2e test images to force rebuild

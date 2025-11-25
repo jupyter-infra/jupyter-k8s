@@ -14,8 +14,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
 var _ = Describe("AccessResourcesBuilder", func() {

@@ -9,8 +9,8 @@ import (
 	"context"
 	"strings"
 
-	workspacev1alpha1 "github.com/jupyter-ai-contrib/jupyter-k8s/api/v1alpha1"
-	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"

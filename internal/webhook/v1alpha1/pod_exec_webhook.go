@@ -18,8 +18,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/jupyter-ai-contrib/jupyter-k8s/internal/controller"
-	workspaceutil "github.com/jupyter-ai-contrib/jupyter-k8s/internal/workspace"
+	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
+	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
 // +kubebuilder:webhook:path=/validate-pods-exec-workspace,mutating=false,failurePolicy=ignore,sideEffects=None,groups="",resources=pods/exec,verbs=connect,versions=v1,name=vpods-exec-workspace-v1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
