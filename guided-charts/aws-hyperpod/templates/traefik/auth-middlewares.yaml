@@ -3,7 +3,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: auth-headers
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
 spec:
   headers:
     sslRedirect: true
@@ -21,13 +21,13 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: authmiddleware-bearer-auth
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     app: authmiddleware
     component: auth
 spec:
   forwardAuth:
-    address: "http://authmiddleware.{{ .Values.namespace }}:8080/bearer-auth"
+    address: "http://authmiddleware.{{ .Release.Namespace }}:8080/bearer-auth"
     trustForwardHeader: true
     addAuthCookiesToResponse:
       - "{{ $.Values.clusterWebUI.auth.cookieName }}"
@@ -41,13 +41,13 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: authmiddleware-verify
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     app: authmiddleware
     component: auth
 spec:
   forwardAuth:
-    address: "http://authmiddleware.{{ .Values.namespace }}:8080/verify"
+    address: "http://authmiddleware.{{ .Release.Namespace }}:8080/verify"
     trustForwardHeader: true
     addAuthCookiesToResponse:
       - "{{ $.Values.clusterWebUI.auth.cookieName }}"
@@ -61,7 +61,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: workspace-auth-redirect
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     app: authmiddleware
     component: auth
@@ -80,7 +80,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: strip-bearer-auth-suffix
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     app: authmiddleware
     component: auth

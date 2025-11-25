@@ -3,11 +3,11 @@ kind: APIService
 metadata:
   name: v1alpha1.connection.workspace.jupyter.org
   annotations:
-    cert-manager.io/inject-ca-from: jupyter-k8s-system/extension-server-cert
+    cert-manager.io/inject-ca-from: system/extension-server-cert
 spec:
   service:
     name: extension-server
-    namespace: jupyter-k8s-system
+    namespace: system
   group: connection.workspace.jupyter.org
   version: v1alpha1
   groupPriorityMinimum: 100
