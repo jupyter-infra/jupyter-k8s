@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jupyter-ai-contrib/jupyter-k8s/test/utils"
+	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 )

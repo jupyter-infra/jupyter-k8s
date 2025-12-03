@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
-	"github.com/upyter-infra/jupyter-k8s/test/utils"
 )
 
 // kubectlGet retrieves a Kubernetes resource with optional JSONPath query
