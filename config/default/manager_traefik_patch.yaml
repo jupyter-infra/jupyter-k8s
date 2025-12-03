@@ -1,0 +1,4 @@
+# This patch adds the --watch-traefik flag to enable Traefik resources support
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: "--watch-traefik=true"

@@ -1,8 +1,0 @@
-apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: access-app-type-test
-spec:
-  displayName: "Access App Type Test"
-  templateRef:
-    name: "access-app-type-template"

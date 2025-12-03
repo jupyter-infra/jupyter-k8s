@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: template-defaults-workspace
+spec:
+  displayName: "Webhook Defaults Test"
+  templateRef:
+    name: base-template
+    namespace: jupyter-k8s-shared
+  ownershipType: Public

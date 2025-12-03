@@ -4,7 +4,7 @@ metadata:
   name: workspace-with-affinity
 spec:
   displayName: "Workspace with Node Affinity"
-  image: "jupyter/scipy-notebook:latest"
+  image: jk8s-application-jupyter-uv:latest
   desiredStatus: Running
   affinity:
     nodeAffinity:

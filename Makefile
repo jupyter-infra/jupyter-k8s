@@ -50,7 +50,7 @@ OAUTH2P_COOKIE_SECRET := $(shell openssl rand -base64 32 | tr -- '+/' '-_')
 all: build
 
 .PHONY: release
-release: helm-generate build lint-fix test helm-lint helm-test helm-test-aws-traefik-dex ## Run all checks required before PR submission (excluding e2e tests)
+release: helm-generate build lint-fix lint-fix-e2e test helm-lint helm-test helm-test-aws-traefik-dex ## Run all checks required before PR submission (excluding e2e tests)
 
 ##@ General
 
@@ -141,7 +141,7 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 	fi
 
 .PHONY: test-e2e
-test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
+test-e2e: setup-test-e2e manifests generate fmt vet load-images-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
 	KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -ginkgo.v
 	$(MAKE) cleanup-test-e2e
 
@@ -159,6 +159,7 @@ cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 cleanup-test-e2e-images: ## Remove e2e test images to force rebuild
 	@echo "Removing e2e test images..."
 	@$(CONTAINER_TOOL) rmi jupyter.org/jupyter-k8s:v0.0.1 2>/dev/null || true
+	@$(MAKE) -C images clean CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: test-e2e-clean
 test-e2e-clean: cleanup-test-e2e cleanup-test-e2e-images test-e2e ## Full cleanup and rerun e2e tests
@@ -167,10 +168,18 @@ test-e2e-clean: cleanup-test-e2e cleanup-test-e2e-images test-e2e ## Full cleanu
 lint: golangci-lint helm-lint ## Run golangci-lint linter
 	$(GOLANGCI_LINT) run
 
+.PHONY: lint-e2e
+lint-e2e: golangci-lint ## Run golangci-lint linter on e2e tests
+	GOFLAGS="-tags=e2e" $(GOLANGCI_LINT) run ./test/e2e/...
+
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
 
+.PHONY: lint-fix-e2e
+lint-fix-e2e: golangci-lint ## Run golangci-lint linter on e2e tests and perform fixes
+	GOFLAGS="-tags=e2e" $(GOLANGCI_LINT) run --fix ./test/e2e/...
+	
 .PHONY: lint-config
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
@@ -180,6 +189,10 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 .PHONY: build
 build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
+
+.PHONY: build-e2e
+build-e2e: manifests generate fmt vet
+	go build -tags=e2e ./test/e2e/...
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
@@ -344,7 +357,7 @@ setup-kind: ## Set up a Kind cluster for development if it does not exist
 	fi
 
 .PHONY: test-e2e-focus
-test-e2e-focus: setup-test-e2e manifests generate fmt vet ## Run specific e2e tests using FOCUS parameter. Usage: make test-e2e-focus FOCUS="Primary Storage"
+test-e2e-focus: setup-test-e2e manifests generate fmt vet load-images-e2e ## Run specific e2e tests using FOCUS parameter. Usage: make test-e2e-focus FOCUS="Primary Storage"
 	@if [ -z "$(FOCUS)" ]; then \
 		echo "Error: FOCUS parameter is required. Usage: make test-e2e-focus FOCUS=\"Primary Storage\""; \
 		exit 1; \
@@ -378,6 +391,12 @@ load-images: docker-build ## Build and load images into the Kind cluster
 	$(KIND) load image-archive /tmp/kind-images/controller.tar --name $(DEV_KIND_CLUSTER)
 	rm -f /tmp/kind-images/controller.tar
 	$(MAKE) -C images push-all-kind CLUSTER_NAME=$(DEV_KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL)
+
+.PHONY: load-images-e2e
+load-images-e2e: ## Build and load application images into the e2e test Kind cluster
+	@echo "Loading application images into e2e test cluster ${KIND_CLUSTER}..."
+	@echo "Note: Controller image is built and loaded by the e2e test suite itself"
+	$(MAKE) -C images push-all-kind CLUSTER_NAME=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: kubectl-kind
 kubectl-kind: ## Configure kubectl to use kind cluster

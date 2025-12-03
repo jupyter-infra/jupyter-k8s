@@ -1,0 +1,17 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: access-strategy-with-env
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: Test Access Strategy With Env Variables
+  accessResourceTemplates: []
+  deploymentModifications:
+    podModifications:
+      primaryContainerModifications:
+        mergeEnv:
+          - name: JUPYTER_BASE_URL
+            valueTemplate: "/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
+          - name: TEST_ENV_VAR
+            valueTemplate: "test-value-{{ .Workspace.Name }}"
+  accessURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"

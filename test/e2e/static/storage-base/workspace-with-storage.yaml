@@ -1,0 +1,18 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-with-storage
+spec:
+  displayName: "Workspace with Storage"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  storage:
+    size: 2Gi
+    storageClassName: rancher-storage-class
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

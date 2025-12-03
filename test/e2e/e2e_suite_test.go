@@ -6,7 +6,6 @@ Copyright (c) Amazon Web Services
 Distributed under the terms of the MIT license
 */
 
-
 package e2e
 
 import (
@@ -54,6 +53,9 @@ var _ = BeforeSuite(func() {
 		}
 	}()
 
+	// Check if operator is already installed and clean up the cluster if needed
+	checkAndCleanCluster()
+
 	// Check if image exists to skip unnecessary rebuild
 	By("checking if manager image exists")
 	// Get container tool from environment (matches Makefile pattern)
@@ -81,13 +83,13 @@ var _ = BeforeSuite(func() {
 	cmd = exec.Command("kubectl", "get", "nodes",
 		"-o", "jsonpath={.items[0].status.nodeInfo.containerRuntimeVersion}")
 	runtime, _ := utils.Run(cmd)
-	_, _ = fmt.Fprintf(GinkgoWriter, "Container runtime: %s\n", strings.TrimSpace(string(runtime)))
+	_, _ = fmt.Fprintf(GinkgoWriter, "Container runtime: %s\n", strings.TrimSpace(runtime))
 
 	// List images on the node to confirm our image is there
 	cmd = exec.Command("docker", "exec", "jupyter-k8s-test-e2e-control-plane",
 		"crictl", "images")
 	if images, err := utils.Run(cmd); err == nil {
-		if strings.Contains(string(images), projectImage) {
+		if strings.Contains(images, projectImage) {
 			_, _ = fmt.Fprintf(GinkgoWriter, "✓ Image %s confirmed on node\n", projectImage)
 		} else {
 			_, _ = fmt.Fprintf(GinkgoWriter, "⚠ WARNING: Image %s NOT found on node\n", projectImage)
@@ -119,29 +121,68 @@ var _ = BeforeSuite(func() {
 
 	By("creating shared test namespace")
 	// Delete first to ensure clean state (idempotent)
-	cmd = exec.Command("kubectl", "delete", "ns", namespace, "--ignore-not-found", "--wait=true", "--timeout=300s")
+	cmd = exec.Command("kubectl", "delete", "ns", OperatorNamespace, "--ignore-not-found", "--wait=true", "--timeout=300s")
 	_, _ = utils.Run(cmd)
-	// Create namespace for all test suites
-	cmd = exec.Command("kubectl", "create", "ns", namespace)
+	// Create operator namespace for all test suites
+	cmd = exec.Command("kubectl", "create", "ns", OperatorNamespace)
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to create shared test namespace")
 
 	// Verify namespace actually exists and is Active
-	cmd = exec.Command("kubectl", "get", "ns", namespace,
+	cmd = exec.Command("kubectl", "get", "ns", OperatorNamespace,
 		"-o", "jsonpath={.status.phase}")
 	phase, err := utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to verify namespace exists")
-	Expect(strings.TrimSpace(string(phase))).To(Equal("Active"),
+	Expect(strings.TrimSpace(phase)).To(Equal("Active"),
 		"Namespace not in Active phase")
 
 	By("labeling the namespace to enforce the restricted security policy")
-	cmd = exec.Command("kubectl", "label", "--overwrite", "ns", namespace,
+	cmd = exec.Command("kubectl", "label", "--overwrite", "ns", OperatorNamespace,
 		"pod-security.kubernetes.io/enforce=restricted")
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with pod security policy")
 
+	By("installing Traefik CRDs for access strategy tests")
+	// Check if Traefik CRDs are already installed
+	cmd = exec.Command("kubectl", "get", "crds", "ingressroutes.traefik.io", "--ignore-not-found")
+	traeficCRD, _ := utils.Run(cmd)
+	if strings.TrimSpace(traeficCRD) == "" {
+		// Create traefik namespace
+		cmd = exec.Command("kubectl", "create", "namespace", "traefik", "--dry-run=client", "-o", "yaml")
+		createNs, _ := utils.Run(cmd)
+		cmd = exec.Command("sh", "-c", fmt.Sprintf("echo '%s' | kubectl apply -f -", createNs))
+		_, _ = utils.Run(cmd)
+
+		// Install Traefik CRDs using helm
+		By("adding traefik helm repo")
+		cmd = exec.Command("helm", "repo", "add", "traefik", "https://traefik.github.io/charts")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to add traefik helm repo")
+
+		cmd = exec.Command("helm", "repo", "update")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to update helm repos")
+
+		By("installing traefik CRDs")
+		cmd = exec.Command("helm", "install", "traefik-crd", "traefik/traefik-crds",
+			"--namespace", "traefik")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to install traefik CRDs")
+
+		// Verify CRDs are installed
+		Eventually(func(g Gomega) {
+			cmd := exec.Command("kubectl", "get", "crds", "ingressroutes.traefik.io")
+			output, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(output).To(ContainSubstring("ingressroutes.traefik.io"))
+		}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+	} else {
+		By("traefik CRDs already installed")
+	}
+
 	By("creating jupyter-k8s-shared namespace for templates")
-	cmd = exec.Command("kubectl", "delete", "ns", "jupyter-k8s-shared", "--ignore-not-found", "--wait=true", "--timeout=300s")
+	cmd = exec.Command("kubectl", "delete", "ns", "jupyter-k8s-shared",
+		"--ignore-not-found", "--wait=true", "--timeout=300s")
 	_, _ = utils.Run(cmd)
 	cmd = exec.Command("kubectl", "create", "ns", "jupyter-k8s-shared")
 	_, err = utils.Run(cmd)
@@ -162,7 +203,7 @@ var _ = BeforeSuite(func() {
 			"-o", "jsonpath={.status.conditions[?(@.type=='Established')].status}")
 		status, err := utils.Run(cmd)
 		g.Expect(err).NotTo(HaveOccurred())
-		g.Expect(strings.TrimSpace(string(status))).To(Equal("True"))
+		g.Expect(strings.TrimSpace(status)).To(Equal("True"))
 
 		// WorkspaceTemplate CRD
 		cmd = exec.Command("kubectl", "get", "crd",
@@ -170,7 +211,7 @@ var _ = BeforeSuite(func() {
 			"-o", "jsonpath={.status.conditions[?(@.type=='Established')].status}")
 		status, err = utils.Run(cmd)
 		g.Expect(err).NotTo(HaveOccurred())
-		g.Expect(strings.TrimSpace(string(status))).To(Equal("True"))
+		g.Expect(strings.TrimSpace(status)).To(Equal("True"))
 
 		// WorkspaceAccessStrategy CRD
 		cmd = exec.Command("kubectl", "get", "crd",
@@ -178,8 +219,11 @@ var _ = BeforeSuite(func() {
 			"-o", "jsonpath={.status.conditions[?(@.type=='Established')].status}")
 		status, err = utils.Run(cmd)
 		g.Expect(err).NotTo(HaveOccurred())
-		g.Expect(strings.TrimSpace(string(status))).To(Equal("True"))
+		g.Expect(strings.TrimSpace(status)).To(Equal("True"))
 	}).WithTimeout(30 * time.Second).WithPolling(500 * time.Millisecond).Should(Succeed())
+
+	// Clean up any leftover resources before starting tests
+	ensureCleanState()
 
 	By("deploying the controller-manager with webhook enabled")
 	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
@@ -190,13 +234,13 @@ var _ = BeforeSuite(func() {
 	cmd = exec.Command("kubectl", "create", "rolebinding", "jupyter-k8s-extension-api-auth",
 		"-n", "kube-system",
 		"--role=extension-apiserver-authentication-reader",
-		fmt.Sprintf("--serviceaccount=%s:jupyter-k8s-controller-manager", namespace))
+		fmt.Sprintf("--serviceaccount=%s:jupyter-k8s-controller-manager", OperatorNamespace))
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to create extension API auth RoleBinding")
 
 	By("waiting for controller deployment to be available")
 	cmd = exec.Command("kubectl", "wait", "deployment/jupyter-k8s-controller-manager",
-		"-n", namespace, "--for=condition=Available", "--timeout=3m")
+		"-n", OperatorNamespace, "--for=condition=Available", "--timeout=3m")
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Controller deployment failed to become available")
 
@@ -204,33 +248,33 @@ var _ = BeforeSuite(func() {
 	Eventually(func(g Gomega) {
 		cmd := exec.Command("kubectl", "get", "pods",
 			"-l", "control-plane=controller-manager",
-			"-n", namespace,
+			"-n", OperatorNamespace,
 			"-o", "jsonpath={.items[*].metadata.name}")
 		output, err := utils.Run(cmd)
 		g.Expect(err).NotTo(HaveOccurred())
-		podNames := strings.Fields(strings.TrimSpace(string(output)))
-		g.Expect(len(podNames)).To(BeNumerically(">=", 1), "Expected at least 1 controller pod")
+		podNames := strings.Fields(strings.TrimSpace(output))
+		g.Expect(podNames).ToNot(BeEmpty(), "Expected at least 1 controller pod")
 
 		// Verify pod is actually Running, not CrashLoopBackOff
 		for _, podName := range podNames {
 			cmd = exec.Command("kubectl", "get", "pod", podName,
-				"-n", namespace,
+				"-n", OperatorNamespace,
 				"-o", "jsonpath={.status.phase}")
 			phase, err := utils.Run(cmd)
 			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(strings.TrimSpace(string(phase))).To(Equal("Running"),
+			g.Expect(strings.TrimSpace(phase)).To(Equal("Running"),
 				fmt.Sprintf("Pod %s not in Running state", podName))
 		}
 	}).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(Succeed())
 
 	By("waiting for webhook certificate to be ready")
 	Eventually(func(g Gomega) {
-		cmd := exec.Command("kubectl", "get", "certificate", webhookCertificateName,
-			"-n", namespace,
+		cmd := exec.Command("kubectl", "get", "certificate", WebhookCertificateName,
+			"-n", OperatorNamespace,
 			"-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
 		status, err := utils.Run(cmd)
 		g.Expect(err).NotTo(HaveOccurred())
-		g.Expect(strings.TrimSpace(string(status))).To(Equal("True"), "Certificate not ready")
+		g.Expect(strings.TrimSpace(status)).To(Equal("True"), "Certificate not ready")
 	}).WithTimeout(3 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 
 	By("verifying mutating webhook configuration with CA bundle")
@@ -240,7 +284,7 @@ var _ = BeforeSuite(func() {
 			"-o", "jsonpath={.webhooks[0].clientConfig.caBundle}")
 		caBundle, err := utils.Run(cmd)
 		g.Expect(err).NotTo(HaveOccurred())
-		g.Expect(strings.TrimSpace(string(caBundle))).NotTo(BeEmpty(), "CA bundle not injected")
+		g.Expect(strings.TrimSpace(caBundle)).NotTo(BeEmpty(), "CA bundle not injected")
 	}).WithTimeout(3 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 
 	By("verifying validating webhook configuration with CA bundle")
@@ -250,14 +294,15 @@ var _ = BeforeSuite(func() {
 			"-o", "jsonpath={.webhooks[0].clientConfig.caBundle}")
 		caBundle, err := utils.Run(cmd)
 		g.Expect(err).NotTo(HaveOccurred())
-		g.Expect(strings.TrimSpace(string(caBundle))).NotTo(BeEmpty(), "CA bundle not injected")
+		g.Expect(strings.TrimSpace(caBundle)).NotTo(BeEmpty(), "CA bundle not injected")
 	}).WithTimeout(3 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 
 	By("testing webhook endpoint with dry-run API call")
-	cmd = exec.Command("kubectl", "apply", "--dry-run=server",
-		"-f", "test/e2e/static/workspace_webhook_readiness.yaml")
-	_, err = utils.Run(cmd)
-	Expect(err).NotTo(HaveOccurred(), "Webhook endpoint failed to respond to dry-run request")
+	Eventually(func(g Gomega) {
+		workspaceFilename := "webhook-readiness-test"
+		group := "webhook"
+		createWorkspaceForTest(workspaceFilename, group, "")
+	}).WithTimeout(1 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 	_, _ = fmt.Fprintf(GinkgoWriter, "✓ Controller and webhooks are ready for testing\n")
 })
@@ -272,26 +317,26 @@ func dumpSetupDiagnostics() {
 
 	// Detailed pod status for jupyter-k8s-system
 	cmd = exec.Command("kubectl", "describe", "pods",
-		"-n", namespace, "-l", "control-plane=controller-manager")
+		"-n", OperatorNamespace, "-l", "control-plane=controller-manager")
 	if podDetails, _ := utils.Run(cmd); len(podDetails) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nController pod details:\n%s\n", podDetails)
 	}
 
 	// Check deployment status
 	cmd = exec.Command("kubectl", "get", "deployment",
-		"-n", namespace, "-o", "wide")
+		"-n", OperatorNamespace, "-o", "wide")
 	if deploys, _ := utils.Run(cmd); len(deploys) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nDeployments:\n%s\n", deploys)
 	}
 
 	// Check replicasets (shows deployment issues)
 	cmd = exec.Command("kubectl", "get", "replicasets",
-		"-n", namespace, "-o", "wide")
+		"-n", OperatorNamespace, "-o", "wide")
 	if rs, _ := utils.Run(cmd); len(rs) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nReplicaSets:\n%s\n", rs)
 	}
 
-	cmd = exec.Command("kubectl", "logs", "-n", namespace,
+	cmd = exec.Command("kubectl", "logs", "-n", OperatorNamespace,
 		"-l", "control-plane=controller-manager", "--tail=100")
 	if logs, _ := utils.Run(cmd); len(logs) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nController logs:\n%s\n", logs)
@@ -303,7 +348,7 @@ func dumpSetupDiagnostics() {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nWarning events:\n%s\n", events)
 	}
 
-	cmd = exec.Command("kubectl", "get", "certificate", "-n", namespace)
+	cmd = exec.Command("kubectl", "get", "certificate", "-n", OperatorNamespace)
 	if certs, _ := utils.Run(cmd); len(certs) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nCertificates:\n%s\n", certs)
 	}
@@ -338,7 +383,15 @@ var _ = AfterSuite(func() {
 		_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Template cleanup failed: %v\nOutput: %s\n", err, output)
 	}
 
+	By("cleaning up all workspace access strategies across all namespaces")
+	cmd = exec.Command("kubectl", "delete", "workspaceaccessstrategy", "--all", "--all-namespaces",
+		"--ignore-not-found", "--wait=true", "--timeout=180s")
+	if output, err := utils.Run(cmd); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: AccessStrategy cleanup failed: %v\nOutput: %s\n", err, output)
+	}
+
 	diagnoseAndCleanupStuckTemplates()
+	diagnoseAndCleanupStuckAccessStrategies()
 
 	By("deleting webhook configurations explicitly")
 	// Webhook configurations may persist after undeploy if namespace is deleted first
@@ -351,11 +404,11 @@ var _ = AfterSuite(func() {
 
 	By("deleting cert-manager resources")
 	// Clean up certificates and issuers created by the controller
-	cmd = exec.Command("kubectl", "delete", "certificate", webhookCertificateName,
-		"-n", namespace, "--ignore-not-found")
+	cmd = exec.Command("kubectl", "delete", "certificate", WebhookCertificateName,
+		"-n", OperatorNamespace, "--ignore-not-found")
 	_, _ = utils.Run(cmd)
 	cmd = exec.Command("kubectl", "delete", "issuer", "selfsigned-issuer",
-		"-n", namespace, "--ignore-not-found")
+		"-n", OperatorNamespace, "--ignore-not-found")
 	_, _ = utils.Run(cmd)
 
 	By("undeploying the controller-manager")
@@ -370,25 +423,25 @@ var _ = AfterSuite(func() {
 	// Ensure controller is completely stopped before deleting CRDs
 	// This prevents race conditions with controller finalizer processing
 	Eventually(func(g Gomega) {
-		cmd := exec.Command("kubectl", "get", "pods", "-n", namespace,
+		cmd := exec.Command("kubectl", "get", "pods", "-n", OperatorNamespace,
 			"-l", "control-plane=controller-manager",
 			"-o", "jsonpath={.items[*].status.phase}")
 		output, err := utils.Run(cmd)
 		g.Expect(err).NotTo(HaveOccurred())
 		// Should be no pods at all (empty output)
-		g.Expect(strings.TrimSpace(string(output))).To(BeEmpty(),
+		g.Expect(strings.TrimSpace(output)).To(BeEmpty(),
 			"Controller pod still exists or terminating")
 	}).WithTimeout(120 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
 
 	// Defensive check: Force delete if pod is still stuck despite Eventually verification
 	// This handles edge cases like finalizers or disrupted API server communication
-	cmd = exec.Command("kubectl", "get", "pods", "-n", namespace,
+	cmd = exec.Command("kubectl", "get", "pods", "-n", OperatorNamespace,
 		"-l", "control-plane=controller-manager", "-o", "name")
-	if output, _ := utils.Run(cmd); strings.TrimSpace(string(output)) != "" {
+	if output, _ := utils.Run(cmd); strings.TrimSpace(output) != "" {
 		By("Force deleting stuck controller pod")
-		podName := strings.TrimSpace(string(output))
+		podName := strings.TrimSpace(output)
 		cmd = exec.Command("kubectl", "delete", podName,
-			"-n", namespace, "--force", "--grace-period=0")
+			"-n", OperatorNamespace, "--force", "--grace-period=0")
 		_, _ = utils.Run(cmd)
 	}
 
@@ -407,14 +460,15 @@ var _ = AfterSuite(func() {
 	}
 
 	By("uninstalling CRDs")
-	// CRDs must be deleted after controller termination to avoid orphaned resources
-	cmd = exec.Command("make", "uninstall")
-	if output, err := utils.Run(cmd); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: CRD uninstall failed: %v\nOutput: %s\n", err, output)
+	// Delete CRDs directly with kubectl instead of using make uninstall
+	crds := GetWorkspaceCrds()
+	for _, crd := range crds {
+		cmd = exec.Command("kubectl", "delete", "crd", crd, "--ignore-not-found")
+		_, _ = utils.Run(cmd)
 	}
 
-	By("removing shared test namespace")
-	cmd = exec.Command("kubectl", "delete", "ns", namespace, "--wait=true", "--timeout=300s")
+	By("removing operator namespace")
+	cmd = exec.Command("kubectl", "delete", "ns", OperatorNamespace, "--wait=true", "--timeout=300s")
 	_, _ = utils.Run(cmd)
 
 	// Teardown CertManager after the suite if not skipped and if it was not already installed
@@ -422,4 +476,11 @@ var _ = AfterSuite(func() {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")
 		utils.UninstallCertManager()
 	}
+
+	// Uninstall Traefik CRDs and resources
+	By("cleaning up Traefik resources")
+	cmd = exec.Command("helm", "uninstall", "traefik-crd", "--namespace", "traefik", "--ignore-not-found")
+	_, _ = utils.Run(cmd)
+	cmd = exec.Command("kubectl", "delete", "ns", "traefik", "--ignore-not-found")
+	_, _ = utils.Run(cmd)
 })

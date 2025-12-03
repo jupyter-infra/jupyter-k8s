@@ -4,7 +4,7 @@ metadata:
   name: workspace-with-node-selector
 spec:
   displayName: "Workspace with Node Selector"
-  image: "jupyter/scipy-notebook:latest"
+  image: jk8s-application-jupyter-uv:latest
   desiredStatus: Running
   nodeSelector:
     kubernetes.io/arch: "amd64"

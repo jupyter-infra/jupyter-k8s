@@ -1,14 +1,15 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
-  name: test-rejected-workspace
+  name: rejected-image-workspace
   namespace: default
 spec:
   displayName: "Test Rejected Workspace"
   desiredStatus: Running
   templateRef:
-    name: "restricted-template"
-  image: "tensorflow/tensorflow:latest-gpu-jupyter"
+    name: base-template
+    namespace: jupyter-k8s-shared
+  image: tensorflow/tensorflow:latest-gpu-jupyter
   ownershipType: Public
   resources:
     requests:

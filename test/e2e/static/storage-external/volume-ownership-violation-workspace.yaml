@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: volume-ownership-violation-workspace
+spec:
+  displayName: "Volume Ownership Violation Test"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  volumes:
+  - name: stolen-volume
+    persistentVolumeClaimName: workspace-owner-workspace-pvc
+    mountPath: /home/jovyan/stolen-data

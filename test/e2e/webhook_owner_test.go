@@ -6,123 +6,123 @@ Copyright (c) Amazon Web Services
 Distributed under the terms of the MIT license
 */
 
-
 package e2e
 
 import (
 	"os/exec"
-	"strings"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"time"
 
 	"github.com/jupyter-infra/jupyter-k8s/test/utils"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Webhook Owner", Ordered, func() {
-	AfterAll(func() {
-		By("cleaning up webhook owner test workspaces")
-		cmd := exec.Command("kubectl", "delete", "workspace",
-			"workspace-sample", "workspace-with-annotations",
-			"--ignore-not-found", "--timeout=60s")
-		_, _ = utils.Run(cmd)
+	const (
+		workspaceNamespace       = "default"
+		groupDir                 = "owner"
+		workspaceWithAnnotations = "workspace-with-annotations"
+	)
+
+	AfterEach(func() {
+		deleteResourcesForOwnerTest(workspaceNamespace)
 	})
 
 	Context("Ownership Annotation", func() {
 		It("should add created-by annotation to new workspace", func() {
+			workspaceName := "workspace-sample"
+			workspaceFilename := "workspace-sample"
+
 			By("creating a workspace")
-			cmd := exec.Command("kubectl", "apply", "-f", "config/samples/workspace_v1alpha1_workspace.yaml")
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
+			createWorkspaceForTest(workspaceFilename, groupDir, "")
 
 			By("verifying created-by annotation exists")
-			cmd = exec.Command("kubectl", "get", "workspace", "workspace-sample",
-				"-o", "jsonpath={.metadata.annotations.workspace\\.jupyter\\.org/created-by}")
-			output, err := utils.Run(cmd)
+			annotation, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.metadata.annotations.workspace\\.jupyter\\.org/created-by}")
 			Expect(err).NotTo(HaveOccurred())
-			annotation := strings.TrimSpace(string(output))
 			Expect(annotation).NotTo(BeEmpty(), "created-by annotation should be present")
 
 			By("verifying annotation contains user identity")
 			// Annotation should contain some form of user identity (system:, kubernetes-admin, etc.)
-			Expect(len(annotation)).To(BeNumerically(">", 0), "annotation should contain user identity")
+			Expect(annotation).NotTo(BeEmpty(), "annotation should contain user identity")
 		})
 
 		It("should preserve existing annotations when adding created-by", func() {
+			workspaceName := workspaceWithAnnotations
+			workspaceFilename := workspaceWithAnnotations
+
 			By("creating workspace with existing annotation")
-			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/static/webhook-validation/workspace-with-annotations.yaml")
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
+			createWorkspaceForTest(workspaceFilename, groupDir, "")
 
 			By("verifying both annotations exist")
-			cmd = exec.Command("kubectl", "get", "workspace", "workspace-with-annotations",
-				"-o", "jsonpath={.metadata.annotations}")
-			output, err := utils.Run(cmd)
+			annotations, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.metadata.annotations}")
 			Expect(err).NotTo(HaveOccurred())
-			annotations := string(output)
 			Expect(annotations).To(ContainSubstring("custom-annotation"))
 			Expect(annotations).To(ContainSubstring("created-by"))
 		})
 	})
 
 	Context("Webhook Health", func() {
-		It("should have webhook endpoint responding", func() {
+		It("should have a responding webhook endpoint", func() {
+			workspaceFilename := workspaceWithAnnotations
+
+			By("creating workspace to trigger webhook")
+			createWorkspaceForTest(workspaceFilename, groupDir, "")
+
 			By("getting controller pod name")
-			cmd := exec.Command("kubectl", "get", "pods", "-l", "control-plane=controller-manager",
-				"-o", "go-template={{ range .items }}{{ if not .metadata.deletionTimestamp }}{{ .metadata.name }}{{ \"\\n\" }}{{ end }}{{ end }}",
-				"-n", "jupyter-k8s-system")
-			output, err := utils.Run(cmd)
+			podName, err := kubectlGetByLabels("pod", "control-plane=controller-manager",
+				OperatorNamespace, "{.items[0].metadata.name}")
 			Expect(err).NotTo(HaveOccurred())
-			podName := strings.TrimSpace(string(output))
 			Expect(podName).NotTo(BeEmpty())
 
 			By("checking webhook logs for successful processing")
-			cmd = exec.Command("kubectl", "logs", podName, "-n", "jupyter-k8s-system", "--tail=50")
-			output, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			logs := string(output)
-			Expect(logs).To(ContainSubstring("workspace-with-annotations"), "webhook should be logging")
+			cmd := exec.Command("kubectl", "logs", podName, "-n", OperatorNamespace, "--tail=50")
+			output, logErr := utils.Run(cmd)
+			Expect(logErr).NotTo(HaveOccurred())
+			Expect(output).To(ContainSubstring("workspace-with-annotations"), "webhook should be logging")
 		})
 	})
 
 	Context("Webhook Configuration", func() {
 		It("should have mutating webhook configuration registered", func() {
 			By("checking mutating webhook configuration exists")
-			cmd := exec.Command("kubectl", "get", "mutatingwebhookconfiguration",
-				"jupyter-k8s-mutating-webhook-configuration")
-			output, err := utils.Run(cmd)
-			if err != nil {
-				Skip("Mutating webhook configuration not found - webhooks may not be enabled in this deployment")
-			}
-			Expect(string(output)).To(ContainSubstring("jupyter-k8s-mutating-webhook-configuration"))
+			output, err := kubectlGet("mutatingwebhookconfiguration",
+				"jupyter-k8s-mutating-webhook-configuration", "", "{.metadata.name}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("jupyter-k8s-mutating-webhook-configuration"))
 
 			By("verifying webhook targets correct service")
-			cmd = exec.Command("kubectl", "get", "mutatingwebhookconfiguration",
-				"jupyter-k8s-mutating-webhook-configuration",
-				"-o", "jsonpath={.webhooks[0].clientConfig.service.name}")
-			output, err = utils.Run(cmd)
-			if err == nil {
-				serviceName := strings.TrimSpace(string(output))
-				Expect(serviceName).To(Equal("jupyter-k8s-controller-manager"))
-			}
+			serviceName, err := kubectlGet("mutatingwebhookconfiguration",
+				"jupyter-k8s-mutating-webhook-configuration", "",
+				"{.webhooks[0].clientConfig.service.name}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(serviceName).To(Equal("jupyter-k8s-controller-manager"))
 		})
 
 		It("should have CA bundle configured", func() {
-			By("checking CA bundle is present or webhook is configured")
-			cmd := exec.Command("kubectl", "get", "mutatingwebhookconfiguration",
-				"jupyter-k8s-mutating-webhook-configuration")
-			_, err := utils.Run(cmd)
-			if err != nil {
-				Skip("Mutating webhook configuration not found - webhooks may not be enabled")
-			}
-
-			cmd = exec.Command("kubectl", "get", "mutatingwebhookconfiguration",
-				"jupyter-k8s-mutating-webhook-configuration",
-				"-o", "jsonpath={.webhooks[0].clientConfig.caBundle}")
-			output, err := utils.Run(cmd)
-			// CA bundle may be empty if cert-manager hasn't injected it yet, but config should exist
+			By("checking mutating webhook configuration exists")
+			output, err := kubectlGet("mutatingwebhookconfiguration",
+				"jupyter-k8s-mutating-webhook-configuration", "", "{.metadata.name}")
 			Expect(err).NotTo(HaveOccurred())
-			_ = output // CA bundle presence is optional depending on cert-manager setup
+			Expect(output).To(Equal("jupyter-k8s-mutating-webhook-configuration"))
+
+			By("verifying CA bundle field is accessible")
+			_, err = kubectlGet("mutatingwebhookconfiguration",
+				"jupyter-k8s-mutating-webhook-configuration", "",
+				"{.webhooks[0].clientConfig.caBundle}")
+			// CA bundle may be empty if cert-manager hasn't injected it yet, but field should be accessible
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })
+
+func deleteResourcesForOwnerTest(workspaceNamespace string) {
+	By("cleaning up workspaces")
+	cmd := exec.Command("kubectl", "delete", "workspace", "--all", "-n", workspaceNamespace,
+		"--ignore-not-found", "--wait=true", "--timeout=60s")
+	_, _ = utils.Run(cmd)
+
+	// Wait to ensure all resources are fully deleted
+	time.Sleep(2 * time.Second)
+}

@@ -1,8 +1,0 @@
-apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: workspace-with-annotations
-  annotations:
-    custom-annotation: "test-value"
-spec:
-  displayName: "Test Workspace"

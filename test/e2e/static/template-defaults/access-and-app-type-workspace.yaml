@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: access-and-app-type-workspace
+spec:
+  displayName: "App Type Test"
+  templateRef:
+    name: access-and-app-type-template
+    namespace: jupyter-k8s-shared
+ 

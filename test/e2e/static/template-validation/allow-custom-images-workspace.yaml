@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: allow-custom-images-workspace
+spec:
+  displayName: "Custom Image Allowed Test"
+  templateRef:
+    name: allow-custom-images-template
+    namespace: jupyter-k8s-shared
+  image: custom/authorized:latest
