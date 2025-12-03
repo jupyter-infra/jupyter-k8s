@@ -211,6 +211,9 @@ func createRecommendedOptions(config *ExtensionConfig) *genericoptions.Recommend
 	recommendedOptions.SecureServing.ServerCert.CertKey.KeyFile = config.KeyPath
 	recommendedOptions.SecureServing.ServerCert.PairName = "tls"
 
+	// turn off advanced priority and fairness features that require extra permissions
+	recommendedOptions.Features.EnablePriorityAndFairness = false
+
 	return recommendedOptions
 }
 
@@ -218,6 +221,7 @@ func createRecommendedOptions(config *ExtensionConfig) *genericoptions.Recommend
 func createGenericAPIServer(recommendedOptions *genericoptions.RecommendedOptions) (*genericapiserver.GenericAPIServer, error) {
 	// Create server config
 	serverConfig := genericapiserver.NewRecommendedConfig(codecs)
+	serverConfig.EnableDiscovery = false
 	serverConfig.EffectiveVersion = compatibility.DefaultBuildEffectiveVersion()
 
 	// Apply options to configure authentication automatically
