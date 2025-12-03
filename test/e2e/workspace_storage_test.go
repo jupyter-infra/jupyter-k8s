@@ -431,12 +431,12 @@ func deleteResourcesForResourcesTest(namespace string) {
 
 	// Delete all workspaces in the namespace
 	cmd := exec.Command("kubectl", "delete", "workspace", "--all", "-n", namespace,
-		"--ignore-not-found", "--wait=true", "--timeout=120s")
+		"--ignore-not-found", "--wait=true", "--timeout=180s")
 	_, _ = utils.Run(cmd)
 
 	// Delete standalone PVCs that might have been created
 	cmd = exec.Command("kubectl", "delete", "pvc", "--all", "-n", namespace,
-		"--ignore-not-found", "--wait=true")
+		"--ignore-not-found", "--wait=true", "--timeout=60s")
 	_, _ = utils.Run(cmd)
 
 	// Delete templates that might have been created
