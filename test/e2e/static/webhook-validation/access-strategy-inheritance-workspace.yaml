@@ -1,8 +1,0 @@
-apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: access-strategy-inheritance-test
-spec:
-  displayName: "Access Strategy Inheritance Test"
-  templateRef:
-    name: "access-strategy-template"

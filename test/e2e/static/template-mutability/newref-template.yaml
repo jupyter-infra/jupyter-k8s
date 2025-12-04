@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: newref-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Restricted Template"
+  description: "Restricted template for mutability testing"
+  defaultOwnershipType: Public
+  allowedImages:
+    - jk8s-application-jupyter-uv:latest
+  defaultImage: jk8s-application-jupyter-uv:latest

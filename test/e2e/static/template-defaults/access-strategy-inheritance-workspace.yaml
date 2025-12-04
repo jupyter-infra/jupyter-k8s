@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: access-strategy-inheritance-workspace
+spec:
+  displayName: "Access Strategy Inheritance Test"
+  templateRef:
+    name: access-strategy-template
+    namespace: jupyter-k8s-shared

@@ -1,8 +1,0 @@
-apiVersion: workspace.jupyter.org/v1alpha1
-kind: Workspace
-metadata:
-  name: security-context-test
-spec:
-  displayName: "Security Context Test"
-  templateRef:
-    name: security-context-template

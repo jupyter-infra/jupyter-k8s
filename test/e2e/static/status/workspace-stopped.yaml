@@ -1,0 +1,18 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-stopped
+  namespace: default
+spec:
+  displayName: "Status Test - Stopped"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Stopped
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  storage:
+    size: 1Gi

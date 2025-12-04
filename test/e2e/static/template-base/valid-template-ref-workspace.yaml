@@ -1,0 +1,13 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  labels:
+    app.kubernetes.io/name: jupyter-k8s
+  name: valid-template-ref-workspace
+spec:
+  displayName: "Workspace Using Template"
+  templateRef:
+    name: base-template
+    namespace: jupyter-k8s-shared
+  desiredStatus: Running
+  ownershipType: Public

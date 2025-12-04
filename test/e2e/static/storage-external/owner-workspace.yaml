@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: owner-workspace
+spec:
+  displayName: "Owner Workspace"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  storage:
+    size: 1Gi

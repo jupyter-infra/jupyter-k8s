@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: restricted-images-workspace
+spec:
+  displayName: "Custom Image Rejected Test"
+  templateRef:
+    name: restricted-images-template
+    namespace: jupyter-k8s-shared
+  image: custom/unauthorized:latest

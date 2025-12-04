@@ -1,11 +1,12 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
-  name: cpu-exceed-test
+  name: cpu-exceed-workspace
 spec:
   displayName: "CPU Bounds Test"
   templateRef:
-    name: "production-notebook-template"
+    name: base-template
+    namespace: jupyter-k8s-shared
   ownershipType: Public
   resources:
     requests:

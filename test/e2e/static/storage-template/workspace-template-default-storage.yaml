@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-template-default-storage
+spec:
+  displayName: "Workspace with Template Default Storage"
+  templateRef:
+    name: storage-template
+    namespace: jupyter-k8s-shared
+  desiredStatus: Running
