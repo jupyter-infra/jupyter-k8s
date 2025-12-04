@@ -115,7 +115,7 @@ func VerifyPodCanAccessExternalVolumes(workspaceName, namespace, pvcName, mountP
 	ginkgo.GinkgoHelper()
 
 	if isUsingFinch() {
-		ginkgo.By("skipping exec-based volume access test (Finch has known cgroup timing issues)")
+		ginkgo.By("skipping exec-based volume access test (Finch has known cgroup access issues)")
 		return
 	}
 
@@ -174,7 +174,7 @@ func VerifyPodCanAccessHomeVolume(workspaceName, namespace string) {
 // note: no-op when using finch
 func VerifyHomeVolumeDataPersisted(workspaceName, namespace string) {
 	if isUsingFinch() {
-		ginkgo.By("skipping exec-based volume persistence test test (Finch has known cgroup timing issues)")
+		ginkgo.By("skipping exec-based volume persistence test test (Finch has known cgroup access issues)")
 		return
 	}
 	ginkgo.GinkgoHelper()

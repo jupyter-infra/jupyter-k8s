@@ -29,15 +29,19 @@ func WaitForWorkspaceToReachCondition(
 		jsonPath := fmt.Sprintf("{.status.conditions[?(@.type==\"%s\")].status}", conditionType)
 		output, err := kubectlGet("workspace", workspaceName, namespace, jsonPath)
 
+		if err != nil {
+			ginkgo.GinkgoWriter.Printf("ERROR getting workspace %s condition: %v", workspaceName, err)
+		}
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+
 		// If condition isn't met yet, check workspace status again
 		if output != expectedStatus {
 			statusOutput, statusErr := kubectlGet("workspace", workspaceName, namespace, "{.status.conditions}")
-			g.Expect(statusErr).NotTo(gomega.HaveOccurred())
-			_, _ = fmt.Fprintf(ginkgo.GinkgoWriter, "All conditions for workspace %s: %s\n",
-				workspaceName, statusOutput)
+			if statusErr == nil {
+				_, _ = fmt.Fprintf(ginkgo.GinkgoWriter, "All conditions for workspace %s: %s\n",
+					workspaceName, statusOutput)
+			}
 		}
-
-		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(output).To(gomega.Equal(expectedStatus))
 	}).WithTimeout(5 * time.Minute).WithPolling(5 * time.Second).Should(gomega.Succeed())
 }

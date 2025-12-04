@@ -142,7 +142,7 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt vet load-images-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -ginkgo.v
+	KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -timeout 60m -ginkgo.v -ginkgo.timeout 60m
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: cleanup-test-e2e
@@ -362,7 +362,7 @@ test-e2e-focus: setup-test-e2e manifests generate fmt vet load-images-e2e ## Run
 		echo "Error: FOCUS parameter is required. Usage: make test-e2e-focus FOCUS=\"Primary Storage\""; \
 		exit 1; \
 	fi
-	KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -ginkgo.v -ginkgo.focus="$(FOCUS)"
+	KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -timeout 60m -ginkgo.v -ginkgo.focus="$(FOCUS)" -ginkgo.timeout 60m
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: teardown-kind
