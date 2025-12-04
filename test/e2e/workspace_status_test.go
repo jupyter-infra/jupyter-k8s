@@ -365,9 +365,9 @@ var _ = Describe("Workspace Status", Ordered, func() {
 func deleteResourcesForStatusTest() {
 	By("cleaning up all workspaces")
 	cmd := exec.Command("kubectl", "delete", "workspace", "--all", "-n", statusTestNamespace,
-		"--ignore-not-found", "--wait=true", "--timeout=60s")
+		"--ignore-not-found", "--wait=true", "--timeout=120s")
 	_, _ = utils.Run(cmd)
 
-	// Wait to ensure all resources are fully deleted
-	time.Sleep(2 * time.Second)
+	By("waiting an arbitrary fixed time for resources to be fully deleted")
+	time.Sleep(1 * time.Second)
 }

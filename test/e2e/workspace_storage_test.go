@@ -427,25 +427,24 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 
 //nolint:unparam
 func deleteResourcesForResourcesTest(namespace string) {
-	By("cleaning up resources for resources test")
 
-	// Delete all workspaces in the namespace
+	By("deleting all workspaces")
 	cmd := exec.Command("kubectl", "delete", "workspace", "--all", "-n", namespace,
 		"--ignore-not-found", "--wait=true", "--timeout=180s")
 	_, _ = utils.Run(cmd)
 
-	// Delete standalone PVCs that might have been created
+	By("deleting all standalone PVCs")
 	cmd = exec.Command("kubectl", "delete", "pvc", "--all", "-n", namespace,
 		"--ignore-not-found", "--wait=true", "--timeout=60s")
 	_, _ = utils.Run(cmd)
 
-	// Delete templates that might have been created
+	By("deleting all templates")
 	cmd = exec.Command("kubectl", "delete", "workspacetemplate", "--all", "-n", SharedNamespace,
 		"--ignore-not-found", "--wait=true", "--timeout=60s")
 	_, _ = utils.Run(cmd)
 
-	// Wait to ensure all resources are fully deleted
-	time.Sleep(2 * time.Second)
+	By("waiting an arbitrary fixed time for resources to be fully deleted")
+	time.Sleep(1 * time.Second)
 }
 
 //nolint:unparam

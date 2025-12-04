@@ -244,7 +244,7 @@ var _ = BeforeSuite(func() {
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Controller deployment failed to become available")
 
-	By("verifying controller pods are running")
+	By("verifying controller pods are running and ready")
 	Eventually(func(g Gomega) {
 		cmd := exec.Command("kubectl", "get", "pods",
 			"-l", "control-plane=controller-manager",
@@ -257,13 +257,19 @@ var _ = BeforeSuite(func() {
 
 		// Verify pod is actually Running, not CrashLoopBackOff
 		for _, podName := range podNames {
-			cmd = exec.Command("kubectl", "get", "pod", podName,
-				"-n", OperatorNamespace,
-				"-o", "jsonpath={.status.phase}")
-			phase, err := utils.Run(cmd)
+			phase, err := kubectlGet("pod", podName, OperatorNamespace, "{.status.phase}")
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(strings.TrimSpace(phase)).To(Equal("Running"),
 				fmt.Sprintf("Pod %s not in Running state", podName))
+
+			// Verify all containers are ready
+			readyStates, err := kubectlGet("pod", podName, OperatorNamespace,
+				"{.status.containerStatuses[*].ready}")
+			g.Expect(err).NotTo(HaveOccurred())
+			for _, ready := range strings.Fields(readyStates) {
+				g.Expect(strings.TrimSpace(ready)).To(Equal("true"),
+					fmt.Sprintf("Container in pod %s not ready", podName))
+			}
 		}
 	}).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(Succeed())
 
@@ -301,8 +307,16 @@ var _ = BeforeSuite(func() {
 	Eventually(func(g Gomega) {
 		workspaceFilename := "webhook-readiness-test"
 		group := "webhook"
-		createWorkspaceForTest(workspaceFilename, group, "")
-	}).WithTimeout(1 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+		path := BuildTestResourcePath(workspaceFilename, group, "")
+		cmd := exec.Command("kubectl", "apply", "-f", path)
+		_, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred(), "Webhook should be ready to accept requests")
+
+		// Clean up the test workspace immediately
+		cmd = exec.Command("kubectl", "delete", "workspace", workspaceFilename,
+			"-n", "default", "--ignore-not-found")
+		_, _ = utils.Run(cmd)
+	}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 
 	_, _ = fmt.Fprintf(GinkgoWriter, "✓ Controller and webhooks are ready for testing\n")
 })

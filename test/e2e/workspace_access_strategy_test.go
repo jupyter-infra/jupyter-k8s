@@ -246,7 +246,7 @@ var _ = Describe("Workspace Access Strategy", Ordered, func() {
 func deleteResourcesForAccessStrategyTest(workspaceNamespace string) {
 	By("cleaning up workspaces")
 	cmd := exec.Command("kubectl", "delete", "workspace", "--all", "-n", workspaceNamespace,
-		"--ignore-not-found", "--wait=true", "--timeout=90s")
+		"--ignore-not-found", "--wait=true", "--timeout=120s")
 	_, _ = utils.Run(cmd)
 
 	By("cleaning up access strategies")
@@ -254,6 +254,6 @@ func deleteResourcesForAccessStrategyTest(workspaceNamespace string) {
 		"--ignore-not-found", "--wait=true", "--timeout=30s")
 	_, _ = utils.Run(cmd)
 
-	// Wait to ensure all resources are fully deleted
-	time.Sleep(2 * time.Second)
+	By("waiting an arbitrary fixed time for resources to be fully deleted")
+	time.Sleep(1 * time.Second)
 }

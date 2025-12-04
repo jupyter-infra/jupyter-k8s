@@ -525,10 +525,10 @@ var _ = Describe("Workspace Template", Ordered, func() {
 func deleteResourcesForTemplateTest() {
 	By("cleaning up workspaces")
 	cmd := exec.Command("kubectl", "delete", "workspace", "--all", "-n", "default",
-		"--ignore-not-found", "--wait=true", "--timeout=90s")
+		"--ignore-not-found", "--wait=true", "--timeout=120s")
 	_, _ = utils.Run(cmd)
 
-	By("cleaning up template")
+	By("cleaning up templates")
 	cmd = exec.Command("kubectl", "delete", "workspacetemplate", "--all", "-n", SharedNamespace,
 		"--ignore-not-found", "--wait=true", "--timeout=60s")
 	_, _ = utils.Run(cmd)
@@ -538,8 +538,8 @@ func deleteResourcesForTemplateTest() {
 		"--ignore-not-found", "--wait=true", "--timeout=30s")
 	_, _ = utils.Run(cmd)
 
-	By("waiting for resources to be fully deleted")
-	time.Sleep(2 * time.Second)
+	By("waiting an arbitrary fixed time for resources to be fully deleted")
+	time.Sleep(1 * time.Second)
 }
 
 // Helper function to test template feature inheritance
