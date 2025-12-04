@@ -1,0 +1,14 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: restricted-images-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Restricted Images Template"
+  description: "Template that restricts custom images"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  allowedImages:
+    - jk8s-application-jupyter-uv:latest
+    - jupyter/base-notebook:latest
+    - jupyter/scipy-notebook:latest
+  allowCustomImages: false

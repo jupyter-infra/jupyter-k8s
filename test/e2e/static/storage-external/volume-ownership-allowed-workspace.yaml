@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: volume-ownership-allowed-workspace
+spec:
+  displayName: "Volume Ownership Allowed Test"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  volumes:
+  - name: shared-volume
+    persistentVolumeClaimName: external-pvc-1
+    mountPath: /home/jovyan/shared-data

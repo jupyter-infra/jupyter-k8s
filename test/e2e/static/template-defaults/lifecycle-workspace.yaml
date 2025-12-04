@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: lifecycle-workspace
+spec:
+  displayName: "Lifecycle Test"
+  templateRef:
+    name: lifecycle-template
+    namespace: jupyter-k8s-shared

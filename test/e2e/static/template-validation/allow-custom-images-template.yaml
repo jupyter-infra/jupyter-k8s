@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: allow-custom-images-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Custom Images Template"
+  description: "Template that allows custom images"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  allowedImages:
+    - jk8s-application-jupyter-uv:latest
+  allowCustomImages: true

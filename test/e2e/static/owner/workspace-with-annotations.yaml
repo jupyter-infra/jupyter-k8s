@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-with-annotations
+  annotations:
+    custom-annotation: test-value
+spec:
+  image: jk8s-application-jupyter-uv:latest
+  displayName: "Test Workspace"

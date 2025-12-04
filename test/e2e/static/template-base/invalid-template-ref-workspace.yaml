@@ -1,0 +1,21 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: invalid-template-ref-workspace
+spec:
+  displayName: "Test Invalid template reference Workspace"
+  desiredStatus: Running
+  templateRef:
+    name: non-existent-template
+    namespace: jupyter-k8s-shared
+  image: "quay.io/jupyter/minimal-notebook:latest"
+  ownershipType: Public
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  storage:
+    size: 1Gi

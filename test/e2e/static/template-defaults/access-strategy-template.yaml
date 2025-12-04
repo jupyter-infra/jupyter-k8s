@@ -1,0 +1,19 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: access-strategy-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Access Strategy Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultAccessStrategy:
+    name: inherited-access-strategy
+    namespace: jupyter-k8s-shared
+  resourceBounds:
+    resources:
+      cpu:
+        min: 100m
+        max: "2"
+      memory:
+        min: 128Mi
+        max: 4Gi

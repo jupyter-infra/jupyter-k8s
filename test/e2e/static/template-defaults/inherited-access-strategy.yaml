@@ -1,0 +1,15 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: inherited-access-strategy
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: Inherited Access Strategy
+  accessResourceTemplates: []
+  deploymentModifications:
+    podModifications:
+      primaryContainerModifications:
+        mergeEnv:
+          - name: JUPYTER_BASE_URL
+            valueTemplate: "/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
+  accessURLTemplate: "https://gpu-burning-llm.io/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}"

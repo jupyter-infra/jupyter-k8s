@@ -1,0 +1,35 @@
+# Example WorkspaceTemplate for production use
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: base-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Production Jupyter Notebook"
+  description: "Secure, resource-controlled notebook for production workloads"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  allowedImages:
+    - jk8s-application-jupyter-uv:latest
+  defaultResources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  resourceBounds:
+    resources:
+      cpu:
+        min: 100m
+        max: 2
+      memory:
+        min: 128Mi
+        max: 4Gi
+      nvidia.com/gpu:
+        min: "0"
+        max: "1"
+  primaryStorage:
+    defaultSize: 1Gi
+    minSize: 100Mi
+    maxSize: 20Gi
+  appType: jupyter
