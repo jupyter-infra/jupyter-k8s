@@ -9,4 +9,4 @@ spec:
     namespace: jupyter-k8s-shared
   desiredStatus: Running
   storage:
-    size: "10Gi"  # Exceeds template max of 5Gi
+    size: 10Gi  # Exceeds template max of 5Gi

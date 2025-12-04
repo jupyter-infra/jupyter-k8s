@@ -15,13 +15,13 @@ spec:
     idleTimeoutInMinutes: 30
     detection:
       httpGet:
-        path: "/api/status"
+        path: /api/status
         port: 8888
   resourceBounds:
     resources:
       cpu:
-        min: "100m"
+        min: 100m
         max: "2"
       memory:
-        min: "128Mi"
-        max: "4Gi"
+        min: 128Mi
+        max: 4Gi

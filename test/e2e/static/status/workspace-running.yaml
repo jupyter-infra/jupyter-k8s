@@ -9,10 +9,10 @@ spec:
   desiredStatus: Running
   resources:
     requests:
-      cpu: "200m"
-      memory: "256Mi"
+      cpu: 200m
+      memory: 256Mi
     limits:
-      cpu: "500m"
-      memory: "512Mi"
+      cpu: 500m
+      memory: 512Mi
   storage:
-    size: "1Gi"
+    size: 1Gi

@@ -7,4 +7,4 @@ spec:
   image: jk8s-application-jupyter-uv:latest
   desiredStatus: Running
   nodeSelector:
-    kubernetes.io/arch: "amd64"
+    kubernetes.io/arch: amd64

@@ -7,7 +7,7 @@ spec:
   image: jk8s-application-jupyter-uv:latest
   desiredStatus: Running
   tolerations:
-  - key: "dedicated"
-    operator: "Equal"
-    value: "jupyter"
-    effect: "NoSchedule"
+  - key: dedicated
+    operator: Equal
+    value: jupyter
+    effect: NoSchedule

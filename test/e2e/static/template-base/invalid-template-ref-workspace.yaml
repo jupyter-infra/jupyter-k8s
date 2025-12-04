@@ -12,10 +12,10 @@ spec:
   ownershipType: Public
   resources:
     requests:
-      cpu: "250m"
-      memory: "512Mi"
+      cpu: 250m
+      memory: 512Mi
     limits:
-      cpu: "500m"
-      memory: "1Gi"
+      cpu: 500m
+      memory: 1Gi
   storage:
-    size: "1Gi"
+    size: 1Gi
