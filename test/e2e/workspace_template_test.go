@@ -88,7 +88,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			createTemplateForTest(baseTemplateName, groupDir, subgroupBase)
 
 			By("applying attempting to create the workspace")
-			VerifyCreateWorkspaceRejectedByWebhook(workspaceFilename, groupDir, subgroupBase, workspaceName)
+			VerifyCreateWorkspaceRejectedByWebhook(workspaceFilename, groupDir, subgroupBase, workspaceName, workspaceNamespace)
 		})
 	})
 
@@ -101,7 +101,8 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			createTemplateForTest(baseTemplateName, groupDir, subgroupBase)
 
 			By("attempting to create workspace with invalid image")
-			VerifyCreateWorkspaceRejectedByWebhook(workspaceFilename, groupDir, subgroupValidation, workspaceName)
+			VerifyCreateWorkspaceRejectedByWebhook(
+				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
 		})
 
 		It("should reject workspace exceeding CPU bounds", func() {
@@ -112,7 +113,8 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			createTemplateForTest(baseTemplateName, groupDir, subgroupBase)
 
 			By("attempting to create workspace with out of bounds cpu")
-			VerifyCreateWorkspaceRejectedByWebhook(workspaceFilename, groupDir, subgroupValidation, workspaceName)
+			VerifyCreateWorkspaceRejectedByWebhook(
+				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
 		})
 
 		It("should accept workspace with valid overrides", func() {
@@ -151,7 +153,8 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			createTemplateForTest(restrictedTemplateFilename, groupDir, subgroupValidation)
 
 			By("attempting to create workspace with custom image")
-			VerifyCreateWorkspaceRejectedByWebhook(workspaceFilename, groupDir, subgroupValidation, workspaceName)
+			VerifyCreateWorkspaceRejectedByWebhook(
+				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
 		})
 
 		It("should allow any image when allowCustomImages is true", func() {

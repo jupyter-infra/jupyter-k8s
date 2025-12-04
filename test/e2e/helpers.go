@@ -76,19 +76,6 @@ func kubectlDeleteAllNamespaces(resource string, opts ...string) error {
 	return err
 }
 
-// kubectlApplyYAML applies YAML content via kubectl
-// nolint:unused
-func kubectlApplyYAML(yamlContent string, dryRun bool) error {
-	ginkgo.GinkgoHelper()
-	args := "kubectl apply -f -"
-	if dryRun {
-		args = "kubectl apply --dry-run=server -f -"
-	}
-	cmd := exec.Command("sh", "-c", "echo '"+yamlContent+"' | "+args)
-	_, err := utils.Run(cmd)
-	return err
-}
-
 // ensureCleanState cleans up any leftover CRDs before starting tests
 func ensureCleanState() {
 	ginkgo.GinkgoHelper()

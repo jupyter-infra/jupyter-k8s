@@ -288,7 +288,7 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 
 			By("attempting to create second workspace that references the first workspace's PVC")
 			VerifyCreateWorkspaceRejectedByWebhook(
-				rejectedWorkspaceFilename, group, externalSubgroup, rejectedWorkspaceName)
+				rejectedWorkspaceFilename, group, externalSubgroup, rejectedWorkspaceName, workspaceNamespace)
 		})
 
 		It("should allow workspace referencing unowned PVC", func() {
@@ -420,7 +420,7 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 			createTemplateForTest(templateFilename, group, templateSubgroup)
 
 			By("verifying the webhook rejects the workspace creation")
-			VerifyCreateWorkspaceRejectedByWebhook(workspaceFilename, group, templateSubgroup, workspaceName)
+			VerifyCreateWorkspaceRejectedByWebhook(workspaceFilename, group, templateSubgroup, workspaceName, workspaceNamespace)
 		})
 	})
 })

@@ -68,6 +68,7 @@ func createPvcForTest(pvcFilename, groupDir, subgroupDir string) {
 
 // WaitForPVCBinding waits for a PVC to be bound
 func WaitForPVCBinding(pvcName, namespace string) {
+	ginkgo.GinkgoHelper()
 	ginkgo.By(fmt.Sprintf("waiting for PVC %s to bind", pvcName))
 	gomega.Eventually(func() error {
 		phase, phaseErr := kubectlGet("pvc", pvcName, namespace, "{.status.phase}")
@@ -83,6 +84,8 @@ func WaitForPVCBinding(pvcName, namespace string) {
 
 // VerifyWorkspaceVolumeMount checks if deployment has correct volume mount
 func VerifyWorkspaceVolumeMount(workspaceName, namespace, volumeName, expectMountPath string) {
+	ginkgo.GinkgoHelper()
+
 	ginkgo.By("retrieving deployment name")
 	deploymentName, nameErr := kubectlGet("workspace", workspaceName, namespace,
 		"{.status.deploymentName}")
@@ -109,6 +112,8 @@ func VerifyWorkspaceVolumeMount(workspaceName, namespace, volumeName, expectMoun
 // VerifyPodCanAccessExternalVolumes verifies pod can access external volumes
 // note: no-op when using finch
 func VerifyPodCanAccessExternalVolumes(workspaceName, namespace, pvcName, mountPath string) {
+	ginkgo.GinkgoHelper()
+
 	if isUsingFinch() {
 		ginkgo.By("skipping exec-based volume access test (Finch has known cgroup timing issues)")
 		return
@@ -127,19 +132,39 @@ func VerifyPodCanAccessExternalVolumes(workspaceName, namespace, pvcName, mountP
 
 	ginkgo.By("writing to the volume at the mount path")
 	filepath := fmt.Sprintf("%s/test-file-1.txt", mountPath)
-	writeCmd := exec.Command("kubectl", "exec", podName, "--", "touch", filepath)
-	_, writeErr := utils.Run(writeCmd)
-	gomega.Expect(writeErr).NotTo(gomega.HaveOccurred())
+	writeCmd := exec.Command("kubectl", "exec", podName, "-n", namespace, "--", "touch", filepath)
+	writeOutput, writeErr := utils.Run(writeCmd)
+	if writeErr != nil {
+		ginkgo.GinkgoWriter.Printf("ERROR writing to volume at %s: %v\nCommand output: %s\n", filepath, writeErr, writeOutput)
+
+		ginkgo.By(fmt.Sprintf("DEBUG: checking if mount path %s exists", mountPath))
+		lsCmd := exec.Command("kubectl", "exec", podName, "-n", namespace, "--", "ls", "-la", mountPath)
+		lsOutput, lsErr := utils.Run(lsCmd)
+		ginkgo.GinkgoWriter.Printf("ls -la %s: %s (err: %v)\n", mountPath, lsOutput, lsErr)
+
+		ginkgo.By("DEBUG: checking all volume mounts in pod")
+		mountsCmd := exec.Command("kubectl", "exec", podName, "-n", namespace, "--", "mount")
+		mountsOutput, mountsErr := utils.Run(mountsCmd)
+		ginkgo.GinkgoWriter.Printf("mount command output: %s (err: %v)\n", mountsOutput, mountsErr)
+
+		ginkgo.By("DEBUG: describing pod")
+		describeCmd := exec.Command("kubectl", "describe", "pod", podName, "-n", namespace)
+		describeOutput, describeErr := utils.Run(describeCmd)
+		ginkgo.GinkgoWriter.Printf("pod description: %s (err: %v)\n", describeOutput, describeErr)
+	}
+	gomega.Expect(writeErr).NotTo(gomega.HaveOccurred(),
+		fmt.Sprintf("Failed to write to %s. Output: %s", filepath, writeOutput))
 
 	ginkgo.By("verifying the file exists")
-	checkCmd := exec.Command("kubectl", "exec", podName, "--", "ls", filepath)
+	checkCmd := exec.Command("kubectl", "exec", podName, "-n", namespace, "--", "ls", filepath)
 	checkOutput, checkErr := utils.Run(checkCmd)
-	gomega.Expect(checkErr).NotTo(gomega.HaveOccurred())
+	gomega.Expect(checkErr).NotTo(gomega.HaveOccurred(), fmt.Sprintf("Failed to list file %s", filepath))
 	gomega.Expect(checkOutput).ToNot(gomega.BeEmpty())
 }
 
 // VerifyPodCanAccessHomeVolume verifies pod can access home volumes
 func VerifyPodCanAccessHomeVolume(workspaceName, namespace string) {
+	ginkgo.GinkgoHelper()
 	pvcName := controller.GeneratePVCName(workspaceName)
 	VerifyPodCanAccessExternalVolumes(workspaceName, namespace, pvcName, "/home/jovyan")
 }
@@ -152,6 +177,7 @@ func VerifyHomeVolumeDataPersisted(workspaceName, namespace string) {
 		ginkgo.By("skipping exec-based volume persistence test test (Finch has known cgroup timing issues)")
 		return
 	}
+	ginkgo.GinkgoHelper()
 	pvcName := controller.GeneratePVCName(workspaceName)
 
 	ginkgo.By("waiting for pvc to bound")
@@ -167,8 +193,9 @@ func VerifyHomeVolumeDataPersisted(workspaceName, namespace string) {
 
 	ginkgo.By("verifying the file still exists")
 	filepath := "/home/jovyan/test-file-1.txt"
-	checkCmd := exec.Command("kubectl", "exec", podName, "--", "ls", filepath)
+	checkCmd := exec.Command("kubectl", "exec", podName, "-n", namespace, "--", "ls", filepath)
 	checkOutput, checkErr := utils.Run(checkCmd)
-	gomega.Expect(checkErr).NotTo(gomega.HaveOccurred())
+	gomega.Expect(checkErr).NotTo(gomega.HaveOccurred(),
+		fmt.Sprintf("Failed to verify persisted file %s exists", filepath))
 	gomega.Expect(checkOutput).ToNot(gomega.BeEmpty())
 }

@@ -23,16 +23,16 @@ import (
 // nolint:unparam // namespace is always "default" now but may change in future tests
 func WaitForWorkspaceToReachCondition(
 	workspaceName string, namespace string, conditionType string, expectedStatus string) {
+	ginkgo.GinkgoHelper()
+
 	gomega.Eventually(func(g gomega.Gomega) {
-		cmd := exec.Command("kubectl", "get", "workspace", workspaceName, "-n", namespace,
-			"-o", fmt.Sprintf("jsonpath={.status.conditions[?(@.type==\"%s\")].status}", conditionType))
-		output, err := utils.Run(cmd)
+		jsonPath := fmt.Sprintf("{.status.conditions[?(@.type==\"%s\")].status}", conditionType)
+		output, err := kubectlGet("workspace", workspaceName, namespace, jsonPath)
 
 		// If condition isn't met yet, check workspace status again
 		if output != expectedStatus {
-			statusCmd := exec.Command("kubectl", "get", "workspace", workspaceName, "-n", namespace,
-				"-o", "jsonpath={.status.conditions}")
-			statusOutput, _ := utils.Run(statusCmd)
+			statusOutput, statusErr := kubectlGet("workspace", workspaceName, namespace, "{.status.conditions}")
+			g.Expect(statusErr).NotTo(gomega.HaveOccurred())
 			_, _ = fmt.Fprintf(ginkgo.GinkgoWriter, "All conditions for workspace %s: %s\n",
 				workspaceName, statusOutput)
 		}
@@ -56,10 +56,6 @@ func VerifyWorkspaceConditions(
 	jsonPath := "{range .status.conditions[*]}{.type}{\"=\"}{.status}{\" \"}{end}"
 	output, err := kubectlGet("workspace", workspaceName, namespace, jsonPath)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-	// Debug output
-	_, _ = fmt.Fprintf(ginkgo.GinkgoWriter, "Conditions for workspace %s: %s\n",
-		workspaceName, output)
 
 	// Parse conditions from output (format: "Type=Status Type=Status ...")
 	actualConditions := make(map[string]string)
@@ -85,15 +81,20 @@ func VerifyWorkspaceConditions(
 // VerifyCreateWorkspaceRejectedByWebhook verifies that a workspace creation is rejected by the admission webhook
 //
 //nolint:unparam
-func VerifyCreateWorkspaceRejectedByWebhook(filename string, group string, subgroup string, wsName string) {
-	ginkgo.By(fmt.Sprintf("creating workspace %s", wsName))
+func VerifyCreateWorkspaceRejectedByWebhook(
+	filename string, group string, subgroup string, wsName string, wsNamespace string,
+) {
+	ginkgo.GinkgoHelper()
+
+	ginkgo.By(fmt.Sprintf("attempting to create workspace %s", wsName))
 	path := BuildTestResourcePath(filename, group, subgroup)
 	cmd := exec.Command("kubectl", "apply", "-f", path)
 	_, err := utils.Run(cmd)
 	gomega.Expect(err).To(gomega.HaveOccurred(), fmt.Sprintf("Expected webhook to reject workspace %s", wsName))
 
 	ginkgo.By(fmt.Sprintf("verifying workspace %s was not created", wsName))
-	cmd = exec.Command("kubectl", "get", "workspace", wsName, "--ignore-not-found")
+	// Note: We don't use kubectlGet() here because we need --ignore-not-found flag
+	cmd = exec.Command("kubectl", "get", "workspace", wsName, "-n", wsNamespace, "--ignore-not-found")
 	output, err := utils.Run(cmd)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	gomega.Expect(output).To(gomega.BeEmpty(), "Workspace should not exist after webhook rejection")
@@ -101,6 +102,8 @@ func VerifyCreateWorkspaceRejectedByWebhook(filename string, group string, subgr
 
 // RestartWorkspacePod force a restart of the underlying pod
 func RestartWorkspacePod(workspaceName, namespace string) {
+	ginkgo.GinkgoHelper()
+
 	ginkgo.By(fmt.Sprintf("retrieving the pod by label for workspace %s", workspaceName))
 	podSelector := fmt.Sprintf("%s=%s", WorkspaceLabelName, workspaceName)
 	podName, podErr := kubectlGetByLabels("pod", podSelector, namespace, "{.items[*].metadata.name}")
@@ -141,6 +144,8 @@ func RestartWorkspacePod(workspaceName, namespace string) {
 // WaitForWorkspacePodToBeReady polls the pod until it is running and the workspace
 // container is ready
 func WaitForWorkspacePodToBeReady(podName, namespace string) {
+	ginkgo.GinkgoHelper()
+
 	ginkgo.By(fmt.Sprintf("waiting for pod %s to be ready", podName))
 	gomega.Eventually(func() error {
 		phase, err := kubectlGet("pod", podName, namespace, "{.status.phase}")

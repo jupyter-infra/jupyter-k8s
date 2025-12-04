@@ -238,7 +238,7 @@ var _ = Describe("Workspace Access Strategy", Ordered, func() {
 			workspaceName := "workspace-with-nonexistent-access-strategy"
 
 			By("verifying Workspace referencing non-existent AccessStrategy rejected by webhook")
-			VerifyCreateWorkspaceRejectedByWebhook(workspaceFilename, groupDir, "", workspaceName)
+			VerifyCreateWorkspaceRejectedByWebhook(workspaceFilename, groupDir, "", workspaceName, workspaceNamespace)
 		})
 	})
 })
