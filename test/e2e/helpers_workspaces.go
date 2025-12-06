@@ -172,3 +172,15 @@ func WaitForWorkspacePodToBeReady(podName, namespace string) {
 		return nil
 	}, 60*time.Second, 1*time.Second).To(gomega.Succeed())
 }
+
+// UpdateWorkspaceDesiredState updates the desiredStatus field of a Workspace using kubectl patch
+func UpdateWorkspaceDesiredState(workspaceName, namespace, desiredState string) {
+	ginkgo.GinkgoHelper()
+
+	ginkgo.By(fmt.Sprintf("updating workspace %s desiredStatus to %s", workspaceName, desiredState))
+	patchCmd := fmt.Sprintf(`{"spec":{"desiredStatus":"%s"}}`, desiredState)
+	cmd := exec.Command("kubectl", "patch", "workspace", workspaceName,
+		"-n", namespace, "--type=merge", "-p", patchCmd)
+	_, err := utils.Run(cmd)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Failed to update workspace desiredStatus")
+}

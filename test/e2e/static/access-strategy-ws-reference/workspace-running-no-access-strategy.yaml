@@ -1,0 +1,15 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-running-no-access-strategy
+  namespace: default
+spec:
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

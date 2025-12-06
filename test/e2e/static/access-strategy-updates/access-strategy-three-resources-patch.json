@@ -1,0 +1,24 @@
+{
+  "spec": {
+    "accessResourceTemplates": [
+      {
+        "kind": "NetworkPolicy",
+        "apiVersion": "networking.k8s.io/v1",
+        "namePrefix": "workspace-network-policy",
+        "template": "spec:\n  podSelector:\n    matchLabels:\n      workspace.jupyter.org/workspaceName: \"{{ .Workspace.Name }}\"\n  policyTypes:\n  - Ingress\n  ingress:\n  - from:\n    - namespaceSelector:\n        matchLabels:\n          kubernetes.io/metadata.name: jupyter-k8s-system\n    ports:\n    - port: 8888\n      protocol: TCP\n"
+      },
+      {
+        "kind": "IngressRoute",
+        "apiVersion": "traefik.io/v1alpha1",
+        "namePrefix": "primary-route",
+        "template": "spec:\n  entryPoints:\n    - websecure\n  routes:\n    - match: \"Host(`example.com`) && PathPrefix(`/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/`)\"\n      kind: Rule\n      priority: 100\n      services:\n        - name: \"{{ .Service.Name }}\"\n          namespace: \"{{ .Service.Namespace }}\"\n          port: 8888\n"
+      },
+      {
+        "kind": "IngressRoute",
+        "apiVersion": "traefik.io/v1alpha1",
+        "namePrefix": "auth-route",
+        "template": "spec:\n  entryPoints:\n    - websecure\n  routes:\n    - match: \"Host(`example.com`) && PathPrefix(`/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/auth`)\"\n      kind: Rule\n      priority: 110\n      services:\n        - name: \"{{ .Service.Name }}\"\n          namespace: \"{{ .Service.Namespace }}\"\n          port: 8888\n"
+      }
+    ]
+  }
+}

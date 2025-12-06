@@ -1,0 +1,71 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: access-strategy-with-env-and-resources
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: Test Access Strategy With Env Variables and Resources
+  deploymentModifications:
+    podModifications:
+      primaryContainerModifications:
+        mergeEnv:
+          - name: JUPYTER_BASE_URL
+            valueTemplate: "/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
+          - name: TEST_ENV_VAR
+            valueTemplate: "test-value-{{ .Workspace.Name }}"
+  accessResourceTemplates:
+    # Network policy to restrict pod access
+    - kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      namePrefix: workspace-network-policy
+      template: |
+        spec:
+          podSelector:
+            matchLabels:
+              workspace.jupyter.org/workspaceName: "{{ .Workspace.Name }}"
+          policyTypes:
+          - Ingress
+          ingress:
+          - from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: jupyter-k8s-system
+            ports:
+            - port: 8888
+              protocol: TCP
+
+    # The regular route for authenticated requests
+    - kind: IngressRoute
+      apiVersion: traefik.io/v1alpha1
+      namePrefix: primary-route
+      template: |
+        spec:
+          entryPoints:
+            - websecure
+          routes:
+            - match: "Host(`example.com`) && PathPrefix(`/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/`)"
+              kind: Rule
+              priority: 100
+              services:
+                - name: "{{ .Service.Name }}"
+                  namespace: "{{ .Service.Namespace }}"
+                  port: 8888
+
+    # The auth route for initial authentication
+    - kind: IngressRoute
+      apiVersion: traefik.io/v1alpha1
+      namePrefix: auth-route
+      template: |
+        spec:
+          entryPoints:
+            - websecure
+          routes:
+            - match: "Host(`example.com`) && PathPrefix(`/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/auth`)"
+              kind: Rule
+              priority: 110  # Higher priority for auth paths
+              services:
+                - name: "{{ .Service.Name }}"
+                  namespace: "{{ .Service.Namespace }}"
+                  port: 8888
+
+  accessURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
