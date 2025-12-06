@@ -1,0 +1,15 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: access-strategy-with-templates
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: Test Access Strategy With URL and Env Templates
+  accessResourceTemplates: []
+  deploymentModifications:
+    podModifications:
+      primaryContainerModifications:
+        mergeEnv:
+          - name: JUPYTER_BASE_URL
+            valueTemplate: "/old/{{ .Workspace.Name }}/"
+  accessURLTemplate: "https://old.example.com/{{ .Workspace.Name }}/"

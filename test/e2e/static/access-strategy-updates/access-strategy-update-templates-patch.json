@@ -1,0 +1,17 @@
+{
+  "spec": {
+    "deploymentModifications": {
+      "podModifications": {
+        "primaryContainerModifications": {
+          "mergeEnv": [
+            {
+              "name": "JUPYTER_BASE_URL",
+              "valueTemplate": "/new/{{ .Workspace.Name }}/"
+            }
+          ]
+        }
+      }
+    },
+    "accessURLTemplate": "https://new.example.com/{{ .Workspace.Name }}/"
+  }
+}
