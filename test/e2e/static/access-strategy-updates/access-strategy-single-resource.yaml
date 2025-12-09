@@ -1,0 +1,29 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: access-strategy-single-resource
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: Test Access Strategy With Single Resource
+  accessResourceTemplates:
+    # Network policy to restrict pod access
+    - kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      namePrefix: workspace-network-policy
+      template: |
+        spec:
+          podSelector:
+            matchLabels:
+              workspace.jupyter.org/workspaceName: "{{ .Workspace.Name }}"
+          policyTypes:
+          - Ingress
+          ingress:
+          - from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: jupyter-k8s-system
+            ports:
+            - port: 8888
+              protocol: TCP
+
+  accessURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"

@@ -1,0 +1,12 @@
+{
+  "spec": {
+    "accessResourceTemplates": [
+      {
+        "kind": "IngressRoute",
+        "apiVersion": "traefik.io/v1alpha1",
+        "namePrefix": "primary-route",
+        "template": "spec:\n  entryPoints:\n    - websecure\n  routes:\n    - match: \"Host(`example.com`) && PathPrefix(`/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/`)\"\n      kind: Rule\n      priority: 100\n      services:\n        - name: \"{{ .Service.Name }}\"\n          namespace: \"{{ .Service.Namespace }}\"\n          port: 8888\n"
+      }
+    ]
+  }
+}
