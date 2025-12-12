@@ -47,8 +47,8 @@ func hasWebUIEnabled(accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) 
 }
 
 // isWorkspaceAvailable checks if the workspace has the Available condition set to True.
-func isWorkspaceAvailable(workspace *workspacev1alpha1.Workspace) bool {
-	for _, condition := range workspace.Status.Conditions {
+func isWorkspaceAvailable(ws *workspacev1alpha1.Workspace) bool {
+	for _, condition := range ws.Status.Conditions {
 		if condition.Type == "Available" && condition.Status == metav1.ConditionTrue {
 			return true
 		}
