@@ -16,6 +16,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/go-logr/logr"
 	connectionv1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/connection/v1alpha1"
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/aws"
@@ -34,6 +35,59 @@ type noOpPodExec struct{}
 
 func (n *noOpPodExec) ExecInPod(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string, stdin string) (string, error) {
 	return "", fmt.Errorf("pod exec not supported in connection URL generation")
+}
+
+// hasWebUIEnabled checks if WebUI is enabled by verifying if BearerAuthURLTemplate
+// is defined in the access strategy.
+func hasWebUIEnabled(accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) bool {
+	if accessStrategy == nil {
+		return false
+	}
+	return accessStrategy.Spec.BearerAuthURLTemplate != ""
+}
+
+// isWorkspaceAvailable checks if the workspace has the Available condition set to True.
+func isWorkspaceAvailable(workspace *workspacev1alpha1.Workspace) bool {
+	for _, condition := range workspace.Status.Conditions {
+		if condition.Type == "Available" && condition.Status == metav1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+// validateWebUIConnection validates that a workspace is ready for WebUI connections.
+// Returns an error if validation fails, nil if validation passes.
+func (s *ExtensionServer) validateWebUIConnection(namespace, workspaceName string, logger logr.Logger) error {
+	ws, err := s.getWorkspace(namespace, workspaceName)
+	if err != nil {
+		logger.Error(err, "Failed to get workspace for WebUI validation", "workspaceName", workspaceName)
+		return fmt.Errorf("failed to retrieve workspace")
+	}
+
+	accessStrategy, err := s.getAccessStrategy(ws)
+	if err != nil {
+		logger.Error(err, "Failed to get access strategy for WebUI validation", "workspaceName", workspaceName)
+		return fmt.Errorf("failed to retrieve access strategy")
+	}
+
+	// Check 1: WebUI is enabled via BearerAuthURLTemplate
+	if !hasWebUIEnabled(accessStrategy) {
+		logger.Info("WebUI connection rejected: WebUI not enabled for workspace",
+			"workspaceName", workspaceName,
+			"namespace", namespace)
+		return fmt.Errorf("WebUI is not enabled for this workspace. BearerAuthURLTemplate must be configured in the AccessStrategy")
+	}
+
+	// Check 2: Workspace is available
+	if !isWorkspaceAvailable(ws) {
+		logger.Info("WebUI connection rejected: workspace not available",
+			"workspaceName", workspaceName,
+			"namespace", namespace)
+		return fmt.Errorf("workspace is not available. Please wait for the workspace to be ready")
+	}
+
+	return nil
 }
 
 // generateWebUIBearerTokenURL generates a Web UI connection URL with JWT token
@@ -180,6 +234,19 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	if !result.Allowed {
 		WriteKubernetesError(w, http.StatusForbidden, result.Reason)
 		return
+	}
+
+	// Pre-validate WebUI connections before attempting to generate URL
+	if req.Spec.WorkspaceConnectionType == connectionv1alpha1.ConnectionTypeWebUI {
+		if err := s.validateWebUIConnection(namespace, req.Spec.WorkspaceName, logger); err != nil {
+			// Determine appropriate HTTP status code based on error message
+			statusCode := http.StatusBadRequest
+			if strings.Contains(err.Error(), "not available") {
+				statusCode = http.StatusServiceUnavailable
+			}
+			WriteKubernetesError(w, statusCode, err.Error())
+			return
+		}
 	}
 
 	// Generate response based on connection type
