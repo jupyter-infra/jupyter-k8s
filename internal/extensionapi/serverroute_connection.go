@@ -241,7 +241,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 		if err := s.validateWebUIConnection(namespace, req.Spec.WorkspaceName, logger); err != nil {
 			// Determine appropriate HTTP status code based on error type
 			statusCode := http.StatusInternalServerError // Default for unexpected errors
-			
+
 			if strings.Contains(err.Error(), "not enabled") {
 				// WebUI not configured - client error (misconfiguration)
 				statusCode = http.StatusBadRequest
@@ -252,7 +252,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 				// Internal error fetching resources
 				statusCode = http.StatusInternalServerError
 			}
-			
+
 			WriteKubernetesError(w, statusCode, err.Error())
 			return
 		}
