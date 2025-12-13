@@ -239,11 +239,20 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	// Pre-validate WebUI connections before attempting to generate URL
 	if req.Spec.WorkspaceConnectionType == connectionv1alpha1.ConnectionTypeWebUI {
 		if err := s.validateWebUIConnection(namespace, req.Spec.WorkspaceName, logger); err != nil {
-			// Determine appropriate HTTP status code based on error message
-			statusCode := http.StatusBadRequest
-			if strings.Contains(err.Error(), "not available") {
+			// Determine appropriate HTTP status code based on error type
+			statusCode := http.StatusInternalServerError // Default for unexpected errors
+			
+			if strings.Contains(err.Error(), "not enabled") {
+				// WebUI not configured - client error (misconfiguration)
+				statusCode = http.StatusBadRequest
+			} else if strings.Contains(err.Error(), "not available") {
+				// Workspace exists but not ready - temporary condition
 				statusCode = http.StatusServiceUnavailable
+			} else if strings.Contains(err.Error(), "failed to retrieve") {
+				// Internal error fetching resources
+				statusCode = http.StatusInternalServerError
 			}
+			
 			WriteKubernetesError(w, statusCode, err.Error())
 			return
 		}
