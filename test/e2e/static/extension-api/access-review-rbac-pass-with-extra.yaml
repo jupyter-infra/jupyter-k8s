@@ -1,0 +1,16 @@
+apiVersion: connection.workspace.jupyter.org/v1alpha1
+kind: ConnectionAccessReview
+metadata:
+  name: access-review-rbac-pass-with-extra
+  namespace: default
+spec:
+  workspaceName: workspace-public-access
+  user: owner-for-access-test-user
+  groups: []
+  extra:
+    accessKeyId: ["ASIAYULVOXIZB2F5MOCK"]
+    arn: ["arn:aws:sts::123456789012:assumed-role/TestRole/test-session"]
+    canonicalArn: ["arn:aws:iam::123456789012:role/TestRole"]
+    principalId: ["AROAYULVOXIZMOCKPRINC"]
+    sessionName: ["test-session"]
+    sigs.k8s.io/aws-iam-authenticator/principalId: ["AROAYULVOXIZMOCKPRINC"]

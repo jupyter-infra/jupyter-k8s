@@ -1,0 +1,9 @@
+apiVersion: connection.workspace.jupyter.org/v1alpha1
+kind: ConnectionAccessReview
+metadata:
+  name: access-review-rbac-fail
+  namespace: default
+spec:
+  workspaceName: workspace-public-access
+  user: user-without-rbac-permission
+  groups: []

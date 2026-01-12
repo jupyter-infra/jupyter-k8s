@@ -231,6 +231,10 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred(), "Failed to deploy controller-manager")
 
 	By("creating extension API authentication RoleBinding")
+	// Delete first if it exists from a previous run
+	cmd = exec.Command("kubectl", "delete", "rolebinding", "jupyter-k8s-extension-api-auth",
+		"-n", "kube-system", "--ignore-not-found")
+	_, _ = utils.Run(cmd)
 	cmd = exec.Command("kubectl", "create", "rolebinding", "jupyter-k8s-extension-api-auth",
 		"-n", "kube-system",
 		"--role=extension-apiserver-authentication-reader",
@@ -318,7 +322,18 @@ var _ = BeforeSuite(func() {
 		_, _ = utils.Run(cmd)
 	}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 
-	_, _ = fmt.Fprintf(GinkgoWriter, "✓ Controller and webhooks are ready for testing\n")
+	By("waiting for extension API service to be available")
+	Eventually(func(g Gomega) {
+		cmd := exec.Command("kubectl", "get", "apiservice",
+			"v1alpha1.connection.workspace.jupyter.org",
+			"-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}")
+		status, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(strings.TrimSpace(status)).To(Equal("True"),
+			"Extension APIService not available")
+	}).WithTimeout(3 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "✓ Controller, webhooks, and extension API are ready for testing\n")
 })
 
 func dumpSetupDiagnostics() {
@@ -406,6 +421,12 @@ var _ = AfterSuite(func() {
 
 	diagnoseAndCleanupStuckTemplates()
 	diagnoseAndCleanupStuckAccessStrategies()
+
+	By("deleting extension API authentication RoleBinding")
+	// Clean up the extension API auth rolebinding in kube-system namespace
+	cmd = exec.Command("kubectl", "delete", "rolebinding", "jupyter-k8s-extension-api-auth",
+		"-n", "kube-system", "--ignore-not-found")
+	_, _ = utils.Run(cmd)
 
 	By("deleting webhook configurations explicitly")
 	// Webhook configurations may persist after undeploy if namespace is deleted first

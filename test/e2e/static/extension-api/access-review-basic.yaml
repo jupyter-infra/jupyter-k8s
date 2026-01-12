@@ -1,0 +1,9 @@
+apiVersion: connection.workspace.jupyter.org/v1alpha1
+kind: ConnectionAccessReview
+metadata:
+  name: access-review-basic
+  namespace: default
+spec:
+  workspaceName: extension-api-test-workspace
+  user: testuser
+  groups: []

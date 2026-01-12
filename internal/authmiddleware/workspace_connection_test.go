@@ -291,7 +291,7 @@ func TestCreateConnectionAccessReview_CallsCreateAccessReview(t *testing.T) {
 	}
 
 	// Expected path for the connection access review
-	expectedPath := fmt.Sprintf("/apis/%s/namespaces/%s/connectionaccessreview",
+	expectedPath := fmt.Sprintf("/apis/%s/namespaces/%s/connectionaccessreviews",
 		expectApiGroupVersion, namespace)
 
 	// Call the method being tested
@@ -427,7 +427,7 @@ func TestVerifyWorkspaceAccess_ReturnsResultInfoAndNoError_WhenAccessReviewSucce
 	assert.Equal(t, TestWorkspaceName, workspaceInfo.Name, "Expected workspace name to be 'myworkspace'")
 
 	// Verify the request was made to the correct URL
-	expectedPath := fmt.Sprintf("/apis/%s/namespaces/%s/connectionaccessreview",
+	expectedPath := fmt.Sprintf("/apis/%s/namespaces/%s/connectionaccessreviews",
 		expectApiGroupVersion, workspaceInfo.Namespace)
 	mockServer.AssertRequestPath(expectedPath)
 }

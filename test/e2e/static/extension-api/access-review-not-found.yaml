@@ -1,0 +1,9 @@
+apiVersion: connection.workspace.jupyter.org/v1alpha1
+kind: ConnectionAccessReview
+metadata:
+  name: access-review-not-found
+  namespace: default
+spec:
+  workspaceName: workspace-does-not-exist
+  user: owner-for-access-test-user
+  groups: []

@@ -168,8 +168,8 @@ func (s *ExtensionServer) registerAllRoutes() {
 
 	// Register all namespaced routes
 	s.registerNamespacedRoutes(map[string]func(http.ResponseWriter, *http.Request){
-		"workspaceconnections":   s.HandleConnectionCreate,
-		"connectionaccessreview": s.handleConnectionAccessReview,
+		"workspaceconnections":    s.HandleConnectionCreate,
+		"connectionaccessreviews": s.handleConnectionAccessReview,
 	})
 }
 

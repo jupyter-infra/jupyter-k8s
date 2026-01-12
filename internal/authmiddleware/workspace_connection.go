@@ -144,7 +144,7 @@ func (s *Server) createConnectionAccessReview(
 	// Furthermore:
 	// 1. As of Q4 2025, we cannot define custom subresources with kubebuilder
 	// 2. Controller-runtime has limited support for custom subresources
-	url := fmt.Sprintf("/apis/%s/namespaces/%s/connectionaccessreview",
+	url := fmt.Sprintf("/apis/%s/namespaces/%s/connectionaccessreviews",
 		v1alpha1.SchemeGroupVersion.String(), namespace)
 
 	// Create a REST request to create:ConnectionAccessReview to the extension server
