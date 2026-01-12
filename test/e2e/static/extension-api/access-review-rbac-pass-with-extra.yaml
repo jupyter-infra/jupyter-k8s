@@ -8,9 +8,9 @@ spec:
   user: owner-for-access-test-user
   groups: []
   extra:
-    accessKeyId: ["ASIAYULVOXIZB2F5MOCK"]
-    arn: ["arn:aws:sts::123456789012:assumed-role/TestRole/test-session"]
-    canonicalArn: ["arn:aws:iam::123456789012:role/TestRole"]
-    principalId: ["AROAYULVOXIZMOCKPRINC"]
-    sessionName: ["test-session"]
-    sigs.k8s.io/aws-iam-authenticator/principalId: ["AROAYULVOXIZMOCKPRINC"]
+    accessKeyId: ["EXAMPLEACCESSKEYID123"]
+    arn: ["arn:aws:sts::000000000000:assumed-role/ExampleRole/example-session"]
+    canonicalArn: ["arn:aws:iam::000000000000:role/ExampleRole"]
+    principalId: ["EXAMPLEPRINCIPALID123"]
+    sessionName: ["example-session"]
+    sigs.k8s.io/aws-iam-authenticator/principalId: ["EXAMPLEPRINCIPALID123"]
