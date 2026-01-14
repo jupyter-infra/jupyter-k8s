@@ -272,3 +272,99 @@ func TestGetOIDCUsernameFromToken(t *testing.T) {
 		})
 	}
 }
+
+// TestVerifyToken_NotInitialized tests that VerifyToken returns an error when called before Start()
+func TestVerifyToken_NotInitialized(t *testing.T) {
+	config := &Config{
+		OIDCIssuerURL:       "https://example.com/dex",
+		OIDCClientID:        "test-client",
+		OIDCInitTimeoutSecs: 10,
+	}
+
+	verifier, err := NewOIDCVerifier(config, slog.Default())
+	require.NoError(t, err)
+	require.NotNil(t, verifier)
+
+	// Try to verify a token before calling Start()
+	claims, isFault, err := verifier.VerifyToken(context.Background(), "fake.jwt.token", slog.Default())
+
+	// Should return an error indicating the verifier is not initialized
+	assert.Nil(t, claims)
+	assert.True(t, isFault, "Should be a fault error since verifier not initialized")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not initialized")
+	assert.Contains(t, err.Error(), "call Start() first")
+}
+
+// TestStart_WithInvalidIssuer tests that Start returns an error with an invalid issuer URL
+func TestStart_WithInvalidIssuer(t *testing.T) {
+	config := &Config{
+		OIDCIssuerURL:       "http://nonexistent-issuer-that-does-not-exist.local",
+		OIDCClientID:        "test-client",
+		OIDCInitTimeoutSecs: 2, // Short timeout for faster test
+	}
+
+	verifier, err := NewOIDCVerifier(config, slog.Default())
+	require.NoError(t, err)
+	require.NotNil(t, verifier)
+
+	// Try to start with an invalid issuer
+	err = verifier.Start(context.Background())
+
+	// Should return an error
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to initialize OIDC provider")
+}
+
+// TestNewOIDCVerifier_RequiredFields tests that NewOIDCVerifier validates required fields
+func TestNewOIDCVerifier_RequiredFields(t *testing.T) {
+	t.Run("Missing issuer URL", func(t *testing.T) {
+		config := &Config{
+			OIDCIssuerURL:       "", // Missing
+			OIDCClientID:        "test-client",
+			OIDCInitTimeoutSecs: 10,
+		}
+
+		verifier, err := NewOIDCVerifier(config, slog.Default())
+		assert.Error(t, err)
+		assert.Nil(t, verifier)
+		assert.Contains(t, err.Error(), "issuer URL is required")
+	})
+
+	t.Run("Missing client ID", func(t *testing.T) {
+		config := &Config{
+			OIDCIssuerURL:       "https://example.com/dex",
+			OIDCClientID:        "", // Missing
+			OIDCInitTimeoutSecs: 10,
+		}
+
+		verifier, err := NewOIDCVerifier(config, slog.Default())
+		assert.Error(t, err)
+		assert.Nil(t, verifier)
+		assert.Contains(t, err.Error(), "client ID is required")
+	})
+}
+
+// TestStart_ContextCanceled tests that Start respects context cancellation
+func TestStart_ContextCanceled(t *testing.T) {
+	config := &Config{
+		OIDCIssuerURL:       "http://nonexistent-issuer-that-does-not-exist.local",
+		OIDCClientID:        "test-client",
+		OIDCInitTimeoutSecs: 30,
+	}
+
+	verifier, err := NewOIDCVerifier(config, slog.Default())
+	require.NoError(t, err)
+	require.NotNil(t, verifier)
+
+	// Create a context that's already canceled
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	// Try to start with a canceled context
+	err = verifier.Start(ctx)
+
+	// Should return an error related to context cancellation
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to initialize OIDC provider")
+}

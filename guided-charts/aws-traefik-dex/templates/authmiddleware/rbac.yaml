@@ -31,4 +31,33 @@ subjects:
   - kind: ServiceAccount
     name: jupyter-k8s-authmiddleware
     namespace: {{ .Values.namespace }}
+---
+# Role for reading JWT signing secrets (multi-key rotation)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: authmiddleware-secret-reader
+  namespace: {{ .Values.namespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["{{ .Values.authmiddleware.secretName }}"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: authmiddleware-secret-reader
+  namespace: {{ .Values.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: authmiddleware-secret-reader
+subjects:
+  - kind: ServiceAccount
+    name: jupyter-k8s-authmiddleware
+    namespace: {{ .Values.namespace }}
 {{- end }}

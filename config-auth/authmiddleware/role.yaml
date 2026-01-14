@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: authmiddleware-secrets-reader
+  labels:
+    app: authmiddleware
+    component: auth
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["jupyter-k8s-authmiddleware-secrets"]
+  verbs: ["get"]

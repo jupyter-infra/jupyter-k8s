@@ -1,0 +1,128 @@
+# Adds namespace to all resources.
+namespace: jupyter-k8s-router
+
+# Value of this field is prepended to the
+# names of all resources
+namePrefix: jupyter-k8s-
+
+resources:
+- ../authmiddleware
+- ../rotator
+
+# Configuration values - modify these to customize the deployment
+configMapGenerator:
+- name: auth-config
+  literals:
+  # Rotation schedule (cron format)
+  - ROTATION_SCHEDULE=*/5 * * * *
+  # Number of JWT signing keys to retain
+  - NUMBER_OF_KEYS=3
+  # JWT token expiration
+  - JWT_EXPIRATION=1h
+  # Delay before using newly rotated keys
+  - JWT_NEW_KEY_USE_DELAY=5s
+  # JWT refresh window (start refreshing this long before expiration)
+  - JWT_REFRESH_WINDOW=10m
+  # JWT refresh horizon (must be >= JWT_EXPIRATION)
+  - JWT_REFRESH_HORIZON=12h
+  # Container images
+  - AUTHMIDDLEWARE_IMAGE=docker.io/library/authmiddleware:local
+  - ROTATOR_IMAGE=docker.io/library/rotator:local
+
+# Replace hardcoded values with configMap values
+replacements:
+# Rotator schedule
+- source:
+    kind: ConfigMap
+    name: auth-config
+    fieldPath: data.ROTATION_SCHEDULE
+  targets:
+  - select:
+      kind: CronJob
+      name: rotator
+    fieldPaths:
+    - spec.schedule
+
+# Rotator NUMBER_OF_KEYS
+- source:
+    kind: ConfigMap
+    name: auth-config
+    fieldPath: data.NUMBER_OF_KEYS
+  targets:
+  - select:
+      kind: CronJob
+      name: rotator
+    fieldPaths:
+    - spec.jobTemplate.spec.template.spec.containers.[name=rotator].env.[name=NUMBER_OF_KEYS].value
+
+# JWT_EXPIRATION
+- source:
+    kind: ConfigMap
+    name: auth-config
+    fieldPath: data.JWT_EXPIRATION
+  targets:
+  - select:
+      kind: Deployment
+      name: authmiddleware
+    fieldPaths:
+    - spec.template.spec.containers.[name=authmiddleware].env.[name=JWT_EXPIRATION].value
+
+# JWT_NEW_KEY_USE_DELAY
+- source:
+    kind: ConfigMap
+    name: auth-config
+    fieldPath: data.JWT_NEW_KEY_USE_DELAY
+  targets:
+  - select:
+      kind: Deployment
+      name: authmiddleware
+    fieldPaths:
+    - spec.template.spec.containers.[name=authmiddleware].env.[name=JWT_NEW_KEY_USE_DELAY].value
+
+# JWT_REFRESH_WINDOW
+- source:
+    kind: ConfigMap
+    name: auth-config
+    fieldPath: data.JWT_REFRESH_WINDOW
+  targets:
+  - select:
+      kind: Deployment
+      name: authmiddleware
+    fieldPaths:
+    - spec.template.spec.containers.[name=authmiddleware].env.[name=JWT_REFRESH_WINDOW].value
+
+# JWT_REFRESH_HORIZON
+- source:
+    kind: ConfigMap
+    name: auth-config
+    fieldPath: data.JWT_REFRESH_HORIZON
+  targets:
+  - select:
+      kind: Deployment
+      name: authmiddleware
+    fieldPaths:
+    - spec.template.spec.containers.[name=authmiddleware].env.[name=JWT_REFRESH_HORIZON].value
+
+# Authmiddleware image
+- source:
+    kind: ConfigMap
+    name: auth-config
+    fieldPath: data.AUTHMIDDLEWARE_IMAGE
+  targets:
+  - select:
+      kind: Deployment
+      name: authmiddleware
+    fieldPaths:
+    - spec.template.spec.containers.[name=authmiddleware].image
+
+# Rotator image
+- source:
+    kind: ConfigMap
+    name: auth-config
+    fieldPath: data.ROTATOR_IMAGE
+  targets:
+  - select:
+      kind: CronJob
+      name: rotator
+    fieldPaths:
+    - spec.jobTemplate.spec.template.spec.containers.[name=rotator].image

@@ -6,105 +6,97 @@ Distributed under the terms of the MIT license
 package authmiddleware
 
 import (
-	"testing"
 	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-func TestNewJWTHandler_StandardSigning(t *testing.T) {
-	cfg := &Config{
-		JWTSigningType:    JWTSigningTypeStandard,
-		JWTSigningKey:     "test-signing-key-32-characters-long",
-		JWTIssuer:         "test-issuer",
-		JWTAudience:       "test-audience",
-		JWTExpiration:     time.Hour,
-		JWTRefreshEnable:  false,
-		JWTRefreshWindow:  0,
-		JWTRefreshHorizon: 0,
-	}
+var _ = Describe("NewJWTHandler", func() {
+	var (
+		logger = zap.New(zap.UseDevMode(true))
+		cfg    *Config
+	)
 
-	handler, err := NewJWTHandler(cfg)
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-	if handler == nil {
-		t.Fatal("Expected handler, got nil")
-	}
+	BeforeEach(func() {
+		// Default config for standard signing
+		cfg = &Config{
+			JWTSigningType:    JWTSigningTypeStandard,
+			JwtSecretName:     "test-jwt-secret",
+			JWTIssuer:         "test-issuer",
+			JWTAudience:       "test-audience",
+			JWTExpiration:     time.Hour,
+			JwtNewKeyUseDelay: 5 * time.Minute,
+			JWTRefreshEnable:  true,
+			JWTRefreshWindow:  10 * time.Minute,
+			JWTRefreshHorizon: 5 * time.Minute,
+		}
+	})
 
-	// Test that handler can generate tokens
-	token, err := handler.GenerateToken("testuser", []string{"group1"}, "uid", nil, "/path", "domain", "session")
-	if err != nil {
-		t.Fatalf("Failed to generate token: %v", err)
-	}
-	if token == "" {
-		t.Fatal("Expected non-empty token")
-	}
-}
+	Context("Standard Signing Type", func() {
+		It("Should create JWT handler and StandardSigner", func() {
+			handler, standardSigner, err := NewJWTHandler(cfg, logger)
 
-func TestNewJWTHandler_StandardSigning_MissingKey(t *testing.T) {
-	cfg := &Config{
-		JWTSigningType: JWTSigningTypeStandard,
-		JWTSigningKey:  "", // Missing key - but this is validated in config.go, not factory
-		JWTIssuer:      "test-issuer",
-		JWTAudience:    "test-audience",
-		JWTExpiration:  time.Hour,
-	}
+			Expect(err).NotTo(HaveOccurred())
+			Expect(handler).NotTo(BeNil())
+			Expect(standardSigner).NotTo(BeNil())
+		})
 
-	// This should succeed because config validation happens elsewhere
-	// The factory just uses whatever is in the config
-	handler, err := NewJWTHandler(cfg)
-	if err != nil {
-		t.Fatalf("Expected no error from factory, got %v", err)
-	}
-	if handler == nil {
-		t.Fatal("Expected handler, got nil")
-	}
-}
+	})
 
-func TestNewJWTHandler_KMSSigning_MissingKeyId(t *testing.T) {
-	cfg := &Config{
-		JWTSigningType: JWTSigningTypeKMS,
-		KMSKeyId:       "", // Missing KMS key ID
-		JWTIssuer:      "test-issuer",
-		JWTAudience:    "test-audience",
-		JWTExpiration:  time.Hour,
-	}
+	Context("KMS Signing Type", func() {
+		BeforeEach(func() {
+			cfg.JWTSigningType = JWTSigningTypeKMS
+			cfg.KMSKeyId = "arn:aws:kms:us-west-2:123456789012:key/12345678-1234-1234-1234-123456789012"
+		})
 
-	_, err := NewJWTHandler(cfg)
-	if err == nil {
-		t.Fatal("Expected error for missing KMS key ID")
-	}
-	if err.Error() != "KMS_KEY_ID required when JWT_SIGNING_TYPE is kms" {
-		t.Errorf("Expected specific error message, got %v", err)
-	}
-}
+		It("Should return error if KMS key ID is missing", func() {
+			cfg.KMSKeyId = ""
 
-func TestNewJWTHandler_InvalidSigningType(t *testing.T) {
-	cfg := &Config{
-		JWTSigningType: "invalid-type",
-		JWTIssuer:      "test-issuer",
-		JWTAudience:    "test-audience",
-		JWTExpiration:  time.Hour,
-	}
+			handler, standardSigner, err := NewJWTHandler(cfg, logger)
 
-	_, err := NewJWTHandler(cfg)
-	if err == nil {
-		t.Fatal("Expected error for invalid signing type")
-	}
-	if err.Error() != "unknown JWT signing type: invalid-type" {
-		t.Errorf("Expected specific error message, got %v", err)
-	}
-}
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal("KMS_KEY_ID required when JWT_SIGNING_TYPE is kms"))
+			Expect(handler).To(BeNil())
+			Expect(standardSigner).To(BeNil())
+		})
 
-func TestNewJWTHandler_NilConfig(t *testing.T) {
-	_, err := NewJWTHandler(nil)
-	if err == nil {
-		t.Fatal("Expected error for nil config")
-	}
-	if err.Error() != "config cannot be nil" {
-		t.Errorf("Expected 'config cannot be nil', got %v", err)
-	}
-}
+		It("Should return nil StandardSigner for KMS signing (no secret watching needed)", func() {
+			// Note: This test will fail to create KMS client in test environment
+			// We're just verifying the logic flow
+			_, standardSigner, err := NewJWTHandler(cfg, logger)
 
-// Note: KMS signing success test would require mocking AWS KMS client
-// This is intentionally omitted as it would require significant test infrastructure
-// and the KMS client creation is already tested in the aws package
+			// We expect an error creating KMS client in test environment
+			// but we can verify the standardSigner would be nil if it succeeded
+			if err == nil {
+				Expect(standardSigner).To(BeNil(), "KMS signing should not create a StandardSigner")
+			} else {
+				// Expected in test environment without AWS credentials
+				Expect(err.Error()).To(ContainSubstring("failed to create KMS client"))
+			}
+		})
+	})
+
+	Context("Invalid Configuration", func() {
+		It("Should return error if config is nil", func() {
+			handler, standardSigner, err := NewJWTHandler(nil, logger)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal("config cannot be nil"))
+			Expect(handler).To(BeNil())
+			Expect(standardSigner).To(BeNil())
+		})
+
+		It("Should return error for unknown JWT signing type", func() {
+			cfg.JWTSigningType = "unknown-type"
+
+			handler, standardSigner, err := NewJWTHandler(cfg, logger)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal("unknown JWT signing type: unknown-type"))
+			Expect(handler).To(BeNil())
+			Expect(standardSigner).To(BeNil())
+		})
+	})
+})

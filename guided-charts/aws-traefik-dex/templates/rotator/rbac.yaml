@@ -1,0 +1,37 @@
+{{- if and .Values.authmiddleware.enabled .Values.rotator.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jwt-rotator
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: jwt-rotator
+    component: security
+---
+# Role for managing JWT signing secrets (key rotation)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jwt-rotator-role
+  namespace: {{ .Values.namespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["{{ .Values.authmiddleware.secretName }}"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jwt-rotator-rolebinding
+  namespace: {{ .Values.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: jwt-rotator-role
+subjects:
+  - kind: ServiceAccount
+    name: jwt-rotator
+    namespace: {{ .Values.namespace }}
+{{- end }}

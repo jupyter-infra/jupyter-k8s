@@ -64,17 +64,16 @@ spec:
         env:
           - name: PORT
             value: "8080"
+          - name: NAMESPACE
+            value: "{{ .Values.namespace }}"
           - name: READ_TIMEOUT
             value: "{{ .Values.authmiddleware.readTimeout }}"
           - name: WRITE_TIMEOUT
             value: "{{ .Values.authmiddleware.writeTimeout }}"
           - name: SHUTDOWN_TIMEOUT
             value: "{{ .Values.authmiddleware.shutdownTimeout }}"
-          - name: JWT_SIGNING_KEY
-            valueFrom:
-              secretKeyRef:
-                name: authmiddleware-secrets
-                key: jwt-signing-key
+          - name: JWT_SECRET_NAME
+            value: "{{ .Values.authmiddleware.secretName }}"
           - name: JWT_ISSUER
             value: "{{ .Values.authmiddleware.jwtIssuer }}"
           - name: JWT_AUDIENCE
@@ -87,6 +86,8 @@ spec:
             value: "{{ .Values.authmiddleware.jwtRefreshWindow }}"
           - name: JWT_REFRESH_HORIZON
             value: "{{ .Values.authmiddleware.jwtRefreshHorizon }}"
+          - name: JWT_NEW_KEY_USE_DELAY
+            value: "{{ .Values.authmiddleware.jwtNewKeyUseDelay }}"
           - name: COOKIE_NAME
             value: "{{ .Values.authmiddleware.cookieName }}"
           - name: COOKIE_SECURE
