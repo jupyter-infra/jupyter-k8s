@@ -184,3 +184,15 @@ func UpdateWorkspaceDesiredState(workspaceName, namespace, desiredState string) 
 	_, err := utils.Run(cmd)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Failed to update workspace desiredStatus")
 }
+
+// deleteWorkspaceAsUser deletes a workspace with kubectl impersonation
+func deleteWorkspaceAsUser(name, user string, groups []string) error {
+	ginkgo.GinkgoHelper()
+	args := []string{"delete", "workspace", name, "-n", "default", "--as=" + user}
+	for _, group := range groups {
+		args = append(args, "--as-group="+group)
+	}
+	cmd := exec.Command("kubectl", args...)
+	_, err := utils.Run(cmd)
+	return err
+}

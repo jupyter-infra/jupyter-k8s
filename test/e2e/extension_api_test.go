@@ -58,7 +58,7 @@ var _ = Describe("Extension API", Ordered, func() {
 		It("should deny unauthorized user from creating ConnectionAccessReview", func() {
 			By("attempting to create ConnectionAccessReview as unauthorized user via kubectl impersonation")
 			reviewPath := getFixturePath("access-review-basic")
-			err := createConnectionAccessReviewAsUser(reviewPath, "no-connection-access-review-user", []string{})
+			err := createObjectAsUser(reviewPath, "no-connection-access-review-user", []string{})
 			Expect(err).To(HaveOccurred(), "Unauthorized user should NOT be able to create ConnectionAccessReview")
 			Expect(err.Error()).To(ContainSubstring("forbidden"), "Error should indicate RBAC denial")
 		})
