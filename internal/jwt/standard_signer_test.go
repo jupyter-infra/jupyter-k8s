@@ -405,12 +405,12 @@ func TestStandardSigner_HS384Algorithm(t *testing.T) {
 	}
 }
 
-func TestStandardSigner_GetLatestKidWithCoolOff(t *testing.T) {
-	t.Run("no keys beyond cooloff", func(t *testing.T) {
+func TestStandardSigner_CoolOffKeySelection(t *testing.T) {
+	t.Run("no keys beyond cooloff returns error", func(t *testing.T) {
 		signingKeys := map[string][]byte{
 			"1000": []byte("key1-32-characters-long-enough"),
 		}
-		signer := NewStandardSigner("test-issuer", "test-audience", time.Hour, 0)
+		signer := NewStandardSigner("test-issuer", "test-audience", time.Hour, 5*time.Second)
 		_ = signer.UpdateKeys(signingKeys, "1000")
 
 		// Manually set keyAddedTimes to recent times (within cooloff)
@@ -419,21 +419,25 @@ func TestStandardSigner_GetLatestKidWithCoolOff(t *testing.T) {
 			"1000": time.Now().Add(-1 * time.Second),
 			"2000": time.Now().Add(-500 * time.Millisecond),
 		}
-		signer.newKeyUseDelay = 5 * time.Second
 		signer.mu.Unlock()
 
-		kid := signer.GetLatestKidWithCoolOff()
-		if kid != "" {
-			t.Errorf("Expected empty string when all keys within cooloff, got %s", kid)
+		// Should fail to generate token since all keys are within cooloff
+		_, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+		if err == nil {
+			t.Error("Expected error when all keys within cooloff, got nil")
+		}
+		if !strings.Contains(err.Error(), "no signing key available") {
+			t.Errorf("Expected 'no signing key available' error, got: %v", err)
 		}
 	})
 
-	t.Run("one key beyond cooloff", func(t *testing.T) {
+	t.Run("one key beyond cooloff is used", func(t *testing.T) {
 		signingKeys := map[string][]byte{
 			"1000": []byte("key1-32-characters-long-enough"),
+			"2000": []byte("key2-32-characters-long-enough"),
 		}
 		signer := NewStandardSigner("test-issuer", "test-audience", time.Hour, 2*time.Second)
-		_ = signer.UpdateKeys(signingKeys, "1000")
+		_ = signer.UpdateKeys(signingKeys, "2000")
 
 		// Manually set keyAddedTimes
 		signer.mu.Lock()
@@ -443,18 +447,26 @@ func TestStandardSigner_GetLatestKidWithCoolOff(t *testing.T) {
 		}
 		signer.mu.Unlock()
 
-		kid := signer.GetLatestKidWithCoolOff()
-		if kid != "1000" {
-			t.Errorf("Expected kid '1000', got %s", kid)
+		token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+		if err != nil {
+			t.Fatalf("Expected token generation to succeed, got error: %v", err)
+		}
+
+		// Verify token uses kid "1000"
+		parsedToken, _, _ := jwt5.NewParser().ParseUnverified(token, &Claims{})
+		if kid, ok := parsedToken.Header["kid"].(string); !ok || kid != "1000" {
+			t.Errorf("Expected token to use kid '1000', got %v", parsedToken.Header["kid"])
 		}
 	})
 
 	t.Run("multiple keys beyond cooloff returns latest", func(t *testing.T) {
 		signingKeys := map[string][]byte{
 			"1000": []byte("key1-32-characters-long-enough"),
+			"2000": []byte("key2-32-characters-long-enough"),
+			"3000": []byte("key3-32-characters-long-enough"),
 		}
 		signer := NewStandardSigner("test-issuer", "test-audience", time.Hour, 2*time.Second)
-		_ = signer.UpdateKeys(signingKeys, "1000")
+		_ = signer.UpdateKeys(signingKeys, "3000")
 
 		// Manually set keyAddedTimes - all beyond cooloff
 		signer.mu.Lock()
@@ -465,18 +477,26 @@ func TestStandardSigner_GetLatestKidWithCoolOff(t *testing.T) {
 		}
 		signer.mu.Unlock()
 
-		kid := signer.GetLatestKidWithCoolOff()
-		if kid != "3000" {
-			t.Errorf("Expected latest kid '3000', got %s", kid)
+		token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+		if err != nil {
+			t.Fatalf("Expected token generation to succeed, got error: %v", err)
+		}
+
+		// Should use latest kid "3000"
+		parsedToken, _, _ := jwt5.NewParser().ParseUnverified(token, &Claims{})
+		if kid, ok := parsedToken.Header["kid"].(string); !ok || kid != "3000" {
+			t.Errorf("Expected token to use latest kid '3000', got %v", parsedToken.Header["kid"])
 		}
 	})
 
-	t.Run("zero cooloff period makes all keys usable", func(t *testing.T) {
+	t.Run("zero cooloff period makes all keys immediately usable", func(t *testing.T) {
 		signingKeys := map[string][]byte{
 			"1000": []byte("key1-32-characters-long-enough"),
+			"2000": []byte("key2-32-characters-long-enough"),
+			"3000": []byte("key3-32-characters-long-enough"),
 		}
 		signer := NewStandardSigner("test-issuer", "test-audience", time.Hour, 0)
-		_ = signer.UpdateKeys(signingKeys, "1000")
+		_ = signer.UpdateKeys(signingKeys, "3000")
 
 		// Manually set keyAddedTimes to very recent
 		signer.mu.Lock()
@@ -487,18 +507,26 @@ func TestStandardSigner_GetLatestKidWithCoolOff(t *testing.T) {
 		}
 		signer.mu.Unlock()
 
-		kid := signer.GetLatestKidWithCoolOff()
-		if kid != "3000" {
-			t.Errorf("Expected latest kid '3000' with zero cooloff, got %s", kid)
+		token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+		if err != nil {
+			t.Fatalf("Expected token generation to succeed with zero cooloff, got error: %v", err)
+		}
+
+		// Should use latest kid "3000" even though it's very recent
+		parsedToken, _, _ := jwt5.NewParser().ParseUnverified(token, &Claims{})
+		if kid, ok := parsedToken.Header["kid"].(string); !ok || kid != "3000" {
+			t.Errorf("Expected token to use latest kid '3000' with zero cooloff, got %v", parsedToken.Header["kid"])
 		}
 	})
 
 	t.Run("lexicographic ordering selects latest", func(t *testing.T) {
 		signingKeys := map[string][]byte{
 			"1000": []byte("key1-32-characters-long-enough"),
+			"1500": []byte("key2-32-characters-long-enough"),
+			"2000": []byte("key3-32-characters-long-enough"),
 		}
 		signer := NewStandardSigner("test-issuer", "test-audience", time.Hour, 1*time.Second)
-		_ = signer.UpdateKeys(signingKeys, "1000")
+		_ = signer.UpdateKeys(signingKeys, "2000")
 
 		// Set keys with non-sequential timestamps but all beyond cooloff
 		signer.mu.Lock()
@@ -509,10 +537,46 @@ func TestStandardSigner_GetLatestKidWithCoolOff(t *testing.T) {
 		}
 		signer.mu.Unlock()
 
-		kid := signer.GetLatestKidWithCoolOff()
+		token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+		if err != nil {
+			t.Fatalf("Expected token generation to succeed, got error: %v", err)
+		}
+
 		// "2000" > "1500" > "1000" lexicographically
-		if kid != "2000" {
-			t.Errorf("Expected lexicographically latest kid '2000', got %s", kid)
+		parsedToken, _, _ := jwt5.NewParser().ParseUnverified(token, &Claims{})
+		if kid, ok := parsedToken.Header["kid"].(string); !ok || kid != "2000" {
+			t.Errorf("Expected lexicographically latest kid '2000', got %v", parsedToken.Header["kid"])
+		}
+	})
+
+	t.Run("returns both kid and signing key correctly", func(t *testing.T) {
+		keyData := []byte("test-signing-key-32-characters-l")
+		signingKeys := map[string][]byte{
+			"1000": keyData,
+		}
+		signer := NewStandardSigner("test-issuer", "test-audience", time.Hour, 1*time.Second)
+		_ = signer.UpdateKeys(signingKeys, "1000")
+
+		// Set key beyond cooloff
+		signer.mu.Lock()
+		signer.keyAddedTimes = map[string]time.Time{
+			"1000": time.Now().Add(-10 * time.Second),
+		}
+		signer.mu.Unlock()
+
+		// Generate token and validate it can be verified (proving the key was correctly retrieved)
+		token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+		if err != nil {
+			t.Fatalf("Expected token generation to succeed, got error: %v", err)
+		}
+
+		// If ValidateToken succeeds, it means the kid and key were both correct
+		claims, err := signer.ValidateToken(token)
+		if err != nil {
+			t.Errorf("Token validation failed, indicating kid/key mismatch: %v", err)
+		}
+		if claims.User != testUser {
+			t.Errorf("Expected user %s, got %s", testUser, claims.User)
 		}
 	})
 }

@@ -126,7 +126,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.logger.Info("Shutting down HTTP server")
 
 	// Create a deadline to wait for
-	shutdownCtx, cancel := context.WithTimeout(ctx, s.config.ShutdownTimeout)
+	// Use Background context instead of parent ctx to ensure timeout works even if parent is cancelled
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), s.config.ShutdownTimeout)
 	defer cancel()
 
 	// Gracefully shut down the server

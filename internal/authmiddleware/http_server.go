@@ -8,11 +8,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
-	"github.com/jupyter-infra/jupyter-k8s/internal/rotator"
 )
 
 // HTTPServerRunnable wraps the Server to make it compatible with the
 // controller-runtime Manager's Runnable interface.
+//
+// This adapter is necessary because:
+// 1. controller-runtime Manager expects Runnables with Start(ctx) that respect context cancellation
+// 2. Server.Start() blocks on http.ListenAndServe() and doesn't support graceful shutdown natively
+// 3. We need to load initial JWT signing keys before starting the HTTP server
+//
+// The adapter handles:
+// - Initial secret loading (for StandardSigner only, deferred until Start to avoid network calls during construction)
+// - Starting the HTTP server in a goroutine
+// - Graceful shutdown when context is cancelled
+// - Propagating server errors back to the manager
 type HTTPServerRunnable struct {
 	server         *Server
 	logger         logr.Logger
@@ -59,7 +69,6 @@ func (h *HTTPServerRunnable) Start(ctx context.Context) error {
 			h.runtimeClient,
 			h.secretName,
 			h.namespace,
-			rotator.ParseSigningKeys,
 		); err != nil {
 			return fmt.Errorf("failed to retrieve initial secret: %w", err)
 		}

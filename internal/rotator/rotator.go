@@ -9,53 +9,25 @@ package rotator
 import (
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"fmt"
+	"log"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	// KeyPrefix is the prefix for JWT signing keys in the secret
-	KeyPrefix = "jwt-signing-key-"
-	// KeySizeBytes is the size of generated signing keys in bytes (384 bits)
-	// Must be at least 48 bytes for HS384 per RFC 7518 Section 3.2
-	KeySizeBytes = 48
-)
-
 // GenerateKey generates a cryptographically random signing key
 func GenerateKey() ([]byte, error) {
-	key := make([]byte, KeySizeBytes)
+	key := make([]byte, jwt.KeySizeBytes)
 	if _, err := rand.Read(key); err != nil {
 		return nil, fmt.Errorf("failed to generate random key: %w", err)
 	}
 	return key, nil
-}
-
-// BuildKeyName creates a key name with the given timestamp
-func BuildKeyName(timestamp int64) string {
-	return fmt.Sprintf("%s%d", KeyPrefix, timestamp)
-}
-
-// ParseKeyTimestamp extracts the timestamp from a key name
-func ParseKeyTimestamp(keyName string) (int64, error) {
-	if !strings.HasPrefix(keyName, KeyPrefix) {
-		return 0, fmt.Errorf("key name %s does not have prefix %s", keyName, KeyPrefix)
-	}
-
-	timestampStr := strings.TrimPrefix(keyName, KeyPrefix)
-	timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse timestamp from %s: %w", keyName, err)
-	}
-
-	return timestamp, nil
 }
 
 // keyEntry represents a signing key with its timestamp
@@ -89,14 +61,14 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, secretName strin
 	// Parse existing keys
 	keys := make([]keyEntry, 0, len(secret.Data))
 	for name, value := range secret.Data {
-		if !strings.HasPrefix(name, KeyPrefix) {
+		if !strings.HasPrefix(name, jwt.KeyPrefix) {
 			continue
 		}
 
-		timestamp, err := ParseKeyTimestamp(name)
+		timestamp, err := jwt.ParseKeyTimestamp(name)
 		if err != nil {
 			// Log warning but continue - don't fail rotation due to malformed key
-			fmt.Printf("Warning: skipping malformed key %s: %v\n", name, err)
+			log.Printf("Warning: skipping malformed key %s: %v\n", name, err)
 			continue
 		}
 
@@ -119,7 +91,7 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, secretName strin
 	}
 
 	now := time.Now().UTC().Unix()
-	newKeyName := BuildKeyName(now)
+	newKeyName := jwt.BuildKeyName(now)
 
 	// Check if key with this timestamp already exists (clock skew or very fast rotation)
 	for _, k := range keys {
@@ -147,7 +119,7 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, secretName strin
 		for _, k := range keysToRemove {
 			delete(secret.Data, k.name)
 		}
-		fmt.Printf("Pruned %d old keys: %v\n", len(keysToRemove), getKeyNames(keysToRemove))
+		log.Printf("Pruned %d old keys: %v\n", len(keysToRemove), getKeyNames(keysToRemove))
 	}
 
 	// Update secret
@@ -157,7 +129,7 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, secretName strin
 	}
 
 	remainingKeys := len(secret.Data)
-	fmt.Printf("Successfully rotated keys in secret %s/%s: added key %s, %d keys remaining\n",
+	log.Printf("Successfully rotated keys in secret %s/%s: added key %s, %d keys remaining\n",
 		secret.Namespace, secretName, newKeyName, remainingKeys)
 
 	return nil
@@ -189,8 +161,8 @@ func ValidateSecret(ctx context.Context, k8sClient client.Client, secretName str
 
 	keyCount := 0
 	for name := range secret.Data {
-		if strings.HasPrefix(name, KeyPrefix) {
-			_, err := ParseKeyTimestamp(name)
+		if strings.HasPrefix(name, jwt.KeyPrefix) {
+			_, err := jwt.ParseKeyTimestamp(name)
 			if err != nil {
 				return fmt.Errorf("invalid key %s: %w", name, err)
 			}
@@ -215,18 +187,18 @@ func GetLatestKeyID(secret *corev1.Secret) (string, error) {
 	var latestKid string
 
 	for name := range secret.Data {
-		if !strings.HasPrefix(name, KeyPrefix) {
+		if !strings.HasPrefix(name, jwt.KeyPrefix) {
 			continue
 		}
 
-		timestamp, err := ParseKeyTimestamp(name)
+		timestamp, err := jwt.ParseKeyTimestamp(name)
 		if err != nil {
 			continue // Skip malformed keys
 		}
 
 		if timestamp > latestTimestamp {
 			latestTimestamp = timestamp
-			latestKid = strings.TrimPrefix(name, KeyPrefix)
+			latestKid = strings.TrimPrefix(name, jwt.KeyPrefix)
 		}
 	}
 
@@ -235,52 +207,4 @@ func GetLatestKeyID(secret *corev1.Secret) (string, error) {
 	}
 
 	return latestKid, nil
-}
-
-// ParseSigningKeys extracts all JWT signing keys from a secret
-func ParseSigningKeys(secret *corev1.Secret) (map[string][]byte, string, error) {
-	if secret.Data == nil {
-		return nil, "", fmt.Errorf("secret has no data")
-	}
-
-	signingKeys := make(map[string][]byte)
-	var latestTimestamp int64
-	var latestKid string
-
-	for name, value := range secret.Data {
-		if !strings.HasPrefix(name, KeyPrefix) {
-			continue
-		}
-
-		timestamp, err := ParseKeyTimestamp(name)
-		if err != nil {
-			return nil, "", fmt.Errorf("invalid key format %s: %w", name, err)
-		}
-
-		kid := strings.TrimPrefix(name, KeyPrefix)
-		signingKeys[kid] = value
-
-		if timestamp > latestTimestamp {
-			latestTimestamp = timestamp
-			latestKid = kid
-		}
-	}
-
-	if len(signingKeys) == 0 {
-		return nil, "", fmt.Errorf("no signing keys found in secret")
-	}
-
-	return signingKeys, latestKid, nil
-}
-
-// FormatKeyForDisplay formats a key value for safe display (base64 encoded, truncated)
-func FormatKeyForDisplay(key []byte) string {
-	if len(key) == 0 {
-		return "<empty>"
-	}
-	encoded := base64.StdEncoding.EncodeToString(key)
-	if len(encoded) > 16 {
-		return encoded[:16] + "..."
-	}
-	return encoded
 }

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,8 +37,8 @@ func TestGenerateKey(t *testing.T) {
 		t.Fatalf("GenerateKey failed: %v", err)
 	}
 
-	if len(key) != KeySizeBytes {
-		t.Errorf("Expected key size %d, got %d", KeySizeBytes, len(key))
+	if len(key) != jwt.KeySizeBytes {
+		t.Errorf("Expected key size %d, got %d", jwt.KeySizeBytes, len(key))
 	}
 
 	// Generate another key and verify it's different (extremely unlikely to collide)
@@ -48,73 +49,6 @@ func TestGenerateKey(t *testing.T) {
 
 	if string(key) == string(key2) {
 		t.Error("Two generated keys are identical (collision)")
-	}
-}
-
-func TestBuildKeyName(t *testing.T) {
-	timestamp := int64(1609459200) // 2021-01-01 00:00:00 UTC
-	expected := "jwt-signing-key-1609459200"
-	result := BuildKeyName(timestamp)
-
-	if result != expected {
-		t.Errorf("Expected %s, got %s", expected, result)
-	}
-}
-
-func TestParseKeyTimestamp(t *testing.T) {
-	tests := []struct {
-		name          string
-		keyName       string
-		expected      int64
-		expectError   bool
-		errorContains string
-	}{
-		{
-			name:        "valid key name",
-			keyName:     "jwt-signing-key-1609459200",
-			expected:    1609459200,
-			expectError: false,
-		},
-		{
-			name:          "missing prefix",
-			keyName:       "invalid-key-1609459200",
-			expectError:   true,
-			errorContains: "does not have prefix",
-		},
-		{
-			name:          "invalid timestamp",
-			keyName:       "jwt-signing-key-notanumber",
-			expectError:   true,
-			errorContains: "failed to parse timestamp",
-		},
-		{
-			name:          "empty timestamp",
-			keyName:       "jwt-signing-key-",
-			expectError:   true,
-			errorContains: "failed to parse timestamp",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := ParseKeyTimestamp(tt.keyName)
-
-			if tt.expectError {
-				if err == nil {
-					t.Fatal("Expected error but got none")
-				}
-				if tt.errorContains != "" && !contains(err.Error(), tt.errorContains) {
-					t.Errorf("Expected error containing '%s', got '%s'", tt.errorContains, err.Error())
-				}
-			} else {
-				if err != nil {
-					t.Fatalf("Unexpected error: %v", err)
-				}
-				if result != tt.expected {
-					t.Errorf("Expected %d, got %d", tt.expected, result)
-				}
-			}
-		})
 	}
 }
 
@@ -146,7 +80,7 @@ func TestRotateSecret_NewSecret(t *testing.T) {
 
 	keyCount := 0
 	for name := range updatedSecret.Data {
-		if hasPrefix(name, KeyPrefix) {
+		if hasPrefix(name, jwt.KeyPrefix) {
 			keyCount++
 		}
 	}
@@ -191,7 +125,7 @@ func TestRotateSecret_AddAndPruneKeys(t *testing.T) {
 
 	keys := []string{}
 	for name := range updatedSecret.Data {
-		if hasPrefix(name, KeyPrefix) {
+		if hasPrefix(name, jwt.KeyPrefix) {
 			keys = append(keys, name)
 		}
 	}
@@ -272,8 +206,8 @@ func TestRotateSecret_MalformedKeysSkipped(t *testing.T) {
 	// Should have 3 valid keys (2 original + 1 new)
 	validKeyCount := 0
 	for name := range updatedSecret.Data {
-		if hasPrefix(name, KeyPrefix) {
-			_, err := ParseKeyTimestamp(name)
+		if hasPrefix(name, jwt.KeyPrefix) {
+			_, err := jwt.ParseKeyTimestamp(name)
 			if err == nil {
 				validKeyCount++
 			}
@@ -444,144 +378,6 @@ func TestGetLatestKeyID(t *testing.T) {
 				if kid != tt.expectedKid {
 					t.Errorf("Expected kid '%s', got '%s'", tt.expectedKid, kid)
 				}
-			}
-		})
-	}
-}
-
-func TestParseSigningKeys(t *testing.T) {
-	tests := []struct {
-		name          string
-		secretData    map[string][]byte
-		expectedKeys  int
-		expectedKid   string
-		expectError   bool
-		errorContains string
-	}{
-		{
-			name: "single key",
-			secretData: map[string][]byte{
-				"jwt-signing-key-1000": []byte("key1"),
-			},
-			expectedKeys: 1,
-			expectedKid:  "1000",
-			expectError:  false,
-		},
-		{
-			name: "multiple keys",
-			secretData: map[string][]byte{
-				"jwt-signing-key-1000": []byte("key1"),
-				"jwt-signing-key-2000": []byte("key2"),
-				"jwt-signing-key-3000": []byte("key3"),
-			},
-			expectedKeys: 3,
-			expectedKid:  "3000",
-			expectError:  false,
-		},
-		{
-			name: "mixed keys and other data",
-			secretData: map[string][]byte{
-				"jwt-signing-key-1000": []byte("key1"),
-				"jwt-signing-key-2000": []byte("key2"),
-				"other-data":           []byte("ignored"),
-			},
-			expectedKeys: 2,
-			expectedKid:  "2000",
-			expectError:  false,
-		},
-		{
-			name:          "no data",
-			secretData:    nil,
-			expectError:   true,
-			errorContains: "secret has no data",
-		},
-		{
-			name: "no signing keys",
-			secretData: map[string][]byte{
-				"other-key": []byte("notakey"),
-			},
-			expectError:   true,
-			errorContains: "no signing keys found",
-		},
-		{
-			name: "invalid key format",
-			secretData: map[string][]byte{
-				"jwt-signing-key-invalid": []byte("badkey"),
-			},
-			expectError:   true,
-			errorContains: "invalid key format",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      testSecretName,
-					Namespace: testNamespace,
-				},
-				Data: tt.secretData,
-			}
-
-			keys, kid, err := ParseSigningKeys(secret)
-
-			if tt.expectError {
-				if err == nil {
-					t.Fatal("Expected error but got none")
-				}
-				if tt.errorContains != "" && !contains(err.Error(), tt.errorContains) {
-					t.Errorf("Expected error containing '%s', got '%s'", tt.errorContains, err.Error())
-				}
-			} else {
-				if err != nil {
-					t.Fatalf("Unexpected error: %v", err)
-				}
-				if len(keys) != tt.expectedKeys {
-					t.Errorf("Expected %d keys, got %d", tt.expectedKeys, len(keys))
-				}
-				if kid != tt.expectedKid {
-					t.Errorf("Expected kid '%s', got '%s'", tt.expectedKid, kid)
-				}
-
-				// Verify all keys are accessible by their kid
-				for expectedKid := range keys {
-					if _, ok := keys[expectedKid]; !ok {
-						t.Errorf("Expected key with kid '%s' not found", expectedKid)
-					}
-				}
-			}
-		})
-	}
-}
-
-func TestFormatKeyForDisplay(t *testing.T) {
-	tests := []struct {
-		name     string
-		key      []byte
-		expected string
-	}{
-		{
-			name:     "empty key",
-			key:      []byte{},
-			expected: "<empty>",
-		},
-		{
-			name:     "short key",
-			key:      []byte("short"),
-			expected: "c2hvcnQ=", // base64 of "short"
-		},
-		{
-			name:     "long key - truncated",
-			key:      []byte("this-is-a-very-long-key-that-should-be-truncated"),
-			expected: "dGhpcy1pcy1hLXZl...", // First 16 chars + "..."
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := FormatKeyForDisplay(tt.key)
-			if result != tt.expected {
-				t.Errorf("Expected '%s', got '%s'", tt.expected, result)
 			}
 		})
 	}

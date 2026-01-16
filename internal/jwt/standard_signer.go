@@ -45,9 +45,10 @@ func NewStandardSigner(issuer string, audience string, expiration time.Duration,
 	}
 }
 
-// GetLatestKidWithCoolOff returns the latest key ID that has passed the cooloff period
-// Returns empty string if no key is beyond the cooloff period
-func (s *StandardSigner) GetLatestKidWithCoolOff() string {
+// getLatestKidAndKeyWithCoolOff returns the latest key ID and signing key that have passed the cooloff period
+// Returns empty kid and nil key if no key is beyond the cooloff period
+// This combines kid lookup and key retrieval in a single lock to avoid double locking
+func (s *StandardSigner) getLatestKidAndKeyWithCoolOff() (string, []byte) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -64,7 +65,11 @@ func (s *StandardSigner) GetLatestKidWithCoolOff() string {
 		}
 	}
 
-	return usableKid
+	if usableKid == "" {
+		return "", nil
+	}
+
+	return usableKid, s.signingKeys[usableKid]
 }
 
 // GenerateToken creates a new JWT token for the given user and groups
@@ -78,17 +83,9 @@ func (s *StandardSigner) GenerateToken(
 	path string,
 	domain string,
 	tokenType string) (string, error) {
-	usableKid := s.GetLatestKidWithCoolOff()
-	if usableKid == "" {
+	usableKid, signingKey := s.getLatestKidAndKeyWithCoolOff()
+	if usableKid == "" || signingKey == nil {
 		return "", fmt.Errorf("no signing key available beyond cooloff period (%v)", s.newKeyUseDelay)
-	}
-
-	s.mu.RLock()
-	signingKey := s.signingKeys[usableKid]
-	s.mu.RUnlock()
-
-	if signingKey == nil {
-		return "", fmt.Errorf("signing key not found for kid: %s", usableKid)
 	}
 
 	now := time.Now().UTC()
@@ -216,14 +213,11 @@ func (s *StandardSigner) UpdateKeys(signingKeys map[string][]byte, latestKid str
 
 // RetrieveInitialSecret loads the initial JWT signing keys from the Kubernetes secret.
 // This is called when the HTTP server starts to ensure keys are loaded before accepting requests.
-// The parseFunc parameter is a function that parses signing keys from a secret - it's injected
-// to avoid circular dependencies with the rotator package.
 func (s *StandardSigner) RetrieveInitialSecret(
 	ctx context.Context,
 	runtimeClient client.Client,
 	secretName string,
 	namespace string,
-	parseFunc func(*corev1.Secret) (map[string][]byte, string, error),
 ) error {
 	// Get secret
 	secret := &corev1.Secret{}
@@ -236,7 +230,7 @@ func (s *StandardSigner) RetrieveInitialSecret(
 	}
 
 	// Parse signing keys from secret
-	signingKeys, latestKid, err := parseFunc(secret)
+	signingKeys, latestKid, err := ParseSigningKeysFromSecret(secret)
 	if err != nil {
 		return fmt.Errorf("failed to parse signing keys from secret: %w", err)
 	}

@@ -17,7 +17,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
-	"github.com/jupyter-infra/jupyter-k8s/internal/rotator"
 )
 
 // SetupAuthMiddlewareWithManager sets up the authentication middleware server
@@ -110,7 +109,7 @@ func registerSecretWatchHandlers(
 	// Helper function to update signer from secret
 	updateSignerFromSecret := func(secret *corev1.Secret) {
 		// Parse signing keys from secret
-		signingKeys, latestKid, err := rotator.ParseSigningKeys(secret)
+		signingKeys, latestKid, err := jwt.ParseSigningKeysFromSecret(secret)
 		if err != nil {
 			logger.Error(err, "Failed to parse signing keys")
 			return
