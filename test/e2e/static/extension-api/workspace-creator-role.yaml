@@ -1,0 +1,11 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: workspace-creator-role
+  namespace: default
+  labels:
+    jk8s/e2e: extension-api-test
+rules:
+- apiGroups: ["workspace.jupyter.org"]
+  resources: ["workspaces"]
+  verbs: ["create", "get", "list"]

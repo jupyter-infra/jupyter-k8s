@@ -1,0 +1,9 @@
+apiVersion: connection.workspace.jupyter.org/v1alpha1
+kind: ConnectionAccessReview
+metadata:
+  name: access-review-private-owner
+  namespace: default
+spec:
+  workspaceName: workspace-owner-only-access
+  user: owner-for-access-test-user
+  groups: []

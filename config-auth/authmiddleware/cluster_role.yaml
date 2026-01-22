@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: authmiddleware-workspace-access
+  labels:
+    app: authmiddleware
+    component: auth
+rules:
+  # Access to workspace resources for session creation
+  - apiGroups: ["connection.workspace.jupyter.org"]
+    resources: ["connectionaccessreviews"]
+    verbs: ["create"]

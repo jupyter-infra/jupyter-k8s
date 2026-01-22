@@ -6,11 +6,14 @@ Distributed under the terms of the MIT license
 package aws_traefik_dex_test
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/yaml"
 
 	"github.com/jupyter-infra/jupyter-k8s/test/helm"
 )
@@ -85,5 +88,44 @@ var _ = Describe("AWS Traefik Dex Resources", func() {
 		invalidRefs := helm.FindInvalidReferences(references, schema)
 
 		Expect(invalidRefs).To(BeEmpty(), "Invalid values references found: %v", invalidRefs)
+	})
+
+	It("should generate JWT signing key with 48 bytes (384 bits) for HS384", func() {
+		// Get project root directory
+		rootDir, err := filepath.Abs("../../..")
+		Expect(err).NotTo(HaveOccurred())
+
+		// Read the rendered secret
+		secretPath := filepath.Join(
+			rootDir, "dist", "test-output-guided", "jupyter-k8s-aws-traefik-dex",
+			"templates", "authmiddleware", "secrets.yaml")
+
+		secretBytes, err := os.ReadFile(secretPath)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Parse the secret
+		var secret corev1.Secret
+		err = yaml.Unmarshal(secretBytes, &secret)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Find the JWT signing key (should have format jwt-signing-key-<timestamp>)
+		var keyValue []byte
+		var keyName string
+		for name, value := range secret.Data {
+			if strings.HasPrefix(name, "jwt-signing-key-") {
+				keyValue = value
+				keyName = name
+				break
+			}
+		}
+
+		Expect(keyName).NotTo(BeEmpty(), "No JWT signing key found in secret")
+
+		// The value in the secret data field is base64-encoded in the YAML file,
+		// but the YAML parser (sigs.k8s.io/yaml) automatically decodes it when
+		// unmarshaling into a corev1.Secret. So keyValue is already the raw bytes.
+		// Verify the key is exactly 48 bytes (384 bits) as required by RFC 7518 for HS384
+		Expect(keyValue).To(HaveLen(48),
+			"JWT signing key %s should be 48 bytes for HS384, but got %d bytes", keyName, len(keyValue))
 	})
 })

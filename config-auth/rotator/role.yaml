@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: rotator-secrets-manager
+  labels:
+    app: jwt-rotator
+    component: security
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["jupyter-k8s-authmiddleware-secrets"]
+  verbs: ["get", "update", "patch"]

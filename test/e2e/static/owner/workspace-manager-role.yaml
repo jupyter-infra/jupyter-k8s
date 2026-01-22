@@ -1,0 +1,11 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: workspace-manager-role
+  namespace: default
+  labels:
+    jk8s/e2e: ownership-test
+rules:
+- apiGroups: ["workspace.jupyter.org"]
+  resources: ["workspaces"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

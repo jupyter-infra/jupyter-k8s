@@ -1,0 +1,58 @@
+{{- if and .Values.authmiddleware.enabled .Values.rotator.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: jwt-rotator
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: jwt-rotator
+    component: security
+spec:
+  # Schedule is auto-generated from rotationInterval using defaulter.rotationCronSchedule
+  schedule: {{ include "defaulter.rotationCronSchedule" . | quote | trim }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            app: jwt-rotator
+            component: security
+        spec:
+          serviceAccountName: jwt-rotator
+          restartPolicy: OnFailure
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65532
+            runAsNonRoot: true
+            fsGroup: 65532
+          containers:
+          - name: rotator
+            image: {{ .Values.rotator.repository }}/{{ .Values.rotator.imageName }}:{{ .Values.rotator.imageTag }}
+            imagePullPolicy: {{ .Values.rotator.imagePullPolicy }}
+            resources:
+              requests:
+                cpu: {{ .Values.rotator.resources.requests.cpu }}
+                memory: {{ .Values.rotator.resources.requests.memory }}
+              limits:
+                cpu: {{ .Values.rotator.resources.limits.cpu }}
+                memory: {{ .Values.rotator.resources.limits.memory }}
+            securityContext:
+              capabilities:
+                drop:
+                - ALL
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+            env:
+            - name: SECRET_NAME
+              value: "{{ .Values.authmiddleware.secretName }}"
+            - name: SECRET_NAMESPACE
+              value: "{{ .Values.namespace }}"
+            - name: NUMBER_OF_KEYS
+              value: "{{ .Values.rotator.numberOfKeys }}"
+            - name: DRY_RUN
+              value: "false"
+{{- end }}

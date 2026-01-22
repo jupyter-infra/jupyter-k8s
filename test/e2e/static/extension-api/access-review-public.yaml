@@ -1,0 +1,9 @@
+apiVersion: connection.workspace.jupyter.org/v1alpha1
+kind: ConnectionAccessReview
+metadata:
+  name: access-review-public
+  namespace: default
+spec:
+  workspaceName: workspace-public-access
+  user: owner-for-access-test-user
+  groups: []

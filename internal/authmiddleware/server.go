@@ -10,9 +10,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 	"k8s.io/client-go/kubernetes"
@@ -75,6 +72,7 @@ func NewServer(config *Config, jwtManager jwt.Handler, cookieManager CookieHandl
 }
 
 // Start initializes and starts the HTTP server
+// This method blocks until the server exits or encounters an error
 func (s *Server) Start() error {
 	// Initialize OIDC verifier if enabled
 	if s.config.EnableOAuth && s.oidcVerifier != nil {
@@ -109,42 +107,37 @@ func (s *Server) Start() error {
 		WriteTimeout: s.config.WriteTimeout,
 	}
 
-	// Channel for handling shutdown
-	idleConnsClosed := make(chan struct{})
-
-	// Setup graceful shutdown
-	go s.handleShutdown(idleConnsClosed)
-
-	// Start server
+	// Start server (blocks until error or shutdown)
 	s.logger.Info("Starting authentication middleware service", "port", s.config.Port)
 	if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
 		return fmt.Errorf("server error: %w", err)
 	}
 
-	<-idleConnsClosed
 	s.logger.Info("Server stopped")
 	return nil
 }
 
-// handleShutdown handles graceful server shutdown
-func (s *Server) handleShutdown(idleConnsClosed chan struct{}) {
-	sigint := make(chan os.Signal, 1)
-	signal.Notify(sigint, syscall.SIGINT, syscall.SIGTERM)
-	<-sigint
-
-	s.logger.Info("Received shutdown signal")
-
-	// Create a deadline to wait for
-	ctx, cancel := context.WithTimeout(context.Background(), s.config.ShutdownTimeout)
-	defer cancel()
-
-	// Doesn't block if no connections, but will otherwise wait
-	// until the timeout deadline
-	if err := s.httpServer.Shutdown(ctx); err != nil {
-		s.logger.Error("Server shutdown error", "error", err)
+// Shutdown gracefully shuts down the HTTP server
+func (s *Server) Shutdown(ctx context.Context) error {
+	if s.httpServer == nil {
+		return nil
 	}
 
-	close(idleConnsClosed)
+	s.logger.Info("Shutting down HTTP server")
+
+	// Create a deadline to wait for
+	// Use Background context instead of parent ctx to ensure timeout works even if parent is cancelled
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), s.config.ShutdownTimeout)
+	defer cancel()
+
+	// Gracefully shut down the server
+	if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
+		s.logger.Error("Server shutdown error", "error", err)
+		return err
+	}
+
+	s.logger.Info("HTTP server shutdown complete")
+	return nil
 }
 
 // Handler methods are implemented in separate files:

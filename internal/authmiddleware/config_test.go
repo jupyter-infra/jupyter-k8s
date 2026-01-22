@@ -15,16 +15,6 @@ import (
 
 // TestNewConfigDefault verifies that default values are used correctly if not passed
 func TestNewConfigDefault(t *testing.T) {
-	// Set required environment variables
-	if err := os.Setenv(EnvJwtSigningKey, "test-signing-key"); err != nil {
-		t.Fatalf("Failed to set environment variable %s: %v", EnvJwtSigningKey, err)
-	}
-	defer func() {
-		if err := os.Unsetenv(EnvJwtSigningKey); err != nil {
-			t.Logf("Failed to unset environment variable %s: %v", EnvJwtSigningKey, err)
-		}
-	}()
-
 	config, err := NewConfig()
 	if err != nil {
 		t.Fatalf("NewConfig() error = %v", err)
@@ -56,12 +46,15 @@ func checkServerDefaults(t *testing.T, config *Config) {
 	if len(config.TrustedProxies) != 2 || config.TrustedProxies[0] != "127.0.0.1" || config.TrustedProxies[1] != "::1" {
 		t.Errorf("Expected TrustedProxies to be [127.0.0.1 ::1], got %v", config.TrustedProxies)
 	}
+	if config.MetricsAddr != DefaultMetricsAddr {
+		t.Errorf("Expected MetricsAddr to be %s, got %s", DefaultMetricsAddr, config.MetricsAddr)
+	}
+	if config.ProbeAddr != DefaultProbeAddr {
+		t.Errorf("Expected ProbeAddr to be %s, got %s", DefaultProbeAddr, config.ProbeAddr)
+	}
 }
 
 func checkAuthDefaults(t *testing.T, config *Config) {
-	if config.JWTSigningKey != "test-signing-key" {
-		t.Errorf("Expected JWTSigningKey to be %s, got %s", "test-signing-key", config.JWTSigningKey)
-	}
 	if config.JWTIssuer != DefaultJwtIssuer {
 		t.Errorf("Expected JWTIssuer to be %s, got %s", DefaultJwtIssuer, config.JWTIssuer)
 	}
@@ -79,6 +72,12 @@ func checkAuthDefaults(t *testing.T, config *Config) {
 	}
 	if config.JWTRefreshWindow != DefaultJwtRefreshWindow {
 		t.Errorf("Expected JWTRefreshWindow to be %v, got %v", DefaultJwtRefreshWindow, config.JWTRefreshWindow)
+	}
+	if config.JwtSecretName != DefaultJwtSecretName {
+		t.Errorf("Expected JwtSecretName to be %s, got %s", DefaultJwtSecretName, config.JwtSecretName)
+	}
+	if config.JwtNewKeyUseDelay != DefaultJwtNewKeyUseDelay {
+		t.Errorf("Expected JwtNewKeyUseDelay to be %v, got %v", DefaultJwtNewKeyUseDelay, config.JwtNewKeyUseDelay)
 	}
 }
 
@@ -158,15 +157,19 @@ func TestNewConfigEnvOverrides(t *testing.T) {
 	setEnv(t, EnvWriteTimeout, "20s")
 	setEnv(t, EnvShutdownTimeout, "45s")
 	setEnv(t, EnvTrustedProxies, "192.168.1.1,10.0.0.1")
+	setEnv(t, EnvMetricsAddr, ":8888")
+	setEnv(t, EnvProbeAddr, ":8889")
+	setEnv(t, EnvNamespace, "custom-namespace")
 
 	// Auth configuration
-	setEnv(t, EnvJwtSigningKey, "custom-jwt-key")
 	setEnv(t, EnvJwtIssuer, "custom-issuer")
 	setEnv(t, EnvJwtAudience, "custom-audience")
 	setEnv(t, EnvJwtExpiration, "30m")
 	setEnv(t, EnvEnableJwtRefresh, "false")
 	setEnv(t, EnvJwtRefreshHorizon, "24h")
 	setEnv(t, EnvJwtRefreshWindow, "5m")
+	setEnv(t, EnvJwtSecretName, "custom-jwt-secret")
+	setEnv(t, EnvJwtNewKeyUseDelay, "10s")
 
 	// Cookie configuration
 	setEnv(t, EnvCookieName, "custom_auth")
@@ -192,8 +195,10 @@ func TestNewConfigEnvOverrides(t *testing.T) {
 	// Clean up environment variables after the test
 	vars := []string{
 		EnvPort, EnvReadTimeout, EnvWriteTimeout, EnvShutdownTimeout, EnvTrustedProxies,
-		EnvJwtSigningKey, EnvJwtIssuer, EnvJwtAudience, EnvJwtExpiration,
+		EnvMetricsAddr, EnvProbeAddr, EnvNamespace,
+		EnvJwtIssuer, EnvJwtAudience, EnvJwtExpiration,
 		EnvEnableJwtRefresh, EnvJwtRefreshHorizon, EnvJwtRefreshWindow,
+		EnvJwtSecretName, EnvJwtNewKeyUseDelay,
 		EnvCookieName, EnvCookieSecure, EnvCookieDomain, EnvCookiePath,
 		EnvCookieMaxAge, EnvCookieHttpOnly, EnvCookieSameSite,
 		EnvPathRegexPattern, EnvWorkspaceNamespacePathRegex, EnvWorkspaceNamePathRegex,
@@ -241,12 +246,18 @@ func checkServerConfig(t *testing.T, config *Config) {
 	if len(config.TrustedProxies) != 2 || config.TrustedProxies[0] != "192.168.1.1" || config.TrustedProxies[1] != "10.0.0.1" {
 		t.Errorf("Expected TrustedProxies to be [192.168.1.1 10.0.0.1], got %v", config.TrustedProxies)
 	}
+	if config.MetricsAddr != ":8888" {
+		t.Errorf("Expected MetricsAddr to be :8888, got %s", config.MetricsAddr)
+	}
+	if config.ProbeAddr != ":8889" {
+		t.Errorf("Expected ProbeAddr to be :8889, got %s", config.ProbeAddr)
+	}
+	if config.Namespace != "custom-namespace" {
+		t.Errorf("Expected Namespace to be custom-namespace, got %s", config.Namespace)
+	}
 }
 
 func checkAuthConfig(t *testing.T, config *Config) {
-	if config.JWTSigningKey != "custom-jwt-key" {
-		t.Errorf("Expected JWTSigningKey to be custom-jwt-key, got %s", config.JWTSigningKey)
-	}
 	if config.JWTIssuer != "custom-issuer" {
 		t.Errorf("Expected JWTIssuer to be custom-issuer, got %s", config.JWTIssuer)
 	}
@@ -264,6 +275,12 @@ func checkAuthConfig(t *testing.T, config *Config) {
 	}
 	if config.JWTRefreshWindow != 5*time.Minute {
 		t.Errorf("Expected JWTExpiration to be 5m, got %v", config.JWTRefreshWindow)
+	}
+	if config.JwtSecretName != "custom-jwt-secret" {
+		t.Errorf("Expected JwtSecretName to be custom-jwt-secret, got %s", config.JwtSecretName)
+	}
+	if config.JwtNewKeyUseDelay != 10*time.Second {
+		t.Errorf("Expected JwtNewKeyUseDelay to be 10s, got %v", config.JwtNewKeyUseDelay)
 	}
 }
 
@@ -367,16 +384,6 @@ func TestOIDCInitTimeoutConfig(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Set environment variable for JWT signing key (required)
-			if err := os.Setenv(EnvJwtSigningKey, "test-signing-key"); err != nil {
-				t.Fatalf("Failed to set environment variable %s: %v", EnvJwtSigningKey, err)
-			}
-			defer func() {
-				if err := os.Unsetenv(EnvJwtSigningKey); err != nil {
-					t.Logf("Failed to unset environment variable %s: %v", EnvJwtSigningKey, err)
-				}
-			}()
-
 			// Set test environment variable if value is provided
 			if tc.envValue != "" {
 				if err := os.Setenv(EnvOIDCInitTimeoutSecs, tc.envValue); err != nil {
@@ -495,6 +502,87 @@ func TestApplyOidcConfig(t *testing.T) {
 				if err := os.Unsetenv(EnvOidcGroupsPrefix); err != nil {
 					t.Logf("Failed to unset environment variable %s: %v", EnvOidcGroupsPrefix, err)
 				}
+			}
+		})
+	}
+}
+
+// TestJwtNewKeyUseDelayConfig tests that the JWT_NEW_KEY_USE_DELAY configuration
+// correctly handles various environment variable scenarios
+func TestJwtNewKeyUseDelayConfig(t *testing.T) {
+	testCases := []struct {
+		name          string
+		envValue      string
+		expectedValue time.Duration
+		expectError   bool
+	}{
+		{
+			name:          "Default value when env var not set",
+			envValue:      "",
+			expectedValue: DefaultJwtNewKeyUseDelay,
+			expectError:   false,
+		},
+		{
+			name:          "Valid duration in seconds",
+			envValue:      "30s",
+			expectedValue: 30 * time.Second,
+			expectError:   false,
+		},
+		{
+			name:          "Valid duration in minutes",
+			envValue:      "2m",
+			expectedValue: 2 * time.Minute,
+			expectError:   false,
+		},
+		{
+			name:          "Zero duration",
+			envValue:      "0s",
+			expectedValue: 0,
+			expectError:   false,
+		},
+		{
+			name:        "Invalid duration format",
+			envValue:    "invalid",
+			expectError: true,
+		},
+		{
+			name:        "Missing unit",
+			envValue:    "30",
+			expectError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Set test environment variable if value is provided
+			if tc.envValue != "" {
+				if err := os.Setenv(EnvJwtNewKeyUseDelay, tc.envValue); err != nil {
+					t.Fatalf("Failed to set environment variable %s: %v", EnvJwtNewKeyUseDelay, err)
+				}
+				defer func() {
+					if err := os.Unsetenv(EnvJwtNewKeyUseDelay); err != nil {
+						t.Logf("Failed to unset environment variable %s: %v", EnvJwtNewKeyUseDelay, err)
+					}
+				}()
+			}
+
+			// Create config
+			config, err := NewConfig()
+
+			if tc.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("NewConfig() error = %v", err)
+			}
+
+			// Check delay value
+			if config.JwtNewKeyUseDelay != tc.expectedValue {
+				t.Errorf("Expected JwtNewKeyUseDelay to be %v, got %v", tc.expectedValue, config.JwtNewKeyUseDelay)
 			}
 		})
 	}

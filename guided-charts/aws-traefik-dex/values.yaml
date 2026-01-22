@@ -154,14 +154,15 @@ authmiddleware:
       cpu: 100m
       memory: 64Mi
   # JWT configuration
-  # Required: must be provided as base64 encoded string (generate with: openssl rand -base64 32)
-  jwtSigningKey: ""
   jwtIssuer: "jupyter-k8s-auth"
   jwtAudience: "workspace-users"
   jwtExpiration: "1h"
   jwtRefreshEnable: "true"
   jwtRefreshWindow: "15m"
   jwtRefreshHorizon: "12h"
+  jwtNewKeyUseDelay: "5s"
+  # Secret configuration for multi-key JWT signing
+  secretName: "authmiddleware-secrets"
   # Cookie configuration
   cookieName: "workspace_auth"
   cookieSecure: "true"
@@ -182,3 +183,28 @@ authmiddleware:
   enableBearerAuth: false
   # Timeout in seconds for OIDC provider initialization
   oidcInitTimeoutSecs: 30
+
+# JWT Secret Rotator configuration
+rotator:
+  # Whether to enable automatic JWT secret rotation
+  enabled: true
+  # Rotator image settings
+  imagePullPolicy: Always
+  repository: docker.io
+  imageName: jupyter-k8s-rotator
+  imageTag: latest
+  # Rotation interval (how often to rotate keys)
+  # Must be parseable as a duration (e.g., "15m", "1h")
+  rotationInterval: "15m"
+  # Number of keys to keep (older keys are pruned after rotation)
+  # Must satisfy: numberOfKeys * rotationInterval >= jwtExpiration + buffer
+  # Recommended: 6 keys for 15m rotation with 1h expiration (90min retention)
+  numberOfKeys: 6
+  # Resource limits for the CronJob
+  resources:
+    limits:
+      cpu: 100m
+      memory: 64Mi
+    requests:
+      cpu: 50m
+      memory: 32Mi

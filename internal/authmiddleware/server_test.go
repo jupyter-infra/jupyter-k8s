@@ -12,9 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -39,7 +37,6 @@ func TestServerRegisterRoutes(t *testing.T) {
 		WriteTimeout:     5 * time.Second,
 		ShutdownTimeout:  5 * time.Second,
 		PathRegexPattern: DefaultPathRegexPattern,
-		JWTSigningKey:    "test-key",
 		JWTExpiration:    30 * time.Minute,
 		JWTRefreshWindow: 5 * time.Minute,
 	}
@@ -115,7 +112,6 @@ func TestServerStartsAndBindsToTheCorrectPort(t *testing.T) {
 		WriteTimeout:     1 * time.Second,
 		ShutdownTimeout:  1 * time.Second,
 		PathRegexPattern: DefaultPathRegexPattern,
-		JWTSigningKey:    "test-key",
 	}
 
 	// Create mocks
@@ -144,10 +140,11 @@ func TestServerStartsAndBindsToTheCorrectPort(t *testing.T) {
 
 	// Define cleanup to ensure server is always stopped
 	defer func() {
-		// Trigger shutdown by sending signal
-		p, err := os.FindProcess(os.Getpid())
-		if err == nil {
-			_ = p.Signal(syscall.SIGINT)
+		// Trigger shutdown by calling Shutdown method
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			t.Logf("Error shutting down server: %v", err)
 		}
 
 		// Wait for server to shut down (with timeout)
@@ -176,65 +173,6 @@ func TestServerStartsAndBindsToTheCorrectPort(t *testing.T) {
 	}
 }
 
-// TestServerTerminatesOnSIGINT tests that the server terminates when receiving SIGINT
-func TestServerTerminatesOnSIGINT(t *testing.T) {
-	// Skip in short mode as it involves timing and signals
-	if testing.Short() {
-		t.Skip("Skipping test in short mode")
-	}
-
-	// Create a test logger that discards output
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	// Create minimal config with short timeouts for testing
-	config := &Config{
-		Port:             0, // Use random port
-		ReadTimeout:      1 * time.Second,
-		WriteTimeout:     1 * time.Second,
-		ShutdownTimeout:  1 * time.Second,
-		PathRegexPattern: DefaultPathRegexPattern,
-		JWTSigningKey:    "test-key",
-	}
-
-	// Create mocks
-	jwtHandler := &MockJWTHandler{}
-	cookieHandler := &MockCookieHandler{}
-
-	// Create server
-	server := NewServer(config, jwtHandler, cookieHandler, logger)
-
-	// Start server in a goroutine
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- server.Start()
-	}()
-
-	// Give the server a moment to start
-	time.Sleep(100 * time.Millisecond)
-
-	// Send SIGINT to the current process
-	// This will be caught by the server's signal handler
-	p, err := os.FindProcess(os.Getpid())
-	if err != nil {
-		t.Fatalf("Failed to find process: %v", err)
-	}
-
-	// Send signal
-	if err := p.Signal(syscall.SIGINT); err != nil {
-		t.Fatalf("Failed to send signal: %v", err)
-	}
-
-	// Wait for server to shut down
-	select {
-	case err := <-errCh:
-		if err != nil {
-			t.Errorf("Server did not shut down gracefully: %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Error("Server did not shut down within expected time")
-	}
-}
-
 func TestServerStarts_RetrievesKeySetFromOIDCProvider_WhenOauthIsEnabled(t *testing.T) {
 	t.Run("successful OIDC initialization", func(t *testing.T) {
 		// Create a test logger that captures logs
@@ -248,7 +186,6 @@ func TestServerStarts_RetrievesKeySetFromOIDCProvider_WhenOauthIsEnabled(t *test
 			WriteTimeout:     1 * time.Second,
 			ShutdownTimeout:  1 * time.Second,
 			PathRegexPattern: DefaultPathRegexPattern,
-			JWTSigningKey:    "test-key",
 			EnableOAuth:      true,
 			OIDCIssuerURL:    "https://test-issuer.example.com",
 			OIDCClientID:     "test-client-id",
@@ -288,10 +225,11 @@ func TestServerStarts_RetrievesKeySetFromOIDCProvider_WhenOauthIsEnabled(t *test
 
 		// Define cleanup to ensure server is always stopped
 		defer func() {
-			// Trigger shutdown by sending signal
-			p, err := os.FindProcess(os.Getpid())
-			if err == nil {
-				_ = p.Signal(syscall.SIGINT)
+			// Trigger shutdown by calling Shutdown method
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if err := server.Shutdown(ctx); err != nil {
+				t.Logf("Error shutting down server: %v", err)
 			}
 
 			// Wait for server to shut down (with timeout)
@@ -333,7 +271,6 @@ func TestServerStarts_RetrievesKeySetFromOIDCProvider_WhenOauthIsEnabled(t *test
 			WriteTimeout:     1 * time.Second,
 			ShutdownTimeout:  1 * time.Second,
 			PathRegexPattern: DefaultPathRegexPattern,
-			JWTSigningKey:    "test-key",
 			EnableOAuth:      true,
 			OIDCIssuerURL:    "https://test-issuer.example.com",
 			OIDCClientID:     "test-client-id",
@@ -381,7 +318,6 @@ func TestServerStarts_DoesNotCallOIDCProvier_WhenOauthIsDisabled(t *testing.T) {
 		WriteTimeout:     1 * time.Second,
 		ShutdownTimeout:  1 * time.Second,
 		PathRegexPattern: DefaultPathRegexPattern,
-		JWTSigningKey:    "test-key",
 		EnableOAuth:      false,                             // This is the important part - OAuth is disabled
 		OIDCIssuerURL:    "https://test-issuer.example.com", // Still has OIDC config
 		OIDCClientID:     "test-client-id",
@@ -424,10 +360,11 @@ func TestServerStarts_DoesNotCallOIDCProvier_WhenOauthIsDisabled(t *testing.T) {
 
 	// Define cleanup to ensure server is always stopped
 	defer func() {
-		// Trigger shutdown by sending signal
-		p, err := os.FindProcess(os.Getpid())
-		if err == nil {
-			_ = p.Signal(syscall.SIGINT)
+		// Trigger shutdown by calling Shutdown method
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			t.Logf("Error shutting down server: %v", err)
 		}
 
 		// Wait for server to shut down (with timeout)
@@ -445,65 +382,6 @@ func TestServerStarts_DoesNotCallOIDCProvier_WhenOauthIsDisabled(t *testing.T) {
 	}
 }
 
-// TestServerTerminatesOnSIGTERM tests that the server terminates when receiving SIGTERM
-func TestServerTerminatesOnSIGTERM(t *testing.T) {
-	// Skip in short mode as it involves timing and signals
-	if testing.Short() {
-		t.Skip("Skipping test in short mode")
-	}
-
-	// Create a test logger that discards output
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	// Create minimal config with short timeouts for testing
-	config := &Config{
-		Port:             0, // Use random port
-		ReadTimeout:      1 * time.Second,
-		WriteTimeout:     1 * time.Second,
-		ShutdownTimeout:  1 * time.Second,
-		PathRegexPattern: DefaultPathRegexPattern,
-		JWTSigningKey:    "test-key",
-	}
-
-	// Create mocks
-	jwtHandler := &MockJWTHandler{}
-	cookieHandler := &MockCookieHandler{}
-
-	// Create server
-	server := NewServer(config, jwtHandler, cookieHandler, logger)
-
-	// Start server in a goroutine
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- server.Start()
-	}()
-
-	// Give the server a moment to start
-	time.Sleep(100 * time.Millisecond)
-
-	// Send SIGTERM to the current process
-	// This will be caught by the server's signal handler
-	p, err := os.FindProcess(os.Getpid())
-	if err != nil {
-		t.Fatalf("Failed to find process: %v", err)
-	}
-
-	// Send signal
-	if err := p.Signal(syscall.SIGTERM); err != nil {
-		t.Fatalf("Failed to send signal: %v", err)
-	}
-
-	// Wait for server to shut down
-	select {
-	case err := <-errCh:
-		if err != nil {
-			t.Errorf("Server did not shut down gracefully: %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Error("Server did not shut down within expected time")
-	}
-}
-
 func TestServerInstantiatesK8sRestClient(t *testing.T) {
 	// Since we can't replace package functions directly in Go, we'll approach this test differently
 	// We'll create a Server with a working configuration and then verify it has a k8sClient
@@ -516,7 +394,6 @@ func TestServerInstantiatesK8sRestClient(t *testing.T) {
 	// Create minimal config
 	config := &Config{
 		PathRegexPattern: DefaultPathRegexPattern,
-		JWTSigningKey:    "test-key",
 	}
 
 	// Create server and let it attempt to set up the k8s client
@@ -574,7 +451,6 @@ func TestServerLogsAnErrorIfClientInstantiationFails(t *testing.T) {
 	// Create minimal config
 	config := &Config{
 		PathRegexPattern: DefaultPathRegexPattern,
-		JWTSigningKey:    "test-key",
 	}
 
 	// Create a server instance - note that we're using the real NewServer function
@@ -629,4 +505,43 @@ func TestServerLogsAnErrorIfClientInstantiationFails(t *testing.T) {
 	if !strings.Contains(respBody, "Internal server error") {
 		t.Errorf("Expected 'Internal server error' message in response, got: %s", respBody)
 	}
+}
+
+// TestNewServer_OIDCVerifierCreationFails tests that NewServer handles OIDC verifier creation failures gracefully
+func TestNewServer_OIDCVerifierCreationFails(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	// Create config with OAuth enabled but missing required OIDC fields
+	config := &Config{
+		Port:             8080,
+		ReadTimeout:      5 * time.Second,
+		WriteTimeout:     5 * time.Second,
+		ShutdownTimeout:  5 * time.Second,
+		PathRegexPattern: DefaultPathRegexPattern,
+		JWTExpiration:    30 * time.Minute,
+		JWTRefreshWindow: 5 * time.Minute,
+		EnableOAuth:      true,
+		OIDCIssuerURL:    "", // Missing - will cause NewOIDCVerifier to fail
+		OIDCClientID:     "test-client",
+	}
+
+	jwtHandler := &MockJWTHandler{}
+	cookieHandler := &MockCookieHandler{}
+
+	// Create server - should succeed but oidcVerifier should be nil
+	server := NewServer(config, jwtHandler, cookieHandler, logger)
+
+	// Verify server was created
+	require.NotNil(t, server)
+
+	// Verify oidcVerifier is nil due to creation failure
+	if server.oidcVerifier != nil {
+		t.Error("Expected oidcVerifier to be nil when OIDC config is invalid")
+	}
+
+	// Verify other fields are set correctly
+	require.NotNil(t, server.config)
+	require.NotNil(t, server.jwtManager)
+	require.NotNil(t, server.cookieManager)
+	require.NotNil(t, server.logger)
 }

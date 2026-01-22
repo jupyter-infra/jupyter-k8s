@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: authmiddleware-workspace-access-binding
+  labels:
+    app: authmiddleware
+    component: auth
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: authmiddleware-workspace-access
+subjects:
+- kind: ServiceAccount
+  name: authmiddleware
+  namespace: jupyter-k8s-router

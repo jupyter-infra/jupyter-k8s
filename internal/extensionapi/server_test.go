@@ -262,10 +262,10 @@ var _ = Describe("Server", func() {
 			Expect(server.routes).To(HaveKey(config.ApiPath))
 		})
 
-		It("Should register /workspaceconnections and /connectionaccessreview routes as namespaced", func() {
+		It("Should register /workspaceconnections and /connectionaccessreviews routes as namespaced", func() {
 			namespacedPathPrefix := config.ApiPath + "/namespaces/*/"
 			Expect(server.routes).To(HaveKey(namespacedPathPrefix + "workspaceconnections"))
-			Expect(server.routes).To(HaveKey(namespacedPathPrefix + "connectionaccessreview"))
+			Expect(server.routes).To(HaveKey(namespacedPathPrefix + "connectionaccessreviews"))
 		})
 	})
 

@@ -328,7 +328,7 @@ func TestHandleAuth_HappyPath(t *testing.T) {
 	}
 
 	// Verify the request was made to the correct URL
-	expectedPath := fmt.Sprintf("/apis/%s/namespaces/ns1/connectionaccessreview",
+	expectedPath := fmt.Sprintf("/apis/%s/namespaces/ns1/connectionaccessreviews",
 		expectApiGroupVersion)
 	mockServer.AssertRequestPath(expectedPath)
 }

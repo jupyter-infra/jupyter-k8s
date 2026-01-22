@@ -66,6 +66,18 @@ func kubectlGetAllNamespaces(resource, jsonpath string) (string, error) {
 	return strings.TrimSpace(output), err
 }
 
+// createObjectAsUser creates a Kubernetes object with kubectl impersonation
+func createObjectAsUser(filepath, user string, groups []string) error {
+	ginkgo.GinkgoHelper()
+	args := []string{"create", "-f", filepath, "--as=" + user}
+	for _, group := range groups {
+		args = append(args, "--as-group="+group)
+	}
+	cmd := exec.Command("kubectl", args...)
+	_, err := utils.Run(cmd)
+	return err
+}
+
 // kubectlDeleteAllNamespaces deletes resources across all namespaces
 func kubectlDeleteAllNamespaces(resource string, opts ...string) error {
 	ginkgo.GinkgoHelper()

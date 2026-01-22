@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authmiddleware
+  labels:
+    app: authmiddleware
+    component: auth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authmiddleware
+      component: auth
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: authmiddleware
+        component: auth
+    spec:
+      serviceAccountName: authmiddleware
+      terminationGracePeriodSeconds: 30
+      containers:
+      - image: docker.io/library/authmiddleware:local
+        imagePullPolicy: Never
+        name: authmiddleware
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsUser: 65532
+          runAsGroup: 65532
+        env:
+          - name: PORT
+            value: "8080"
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: READ_TIMEOUT
+            value: "10s"
+          - name: WRITE_TIMEOUT
+            value: "10s"
+          - name: SHUTDOWN_TIMEOUT
+            value: "30s"
+          - name: JWT_SECRET_NAME
+            value: "jupyter-k8s-authmiddleware-secrets"
+          - name: JWT_ISSUER
+            value: "jupyter-k8s-local"
+          - name: JWT_AUDIENCE
+            value: "jupyter-k8s-users"
+          - name: JWT_EXPIRATION
+            value: "1h"
+          - name: JWT_NEW_KEY_USE_DELAY
+            value: "30s"
+          - name: JWT_REFRESH_ENABLE
+            value: "true"
+          - name: JWT_REFRESH_WINDOW
+            value: "10m"
+          - name: JWT_REFRESH_HORIZON
+            value: "2h"
+          - name: COOKIE_NAME
+            value: "jupyter_auth"
+          - name: COOKIE_SECURE
+            value: "false"
+          - name: COOKIE_DOMAIN
+            value: "localhost"
+          - name: COOKIE_PATH
+            value: "/"
+          - name: COOKIE_MAX_AGE
+            value: "24h"
+          - name: COOKIE_HTTP_ONLY
+            value: "true"
+          - name: COOKIE_SAME_SITE
+            value: "Lax"
+          - name: PATH_REGEX_PATTERN
+            value: "^/workspace/([^/]+)/([^/]+)"
+          - name: WORKSPACE_NAMESPACE_PATH_REGEX
+            value: "1"
+          - name: WORKSPACE_NAME_PATH_REGEX
+            value: "2"
+          - name: ENABLE_OAUTH
+            value: "false"
+          - name: ENABLE_BEARER_URL_AUTH
+            value: "false"
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      securityContext:
+        fsGroup: 65532
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532

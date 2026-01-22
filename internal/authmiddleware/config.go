@@ -22,9 +22,11 @@ const (
 	EnvWriteTimeout    = "WRITE_TIMEOUT"
 	EnvShutdownTimeout = "SHUTDOWN_TIMEOUT"
 	EnvTrustedProxies  = "TRUSTED_PROXIES"
+	EnvMetricsAddr     = "METRICS_ADDR"
+	EnvProbeAddr       = "PROBE_ADDR"
+	EnvNamespace       = "NAMESPACE"
 
 	// Auth configuration
-	EnvJwtSigningKey        = "JWT_SIGNING_KEY"
 	EnvJwtSigningType       = "JWT_SIGNING_TYPE"
 	EnvJwtIssuer            = "JWT_ISSUER"
 	EnvJwtAudience          = "JWT_AUDIENCE"
@@ -32,6 +34,8 @@ const (
 	EnvEnableJwtRefresh     = "JWT_REFRESH_ENABLE"
 	EnvJwtRefreshWindow     = "JWT_REFRESH_WINDOW"
 	EnvJwtRefreshHorizon    = "JWT_REFRESH_HORIZON"
+	EnvJwtSecretName        = "JWT_SECRET_NAME"
+	EnvJwtNewKeyUseDelay    = "NEW_KEY_USE_DELAY"
 	EnvEnableOAuth          = "ENABLE_OAUTH"
 	EnvEnableBearerAuth     = "ENABLE_BEARER_URL_AUTH"
 	EnvKMSKeyId             = "KMS_KEY_ID"
@@ -77,6 +81,8 @@ const (
 	DefaultReadTimeout     = 10 * time.Second
 	DefaultWriteTimeout    = 10 * time.Second
 	DefaultShutdownTimeout = 30 * time.Second
+	DefaultMetricsAddr     = ":9090"
+	DefaultProbeAddr       = ":9091"
 	// DefaultTrustedProxies is a slice, defined in createDefaultConfig
 
 	// Auth defaults
@@ -87,6 +93,8 @@ const (
 	DefaultJwtRefreshEnable  = true
 	DefaultJwtRefreshWindow  = 15 * time.Minute // 25% of the default expiration
 	DefaultJwtRefreshHorizon = 12 * time.Hour
+	DefaultJwtSecretName     = "authmiddleware-secrets"
+	DefaultJwtNewKeyUseDelay = 5 * time.Second // Cooloff period before using a new key
 	DefaultEnableOAuth       = true
 	DefaultEnableBearerAuth  = false
 
@@ -122,9 +130,11 @@ type Config struct {
 	WriteTimeout    time.Duration
 	ShutdownTimeout time.Duration
 	TrustedProxies  []string
+	MetricsAddr     string
+	ProbeAddr       string
+	Namespace       string // Namespace to watch for secrets
 
 	// Auth configuration
-	JWTSigningKey        string
 	JWTSigningType       string
 	JWTIssuer            string
 	JWTAudience          string
@@ -132,6 +142,8 @@ type Config struct {
 	JWTRefreshEnable     bool
 	JWTRefreshWindow     time.Duration
 	JWTRefreshHorizon    time.Duration
+	JwtSecretName        string
+	JwtNewKeyUseDelay    time.Duration
 	EnableOAuth          bool
 	EnableBearerAuth     bool
 	KMSKeyId             string
@@ -202,6 +214,8 @@ func createDefaultConfig() *Config {
 		WriteTimeout:    DefaultWriteTimeout,
 		ShutdownTimeout: DefaultShutdownTimeout,
 		TrustedProxies:  []string{"127.0.0.1", "::1"}, // Default trusted proxies
+		MetricsAddr:     DefaultMetricsAddr,
+		ProbeAddr:       DefaultProbeAddr,
 
 		// Auth defaults
 		JWTSigningType:    DefaultJwtSigningType,
@@ -211,6 +225,8 @@ func createDefaultConfig() *Config {
 		JWTRefreshEnable:  DefaultJwtRefreshEnable,
 		JWTRefreshWindow:  DefaultJwtRefreshWindow,
 		JWTRefreshHorizon: DefaultJwtRefreshHorizon,
+		JwtSecretName:     DefaultJwtSecretName,
+		JwtNewKeyUseDelay: DefaultJwtNewKeyUseDelay,
 		EnableOAuth:       DefaultEnableOAuth,
 		EnableBearerAuth:  DefaultEnableBearerAuth,
 
@@ -280,6 +296,18 @@ func applyServerConfig(config *Config) error {
 		config.TrustedProxies = splitAndTrim(trustedProxies, ",")
 	}
 
+	if metricsAddr := os.Getenv(EnvMetricsAddr); metricsAddr != "" {
+		config.MetricsAddr = metricsAddr
+	}
+
+	if probeAddr := os.Getenv(EnvProbeAddr); probeAddr != "" {
+		config.ProbeAddr = probeAddr
+	}
+
+	if namespace := os.Getenv(EnvNamespace); namespace != "" {
+		config.Namespace = namespace
+	}
+
 	return nil
 }
 
@@ -288,13 +316,6 @@ func applyJWTConfig(config *Config) error {
 	// Set signing type first so we can use it for validation
 	if signingType := os.Getenv(EnvJwtSigningType); signingType != "" {
 		config.JWTSigningType = signingType
-	}
-
-	// JWT signing key - only required for standard signing
-	if key := os.Getenv(EnvJwtSigningKey); key != "" {
-		config.JWTSigningKey = key
-	} else if config.JWTSigningType == JWTSigningTypeStandard {
-		return fmt.Errorf("%s environment variable must be set for standard JWT signing", EnvJwtSigningKey)
 	}
 
 	if issuer := os.Getenv(EnvJwtIssuer); issuer != "" {
@@ -337,6 +358,14 @@ func applyJWTConfig(config *Config) error {
 		config.JWTRefreshHorizon = d
 	}
 
+	if newKeyUseDelay := os.Getenv(EnvJwtNewKeyUseDelay); newKeyUseDelay != "" {
+		d, err := time.ParseDuration(newKeyUseDelay)
+		if err != nil {
+			return fmt.Errorf("invalid %s: %w", EnvJwtNewKeyUseDelay, err)
+		}
+		config.JwtNewKeyUseDelay = d
+	}
+
 	if enableOAuth := os.Getenv(EnvEnableOAuth); enableOAuth != "" {
 		enable, err := strconv.ParseBool(enableOAuth)
 		if err != nil {
@@ -372,6 +401,10 @@ func applyJWTConfig(config *Config) error {
 
 	if kmsEncryptionContext := os.Getenv(EnvKMSEncryptionContext); kmsEncryptionContext != "" {
 		config.KMSEncryptionContext = kmsEncryptionContext
+	}
+
+	if jwtSecretName := os.Getenv(EnvJwtSecretName); jwtSecretName != "" {
+		config.JwtSecretName = jwtSecretName
 	}
 
 	// Validate that JWTExpiration >= JWTRefreshWindow

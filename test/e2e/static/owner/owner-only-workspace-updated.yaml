@@ -1,0 +1,8 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: owner-only-workspace
+spec:
+  image: jk8s-application-jupyter-uv:latest
+  ownershipType: OwnerOnly
+  displayName: "OwnerOnly Workspace Updated"
