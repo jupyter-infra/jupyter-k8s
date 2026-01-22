@@ -57,18 +57,18 @@ func isWorkspaceAvailable(ws *workspacev1alpha1.Workspace) bool {
 }
 
 // validateWebUIConnection validates that a workspace is ready for WebUI connections.
-// Returns an error if validation fails, nil if validation passes.
-func (s *ExtensionServer) validateWebUIConnection(namespace, workspaceName string, logger logr.Logger) error {
+// Returns (statusCode, error). If validation passes, returns (0, nil).
+func (s *ExtensionServer) validateWebUIConnection(namespace, workspaceName string, logger logr.Logger) (int, error) {
 	ws, err := s.getWorkspace(namespace, workspaceName)
 	if err != nil {
 		logger.Error(err, "Failed to get workspace for WebUI validation", "workspaceName", workspaceName)
-		return fmt.Errorf("failed to retrieve workspace")
+		return http.StatusInternalServerError, fmt.Errorf("failed to retrieve workspace")
 	}
 
 	accessStrategy, err := s.getAccessStrategy(ws)
 	if err != nil {
 		logger.Error(err, "Failed to get access strategy for WebUI validation", "workspaceName", workspaceName)
-		return fmt.Errorf("failed to retrieve access strategy")
+		return http.StatusInternalServerError, fmt.Errorf("failed to retrieve access strategy")
 	}
 
 	// Check 1: WebUI is enabled via BearerAuthURLTemplate
@@ -76,7 +76,7 @@ func (s *ExtensionServer) validateWebUIConnection(namespace, workspaceName strin
 		logger.Info("WebUI connection rejected: WebUI not enabled for workspace",
 			"workspaceName", workspaceName,
 			"namespace", namespace)
-		return fmt.Errorf("WebUI is not enabled for this workspace. BearerAuthURLTemplate must be configured in the AccessStrategy")
+		return http.StatusBadRequest, fmt.Errorf("web browser access is not enabled for this workspace. Use a remote connection or contact your administrator")
 	}
 
 	// Check 2: Workspace is available
@@ -84,10 +84,10 @@ func (s *ExtensionServer) validateWebUIConnection(namespace, workspaceName strin
 		logger.Info("WebUI connection rejected: workspace not available",
 			"workspaceName", workspaceName,
 			"namespace", namespace)
-		return fmt.Errorf("workspace is not available. Please wait for the workspace to be ready")
+		return http.StatusServiceUnavailable, fmt.Errorf("workspace is not available. Check workspace status for details")
 	}
 
-	return nil
+	return 0, nil
 }
 
 // generateWebUIBearerTokenURL generates a Web UI connection URL with JWT token
@@ -238,21 +238,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 
 	// Pre-validate WebUI connections before attempting to generate URL
 	if req.Spec.WorkspaceConnectionType == connectionv1alpha1.ConnectionTypeWebUI {
-		if err := s.validateWebUIConnection(namespace, req.Spec.WorkspaceName, logger); err != nil {
-			// Determine appropriate HTTP status code based on error type
-			statusCode := http.StatusInternalServerError // Default for unexpected errors
-
-			if strings.Contains(err.Error(), "not enabled") {
-				// WebUI not configured - client error (misconfiguration)
-				statusCode = http.StatusBadRequest
-			} else if strings.Contains(err.Error(), "not available") {
-				// Workspace exists but not ready - temporary condition
-				statusCode = http.StatusServiceUnavailable
-			} else if strings.Contains(err.Error(), "failed to retrieve") {
-				// Internal error fetching resources
-				statusCode = http.StatusInternalServerError
-			}
-
+		if statusCode, err := s.validateWebUIConnection(namespace, req.Spec.WorkspaceName, logger); err != nil {
 			WriteKubernetesError(w, statusCode, err.Error())
 			return
 		}
