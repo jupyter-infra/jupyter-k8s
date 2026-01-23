@@ -23,6 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -1024,5 +1025,295 @@ func TestGenerateVSCodeURL_MissingSSMDocumentName(t *testing.T) {
 
 	if err == nil {
 		t.Error("expected error from SSM strategy creation")
+	}
+}
+
+// TestHasWebUIEnabled tests the hasWebUIEnabled helper function
+func TestHasWebUIEnabled(t *testing.T) {
+	tests := []struct {
+		name           string
+		accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
+		expected       bool
+	}{
+		{
+			name:           "nil access strategy",
+			accessStrategy: nil,
+			expected:       false,
+		},
+		{
+			name: "empty BearerAuthURLTemplate",
+			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					BearerAuthURLTemplate: "",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "BearerAuthURLTemplate configured",
+			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					BearerAuthURLTemplate: "https://example.com/bearer-auth",
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hasWebUIEnabled(tt.accessStrategy)
+			if result != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, result)
+			}
+		})
+	}
+}
+
+// TestIsWorkspaceAvailable tests the isWorkspaceAvailable helper function
+func TestIsWorkspaceAvailable(t *testing.T) {
+	tests := []struct {
+		name      string
+		workspace *workspacev1alpha1.Workspace
+		expected  bool
+	}{
+		{
+			name: "no conditions",
+			workspace: &workspacev1alpha1.Workspace{
+				Status: workspacev1alpha1.WorkspaceStatus{
+					Conditions: []metav1.Condition{},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "Available condition is False",
+			workspace: &workspacev1alpha1.Workspace{
+				Status: workspacev1alpha1.WorkspaceStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:   "Available",
+							Status: metav1.ConditionFalse,
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "Available condition is Unknown",
+			workspace: &workspacev1alpha1.Workspace{
+				Status: workspacev1alpha1.WorkspaceStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:   "Available",
+							Status: metav1.ConditionUnknown,
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "Available condition is True",
+			workspace: &workspacev1alpha1.Workspace{
+				Status: workspacev1alpha1.WorkspaceStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:   "Available",
+							Status: metav1.ConditionTrue,
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "multiple conditions with Available True",
+			workspace: &workspacev1alpha1.Workspace{
+				Status: workspacev1alpha1.WorkspaceStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:   "Progressing",
+							Status: metav1.ConditionFalse,
+						},
+						{
+							Type:   "Available",
+							Status: metav1.ConditionTrue,
+						},
+						{
+							Type:   "Degraded",
+							Status: metav1.ConditionFalse,
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isWorkspaceAvailable(tt.workspace)
+			if result != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, result)
+			}
+		})
+	}
+}
+
+// TestValidateWebUIConnection tests the validateWebUIConnection function
+func TestValidateWebUIConnection(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+
+	tests := []struct {
+		name               string
+		workspace          *workspacev1alpha1.Workspace
+		accessStrategy     *workspacev1alpha1.WorkspaceAccessStrategy
+		expectedStatusCode int
+		expectedError      string
+	}{
+		{
+			name:               "workspace not found",
+			expectedStatusCode: http.StatusInternalServerError,
+			expectedError:      "failed to retrieve workspace",
+		},
+		{
+			name: "workspace not available",
+			workspace: &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
+						Name: "test-strategy",
+					},
+				},
+				Status: workspacev1alpha1.WorkspaceStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:   "Available",
+							Status: metav1.ConditionFalse,
+						},
+					},
+				},
+			},
+			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-strategy",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					BearerAuthURLTemplate: "https://example.com/bearer-auth",
+				},
+			},
+			expectedStatusCode: http.StatusServiceUnavailable,
+			expectedError:      "workspace is not available",
+		},
+		{
+			name: "WebUI not enabled - no BearerAuthURLTemplate",
+			workspace: &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
+						Name: "test-strategy",
+					},
+				},
+				Status: workspacev1alpha1.WorkspaceStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:   "Available",
+							Status: metav1.ConditionTrue,
+						},
+					},
+				},
+			},
+			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-strategy",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					BearerAuthURLTemplate: "",
+				},
+			},
+			expectedStatusCode: http.StatusBadRequest,
+			expectedError:      "web browser access is not enabled",
+		},
+		{
+			name: "validation passes",
+			workspace: &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
+						Name: "test-strategy",
+					},
+				},
+				Status: workspacev1alpha1.WorkspaceStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:   "Available",
+							Status: metav1.ConditionTrue,
+						},
+					},
+				},
+			},
+			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-strategy",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					BearerAuthURLTemplate: "https://example.com/bearer-auth",
+				},
+			},
+			expectedStatusCode: 0,
+			expectedError:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var objects []client.Object
+			if tt.workspace != nil {
+				objects = append(objects, tt.workspace)
+			}
+			if tt.accessStrategy != nil {
+				objects = append(objects, tt.accessStrategy)
+			}
+
+			fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+
+			server := &ExtensionServer{
+				k8sClient: fakeClient,
+			}
+
+			logger := ctrl.Log.WithName("test")
+			statusCode, err := server.validateWebUIConnection("default", "test-workspace", logger)
+
+			if statusCode != tt.expectedStatusCode {
+				t.Errorf("expected status code %d, got %d", tt.expectedStatusCode, statusCode)
+			}
+
+			if tt.expectedError == "" {
+				if err != nil {
+					t.Errorf("expected no error, got %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("expected error containing %q, got nil", tt.expectedError)
+				} else if !strings.Contains(err.Error(), tt.expectedError) {
+					t.Errorf("expected error containing %q, got %q", tt.expectedError, err.Error())
+				}
+			}
+		})
 	}
 }
