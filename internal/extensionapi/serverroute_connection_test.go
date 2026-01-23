@@ -639,12 +639,12 @@ func TestHandleConnectionCreateWithWorkspace(t *testing.T) {
 		},
 	}
 
-	client := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace).Build()
+	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace).Build()
 	logger := ctrl.Log.WithName("test")
 
 	server := &ExtensionServer{
 		config:        &ExtensionConfig{ClusterId: "test"},
-		k8sClient:     client,
+		k8sClient:     fakeClient,
 		logger:        &logger,
 		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
 	}
