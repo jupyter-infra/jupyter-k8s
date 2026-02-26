@@ -1,0 +1,14 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-with-env
+  namespace: default
+spec:
+  displayName: "Workspace with Environment Variables"
+  image: jk8s-application-jupyter-uv:latest
+  containerConfig:
+    env:
+      - name: MY_VAR
+        value: my-value
+      - name: ANOTHER_VAR
+        value: another-value

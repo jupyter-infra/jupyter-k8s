@@ -341,6 +341,41 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(container.Env[0].Name).To(Equal("MY_VAR"))
 			Expect(container.Env[0].Value).To(Equal("test-value"))
 		})
+
+		It("should not inherit template command/args when workspace sets only env", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-env-only",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					ContainerConfig: &workspacev1alpha1.ContainerConfig{
+						// Only setting Env, not Command or Args
+						Env: []corev1.EnvVar{
+							{
+								Name:  "MY_VAR",
+								Value: "my-value",
+							},
+						},
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deployment).NotTo(BeNil())
+
+			container := deployment.Spec.Template.Spec.Containers[0]
+
+			// Command and Args should be empty (not inherited from template)
+			Expect(container.Command).To(BeEmpty())
+			Expect(container.Args).To(BeEmpty())
+
+			// Env should be set
+			Expect(container.Env).To(HaveLen(1))
+			Expect(container.Env[0].Name).To(Equal("MY_VAR"))
+			Expect(container.Env[0].Value).To(Equal("my-value"))
+		})
 	})
 
 	Context("Node Selector", func() {
