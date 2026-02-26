@@ -18,9 +18,10 @@ spec:
       - name: JUPYTER_ENABLE_LAB
         value: "yes"
   resourceBounds:
-    cpu:
-      min: "100m"
-      max: "4"
-    memory:
-      min: "128Mi"
-      max: "8Gi"
+    resources:
+      cpu:
+        min: 100m
+        max: 4
+      memory:
+        min: 128Mi
+        max: 8Gi
