@@ -8,11 +8,6 @@ spec:
   description: "Template with container config including environment variables"
   defaultImage: jk8s-application-jupyter-uv:latest
   defaultContainerConfig:
-    command:
-      - /bin/bash
-    args:
-      - -c
-      - start-notebook.sh
     env:
       - name: TEMPLATE_VAR
         value: template-value
