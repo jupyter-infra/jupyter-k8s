@@ -55,8 +55,13 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 				controller.ConditionTypeStopped:     ConditionFalse,
 			})
 
+			By("retrieving deployment name from workspace status")
+			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.status.deploymentName}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deploymentName).NotTo(BeEmpty())
+
 			By("verifying environment variables are set in the deployment")
-			deploymentName := "workspace-with-env-deployment"
 			envVars, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
 				"{.spec.template.spec.containers[0].env[*].name}")
 			Expect(err).NotTo(HaveOccurred())
@@ -118,8 +123,13 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 				controller.ConditionTypeStopped:     ConditionFalse,
 			})
 
+			By("retrieving deployment name from workspace status")
+			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.status.deploymentName}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deploymentName).NotTo(BeEmpty())
+
 			By("verifying environment variables were updated in deployment")
-			deploymentName := "workspace-env-update-deployment"
 			myVarValue, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
 				"{.spec.template.spec.containers[0].env[?(@.name=='MY_VAR')].value}")
 			Expect(err).NotTo(HaveOccurred())
@@ -172,8 +182,13 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 				controller.ConditionTypeStopped:     ConditionFalse,
 			})
 
+			By("retrieving deployment name from workspace status")
+			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.status.deploymentName}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deploymentName).NotTo(BeEmpty())
+
 			By("verifying environment variables were removed from deployment")
-			deploymentName := "workspace-env-removal-deployment"
 			envVars, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
 				"{.spec.template.spec.containers[0].env}")
 			Expect(err).NotTo(HaveOccurred())
@@ -210,9 +225,13 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 				controller.ConditionTypeStopped:     ConditionFalse,
 			})
 
-			By("verifying valueFrom environment variables are set in deployment")
-			deploymentName := "workspace-env-valuefrom-deployment"
+			By("retrieving deployment name from workspace status")
+			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.status.deploymentName}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deploymentName).NotTo(BeEmpty())
 
+			By("verifying valueFrom environment variables are set in deployment")
 			// Check ConfigMap references
 			configMapRef, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
 				"{.spec.template.spec.containers[0].env[?(@.name=='CONFIG_VALUE')].valueFrom.configMapKeyRef.name}")
