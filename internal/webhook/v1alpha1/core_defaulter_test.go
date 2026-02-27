@@ -130,6 +130,38 @@ var _ = Describe("CoreDefaulter", func() {
 			Expect(workspace.Spec.ContainerConfig.Env[0].Value).To(Equal("workspace-value"))
 		})
 
+		It("should not inherit template command/args when workspace sets only env", func() {
+			template.Spec.DefaultContainerConfig = &workspacev1alpha1.ContainerConfig{
+				Command: []string{"/bin/bash"},
+				Args:    []string{"-c", "start-notebook.sh"},
+				Env: []corev1.EnvVar{
+					{
+						Name:  "TEMPLATE_VAR",
+						Value: "template-value",
+					},
+				},
+			}
+
+			workspace.Spec.ContainerConfig = &workspacev1alpha1.ContainerConfig{
+				// Only setting Env, not Command or Args
+				Env: []corev1.EnvVar{
+					{
+						Name:  "WORKSPACE_VAR",
+						Value: "workspace-value",
+					},
+				},
+			}
+
+			applyCoreDefaults(workspace, template)
+
+			// Template defaults should NOT be applied since workspace has ContainerConfig
+			Expect(workspace.Spec.ContainerConfig.Command).To(BeEmpty())
+			Expect(workspace.Spec.ContainerConfig.Args).To(BeEmpty())
+			Expect(workspace.Spec.ContainerConfig.Env).To(HaveLen(1))
+			Expect(workspace.Spec.ContainerConfig.Env[0].Name).To(Equal("WORKSPACE_VAR"))
+			Expect(workspace.Spec.ContainerConfig.Env[0].Value).To(Equal("workspace-value"))
+		})
+
 		It("should apply access type defaults", func() {
 			template.Spec.DefaultAccessType = "OwnerOnly"
 

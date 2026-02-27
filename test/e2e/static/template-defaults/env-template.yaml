@@ -4,6 +4,7 @@ metadata:
   name: env-template
   namespace: jupyter-k8s-shared
 spec:
+  displayName: "Environment Template"
   description: "Template with container config including environment variables"
   defaultImage: jk8s-application-jupyter-uv:latest
   defaultContainerConfig:
