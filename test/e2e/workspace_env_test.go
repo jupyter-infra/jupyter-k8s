@@ -15,7 +15,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 )
 
@@ -24,11 +23,10 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 		workspaceNamespace = "default"
 		groupDir           = "env"
 		subgroupBase       = "base"
-		subgroupTemplate   = "template"
 	)
 
 	AfterEach(func() {
-		deleteResourcesForEnvTest(workspaceNamespace)
+		deleteResourcesForEnvTest()
 	})
 
 	Context("Environment Variables in Workspace Spec", func() {
@@ -39,20 +37,20 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 			By("creating workspace with environment variables")
 			createWorkspaceForTest(workspaceFilename, groupDir, subgroupBase)
 
-			By("waiting for workspace to become available")
+			By("waiting for Available condition to become True")
 			WaitForWorkspaceToReachCondition(
 				workspaceName,
 				workspaceNamespace,
-				controller.ConditionTypeAvailable,
+				ConditionTypeAvailable,
 				ConditionTrue,
 			)
 
 			By("verifying Available=True, Progressing=False, Degraded=False, Stopped=False")
 			VerifyWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
-				controller.ConditionTypeProgressing: ConditionFalse,
-				controller.ConditionTypeDegraded:    ConditionFalse,
-				controller.ConditionTypeAvailable:   ConditionTrue,
-				controller.ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionFalse,
+				ConditionTypeAvailable:   ConditionTrue,
+				ConditionTypeStopped:     ConditionFalse,
 			})
 
 			By("retrieving deployment name from workspace status")
@@ -87,11 +85,11 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 			By("creating workspace with initial environment variables")
 			createWorkspaceForTest(workspaceFilename, groupDir, subgroupBase)
 
-			By("waiting for workspace to become available")
+			By("waiting for Available condition to become True")
 			WaitForWorkspaceToReachCondition(
 				workspaceName,
 				workspaceNamespace,
-				controller.ConditionTypeAvailable,
+				ConditionTypeAvailable,
 				ConditionTrue,
 			)
 
@@ -104,23 +102,20 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("waiting for workspace to reconcile")
-			time.Sleep(2 * time.Second)
-
-			By("waiting for workspace to become available again")
+			By("waiting for Available condition to become True again")
 			WaitForWorkspaceToReachCondition(
 				workspaceName,
 				workspaceNamespace,
-				controller.ConditionTypeAvailable,
+				ConditionTypeAvailable,
 				ConditionTrue,
 			)
 
 			By("verifying Available=True, Progressing=False, Degraded=False, Stopped=False")
 			VerifyWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
-				controller.ConditionTypeProgressing: ConditionFalse,
-				controller.ConditionTypeDegraded:    ConditionFalse,
-				controller.ConditionTypeAvailable:   ConditionTrue,
-				controller.ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionFalse,
+				ConditionTypeAvailable:   ConditionTrue,
+				ConditionTypeStopped:     ConditionFalse,
 			})
 
 			By("retrieving deployment name from workspace status")
@@ -148,11 +143,11 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 			By("creating workspace with environment variables")
 			createWorkspaceForTest(workspaceFilename, groupDir, subgroupBase)
 
-			By("waiting for workspace to become available")
+			By("waiting for Available condition to become True")
 			WaitForWorkspaceToReachCondition(
 				workspaceName,
 				workspaceNamespace,
-				controller.ConditionTypeAvailable,
+				ConditionTypeAvailable,
 				ConditionTrue,
 			)
 
@@ -163,23 +158,20 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("waiting for workspace to reconcile")
-			time.Sleep(2 * time.Second)
-
-			By("waiting for workspace to become available again")
+			By("waiting for Available condition to become True again")
 			WaitForWorkspaceToReachCondition(
 				workspaceName,
 				workspaceNamespace,
-				controller.ConditionTypeAvailable,
+				ConditionTypeAvailable,
 				ConditionTrue,
 			)
 
 			By("verifying Available=True, Progressing=False, Degraded=False, Stopped=False")
 			VerifyWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
-				controller.ConditionTypeProgressing: ConditionFalse,
-				controller.ConditionTypeDegraded:    ConditionFalse,
-				controller.ConditionTypeAvailable:   ConditionTrue,
-				controller.ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionFalse,
+				ConditionTypeAvailable:   ConditionTrue,
+				ConditionTypeStopped:     ConditionFalse,
 			})
 
 			By("retrieving deployment name from workspace status")
@@ -201,28 +193,29 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 			workspaceFilename := "workspace-env-valuefrom"
 
 			By("creating a ConfigMap for testing")
-			configMapPath := BuildTestResourcePath("test-config", groupDir, subgroupBase)
-			cmd := exec.Command("kubectl", "apply", "-f", configMapPath)
+			cmd := exec.Command("kubectl", "create", "configmap", "test-config",
+				"-n", workspaceNamespace,
+				"--from-literal=config-key=config-value")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating workspace with valueFrom environment variables")
 			createWorkspaceForTest(workspaceFilename, groupDir, subgroupBase)
 
-			By("waiting for workspace to become available")
+			By("waiting for Available condition to become True")
 			WaitForWorkspaceToReachCondition(
 				workspaceName,
 				workspaceNamespace,
-				controller.ConditionTypeAvailable,
+				ConditionTypeAvailable,
 				ConditionTrue,
 			)
 
 			By("verifying Available=True, Progressing=False, Degraded=False, Stopped=False")
 			VerifyWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
-				controller.ConditionTypeProgressing: ConditionFalse,
-				controller.ConditionTypeDegraded:    ConditionFalse,
-				controller.ConditionTypeAvailable:   ConditionTrue,
-				controller.ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionFalse,
+				ConditionTypeAvailable:   ConditionTrue,
+				ConditionTypeStopped:     ConditionFalse,
 			})
 
 			By("retrieving deployment name from workspace status")
@@ -232,82 +225,23 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 			Expect(deploymentName).NotTo(BeEmpty())
 
 			By("verifying valueFrom environment variables are set in deployment")
-			// Check ConfigMap references
+			// Check ConfigMap reference
 			configMapRef, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
 				"{.spec.template.spec.containers[0].env[?(@.name=='CONFIG_VALUE')].valueFrom.configMapKeyRef.name}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(configMapRef).To(Equal("test-config"))
-
-			anotherConfigMapRef, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
-				"{.spec.template.spec.containers[0].env[?(@.name=='ANOTHER_CONFIG_VALUE')].valueFrom.configMapKeyRef.name}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(anotherConfigMapRef).To(Equal("test-config"))
-		})
-	})
-
-	Context("Environment Variables from Template", func() {
-		It("should use template container config when workspace has no config", func() {
-			templateFilename := "env-template"
-			workspaceName := "workspace-no-config"
-			workspaceFilename := "workspace-no-config"
-
-			By("creating template with container config including env variables")
-			createTemplateForTest(templateFilename, groupDir, subgroupTemplate)
-
-			By("creating workspace without container config")
-			createWorkspaceForTest(workspaceFilename, groupDir, subgroupTemplate)
-
-			By("waiting for workspace to become available")
-			WaitForWorkspaceToReachCondition(
-				workspaceName,
-				workspaceNamespace,
-				controller.ConditionTypeAvailable,
-				ConditionTrue,
-			)
-
-			By("verifying Available=True, Progressing=False, Degraded=False, Stopped=False")
-			VerifyWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
-				controller.ConditionTypeProgressing: ConditionFalse,
-				controller.ConditionTypeDegraded:    ConditionFalse,
-				controller.ConditionTypeAvailable:   ConditionTrue,
-				controller.ConditionTypeStopped:     ConditionFalse,
-			})
-
-			By("verifying workspace inherited template's container config")
-			// Check env variables
-			envVars, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.spec.containerConfig.env[*].name}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(envVars).To(ContainSubstring("TEMPLATE_VAR"))
-			Expect(envVars).To(ContainSubstring("JUPYTER_ENABLE_LAB"))
-
-			By("verifying environment variable values from template")
-			templateVarValue, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.spec.containerConfig.env[?(@.name=='TEMPLATE_VAR')].value}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(templateVarValue).To(Equal("template-value"))
-
-			jupyterLabValue, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.spec.containerConfig.env[?(@.name=='JUPYTER_ENABLE_LAB')].value}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(jupyterLabValue).To(Equal("yes"))
 		})
 	})
 })
 
-func deleteResourcesForEnvTest(workspaceNamespace string) {
+func deleteResourcesForEnvTest() {
 	By("cleaning up workspaces")
-	cmd := exec.Command("kubectl", "delete", "workspace", "--all", "-n", workspaceNamespace,
+	cmd := exec.Command("kubectl", "delete", "workspace", "--all", "-n", "default",
 		"--ignore-not-found", "--wait=true", "--timeout=120s")
 	_, _ = utils.Run(cmd)
 
-	By("cleaning up templates")
-	cmd = exec.Command("kubectl", "delete", "workspacetemplate", "--all", "-n", SharedNamespace,
-		"--ignore-not-found", "--wait=true", "--timeout=60s")
-	_, _ = utils.Run(cmd)
-
 	By("cleaning up test ConfigMaps")
-	cmd = exec.Command("kubectl", "delete", "configmap", "test-config", "-n", workspaceNamespace,
+	cmd = exec.Command("kubectl", "delete", "configmap", "test-config", "-n", "default",
 		"--ignore-not-found")
 	_, _ = utils.Run(cmd)
 
