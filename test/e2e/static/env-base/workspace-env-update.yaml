@@ -6,7 +6,13 @@ metadata:
 spec:
   displayName: "Workspace for Env Update Test"
   image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
   containerConfig:
+    command:
+      - /bin/bash
+    args:
+      - -c
+      - start-notebook.sh
     env:
       - name: MY_VAR
         value: initial-value

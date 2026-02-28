@@ -6,7 +6,13 @@ metadata:
 spec:
   displayName: "Workspace with ValueFrom Env Variables"
   image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
   containerConfig:
+    command:
+      - /bin/bash
+    args:
+      - -c
+      - start-notebook.sh
     env:
       - name: CONFIG_VALUE
         valueFrom:

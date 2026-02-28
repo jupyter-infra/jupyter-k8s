@@ -6,7 +6,13 @@ metadata:
 spec:
   displayName: "Workspace for Env Removal Test"
   image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
   containerConfig:
+    command:
+      - /bin/bash
+    args:
+      - -c
+      - start-notebook.sh
     env:
       - name: REMOVE_ME
         value: will-be-removed
