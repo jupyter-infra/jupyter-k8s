@@ -4,7 +4,7 @@ metadata:
   name: workspace-env-removal
   namespace: default
 spec:
-  displayName: "Workspace for Env Removal Test"
+  displayName: "Workspace for Env Removal"
   image: jk8s-application-jupyter-uv:latest
   desiredStatus: Running
   containerConfig:
