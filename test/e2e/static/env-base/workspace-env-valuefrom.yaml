@@ -7,12 +7,14 @@ spec:
   displayName: "Workspace with ValueFrom Env Variables"
   image: jk8s-application-jupyter-uv:latest
   desiredStatus: Running
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
   containerConfig:
-    command:
-      - /bin/bash
-    args:
-      - -c
-      - start-notebook.sh
     env:
       - name: CONFIG_VALUE
         valueFrom:

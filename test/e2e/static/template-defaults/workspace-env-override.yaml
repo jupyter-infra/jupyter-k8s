@@ -10,11 +10,6 @@ spec:
     name: env-template
     namespace: jupyter-k8s-shared
   containerConfig:
-    command:
-      - /bin/bash
-    args:
-      - -c
-      - start-notebook.sh
     env:
       - name: WORKSPACE_VAR
         value: workspace-value
