@@ -94,8 +94,7 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 			)
 
 			By("updating workspace with modified environment variables")
-			patchCmd := `{"spec":{"containerConfig":{"command":["/bin/bash"],"args":["-c","start-notebook.sh"],` +
-				`"env":[{"name":"MY_VAR","value":"updated-value"},{"name":"NEW_VAR","value":"new-value"}]}}}`
+			patchCmd := `{"spec":{"containerConfig":{"env":[{"name":"MY_VAR","value":"updated-value"},{"name":"NEW_VAR","value":"new-value"}]}}}`
 			cmd := exec.Command("kubectl", "patch", "workspace", workspaceName,
 				"-n", workspaceNamespace, "--type=merge", "-p", patchCmd)
 			_, err := utils.Run(cmd)
@@ -194,7 +193,8 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 			By("creating a ConfigMap for testing")
 			cmd := exec.Command("kubectl", "create", "configmap", "test-config",
 				"-n", workspaceNamespace,
-				"--from-literal=config-key=config-value")
+				"--from-literal=config-key=config-value",
+				"--from-literal=another-key=another-value")
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 

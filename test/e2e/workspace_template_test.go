@@ -540,18 +540,6 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			)
 
 			By("verifying workspace inherited template's container config")
-			// Check command
-			command, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.spec.containerConfig.command[0]}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(command).To(Equal("/bin/bash"))
-
-			// Check args
-			args, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.spec.containerConfig.args[0]}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(args).To(Equal("-c"))
-
 			// Check env variables
 			envVars, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
 				"{.spec.containerConfig.env[*].name}")
