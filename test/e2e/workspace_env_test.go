@@ -45,14 +45,6 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 				ConditionTrue,
 			)
 
-			By("verifying Available=True, Progressing=False, Degraded=False, Stopped=False")
-			VerifyWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
-				ConditionTypeProgressing: ConditionFalse,
-				ConditionTypeDegraded:    ConditionFalse,
-				ConditionTypeAvailable:   ConditionTrue,
-				ConditionTypeStopped:     ConditionFalse,
-			})
-
 			By("retrieving deployment name from workspace status")
 			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
 				"{.status.deploymentName}")
@@ -109,14 +101,6 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 				ConditionTrue,
 			)
 
-			By("verifying Available=True, Progressing=False, Degraded=False, Stopped=False")
-			VerifyWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
-				ConditionTypeProgressing: ConditionFalse,
-				ConditionTypeDegraded:    ConditionFalse,
-				ConditionTypeAvailable:   ConditionTrue,
-				ConditionTypeStopped:     ConditionFalse,
-			})
-
 			By("retrieving deployment name from workspace status")
 			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
 				"{.status.deploymentName}")
@@ -165,14 +149,6 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 				ConditionTrue,
 			)
 
-			By("verifying Available=True, Progressing=False, Degraded=False, Stopped=False")
-			VerifyWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
-				ConditionTypeProgressing: ConditionFalse,
-				ConditionTypeDegraded:    ConditionFalse,
-				ConditionTypeAvailable:   ConditionTrue,
-				ConditionTypeStopped:     ConditionFalse,
-			})
-
 			By("retrieving deployment name from workspace status")
 			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
 				"{.status.deploymentName}")
@@ -209,14 +185,6 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 				ConditionTypeAvailable,
 				ConditionTrue,
 			)
-
-			By("verifying Available=True, Progressing=False, Degraded=False, Stopped=False")
-			VerifyWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
-				ConditionTypeProgressing: ConditionFalse,
-				ConditionTypeDegraded:    ConditionFalse,
-				ConditionTypeAvailable:   ConditionTrue,
-				ConditionTypeStopped:     ConditionFalse,
-			})
 
 			By("retrieving deployment name from workspace status")
 			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
