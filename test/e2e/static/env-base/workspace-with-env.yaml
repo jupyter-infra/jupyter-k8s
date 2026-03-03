@@ -1,0 +1,22 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-with-env
+  namespace: default
+spec:
+  displayName: "Workspace with Environment Variables"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  containerConfig:
+    env:
+      - name: MY_VAR
+        value: my-value
+      - name: ANOTHER_VAR
+        value: another-value

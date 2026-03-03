@@ -1,0 +1,23 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: env-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Environment Template"
+  description: "Template with container config including environment variables"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultContainerConfig:
+    env:
+      - name: TEMPLATE_VAR
+        value: template-value
+      - name: JUPYTER_ENABLE_LAB
+        value: "yes"
+  resourceBounds:
+    resources:
+      cpu:
+        min: 100m
+        max: "2"
+      memory:
+        min: 128Mi
+        max: 4Gi

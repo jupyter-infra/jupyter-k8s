@@ -33,6 +33,9 @@ type ContainerConfig struct {
 
 	// Args specifies the container arguments
 	Args []string `json:"args,omitempty"`
+
+	// Env specifies environment variables for the container
+	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 
 // StorageSpec defines the storage configuration for Workspace
