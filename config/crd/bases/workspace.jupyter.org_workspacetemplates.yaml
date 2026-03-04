@@ -1104,6 +1104,14 @@ spec:
                 maxLength: 500
                 minLength: 1
                 type: string
+              defaultLabels:
+                additionalProperties:
+                  type: string
+                description: |-
+                  DefaultLabels specifies labels that will be applied to workspaces using this template
+                  These labels are immutable once set - workspaces cannot modify values for these label keys
+                maxProperties: 50
+                type: object
               defaultLifecycle:
                 description: DefaultLifecycle specifies default lifecycle hooks for
                   workspaces using this template
