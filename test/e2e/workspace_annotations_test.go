@@ -48,12 +48,12 @@ var _ = Describe("Workspace Annotations", Ordered, func() {
 
 			By("verifying automatic annotations exist on workspace")
 			createdBy, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				fmt.Sprintf("{.metadata.annotations['%s']}", controller.AnnotationCreatedBy))
+				"{.metadata.annotations.workspace\\.jupyter\\.org/created-by}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(createdBy).NotTo(BeEmpty(), "created-by annotation should be set")
 
 			lastUpdatedBy, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				fmt.Sprintf("{.metadata.annotations['%s']}", controller.AnnotationLastUpdatedBy))
+				"{.metadata.annotations.workspace\\.jupyter\\.org/last-updated-by}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(lastUpdatedBy).NotTo(BeEmpty(), "last-updated-by annotation should be set")
 
@@ -66,12 +66,12 @@ var _ = Describe("Workspace Annotations", Ordered, func() {
 			Expect(podName).NotTo(BeEmpty())
 
 			podCreatedBy, err := kubectlGet("pod", podName, workspaceNamespace,
-				fmt.Sprintf("{.metadata.annotations['%s']}", controller.AnnotationCreatedBy))
+				"{.metadata.annotations.workspace\\.jupyter\\.org/created-by}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(podCreatedBy).To(Equal(createdBy), "pod should have same created-by annotation")
 
 			podLastUpdatedBy, err := kubectlGet("pod", podName, workspaceNamespace,
-				fmt.Sprintf("{.metadata.annotations['%s']}", controller.AnnotationLastUpdatedBy))
+				"{.metadata.annotations.workspace\\.jupyter\\.org/last-updated-by}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(podLastUpdatedBy).To(Equal(lastUpdatedBy), "pod should have same last-updated-by annotation")
 		})
@@ -106,7 +106,7 @@ var _ = Describe("Workspace Annotations", Ordered, func() {
 
 			By("verifying automatic annotations still exist")
 			createdBy, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				fmt.Sprintf("{.metadata.annotations['%s']}", controller.AnnotationCreatedBy))
+				"{.metadata.annotations.workspace\\.jupyter\\.org/created-by}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(createdBy).NotTo(BeEmpty())
 
@@ -119,17 +119,17 @@ var _ = Describe("Workspace Annotations", Ordered, func() {
 			Expect(podName).NotTo(BeEmpty())
 
 			podCustomAnnotation, err := kubectlGet("pod", podName, workspaceNamespace,
-				"{.metadata.annotations['custom\\.io/annotation']}")
+				"{.metadata.annotations.custom\\.io/annotation}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(podCustomAnnotation).To(Equal("test-value"))
 
 			podPrometheusAnnotation, err := kubectlGet("pod", podName, workspaceNamespace,
-				"{.metadata.annotations['prometheus\\.io/scrape']}")
+				"{.metadata.annotations.prometheus\\.io/scrape}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(podPrometheusAnnotation).To(Equal("true"))
 
 			podCreatedBy, err := kubectlGet("pod", podName, workspaceNamespace,
-				fmt.Sprintf("{.metadata.annotations['%s']}", controller.AnnotationCreatedBy))
+				"{.metadata.annotations.workspace\\.jupyter\\.org/created-by}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(podCreatedBy).To(Equal(createdBy))
 		})
@@ -151,14 +151,14 @@ var _ = Describe("Workspace Annotations", Ordered, func() {
 
 			By("verifying automatic annotations were overwritten by webhook")
 			createdBy, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				fmt.Sprintf("{.metadata.annotations['%s']}", controller.AnnotationCreatedBy))
+				"{.metadata.annotations.workspace\\.jupyter\\.org/created-by}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(createdBy).NotTo(Equal("user-supplied-value"), "webhook should override user-supplied created-by")
 			Expect(createdBy).NotTo(BeEmpty(), "created-by should be set by webhook")
 
 			By("verifying custom annotation was preserved")
 			customAnnotation, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.metadata.annotations['custom\\.io/annotation']}")
+				"{.metadata.annotations.custom\\.io/annotation}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(customAnnotation).To(Equal("test-value"), "custom annotation should be preserved")
 
@@ -170,7 +170,7 @@ var _ = Describe("Workspace Annotations", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			podCreatedBy, err := kubectlGet("pod", podName, workspaceNamespace,
-				fmt.Sprintf("{.metadata.annotations['%s']}", controller.AnnotationCreatedBy))
+				"{.metadata.annotations.workspace\\.jupyter\\.org/created-by}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(podCreatedBy).To(Equal(createdBy), "pod should have webhook-managed created-by")
 		})
@@ -194,7 +194,7 @@ var _ = Describe("Workspace Annotations", Ordered, func() {
 
 			By("capturing initial automatic annotations")
 			createdBy, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				fmt.Sprintf("{.metadata.annotations['%s']}", controller.AnnotationCreatedBy))
+				"{.metadata.annotations.workspace\\.jupyter\\.org/created-by}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(createdBy).NotTo(BeEmpty())
 
@@ -214,13 +214,13 @@ var _ = Describe("Workspace Annotations", Ordered, func() {
 					return ""
 				}
 				annotation, _ := kubectlGet("pod", podName, workspaceNamespace,
-					"{.metadata.annotations['new-annotation']}")
+					"{.metadata.annotations.new-annotation}")
 				return annotation
 			}, "120s", "5s").Should(Equal("new-value"), "new annotation should propagate to pod")
 
 			By("verifying automatic annotations still honored after update")
 			lastUpdatedBy, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				fmt.Sprintf("{.metadata.annotations['%s']}", controller.AnnotationLastUpdatedBy))
+				"{.metadata.annotations.workspace\\.jupyter\\.org/last-updated-by}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(lastUpdatedBy).NotTo(BeEmpty())
 
@@ -231,12 +231,12 @@ var _ = Describe("Workspace Annotations", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			podLastUpdatedBy, err := kubectlGet("pod", podName, workspaceNamespace,
-				fmt.Sprintf("{.metadata.annotations['%s']}", controller.AnnotationLastUpdatedBy))
+				"{.metadata.annotations.workspace\\.jupyter\\.org/last-updated-by}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(podLastUpdatedBy).To(Equal(lastUpdatedBy))
 
 			podCreatedBy, err := kubectlGet("pod", podName, workspaceNamespace,
-				fmt.Sprintf("{.metadata.annotations['%s']}", controller.AnnotationCreatedBy))
+				"{.metadata.annotations.workspace\\.jupyter\\.org/created-by}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(podCreatedBy).To(Equal(createdBy), "created-by should remain unchanged")
 		})
