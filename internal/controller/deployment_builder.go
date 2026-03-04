@@ -86,10 +86,20 @@ func (db *DeploymentBuilder) buildObjectMeta(workspace *workspacev1alpha1.Worksp
 		}
 	}
 
+	// Copy all workspace annotations to deployment
+	var annotations map[string]string
+	if workspace.Annotations != nil {
+		annotations = make(map[string]string)
+		for key, value := range workspace.Annotations {
+			annotations[key] = value
+		}
+	}
+
 	return metav1.ObjectMeta{
-		Name:      GenerateDeploymentName(workspace.Name),
-		Namespace: workspace.Namespace,
-		Labels:    labels,
+		Name:        GenerateDeploymentName(workspace.Name),
+		Namespace:   workspace.Namespace,
+		Labels:      labels,
+		Annotations: annotations,
 	}
 }
 
@@ -107,6 +117,21 @@ func (db *DeploymentBuilder) buildPodLabels(workspace *workspacev1alpha1.Workspa
 	return labels
 }
 
+// buildPodAnnotations creates annotations for pod template, including workspace annotations
+func (db *DeploymentBuilder) buildPodAnnotations(workspace *workspacev1alpha1.Workspace) map[string]string {
+	var annotations map[string]string
+
+	// Copy all workspace annotations to pod
+	if workspace.Annotations != nil {
+		annotations = make(map[string]string)
+		for key, value := range workspace.Annotations {
+			annotations[key] = value
+		}
+	}
+
+	return annotations
+}
+
 // buildDeploymentSpec creates the deployment specification
 func (db *DeploymentBuilder) buildDeploymentSpec(workspace *workspacev1alpha1.Workspace, resources corev1.ResourceRequirements) appsv1.DeploymentSpec {
 	// Single replica for Jupyter workspaces (stateful, user-specific workloads)
@@ -122,7 +147,8 @@ func (db *DeploymentBuilder) buildDeploymentSpec(workspace *workspacev1alpha1.Wo
 		},
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: db.buildPodLabels(workspace),
+				Labels:      db.buildPodLabels(workspace),
+				Annotations: db.buildPodAnnotations(workspace),
 			},
 			Spec: db.buildPodSpec(workspace, resources),
 		},
@@ -293,6 +319,19 @@ func (db *DeploymentBuilder) NeedsUpdate(
 		return false, fmt.Errorf("failed to build desired deployment: %w", err)
 	}
 
-	// Compare pod template specs using semantic equality
-	return !equality.Semantic.DeepEqual(existingDeployment.Spec.Template.Spec, desiredDeployment.Spec.Template.Spec), nil
+	// Compare pod template specs and metadata using semantic equality
+	if !equality.Semantic.DeepEqual(existingDeployment.Spec.Template.Spec, desiredDeployment.Spec.Template.Spec) {
+		return true, nil
+	}
+
+	// Compare pod template metadata (labels and annotations)
+	if !equality.Semantic.DeepEqual(existingDeployment.Spec.Template.Labels, desiredDeployment.Spec.Template.Labels) {
+		return true, nil
+	}
+
+	if !equality.Semantic.DeepEqual(existingDeployment.Spec.Template.Annotations, desiredDeployment.Spec.Template.Annotations) {
+		return true, nil
+	}
+
+	return false, nil
 }
