@@ -776,6 +776,13 @@ func (in *WorkspaceTemplateSpec) DeepCopyInto(out *WorkspaceTemplateSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.DefaultLabels != nil {
+		in, out := &in.DefaultLabels, &out.DefaultLabels
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.DefaultIdleShutdown != nil {
 		in, out := &in.DefaultIdleShutdown, &out.DefaultIdleShutdown
 		*out = new(IdleShutdownSpec)

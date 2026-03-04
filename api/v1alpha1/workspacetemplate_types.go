@@ -84,6 +84,12 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultOwnershipType string `json:"defaultOwnershipType,omitempty"`
 
+	// DefaultLabels specifies labels that will be applied to workspaces using this template
+	// These labels are immutable once set - workspaces cannot modify values for these label keys
+	// +kubebuilder:validation:MaxProperties=50
+	// +optional
+	DefaultLabels map[string]string `json:"defaultLabels,omitempty"`
+
 	// DefaultIdleShutdown provides default idle shutdown configuration
 	// Includes timeout, detection endpoint, and enable/disable
 	// +optional
