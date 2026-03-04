@@ -629,4 +629,79 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(*podSpec.SecurityContext.FSGroup).To(Equal(int64(1000)))
 		})
 	})
+
+	Context("Annotations Propagation", func() {
+		It("should copy workspace annotations to deployment and pod", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-with-annotations",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"custom.io/annotation":  "value1",
+						"another.io/annotation": "value2",
+						"prometheus.io/scrape":  "true",
+						"prometheus.io/port":    "8080",
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					DisplayName: "Test Workspace",
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Deployment should have all workspace annotations
+			Expect(deployment.Annotations).To(HaveLen(4))
+			Expect(deployment.Annotations["custom.io/annotation"]).To(Equal("value1"))
+			Expect(deployment.Annotations["another.io/annotation"]).To(Equal("value2"))
+			Expect(deployment.Annotations["prometheus.io/scrape"]).To(Equal("true"))
+			Expect(deployment.Annotations["prometheus.io/port"]).To(Equal("8080"))
+
+			// Pod template should have all workspace annotations
+			Expect(deployment.Spec.Template.Annotations).To(HaveLen(4))
+			Expect(deployment.Spec.Template.Annotations["custom.io/annotation"]).To(Equal("value1"))
+			Expect(deployment.Spec.Template.Annotations["another.io/annotation"]).To(Equal("value2"))
+			Expect(deployment.Spec.Template.Annotations["prometheus.io/scrape"]).To(Equal("true"))
+			Expect(deployment.Spec.Template.Annotations["prometheus.io/port"]).To(Equal("8080"))
+		})
+
+		It("should detect annotation changes and trigger deployment update", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-annotation-update",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"initial-annotation": "initial-value",
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					DisplayName: "Test Workspace",
+				},
+			}
+
+			existingDeployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Update workspace annotations
+			workspace.Annotations["new-annotation"] = "new-value"
+			workspace.Annotations["initial-annotation"] = "updated-value"
+
+			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(needsUpdate).To(BeTrue(), "deployment should need update when annotations change")
+
+			// Build new deployment and verify annotations
+			newDeployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(newDeployment.Annotations).To(HaveLen(2))
+			Expect(newDeployment.Annotations["new-annotation"]).To(Equal("new-value"))
+			Expect(newDeployment.Annotations["initial-annotation"]).To(Equal("updated-value"))
+
+			Expect(newDeployment.Spec.Template.Annotations).To(HaveLen(2))
+			Expect(newDeployment.Spec.Template.Annotations["new-annotation"]).To(Equal("new-value"))
+			Expect(newDeployment.Spec.Template.Annotations["initial-annotation"]).To(Equal("updated-value"))
+		})
+	})
 })

@@ -1,0 +1,18 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: overwrite-attempt-workspace
+  annotations:
+    workspace.jupyter.org/created-by: "user-supplied-value"
+    custom.io/annotation: "test-value"
+spec:
+  displayName: "Overwrite Attempt Workspace"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
