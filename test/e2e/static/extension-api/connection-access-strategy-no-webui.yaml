@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: connection-test-no-webui
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: Connection Test No WebUI
+  accessResourceTemplates: []
+  accessURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
+  createConnectionHandler: "k8s-native"

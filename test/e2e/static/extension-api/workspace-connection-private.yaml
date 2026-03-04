@@ -1,0 +1,20 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-connection-private
+  namespace: default
+spec:
+  displayName: "Connection Private Workspace"
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  accessType: OwnerOnly
+  accessStrategy:
+    name: connection-test-access-strategy
+    namespace: jupyter-k8s-shared
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

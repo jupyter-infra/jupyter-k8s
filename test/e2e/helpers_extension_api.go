@@ -48,6 +48,42 @@ func createConnectionAccessReviewAndGetStatus(filepath string) (allowed bool, no
 	return allowed, notFound, reason, nil
 }
 
+// createWorkspaceConnectionAndGetResponse creates a WorkspaceConnection and parses the response
+// to extract workspaceConnectionType and workspaceConnectionUrl from the status.
+func createWorkspaceConnectionAndGetResponse(filepath string) (connType, connURL string, err error) {
+	ginkgo.GinkgoHelper()
+	cmd := exec.Command("kubectl", "create", "-f", filepath, "-o", "yaml")
+	output, createErr := utils.Run(cmd)
+	if createErr != nil {
+		return "", "", createErr
+	}
+
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "workspaceConnectionType:") {
+			connType = strings.TrimSpace(strings.TrimPrefix(trimmed, "workspaceConnectionType:"))
+		}
+		if strings.HasPrefix(trimmed, "workspaceConnectionUrl:") {
+			connURL = strings.TrimSpace(strings.TrimPrefix(trimmed, "workspaceConnectionUrl:"))
+		}
+	}
+
+	return connType, connURL, nil
+}
+
+// createWorkspaceConnectionAsUser creates a WorkspaceConnection with kubectl impersonation,
+// returning the raw output and error.
+func createWorkspaceConnectionAsUser(filepath, user string, groups []string) (string, error) {
+	ginkgo.GinkgoHelper()
+	args := []string{"create", "-f", filepath, "-o", "yaml", "--as=" + user}
+	for _, group := range groups {
+		args = append(args, "--as-group="+group)
+	}
+	cmd := exec.Command("kubectl", args...)
+	return utils.Run(cmd)
+}
+
 // updateObjectAsUser updates a Kubernetes object with kubectl impersonation
 func updateObjectAsUser(filepath, user string, groups []string) error {
 	ginkgo.GinkgoHelper()
