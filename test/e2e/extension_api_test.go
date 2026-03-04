@@ -384,6 +384,51 @@ var _ = Describe("Extension API", Ordered, func() {
 				ContainSubstring("forbidden"),
 			))
 		})
+
+		It("should use a new signing key after JWT secret rotation", func() {
+			By("creating a connection to capture the initial kid")
+			_, connURL1, err := createWorkspaceConnectionAndGetResponse(
+				getFixturePath("connection-request-webui"))
+			Expect(err).NotTo(HaveOccurred())
+
+			kid1, err := extractKidFromConnectionURL(connURL1)
+			Expect(err).NotTo(HaveOccurred())
+			_, _ = fmt.Fprintf(GinkgoWriter, "Initial kid: %s\n", kid1)
+
+			By("triggering JWT key rotation via CronJob")
+			cmd := exec.Command("kubectl", "create", "job",
+				"--from=cronjob/jupyter-k8s-jwt-rotator",
+				"jwt-rotation-e2e", "-n", OperatorNamespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for rotation job to complete")
+			cmd = exec.Command("kubectl", "wait", "job/jwt-rotation-e2e",
+				"-n", OperatorNamespace,
+				"--for=condition=complete", "--timeout=60s")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Rotation job did not complete")
+
+			By("waiting for controller to pick up rotated key and start signing with new kid")
+			// The controller's informer detects the secret change, then newKeyUseDelay
+			// (default 5s) must elapse before the new key is used for signing.
+			Eventually(func(g Gomega) {
+				_, connURL2, err := createWorkspaceConnectionAndGetResponse(
+					getFixturePath("connection-request-webui"))
+				g.Expect(err).NotTo(HaveOccurred())
+
+				kid2, err := extractKidFromConnectionURL(connURL2)
+				g.Expect(err).NotTo(HaveOccurred())
+
+				_, _ = fmt.Fprintf(GinkgoWriter, "Polling kid: %s (waiting for != %s)\n", kid2, kid1)
+				g.Expect(kid2).NotTo(Equal(kid1), "Expected new kid after rotation")
+			}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
+			By("cleaning up rotation job")
+			cmd = exec.Command("kubectl", "delete", "job", "jwt-rotation-e2e",
+				"-n", OperatorNamespace, "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
 	})
 })
 

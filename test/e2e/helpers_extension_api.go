@@ -9,6 +9,10 @@ Distributed under the terms of the MIT license
 package e2e
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"net/url"
 	"os/exec"
 	"strings"
 
@@ -82,6 +86,36 @@ func createWorkspaceConnectionAsUser(filepath, user string, groups []string) (st
 	}
 	cmd := exec.Command("kubectl", args...)
 	return utils.Run(cmd)
+}
+
+// extractKidFromConnectionURL parses a connection URL's ?token= query param
+// and returns the "kid" field from the JWT header.
+func extractKidFromConnectionURL(connURL string) (string, error) {
+	parsed, err := url.Parse(connURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse URL: %w", err)
+	}
+	token := parsed.Query().Get("token")
+	if token == "" {
+		return "", fmt.Errorf("no token query param in URL")
+	}
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("JWT has %d parts, expected 3", len(parts))
+	}
+	headerJSON, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return "", fmt.Errorf("failed to decode JWT header: %w", err)
+	}
+	var header map[string]interface{}
+	if err := json.Unmarshal(headerJSON, &header); err != nil {
+		return "", fmt.Errorf("failed to parse JWT header JSON: %w", err)
+	}
+	kid, ok := header["kid"].(string)
+	if !ok || kid == "" {
+		return "", fmt.Errorf("JWT header missing 'kid' field")
+	}
+	return kid, nil
 }
 
 // updateObjectAsUser updates a Kubernetes object with kubectl impersonation

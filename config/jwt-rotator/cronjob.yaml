@@ -27,6 +27,8 @@ spec:
             runAsGroup: 65532
             runAsNonRoot: true
             fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
           containers:
           - name: rotator
             image: docker.io/library/rotator:local

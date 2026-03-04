@@ -405,9 +405,14 @@ load-images: docker-build build-rotator ## Build and load images into the Kind c
 	$(MAKE) -C images push-all-kind CLUSTER_NAME=$(DEV_KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: load-images-e2e
-load-images-e2e: ## Build and load application images into the e2e test Kind cluster
+load-images-e2e: build-rotator ## Build and load application images into the e2e test Kind cluster
 	@echo "Loading application images into e2e test cluster ${KIND_CLUSTER}..."
 	@echo "Note: Controller image is built and loaded by the e2e test suite itself"
+	@echo "Loading rotator image into e2e test cluster ${KIND_CLUSTER}..."
+	@mkdir -p /tmp/kind-images
+	$(CONTAINER_TOOL) save docker.io/library/rotator:local -o /tmp/kind-images/rotator.tar
+	$(KIND) load image-archive /tmp/kind-images/rotator.tar --name $(KIND_CLUSTER)
+	rm -f /tmp/kind-images/rotator.tar
 	$(MAKE) -C images push-all-kind CLUSTER_NAME=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: kubectl-kind
