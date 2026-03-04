@@ -1,0 +1,13 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: default-labels-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Default Labels Template"
+  description: "Template with default labels"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultLabels:
+    env: "production"
+    team: "data-science"
+    managed-by: "platform-team"

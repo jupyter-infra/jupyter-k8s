@@ -176,6 +176,44 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("custom/authorized:latest"))
 		})
+
+		It("should accept workspace with matching default labels", func() {
+			templateFilename := "default-labels-template"
+			workspaceName := "matching-labels-workspace"
+			workspaceFilename := "matching-labels-workspace"
+
+			By("creating template with default labels")
+			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
+
+			By("creating workspace with matching labels")
+			createWorkspaceForTest(workspaceFilename, groupDir, subgroupValidation)
+
+			By("verifying workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("verifying labels are set correctly")
+			output, err := kubectlGet("workspace", workspaceName, workspaceNamespace, "{.metadata.labels.env}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("production"))
+		})
+
+		It("should reject workspace with mismatched default labels", func() {
+			templateFilename := "default-labels-template"
+			workspaceName := "mismatched-labels-workspace"
+			workspaceFilename := "mismatched-labels-workspace"
+
+			By("creating template with default labels")
+			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
+
+			By("attempting to create workspace with mismatched label value")
+			VerifyCreateWorkspaceRejectedByWebhook(
+				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
+		})
 	})
 
 	Context("Mutability and Deletion Protection", func() {
