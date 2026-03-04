@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: jwt-rotator
+  labels:
+    app: extensionapi-jwt-rotator
+    component: security
+spec:
+  # Run every 15 minutes (matches default rotationInterval)
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            app: extensionapi-jwt-rotator
+            component: security
+        spec:
+          serviceAccountName: jwt-rotator
+          restartPolicy: OnFailure
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65532
+            runAsNonRoot: true
+            fsGroup: 65532
+          containers:
+          - name: rotator
+            image: docker.io/library/rotator:local
+            imagePullPolicy: Never
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+              limits:
+                cpu: 100m
+                memory: 128Mi
+            securityContext:
+              capabilities:
+                drop:
+                - ALL
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+            env:
+            - name: SECRET_NAME
+              value: "jupyter-k8s-extensionapi-secrets"
+            - name: SECRET_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: TOKEN_TTL
+              value: "5m"
+            - name: ROTATION_INTERVAL
+              value: "15m"
+            - name: DRY_RUN
+              value: "false"

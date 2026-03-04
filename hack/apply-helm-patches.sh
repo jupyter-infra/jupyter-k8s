@@ -77,6 +77,57 @@ if [ -d "${SCRIPT_DIR}/../config/apiservice" ]; then
     rm -f "${CHART_DIR}/templates/apiservice/kustomization.yaml"
 fi
 
+# Copy jwt-rotator resources (same pattern as apiservice above)
+if [ -d "${SCRIPT_DIR}/../config/jwt-rotator" ]; then
+    echo "Copying jwt-rotator resources..."
+    mkdir -p "${CHART_DIR}/templates/jwt-rotator"
+
+    JWT_COND='{{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}'
+
+    for file in "${SCRIPT_DIR}/../config/jwt-rotator"/*.yaml; do
+        if [ -f "$file" ]; then
+            filename=$(basename "$file")
+            target="${CHART_DIR}/templates/jwt-rotator/${filename}"
+
+            echo "$JWT_COND" > "$target"
+
+            if [[ "$filename" == "cronjob.yaml" ]]; then
+                cat "$file" | \
+                    sed 's#image: docker.io/library/rotator:local#image: "{{ .Values.extensionApi.jwtSecret.rotator.repository }}/{{ .Values.extensionApi.jwtSecret.rotator.imageName }}:{{ .Values.extensionApi.jwtSecret.rotator.imageTag }}"#' | \
+                    sed 's#imagePullPolicy: Never#imagePullPolicy: IfNotPresent#' | \
+                    sed 's#value: "jupyter-k8s-extensionapi-secrets"#value: {{ .Values.extensionApi.jwtSecret.secretName | quote }}#' | \
+                    sed '/name: TOKEN_TTL$/{n; s#value: "5m"#value: {{ .Values.extensionApi.jwtSecret.tokenTTL | quote }}#;}' | \
+                    sed '/name: ROTATION_INTERVAL$/{n; s#value: "15m"#value: {{ .Values.extensionApi.jwtSecret.rotationInterval | quote }}#;}' >> "$target"
+            elif [[ "$filename" == "rbac.yaml" ]]; then
+                cat "$file" | \
+                    sed 's#\["jupyter-k8s-extensionapi-secrets"\]#[{{ .Values.extensionApi.jwtSecret.secretName | quote }}]#g' | \
+                    sed 's#name: controller-manager$#name: jupyter-k8s-controller-manager#' >> "$target"
+            elif [[ "$filename" == "secret.yaml" ]]; then
+                # Secret needs a full rewrite: generate random key instead of hardcoded
+                cat >> "$target" << 'SECRETEOF'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.extensionApi.jwtSecret.secretName }}
+  labels:
+    app: extensionapi-jwt-rotator
+    component: security
+type: Opaque
+data:
+  jwt-signing-key-{{ now | unixEpoch }}: {{ randBytes 48 | b64enc | quote }}
+SECRETEOF
+            else
+                cat "$file" >> "$target"
+            fi
+
+            echo '{{- end }}' >> "$target"
+            echo "  Patched ${filename}"
+        fi
+    done
+
+    rm -f "${CHART_DIR}/templates/jwt-rotator/kustomization.yaml"
+fi
+
 # Remove connection CRDs as they're meant to be subresources, not standalone CRDs
 echo "Removing connection CRDs from Helm chart..."
 find "${CHART_DIR}/templates/crd/" -name "connection.workspace.jupyter.org_*.yaml" -delete
@@ -224,6 +275,21 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
             {{- end}}\
             {{- if .Values.extensionApi.enable }}\
             - "--enable-extension-api"\
+            {{- if .Values.extensionApi.jwtIssuer }}\
+            - "--jwt-issuer={{ .Values.extensionApi.jwtIssuer }}"\
+            {{- end}}\
+            {{- if .Values.extensionApi.jwtAudience }}\
+            - "--jwt-audience={{ .Values.extensionApi.jwtAudience }}"\
+            {{- end}}\
+            {{- end}}\
+            {{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}\
+            - "--jwt-secret-name={{ .Values.extensionApi.jwtSecret.secretName }}"\
+            {{- if .Values.extensionApi.jwtSecret.tokenTTL }}\
+            - "--jwt-ttl={{ .Values.extensionApi.jwtSecret.tokenTTL }}"\
+            {{- end}}\
+            {{- if .Values.extensionApi.jwtSecret.newKeyUseDelay }}\
+            - "--new-key-use-delay={{ .Values.extensionApi.jwtSecret.newKeyUseDelay }}"\
+            {{- end}}\
             {{- end}}\
             {{- if .Values.workspacePodWatching.enable }}\
             - "--enable-workspace-pod-watching"\
@@ -233,7 +299,7 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
                     # Linux sed
                     sed -i '/args:/,/command:/ {
                     /command:/!d
-                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            - "--default-template-namespace={{ .Values.workspaceTemplates.defaultNamespace }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}\n            {{- if .Values.extensionApi.enable }}\n            - "--enable-extension-api"\n            {{- end}}\n            {{- if .Values.workspacePodWatching.enable }}\n            - "--enable-workspace-pod-watching"\n            {{- end}}
+                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            - "--default-template-namespace={{ .Values.workspaceTemplates.defaultNamespace }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}\n            {{- if .Values.extensionApi.enable }}\n            - "--enable-extension-api"\n            {{- if .Values.extensionApi.jwtIssuer }}\n            - "--jwt-issuer={{ .Values.extensionApi.jwtIssuer }}"\n            {{- end}}\n            {{- if .Values.extensionApi.jwtAudience }}\n            - "--jwt-audience={{ .Values.extensionApi.jwtAudience }}"\n            {{- end}}\n            {{- end}}\n            {{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}\n            - "--jwt-secret-name={{ .Values.extensionApi.jwtSecret.secretName }}"\n            {{- if .Values.extensionApi.jwtSecret.tokenTTL }}\n            - "--jwt-ttl={{ .Values.extensionApi.jwtSecret.tokenTTL }}"\n            {{- end}}\n            {{- if .Values.extensionApi.jwtSecret.newKeyUseDelay }}\n            - "--new-key-use-delay={{ .Values.extensionApi.jwtSecret.newKeyUseDelay }}"\n            {{- end}}\n            {{- end}}\n            {{- if .Values.workspacePodWatching.enable }}\n            - "--enable-workspace-pod-watching"\n            {{- end}}
                 }' "${MANAGER_YAML}"
                 fi
                 # Also add extension API volume mount if not already present
@@ -329,6 +395,9 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
         else
             echo "CONTROLLER_POD_NAMESPACE already exists, skipping env var injection"
         fi
+
+        # JWT params are now passed as flags (--jwt-secret-name, --jwt-ttl, --new-key-use-delay)
+        # in the args block above, so no env var injection needed here.
     else
         echo "Warning: manager.yaml not found at ${MANAGER_YAML}"
     fi

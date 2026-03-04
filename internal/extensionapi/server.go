@@ -16,6 +16,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/jupyter-infra/jupyter-k8s/internal/aws"
 	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	genericapiserver "k8s.io/apiserver/pkg/server"
@@ -24,6 +25,7 @@ import (
 	"k8s.io/apiserver/pkg/util/compatibility"
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/kubernetes/typed/authorization/v1"
+	toolscache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -238,17 +240,53 @@ func createGenericAPIServer(recommendedOptions *genericoptions.RecommendedOption
 	return genericServer, nil
 }
 
-func createJWTSignerFactory(config *ExtensionConfig) (jwt.SignerFactory, error) {
-	// Create KMS client and signer factory
-	ctx := context.Background()
-	kmsClient, err := aws.NewKMSClient(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create KMS client: %w", err)
+func createJWTCompositeSignerFactory(config *ExtensionConfig) (jwt.SignerFactory, error) {
+	factories := map[string]jwt.SignerFactory{}
+	var defaultFactory jwt.SignerFactory
+
+	if config.JwtSecretName != "" {
+		ttl := config.JwtTTL
+		if ttl == 0 {
+			ttl = DefaultJwtTTL
+		}
+		newKeyDelay := config.NewKeyUseDelay
+		if newKeyDelay == 0 {
+			newKeyDelay = DefaultNewKeyUseDelay
+		}
+		issuer := config.JwtIssuer
+		if issuer == "" {
+			issuer = DefaultJwtIssuer
+		}
+		audience := config.JwtAudience
+		if audience == "" {
+			audience = DefaultJwtAudience
+		}
+		signer := jwt.NewStandardSigner(issuer, audience, ttl, newKeyDelay)
+		stdFactory := jwt.NewStandardSignerFactory(signer)
+		factories["k8s-native"] = stdFactory
+		defaultFactory = stdFactory
 	}
 
-	signerFactory := aws.NewAWSSignerFactory(kmsClient, config.KMSKeyID, time.Minute*5)
+	if config.KMSKeyID != "" || defaultFactory == nil {
+		ctx := context.Background()
+		kmsClient, err := aws.NewKMSClient(ctx)
+		if err != nil {
+			if defaultFactory != nil {
+				// k8s-native is available; AWS is optional
+				setupLog.Info("AWS KMS not available, using k8s-native signing only", "error", err)
+			} else {
+				return nil, fmt.Errorf("failed to create KMS client: %w", err)
+			}
+		} else {
+			awsFactory := aws.NewAWSSignerFactory(kmsClient, config.KMSKeyID, time.Minute*5)
+			factories["aws"] = awsFactory
+			if defaultFactory == nil {
+				defaultFactory = awsFactory
+			}
+		}
+	}
 
-	return signerFactory, nil
+	return jwt.NewCompositeSignerFactory(factories, defaultFactory), nil
 }
 
 // createExtensionServer creates and configures the extension server
@@ -275,10 +313,45 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 
 	logger := mgr.GetLogger().WithName("extension-api")
 
-	// Create JWT manager
-	signerFactory, err := createJWTSignerFactory(config)
+	// Create JWT signer factory
+	signerFactory, err := createJWTCompositeSignerFactory(config)
 	if err != nil {
 		return err
+	}
+
+	// When using k8s-native signing, register secret watch and initial key loader
+	if config.JwtSecretName != "" {
+		composite := signerFactory.(*jwt.CompositeSignerFactory)
+		nativeFactory, _ := composite.GetFactory("k8s-native")
+		stdFactory := nativeFactory.(*jwt.StandardSignerFactory)
+
+		namespace := config.ControllerNamespace
+		if namespace == "" {
+			return fmt.Errorf("ControllerNamespace must be set when using JWT secret")
+		}
+
+		logger.Info("Registering JWT secret watch event handlers",
+			"secret", config.JwtSecretName,
+			"namespace", namespace)
+
+		if err := registerSecretWatchHandlers(
+			mgr,
+			config.JwtSecretName,
+			namespace,
+			stdFactory.Signer(),
+			logger.WithName("jwt-secret-watch"),
+		); err != nil {
+			return fmt.Errorf("failed to register JWT secret watch handlers: %w", err)
+		}
+
+		if err := mgr.Add(newK8sSecretJwtInitializer(
+			stdFactory.Signer(),
+			config.JwtSecretName,
+			namespace,
+			logger.WithName("jwt-secret-init"),
+		)); err != nil {
+			return fmt.Errorf("failed to add k8s secret JWT initializer: %w", err)
+		}
 	}
 
 	// Create SAR client
@@ -299,4 +372,77 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 
 	// Add server to manager
 	return addServerToManager(mgr, server)
+}
+
+// registerSecretWatchHandlers registers informer event handlers to watch for secret changes
+// and update the StandardSigner when keys are rotated.
+func registerSecretWatchHandlers(
+	mgr ctrl.Manager,
+	secretName string,
+	namespace string,
+	standardSigner *jwt.StandardSigner,
+	logger logr.Logger,
+) error {
+	ctx := context.Background()
+	informer, err := mgr.GetCache().GetInformer(ctx, &corev1.Secret{})
+	if err != nil {
+		return fmt.Errorf("failed to get secret informer: %w", err)
+	}
+
+	updateSignerFromSecret := func(secret *corev1.Secret) {
+		signingKeys, latestKid, err := jwt.ParseSigningKeysFromSecret(secret)
+		if err != nil {
+			logger.Error(err, "Failed to parse signing keys")
+			return
+		}
+
+		if err := standardSigner.UpdateKeys(signingKeys, latestKid); err != nil {
+			logger.Error(err, "Failed to update signing keys")
+			return
+		}
+
+		logger.Info("Successfully updated signing keys from secret",
+			"keyCount", len(signingKeys),
+			"latestKid", latestKid)
+	}
+
+	_, err = informer.AddEventHandler(toolscache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			secret, ok := obj.(*corev1.Secret)
+			if !ok {
+				return
+			}
+			if secret.Name == secretName && secret.Namespace == namespace {
+				logger.Info("Secret added event received", "secret", secret.Name, "namespace", secret.Namespace)
+				updateSignerFromSecret(secret)
+			}
+		},
+		UpdateFunc: func(_, newObj interface{}) {
+			secret, ok := newObj.(*corev1.Secret)
+			if !ok {
+				return
+			}
+			if secret.Name == secretName && secret.Namespace == namespace {
+				logger.Info("Secret updated event received", "secret", secret.Name, "namespace", secret.Namespace)
+				updateSignerFromSecret(secret)
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			secret, ok := obj.(*corev1.Secret)
+			if !ok {
+				return
+			}
+			if secret.Name == secretName && secret.Namespace == namespace {
+				logger.Error(fmt.Errorf("secret was deleted"), "JWT secret deleted",
+					"secret", secretName,
+					"namespace", namespace)
+			}
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to add event handler to informer: %w", err)
+	}
+
+	logger.Info("JWT secret watch event handlers registered")
+	return nil
 }

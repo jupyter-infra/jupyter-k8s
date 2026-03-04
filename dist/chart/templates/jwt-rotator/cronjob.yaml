@@ -1,0 +1,61 @@
+{{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: jwt-rotator
+  labels:
+    app: extensionapi-jwt-rotator
+    component: security
+spec:
+  # Run every 15 minutes (matches default rotationInterval)
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            app: extensionapi-jwt-rotator
+            component: security
+        spec:
+          serviceAccountName: jwt-rotator
+          restartPolicy: OnFailure
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65532
+            runAsNonRoot: true
+            fsGroup: 65532
+          containers:
+          - name: rotator
+            image: "{{ .Values.extensionApi.jwtSecret.rotator.repository }}/{{ .Values.extensionApi.jwtSecret.rotator.imageName }}:{{ .Values.extensionApi.jwtSecret.rotator.imageTag }}"
+            imagePullPolicy: IfNotPresent
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+              limits:
+                cpu: 100m
+                memory: 128Mi
+            securityContext:
+              capabilities:
+                drop:
+                - ALL
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+            env:
+            - name: SECRET_NAME
+              value: {{ .Values.extensionApi.jwtSecret.secretName | quote }}
+            - name: SECRET_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: TOKEN_TTL
+              value: {{ .Values.extensionApi.jwtSecret.tokenTTL | quote }}
+            - name: ROTATION_INTERVAL
+              value: {{ .Values.extensionApi.jwtSecret.rotationInterval | quote }}
+            - name: DRY_RUN
+              value: "false"
+{{- end }}

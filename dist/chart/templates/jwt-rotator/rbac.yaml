@@ -1,0 +1,61 @@
+{{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jwt-rotator-secrets-manager
+  labels:
+    app: extensionapi-jwt-rotator
+    component: security
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: [{{ .Values.extensionApi.jwtSecret.secretName | quote }}]
+  verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jwt-rotator-secrets-manager-binding
+  labels:
+    app: extensionapi-jwt-rotator
+    component: security
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: jwt-rotator-secrets-manager
+subjects:
+- kind: ServiceAccount
+  name: jwt-rotator
+---
+# Controller needs read access to the JWT secret
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jwt-secrets-reader
+  labels:
+    app: extensionapi-jwt-rotator
+    component: security
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: [{{ .Values.extensionApi.jwtSecret.secretName | quote }}]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jwt-secrets-reader-binding
+  labels:
+    app: extensionapi-jwt-rotator
+    component: security
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: jwt-secrets-reader
+subjects:
+- kind: ServiceAccount
+  name: jupyter-k8s-controller-manager
+{{- end }}

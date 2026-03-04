@@ -354,6 +354,15 @@ setup-kind: ## Set up a Kind cluster for development if it does not exist
 	else \
 		echo "cert-manager is already installed, skipping installation"; \
 	fi
+	@if ! kubectl get crds ingressroutes.traefik.io > /dev/null 2>&1; then \
+		echo "Installing Traefik CRDs"; \
+		helm repo add traefik https://traefik.github.io/charts; \
+		helm install traefik-crd traefik/traefik-crds \
+			--namespace traefik \
+			--create-namespace; \
+	else \
+		echo "Traefik CRDs are already installed, skipping installation"; \
+	fi
 
 .PHONY: test-e2e-focus
 test-e2e-focus: setup-test-e2e manifests generate fmt vet load-images-e2e ## Run specific e2e tests using FOCUS parameter. Usage: make test-e2e-focus FOCUS="Primary Storage"
@@ -383,12 +392,16 @@ teardown-kind: ## Tear down the Kind cluster, registry, and clean up images
 	$(MAKE) -C images clean CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: load-images
-load-images: docker-build ## Build and load images into the Kind cluster
+load-images: docker-build build-rotator ## Build and load images into the Kind cluster
 	@echo "Loading controller image ${IMG} into kind cluster ${DEV_KIND_CLUSTER}..."
 	@mkdir -p /tmp/kind-images
 	$(CONTAINER_TOOL) save ${IMG} -o /tmp/kind-images/controller.tar
 	$(KIND) load image-archive /tmp/kind-images/controller.tar --name $(DEV_KIND_CLUSTER)
 	rm -f /tmp/kind-images/controller.tar
+	@echo "Loading rotator image into kind cluster ${DEV_KIND_CLUSTER}..."
+	$(CONTAINER_TOOL) save docker.io/library/rotator:local -o /tmp/kind-images/rotator.tar
+	$(KIND) load image-archive /tmp/kind-images/rotator.tar --name $(DEV_KIND_CLUSTER)
+	rm -f /tmp/kind-images/rotator.tar
 	$(MAKE) -C images push-all-kind CLUSTER_NAME=$(DEV_KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: load-images-e2e
