@@ -72,6 +72,11 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		violations = append(violations, *violation)
 	}
 
+	// Validate default labels
+	if violation := validateDefaultLabels(workspace, template); violation != nil {
+		violations = append(violations, *violation)
+	}
+
 	if len(violations) > 0 {
 		return fmt.Errorf("workspace violates template '%s' constraints: %s", workspace.Spec.TemplateRef.Name, formatViolations(violations))
 	}
