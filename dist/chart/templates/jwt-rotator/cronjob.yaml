@@ -33,7 +33,7 @@ spec:
           containers:
           - name: rotator
             image: "{{ .Values.extensionApi.jwtSecret.rotator.repository }}/{{ .Values.extensionApi.jwtSecret.rotator.imageName }}:{{ .Values.extensionApi.jwtSecret.rotator.imageTag }}"
-            imagePullPolicy: IfNotPresent
+            imagePullPolicy: {{ .Values.extensionApi.jwtSecret.rotator.imagePullPolicy }}
             resources:
               requests:
                 cpu: 50m

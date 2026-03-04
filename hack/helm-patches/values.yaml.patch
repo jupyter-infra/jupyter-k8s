@@ -47,6 +47,7 @@ extensionApi:
       repository: "docker.io"
       imageName: "jupyter-k8s-rotator"
       imageTag: "latest"
+      imagePullPolicy: "IfNotPresent"
       resources:
         requests:
           cpu: 50m

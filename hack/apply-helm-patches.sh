@@ -94,7 +94,7 @@ if [ -d "${SCRIPT_DIR}/../config/jwt-rotator" ]; then
             if [[ "$filename" == "cronjob.yaml" ]]; then
                 cat "$file" | \
                     sed 's#image: docker.io/library/rotator:local#image: "{{ .Values.extensionApi.jwtSecret.rotator.repository }}/{{ .Values.extensionApi.jwtSecret.rotator.imageName }}:{{ .Values.extensionApi.jwtSecret.rotator.imageTag }}"#' | \
-                    sed 's#imagePullPolicy: Never#imagePullPolicy: IfNotPresent#' | \
+                    sed 's#imagePullPolicy: Never#imagePullPolicy: {{ .Values.extensionApi.jwtSecret.rotator.imagePullPolicy }}#' | \
                     sed 's#value: "jupyter-k8s-extensionapi-secrets"#value: {{ .Values.extensionApi.jwtSecret.secretName | quote }}#' | \
                     sed '/name: TOKEN_TTL$/{n; s#value: "5m"#value: {{ .Values.extensionApi.jwtSecret.tokenTTL | quote }}#;}' | \
                     sed '/name: ROTATION_INTERVAL$/{n; s#value: "15m"#value: {{ .Values.extensionApi.jwtSecret.rotationInterval | quote }}#;}' >> "$target"
@@ -127,6 +127,32 @@ SECRETEOF
 
     rm -f "${CHART_DIR}/templates/jwt-rotator/kustomization.yaml"
 fi
+
+# Create extension API auth RoleBinding in kube-system
+# This RoleBinding is excluded from the kustomize pipeline because kustomize's global
+# namespace transform would override kube-system. We create it directly in the helm chart.
+echo "Creating extension API auth RoleBinding template..."
+EXTENSION_AUTH_BINDING="${CHART_DIR}/templates/rbac/extension_api_auth_binding.yaml"
+cat > "${EXTENSION_AUTH_BINDING}" << 'AUTHEOF'
+{{- if .Values.rbac.enable }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: jupyter-k8s-extension-api-auth
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- kind: ServiceAccount
+  name: jupyter-k8s-controller-manager
+  namespace: {{ .Release.Namespace }}
+{{- end -}}
+AUTHEOF
+echo "Created extension API auth RoleBinding template"
 
 # Remove connection CRDs as they're meant to be subresources, not standalone CRDs
 echo "Removing connection CRDs from Helm chart..."
