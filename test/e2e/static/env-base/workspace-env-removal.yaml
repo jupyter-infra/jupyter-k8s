@@ -1,0 +1,22 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-env-removal
+  namespace: default
+spec:
+  displayName: "Workspace for Env Removal"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  containerConfig:
+    env:
+      - name: REMOVE_ME
+        value: will-be-removed
+      - name: ALSO_REMOVE
+        value: also-removed

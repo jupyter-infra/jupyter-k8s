@@ -1,0 +1,28 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-env-valuefrom
+  namespace: default
+spec:
+  displayName: "Workspace with ValueFrom Env Variables"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  containerConfig:
+    env:
+      - name: CONFIG_VALUE
+        valueFrom:
+          configMapKeyRef:
+            name: test-config
+            key: config-key
+      - name: ANOTHER_CONFIG_VALUE
+        valueFrom:
+          configMapKeyRef:
+            name: test-config
+            key: another-key

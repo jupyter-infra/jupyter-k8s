@@ -1,0 +1,17 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: update-annotations-workspace
+  annotations:
+    initial-annotation: "initial-value"
+spec:
+  displayName: "Update Annotations Workspace"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

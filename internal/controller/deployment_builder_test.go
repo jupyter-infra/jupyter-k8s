@@ -177,6 +177,170 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(container.Command).To(Equal([]string{"/bin/bash"}))
 			Expect(container.Args).To(Equal([]string{"-c", "echo 'test' && sleep 3600"}))
 		})
+
+		It("should set environment variables from container config", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-env",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					ContainerConfig: &workspacev1alpha1.ContainerConfig{
+						Env: []corev1.EnvVar{
+							{
+								Name:  "MY_VAR",
+								Value: "my-value",
+							},
+							{
+								Name:  "ANOTHER_VAR",
+								Value: "another-value",
+							},
+						},
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deployment).NotTo(BeNil())
+
+			container := deployment.Spec.Template.Spec.Containers[0]
+
+			Expect(container.Env).To(HaveLen(2))
+			Expect(container.Env[0].Name).To(Equal("MY_VAR"))
+			Expect(container.Env[0].Value).To(Equal("my-value"))
+			Expect(container.Env[1].Name).To(Equal("ANOTHER_VAR"))
+			Expect(container.Env[1].Value).To(Equal("another-value"))
+		})
+
+		It("should handle env variables with valueFrom", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-env-valuefrom",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					ContainerConfig: &workspacev1alpha1.ContainerConfig{
+						Env: []corev1.EnvVar{
+							{
+								Name: "SECRET_VALUE",
+								ValueFrom: &corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "my-secret",
+										},
+										Key: "password",
+									},
+								},
+							},
+							{
+								Name: "CONFIG_VALUE",
+								ValueFrom: &corev1.EnvVarSource{
+									ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "my-config",
+										},
+										Key: "config-key",
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deployment).NotTo(BeNil())
+
+			container := deployment.Spec.Template.Spec.Containers[0]
+
+			Expect(container.Env).To(HaveLen(2))
+			Expect(container.Env[0].Name).To(Equal("SECRET_VALUE"))
+			Expect(container.Env[0].ValueFrom).NotTo(BeNil())
+			Expect(container.Env[0].ValueFrom.SecretKeyRef).NotTo(BeNil())
+			Expect(container.Env[0].ValueFrom.SecretKeyRef.Name).To(Equal("my-secret"))
+			Expect(container.Env[0].ValueFrom.SecretKeyRef.Key).To(Equal("password"))
+
+			Expect(container.Env[1].Name).To(Equal("CONFIG_VALUE"))
+			Expect(container.Env[1].ValueFrom).NotTo(BeNil())
+			Expect(container.Env[1].ValueFrom.ConfigMapKeyRef).NotTo(BeNil())
+			Expect(container.Env[1].ValueFrom.ConfigMapKeyRef.Name).To(Equal("my-config"))
+			Expect(container.Env[1].ValueFrom.ConfigMapKeyRef.Key).To(Equal("config-key"))
+		})
+
+		It("should handle empty env array", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-empty-env",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					ContainerConfig: &workspacev1alpha1.ContainerConfig{
+						Env: []corev1.EnvVar{},
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deployment).NotTo(BeNil())
+
+			container := deployment.Spec.Template.Spec.Containers[0]
+			Expect(container.Env).To(BeEmpty())
+		})
+
+		It("should handle nil container config", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-nil-config",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					ContainerConfig: nil,
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deployment).NotTo(BeNil())
+
+			container := deployment.Spec.Template.Spec.Containers[0]
+			Expect(container.Env).To(BeEmpty())
+		})
+
+		It("should set command, args, and env together", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-full-config",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					ContainerConfig: &workspacev1alpha1.ContainerConfig{
+						Command: []string{"/bin/sh"},
+						Args:    []string{"-c", "echo $MY_VAR"},
+						Env: []corev1.EnvVar{
+							{
+								Name:  "MY_VAR",
+								Value: "test-value",
+							},
+						},
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deployment).NotTo(BeNil())
+
+			container := deployment.Spec.Template.Spec.Containers[0]
+
+			Expect(container.Command).To(Equal([]string{"/bin/sh"}))
+			Expect(container.Args).To(Equal([]string{"-c", "echo $MY_VAR"}))
+			Expect(container.Env).To(HaveLen(1))
+			Expect(container.Env[0].Name).To(Equal("MY_VAR"))
+			Expect(container.Env[0].Value).To(Equal("test-value"))
+		})
 	})
 
 	Context("Node Selector", func() {
@@ -244,12 +408,10 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(HaveLen(1))
 		})
 
-		It("should handle workspace with affinity from template defaults", func() {
-			// Note: Template defaults are applied via webhooks during admission
-			// This test verifies the deployment builder respects workspace spec affinity
+		It("should set preferred node affinity when specified", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace-template-affinity",
+					Name:      "test-workspace-preferred-affinity",
 					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
@@ -321,12 +483,10 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(tolerations[1].Operator).To(Equal(corev1.TolerationOpExists))
 		})
 
-		It("should handle workspace with tolerations from template defaults", func() {
-			// Note: Template defaults are applied via webhooks during admission
-			// This test verifies the deployment builder respects workspace spec tolerations
+		It("should set single toleration when specified", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace-template-tolerations",
+					Name:      "test-workspace-single-toleration",
 					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
@@ -467,6 +627,81 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(podSpec.SecurityContext).NotTo(BeNil())
 			Expect(podSpec.SecurityContext.FSGroup).NotTo(BeNil())
 			Expect(*podSpec.SecurityContext.FSGroup).To(Equal(int64(1000)))
+		})
+	})
+
+	Context("Annotations Propagation", func() {
+		It("should copy workspace annotations to deployment and pod", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-with-annotations",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"custom.io/annotation":  "value1",
+						"another.io/annotation": "value2",
+						"prometheus.io/scrape":  "true",
+						"prometheus.io/port":    "8080",
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					DisplayName: "Test Workspace",
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Deployment should have all workspace annotations
+			Expect(deployment.Annotations).To(HaveLen(4))
+			Expect(deployment.Annotations["custom.io/annotation"]).To(Equal("value1"))
+			Expect(deployment.Annotations["another.io/annotation"]).To(Equal("value2"))
+			Expect(deployment.Annotations["prometheus.io/scrape"]).To(Equal("true"))
+			Expect(deployment.Annotations["prometheus.io/port"]).To(Equal("8080"))
+
+			// Pod template should have all workspace annotations
+			Expect(deployment.Spec.Template.Annotations).To(HaveLen(4))
+			Expect(deployment.Spec.Template.Annotations["custom.io/annotation"]).To(Equal("value1"))
+			Expect(deployment.Spec.Template.Annotations["another.io/annotation"]).To(Equal("value2"))
+			Expect(deployment.Spec.Template.Annotations["prometheus.io/scrape"]).To(Equal("true"))
+			Expect(deployment.Spec.Template.Annotations["prometheus.io/port"]).To(Equal("8080"))
+		})
+
+		It("should detect annotation changes and trigger deployment update", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-annotation-update",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"initial-annotation": "initial-value",
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					DisplayName: "Test Workspace",
+				},
+			}
+
+			existingDeployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Update workspace annotations
+			workspace.Annotations["new-annotation"] = "new-value"
+			workspace.Annotations["initial-annotation"] = "updated-value"
+
+			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(needsUpdate).To(BeTrue(), "deployment should need update when annotations change")
+
+			// Build new deployment and verify annotations
+			newDeployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(newDeployment.Annotations).To(HaveLen(2))
+			Expect(newDeployment.Annotations["new-annotation"]).To(Equal("new-value"))
+			Expect(newDeployment.Annotations["initial-annotation"]).To(Equal("updated-value"))
+
+			Expect(newDeployment.Spec.Template.Annotations).To(HaveLen(2))
+			Expect(newDeployment.Spec.Template.Annotations["new-annotation"]).To(Equal("new-value"))
+			Expect(newDeployment.Spec.Template.Annotations["initial-annotation"]).To(Equal("updated-value"))
 		})
 	})
 })

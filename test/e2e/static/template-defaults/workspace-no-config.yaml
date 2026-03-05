@@ -1,0 +1,11 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-no-config
+  namespace: default
+spec:
+  displayName: "Workspace without Container Config"
+  desiredStatus: Running
+  templateRef:
+    name: env-template
+    namespace: jupyter-k8s-shared

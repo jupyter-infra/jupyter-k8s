@@ -557,6 +557,79 @@ var _ = Describe("Workspace Template", Ordered, func() {
 				},
 			)
 		})
+
+		It("should inherit container config with env variables from template", func() {
+			templateFilename := "env-template"
+			workspaceName := "workspace-no-config"
+			workspaceFilename := "workspace-no-config"
+
+			By("creating template with container config including env variables")
+			createTemplateForTest(templateFilename, groupDir, subgroupDefaults)
+
+			By("creating workspace without container config")
+			createWorkspaceForTest(workspaceFilename, groupDir, subgroupDefaults)
+
+			By("verifying workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("verifying workspace inherited template's container config")
+			// Check env variables
+			envVars, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.spec.containerConfig.env[*].name}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(envVars).To(ContainSubstring("TEMPLATE_VAR"))
+			Expect(envVars).To(ContainSubstring("JUPYTER_ENABLE_LAB"))
+
+			By("verifying environment variable values from template")
+			templateVarValue, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.spec.containerConfig.env[?(@.name=='TEMPLATE_VAR')].value}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(templateVarValue).To(Equal("template-value"))
+
+			jupyterLabValue, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.spec.containerConfig.env[?(@.name=='JUPYTER_ENABLE_LAB')].value}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(jupyterLabValue).To(Equal("yes"))
+		})
+
+		It("should override template env when workspace specifies container config", func() {
+			templateFilename := "env-template"
+			workspaceName := "workspace-env-override"
+			workspaceFilename := "workspace-env-override"
+
+			By("creating template with container config including env variables")
+			createTemplateForTest(templateFilename, groupDir, subgroupDefaults)
+
+			By("creating workspace with its own container config")
+			createWorkspaceForTest(workspaceFilename, groupDir, subgroupDefaults)
+
+			By("verifying workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("verifying workspace uses its own env variables, not template's")
+			envVars, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.spec.containerConfig.env[*].name}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(envVars).To(ContainSubstring("WORKSPACE_VAR"))
+			Expect(envVars).NotTo(ContainSubstring("TEMPLATE_VAR"))
+			Expect(envVars).NotTo(ContainSubstring("JUPYTER_ENABLE_LAB"))
+
+			By("verifying workspace environment variable value")
+			workspaceVarValue, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.spec.containerConfig.env[?(@.name=='WORKSPACE_VAR')].value}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspaceVarValue).To(Equal("workspace-value"))
+		})
 	})
 })
 
