@@ -105,6 +105,13 @@ var _ = Describe("EnvValidator", func() {
 			violations := validateEnvRequirements(workspace, template)
 			Expect(violations).To(BeEmpty())
 		})
+
+		It("should reject value that contains match but isn't exact match", func() {
+			workspace.Spec.Env = []corev1.EnvVar{{Name: "REGION", Value: "eu-us-west-2"}}
+			violations := validateEnvRequirements(workspace, template)
+			Expect(violations).To(HaveLen(1))
+			Expect(violations[0].Type).To(Equal(ViolationTypeEnvRegexMismatch))
+		})
 	})
 
 	Context("invalid regex in template", func() {
