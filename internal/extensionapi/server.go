@@ -16,7 +16,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/jupyter-infra/jupyter-k8s/internal/aws"
 	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	genericapiserver "k8s.io/apiserver/pkg/server"
@@ -25,7 +24,6 @@ import (
 	"k8s.io/apiserver/pkg/util/compatibility"
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/kubernetes/typed/authorization/v1"
-	toolscache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -334,17 +332,16 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 			"secret", config.JwtSecretName,
 			"namespace", namespace)
 
-		if err := registerSecretWatchHandlers(
+		if err := stdFactory.Signer().RegisterSecretWatch(
 			mgr,
 			config.JwtSecretName,
 			namespace,
-			stdFactory.Signer(),
 			logger.WithName("jwt-secret-watch"),
 		); err != nil {
 			return fmt.Errorf("failed to register JWT secret watch handlers: %w", err)
 		}
 
-		if err := mgr.Add(newK8sSecretJwtInitializer(
+		if err := mgr.Add(jwt.NewSecretInitializer(
 			stdFactory.Signer(),
 			config.JwtSecretName,
 			namespace,
@@ -372,77 +369,4 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 
 	// Add server to manager
 	return addServerToManager(mgr, server)
-}
-
-// registerSecretWatchHandlers registers informer event handlers to watch for secret changes
-// and update the StandardSigner when keys are rotated.
-func registerSecretWatchHandlers(
-	mgr ctrl.Manager,
-	secretName string,
-	namespace string,
-	standardSigner *jwt.StandardSigner,
-	logger logr.Logger,
-) error {
-	ctx := context.Background()
-	informer, err := mgr.GetCache().GetInformer(ctx, &corev1.Secret{})
-	if err != nil {
-		return fmt.Errorf("failed to get secret informer: %w", err)
-	}
-
-	updateSignerFromSecret := func(secret *corev1.Secret) {
-		signingKeys, latestKid, err := jwt.ParseSigningKeysFromSecret(secret)
-		if err != nil {
-			logger.Error(err, "Failed to parse signing keys")
-			return
-		}
-
-		if err := standardSigner.UpdateKeys(signingKeys, latestKid); err != nil {
-			logger.Error(err, "Failed to update signing keys")
-			return
-		}
-
-		logger.Info("Successfully updated signing keys from secret",
-			"keyCount", len(signingKeys),
-			"latestKid", latestKid)
-	}
-
-	_, err = informer.AddEventHandler(toolscache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			secret, ok := obj.(*corev1.Secret)
-			if !ok {
-				return
-			}
-			if secret.Name == secretName && secret.Namespace == namespace {
-				logger.Info("Secret added event received", "secret", secret.Name, "namespace", secret.Namespace)
-				updateSignerFromSecret(secret)
-			}
-		},
-		UpdateFunc: func(_, newObj interface{}) {
-			secret, ok := newObj.(*corev1.Secret)
-			if !ok {
-				return
-			}
-			if secret.Name == secretName && secret.Namespace == namespace {
-				logger.Info("Secret updated event received", "secret", secret.Name, "namespace", secret.Namespace)
-				updateSignerFromSecret(secret)
-			}
-		},
-		DeleteFunc: func(obj interface{}) {
-			secret, ok := obj.(*corev1.Secret)
-			if !ok {
-				return
-			}
-			if secret.Name == secretName && secret.Namespace == namespace {
-				logger.Error(fmt.Errorf("secret was deleted"), "JWT secret deleted",
-					"secret", secretName,
-					"namespace", namespace)
-			}
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to add event handler to informer: %w", err)
-	}
-
-	logger.Info("JWT secret watch event handlers registered")
-	return nil
 }

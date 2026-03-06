@@ -3,29 +3,30 @@ Copyright (c) Amazon Web Services
 Distributed under the terms of the MIT license
 */
 
-package extensionapi
+package jwt
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// k8sSecretJwtInitializer loads initial JWT signing keys from a K8s Secret on startup.
+// SecretInitializer loads initial JWT signing keys from a K8s Secret on startup.
 // It implements the controller-runtime Runnable interface.
-type k8sSecretJwtInitializer struct {
-	signer     *jwt.StandardSigner
+type SecretInitializer struct {
+	signer     *StandardSigner
 	secretName string
 	namespace  string
 	logger     logr.Logger
 }
 
-func newK8sSecretJwtInitializer(signer *jwt.StandardSigner, secretName, namespace string, logger logr.Logger) *k8sSecretJwtInitializer {
-	return &k8sSecretJwtInitializer{
+// NewSecretInitializer creates a new SecretInitializer that loads initial JWT signing keys
+// from the specified K8s Secret when started.
+func NewSecretInitializer(signer *StandardSigner, secretName, namespace string, logger logr.Logger) *SecretInitializer {
+	return &SecretInitializer{
 		signer:     signer,
 		secretName: secretName,
 		namespace:  namespace,
@@ -33,7 +34,8 @@ func newK8sSecretJwtInitializer(signer *jwt.StandardSigner, secretName, namespac
 	}
 }
 
-func (b *k8sSecretJwtInitializer) Start(ctx context.Context) error {
+// Start loads the initial JWT signing keys from the K8s Secret. Implements the controller-runtime Runnable interface.
+func (b *SecretInitializer) Start(ctx context.Context) error {
 	b.logger.Info("Loading initial JWT signing keys",
 		"secret", b.secretName,
 		"namespace", b.namespace)
@@ -57,6 +59,7 @@ func (b *k8sSecretJwtInitializer) Start(ctx context.Context) error {
 	return nil
 }
 
-func (b *k8sSecretJwtInitializer) NeedLeaderElection() bool {
+// NeedLeaderElection returns false because secret initialization should run on all replicas.
+func (b *SecretInitializer) NeedLeaderElection() bool {
 	return false
 }
