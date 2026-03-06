@@ -59,6 +59,17 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultContainerConfig *ContainerConfig `json:"defaultContainerConfig,omitempty"`
 
+	// AddEnv specifies environment variables to add to workspaces using this template
+	// Variables are added during defaulting if no variable with the same name exists on the workspace
+	// +kubebuilder:validation:MaxItems=50
+	// +optional
+	AddEnv []corev1.EnvVar `json:"addEnv,omitempty"`
+
+	// EnvRequirements specifies validation rules for workspace environment variables
+	// +kubebuilder:validation:MaxItems=50
+	// +optional
+	EnvRequirements []EnvRequirement `json:"envRequirements,omitempty"`
+
 	// AllowSecondaryStorages controls whether workspaces using this template
 	// can mount additional storage volumes beyond the primary storage
 	// +kubebuilder:default=true
@@ -157,6 +168,24 @@ type LabelRequirement struct {
 	Required *bool `json:"required,omitempty"`
 
 	// Regex is a regular expression the label value must match
+	// If empty, any value is accepted
+	// +optional
+	Regex string `json:"regex,omitempty"`
+}
+
+// EnvRequirement defines a validation rule for a workspace environment variable
+type EnvRequirement struct {
+	// Name is the environment variable name to validate
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Required indicates whether the environment variable must be present on the workspace
+	// +kubebuilder:default=false
+	// +optional
+	Required *bool `json:"required,omitempty"`
+
+	// Regex is a regular expression the environment variable value must match
 	// If empty, any value is accepted
 	// +optional
 	Regex string `json:"regex,omitempty"`

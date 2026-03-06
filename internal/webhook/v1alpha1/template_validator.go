@@ -82,6 +82,11 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		violations = append(violations, forbiddenViolations...)
 	}
 
+	// Validate env requirements
+	if envViolations := validateEnvRequirements(workspace, template); len(envViolations) > 0 {
+		violations = append(violations, envViolations...)
+	}
+
 	if len(violations) > 0 {
 		return fmt.Errorf("workspace violates template '%s' constraints: %s", workspace.Spec.TemplateRef.Name, formatViolations(violations))
 	}

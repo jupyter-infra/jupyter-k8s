@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: has-forbidden-label-workspace
+  namespace: default
+  labels:
+    debug: "true"
+spec:
+  displayName: "Workspace with Forbidden Label"
+  templateRef:
+    name: forbidden-labels-template
+    namespace: jupyter-k8s-shared

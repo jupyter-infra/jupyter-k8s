@@ -214,6 +214,208 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			VerifyCreateWorkspaceRejectedByWebhook(
 				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
 		})
+
+		It("should inject addLabels when workspace has no labels", func() {
+			templateFilename := "default-labels-template"
+			workspaceName := "no-labels-workspace"
+			workspaceFilename := "no-labels-workspace"
+
+			By("creating template with addLabels")
+			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
+
+			By("creating workspace with no labels")
+			createWorkspaceForTest(workspaceFilename, groupDir, subgroupValidation)
+
+			By("verifying workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("verifying addLabels were injected")
+			output, err := kubectlGet("workspace", workspaceName, workspaceNamespace, "{.metadata.labels.env}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("production"))
+
+			output, err = kubectlGet("workspace", workspaceName, workspaceNamespace, "{.metadata.labels.managed-by}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("platform-team"))
+		})
+
+		It("should reject workspace missing a required label", func() {
+			templateFilename := "required-label-template"
+			workspaceName := "missing-required-label-workspace"
+			workspaceFilename := "missing-required-label-workspace"
+
+			By("creating template with required label")
+			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
+
+			By("attempting to create workspace without required label")
+			VerifyCreateWorkspaceRejectedByWebhook(
+				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
+		})
+
+		It("should reject workspace with a forbidden label", func() {
+			templateFilename := "forbidden-labels-template"
+			workspaceName := "has-forbidden-label-workspace"
+			workspaceFilename := "has-forbidden-label-workspace"
+
+			By("creating template with forbidden labels")
+			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
+
+			By("attempting to create workspace with forbidden label")
+			VerifyCreateWorkspaceRejectedByWebhook(
+				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
+		})
+
+		It("should accept workspace without forbidden labels", func() {
+			templateFilename := "forbidden-labels-template"
+			workspaceName := "no-forbidden-label-workspace"
+			workspaceFilename := "no-forbidden-label-workspace"
+
+			By("creating template with forbidden labels")
+			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
+
+			By("creating workspace without forbidden labels")
+			createWorkspaceForTest(workspaceFilename, groupDir, subgroupValidation)
+
+			By("verifying workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+		})
+
+		It("should accept workspace with valid env matching requirements", func() {
+			templateFilename := "env-requirements-template"
+			workspaceName := "valid-env-workspace"
+			workspaceFilename := "valid-env-workspace"
+
+			By("creating template with env requirements")
+			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
+
+			By("creating workspace with valid env")
+			createWorkspaceForTest(workspaceFilename, groupDir, subgroupValidation)
+
+			By("verifying workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("verifying required env var is present")
+			regionValue, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.spec.env[?(@.name=='AWS_REGION')].value}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(regionValue).To(Equal("us-west-2"))
+
+			By("verifying template addEnv was merged in")
+			defaultValue, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.spec.env[?(@.name=='DEFAULT_VAR')].value}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(defaultValue).To(Equal("default-value"))
+		})
+
+		It("should reject workspace missing required env variable", func() {
+			templateFilename := "env-requirements-template"
+			workspaceName := "missing-required-env-workspace"
+			workspaceFilename := "missing-required-env-workspace"
+
+			By("creating template with env requirements")
+			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
+
+			By("attempting to create workspace without required env")
+			VerifyCreateWorkspaceRejectedByWebhook(
+				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
+		})
+
+		It("should reject workspace with env value not matching regex", func() {
+			templateFilename := "env-requirements-template"
+			workspaceName := "invalid-env-regex-workspace"
+			workspaceFilename := "invalid-env-regex-workspace"
+
+			By("creating template with env requirements")
+			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
+
+			By("attempting to create workspace with invalid env value")
+			VerifyCreateWorkspaceRejectedByWebhook(
+				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
+		})
+
+		It("should reject workspace with optional env var failing regex", func() {
+			templateFilename := "env-requirements-template"
+			workspaceName := "optional-env-bad-regex-workspace"
+			workspaceFilename := "optional-env-bad-regex-workspace"
+
+			By("creating template with env requirements including optional regex")
+			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
+
+			By("attempting to create workspace with optional env var that fails regex")
+			VerifyCreateWorkspaceRejectedByWebhook(
+				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
+		})
+
+		It("should reject update that violates env requirements", func() {
+			templateFilename := "env-requirements-template"
+			workspaceName := "valid-env-workspace"
+			workspaceFilename := "valid-env-workspace"
+
+			By("creating template with env requirements")
+			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
+
+			By("creating workspace with valid env")
+			createWorkspaceForTest(workspaceFilename, groupDir, subgroupValidation)
+
+			By("verifying workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("patching workspace to violate env regex requirement")
+			patchCmd := `{"spec":{"env":[{"name":"AWS_REGION","value":"not-valid"}]}}`
+			cmd := exec.Command("kubectl", "patch", "workspace", workspaceName,
+				"-n", workspaceNamespace, "--type=merge", "-p", patchCmd)
+			_, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "Expected webhook to reject update that violates env regex")
+		})
+
+		It("should warn when template envRequirements change", func() {
+			templateFilename := "env-requirements-template"
+			workspaceName := "valid-env-workspace"
+			workspaceFilename := "valid-env-workspace"
+
+			By("creating template with env requirements")
+			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
+
+			By("creating workspace with valid env")
+			createWorkspaceForTest(workspaceFilename, groupDir, subgroupValidation)
+
+			By("verifying workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("updating template envRequirements")
+			patchCmd := `{"spec":{"envRequirements":[{"name":"NEW_REQUIRED","required":true}]}}`
+			cmd := exec.Command("kubectl", "patch", "workspacetemplate", "env-requirements-template",
+				"-n", SharedNamespace, "--type=merge", "-p", patchCmd)
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			// Template webhook returns a warning when constraints change
+			Expect(string(output)).To(ContainSubstring("Warning"), "Expected warning about constraint change")
+		})
 	})
 
 	Context("Mutability and Deletion Protection", func() {
@@ -558,15 +760,15 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			)
 		})
 
-		It("should inherit container config with env variables from template", func() {
+		It("should inherit env variables from template via addEnv", func() {
 			templateFilename := "env-template"
 			workspaceName := "workspace-no-config"
 			workspaceFilename := "workspace-no-config"
 
-			By("creating template with container config including env variables")
+			By("creating template with addEnv environment variables")
 			createTemplateForTest(templateFilename, groupDir, subgroupDefaults)
 
-			By("creating workspace without container config")
+			By("creating workspace without env")
 			createWorkspaceForTest(workspaceFilename, groupDir, subgroupDefaults)
 
 			By("verifying workspace becomes available")
@@ -577,35 +779,34 @@ var _ = Describe("Workspace Template", Ordered, func() {
 				ConditionTrue,
 			)
 
-			By("verifying workspace inherited template's container config")
-			// Check env variables
+			By("verifying workspace inherited template's env variables")
 			envVars, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.spec.containerConfig.env[*].name}")
+				"{.spec.env[*].name}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(ContainSubstring("TEMPLATE_VAR"))
 			Expect(envVars).To(ContainSubstring("JUPYTER_ENABLE_LAB"))
 
 			By("verifying environment variable values from template")
 			templateVarValue, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.spec.containerConfig.env[?(@.name=='TEMPLATE_VAR')].value}")
+				"{.spec.env[?(@.name=='TEMPLATE_VAR')].value}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(templateVarValue).To(Equal("template-value"))
 
 			jupyterLabValue, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.spec.containerConfig.env[?(@.name=='JUPYTER_ENABLE_LAB')].value}")
+				"{.spec.env[?(@.name=='JUPYTER_ENABLE_LAB')].value}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(jupyterLabValue).To(Equal("yes"))
 		})
 
-		It("should override template env when workspace specifies container config", func() {
+		It("should let workspace env override template addEnv by name", func() {
 			templateFilename := "env-template"
 			workspaceName := "workspace-env-override"
 			workspaceFilename := "workspace-env-override"
 
-			By("creating template with container config including env variables")
+			By("creating template with addEnv environment variables")
 			createTemplateForTest(templateFilename, groupDir, subgroupDefaults)
 
-			By("creating workspace with its own container config")
+			By("creating workspace with its own env")
 			createWorkspaceForTest(workspaceFilename, groupDir, subgroupDefaults)
 
 			By("verifying workspace becomes available")
@@ -616,19 +817,58 @@ var _ = Describe("Workspace Template", Ordered, func() {
 				ConditionTrue,
 			)
 
-			By("verifying workspace uses its own env variables, not template's")
+			By("verifying workspace has its own env plus template env merged in")
 			envVars, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.spec.containerConfig.env[*].name}")
+				"{.spec.env[*].name}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(envVars).To(ContainSubstring("WORKSPACE_VAR"))
-			Expect(envVars).NotTo(ContainSubstring("TEMPLATE_VAR"))
-			Expect(envVars).NotTo(ContainSubstring("JUPYTER_ENABLE_LAB"))
+			// Template vars should be merged in since names don't conflict
+			Expect(envVars).To(ContainSubstring("TEMPLATE_VAR"))
+			Expect(envVars).To(ContainSubstring("JUPYTER_ENABLE_LAB"))
 
 			By("verifying workspace environment variable value")
 			workspaceVarValue, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.spec.containerConfig.env[?(@.name=='WORKSPACE_VAR')].value}")
+				"{.spec.env[?(@.name=='WORKSPACE_VAR')].value}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaceVarValue).To(Equal("workspace-value"))
+		})
+
+		It("should let workspace env win when name collides with template addEnv", func() {
+			templateFilename := "env-template"
+			workspaceName := "env-name-collision-workspace"
+			workspaceFilename := "env-name-collision-workspace"
+
+			By("creating template with addEnv including TEMPLATE_VAR")
+			createTemplateForTest(templateFilename, groupDir, subgroupDefaults)
+
+			By("creating workspace that also sets TEMPLATE_VAR with different value")
+			createWorkspaceForTest(workspaceFilename, groupDir, subgroupDefaults)
+
+			By("verifying workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("verifying workspace value wins over template value for same-name env var")
+			templateVarValue, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.spec.env[?(@.name=='TEMPLATE_VAR')].value}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(templateVarValue).To(Equal("workspace-wins"))
+
+			By("verifying workspace-only var is present")
+			wsOnlyValue, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.spec.env[?(@.name=='WORKSPACE_ONLY')].value}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(wsOnlyValue).To(Equal("only-in-workspace"))
+
+			By("verifying non-conflicting template var was still merged in")
+			jupyterLabValue, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.spec.env[?(@.name=='JUPYTER_ENABLE_LAB')].value}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(jupyterLabValue).To(Equal("yes"))
 		})
 	})
 })

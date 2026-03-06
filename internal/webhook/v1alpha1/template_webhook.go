@@ -119,6 +119,11 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 		return true
 	}
 
+	// Check EnvRequirements changes
+	if !equality.Semantic.DeepEqual(oldSpec.EnvRequirements, newSpec.EnvRequirements) {
+		return true
+	}
+
 	return false
 }
 

@@ -33,9 +33,6 @@ type ContainerConfig struct {
 
 	// Args specifies the container arguments
 	Args []string `json:"args,omitempty"`
-
-	// Env specifies environment variables for the container
-	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 
 // StorageSpec defines the storage configuration for Workspace
@@ -140,6 +137,11 @@ type WorkspaceSpec struct {
 
 	// ContainerConfig specifies container command and args configuration
 	ContainerConfig *ContainerConfig `json:"containerConfig,omitempty"`
+
+	// Env specifies environment variables for the workspace container
+	// When a template is used, template's AddEnv vars are merged (workspace vars take precedence by name)
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
 
 	// NodeSelector specifies node selection constraints for the workspace pod
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`

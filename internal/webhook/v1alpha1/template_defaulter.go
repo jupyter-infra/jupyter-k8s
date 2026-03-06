@@ -39,6 +39,7 @@ var defaultApplicators = []DefaultApplicator{
 	applyAccessStrategyDefaults,
 	applyLifecycleDefaults,
 	applySecurityDefaults,
+	applyEnvDefaults,
 }
 
 // ApplyTemplateDefaults applies template defaults to workspace
