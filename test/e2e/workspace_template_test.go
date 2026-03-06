@@ -520,6 +520,48 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			)
 		})
 
+		It("should inherit container security context from template", func() {
+			templateFilename := "container-security-context-template"
+			workspaceName := "container-security-context-workspace"
+			workspaceFilename := "container-security-context-workspace"
+
+			By("creating template with default container security context")
+			createTemplateForTest(templateFilename, groupDir, subgroupDefaults)
+
+			By("creating workspace without container security context")
+			createWorkspaceForTest(workspaceFilename, groupDir, subgroupDefaults)
+
+			By("verifying workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			testTemplateFeaturesInheritance(
+				workspaceName,
+				workspaceNamespace,
+				[]valueTestCaseForTemplateTest{
+					{
+						description: "verifying workspace inherited container security context runAsNonRoot",
+						jsonPath:    "{.spec.containerSecurityContext.runAsNonRoot}",
+						expected:    "true",
+					},
+					{
+						description: "verifying workspace inherited container security context readOnlyRootFilesystem",
+						jsonPath:    "{.spec.containerSecurityContext.readOnlyRootFilesystem}",
+						expected:    "true",
+					},
+					{
+						description: "verifying workspace inherited container security context runAsUser",
+						jsonPath:    "{.spec.containerSecurityContext.runAsUser}",
+						expected:    "1000",
+					},
+				},
+			)
+		})
+
 		It("should inherit container config with env variables from template", func() {
 			templateFilename := "env-template"
 			workspaceName := "workspace-no-config"

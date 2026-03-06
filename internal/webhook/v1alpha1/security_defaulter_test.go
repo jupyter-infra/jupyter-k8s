@@ -71,9 +71,41 @@ var _ = Describe("SecurityDefaulter", func() {
 
 			Expect(workspace.Spec.PodSecurityContext).To(BeNil())
 		})
+
+		It("should not override existing container security context", func() {
+			privileged := false
+			workspace.Spec.ContainerSecurityContext = &corev1.SecurityContext{
+				Privileged: &privileged,
+			}
+			template.Spec.DefaultContainerSecurityContext = &corev1.SecurityContext{
+				RunAsNonRoot: boolPtr(true),
+			}
+
+			applySecurityDefaults(workspace, template)
+
+			Expect(*workspace.Spec.ContainerSecurityContext.Privileged).To(BeFalse())
+			Expect(workspace.Spec.ContainerSecurityContext.RunAsNonRoot).To(BeNil())
+		})
+
+		It("should apply container security context from template when workspace has none", func() {
+			template.Spec.DefaultContainerSecurityContext = &corev1.SecurityContext{
+				RunAsNonRoot: boolPtr(true),
+				RunAsUser:    int64Ptr(1000),
+			}
+
+			applySecurityDefaults(workspace, template)
+
+			Expect(workspace.Spec.ContainerSecurityContext).NotTo(BeNil())
+			Expect(*workspace.Spec.ContainerSecurityContext.RunAsNonRoot).To(BeTrue())
+			Expect(*workspace.Spec.ContainerSecurityContext.RunAsUser).To(Equal(int64(1000)))
+		})
 	})
 })
 
 func int64Ptr(i int64) *int64 {
 	return &i
+}
+
+func boolPtr(b bool) *bool {
+	return &b
 }

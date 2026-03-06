@@ -1,0 +1,19 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: container-sc-workspace
+spec:
+  displayName: "Container Security Context Workspace"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  containerSecurityContext:
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+    runAsUser: 1000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
