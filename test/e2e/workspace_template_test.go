@@ -278,39 +278,6 @@ var _ = Describe("Workspace Template", Ordered, func() {
 				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
 		})
 
-		It("should reject workspace with a forbidden label", func() {
-			templateFilename := "forbidden-labels-template"
-			workspaceName := "has-forbidden-label-workspace"
-			workspaceFilename := "has-forbidden-label-workspace"
-
-			By("creating template with forbidden labels")
-			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
-
-			By("attempting to create workspace with forbidden label")
-			VerifyCreateWorkspaceRejectedByWebhook(
-				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
-		})
-
-		It("should accept workspace without forbidden labels", func() {
-			templateFilename := "forbidden-labels-template"
-			workspaceName := "no-forbidden-label-workspace"
-			workspaceFilename := "no-forbidden-label-workspace"
-
-			By("creating template with forbidden labels")
-			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
-
-			By("creating workspace without forbidden labels")
-			createWorkspaceForTest(workspaceFilename, groupDir, subgroupValidation)
-
-			By("verifying workspace becomes available")
-			WaitForWorkspaceToReachCondition(
-				workspaceName,
-				workspaceNamespace,
-				controller.ConditionTypeAvailable,
-				ConditionTrue,
-			)
-		})
-
 		It("should accept workspace with valid env matching requirements", func() {
 			templateFilename := envRequirementsTemplate
 			workspaceName := validEnvWorkspace

@@ -58,24 +58,3 @@ func validateLabelRequirements(workspace *workspacev1alpha1.Workspace, template 
 
 	return violations
 }
-
-// validateForbiddenLabels checks that workspace doesn't have any forbidden label keys
-func validateForbiddenLabels(workspace *workspacev1alpha1.Workspace, template *workspacev1alpha1.WorkspaceTemplate) []TemplateViolation {
-	if len(template.Spec.ForbiddenLabels) == 0 {
-		return nil
-	}
-
-	var violations []TemplateViolation
-
-	for _, key := range template.Spec.ForbiddenLabels {
-		if _, exists := workspace.Labels[key]; exists {
-			violations = append(violations, TemplateViolation{
-				Type:    ViolationTypeForbiddenLabel,
-				Field:   fmt.Sprintf("metadata.labels[%s]", key),
-				Message: fmt.Sprintf("Label '%s' is forbidden by template", key),
-			})
-		}
-	}
-
-	return violations
-}

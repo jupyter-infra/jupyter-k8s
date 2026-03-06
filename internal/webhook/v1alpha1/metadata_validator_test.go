@@ -108,39 +108,4 @@ var _ = Describe("Metadata Validator", func() {
 			})
 		})
 	})
-
-	Describe("validateForbiddenLabels", func() {
-		var (
-			workspace *workspacev1alpha1.Workspace
-			template  *workspacev1alpha1.WorkspaceTemplate
-		)
-
-		BeforeEach(func() {
-			workspace = &workspacev1alpha1.Workspace{}
-			workspace.Labels = map[string]string{}
-			template = &workspacev1alpha1.WorkspaceTemplate{}
-			template.Spec.ForbiddenLabels = []string{"debug", "bypass-security"}
-		})
-
-		It("should pass when no forbidden labels are present", func() {
-			workspace.Labels["env"] = "production"
-			violations := validateForbiddenLabels(workspace, template)
-			Expect(violations).To(BeEmpty())
-		})
-
-		It("should fail when a forbidden label is present", func() {
-			workspace.Labels["debug"] = "true"
-			violations := validateForbiddenLabels(workspace, template)
-			Expect(violations).To(HaveLen(1))
-			Expect(violations[0].Type).To(Equal(ViolationTypeForbiddenLabel))
-			Expect(violations[0].Field).To(Equal("metadata.labels[debug]"))
-		})
-
-		It("should return no violations when template has no forbidden labels", func() {
-			template.Spec.ForbiddenLabels = nil
-			workspace.Labels["debug"] = "true"
-			violations := validateForbiddenLabels(workspace, template)
-			Expect(violations).To(BeEmpty())
-		})
-	})
 })

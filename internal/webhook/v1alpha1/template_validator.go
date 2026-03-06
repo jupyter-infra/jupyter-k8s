@@ -77,11 +77,6 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		violations = append(violations, labelViolations...)
 	}
 
-	// Validate forbidden labels
-	if forbiddenViolations := validateForbiddenLabels(workspace, template); len(forbiddenViolations) > 0 {
-		violations = append(violations, forbiddenViolations...)
-	}
-
 	// Validate env requirements
 	if envViolations := validateEnvRequirements(workspace, template); len(envViolations) > 0 {
 		violations = append(violations, envViolations...)
