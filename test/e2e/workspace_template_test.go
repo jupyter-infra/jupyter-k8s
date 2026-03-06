@@ -9,6 +9,7 @@ Distributed under the terms of the MIT license
 package e2e
 
 import (
+	"fmt"
 	"os/exec"
 	"time"
 
@@ -246,6 +247,22 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			output, err = kubectlGet("workspace", workspaceName, workspaceNamespace, "{.metadata.labels.managed-by}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("platform-team"))
+
+			By("verifying labels propagated to pod")
+			podName, err := kubectlGetByLabels("pod",
+				fmt.Sprintf("%s=%s", controller.LabelWorkspaceName, workspaceName),
+				workspaceNamespace,
+				"{.items[0].metadata.name}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(podName).NotTo(BeEmpty())
+
+			podEnv, err := kubectlGet("pod", podName, workspaceNamespace, "{.metadata.labels.env}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(podEnv).To(Equal("production"))
+
+			podManagedBy, err := kubectlGet("pod", podName, workspaceNamespace, "{.metadata.labels.managed-by}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(podManagedBy).To(Equal("platform-team"))
 		})
 
 		It("should reject workspace missing a required label", func() {
