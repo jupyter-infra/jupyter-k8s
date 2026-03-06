@@ -58,6 +58,27 @@ spec:
           spec:
             description: WorkspaceTemplateSpec defines the desired state of WorkspaceTemplate
             properties:
+              addLabels:
+                description: |-
+                  AddLabels specifies labels to add to workspaces using this template
+                  Labels are added during defaulting if not already present on the workspace
+                items:
+                  description: TemplateLabel defines a label key-value pair to add
+                    to workspaces
+                  properties:
+                    key:
+                      description: Key is the label key
+                      minLength: 1
+                      type: string
+                    value:
+                      description: Value is the label value
+                      type: string
+                  required:
+                  - key
+                  - value
+                  type: object
+                maxItems: 50
+                type: array
               allowCustomImages:
                 default: false
                 description: |-
@@ -1268,14 +1289,6 @@ spec:
                 maxLength: 500
                 minLength: 1
                 type: string
-              defaultLabels:
-                additionalProperties:
-                  type: string
-                description: |-
-                  DefaultLabels specifies labels that will be applied to workspaces using this template
-                  These labels are immutable once set - workspaces cannot modify values for these label keys
-                maxProperties: 50
-                type: object
               defaultLifecycle:
                 description: DefaultLifecycle specifies default lifecycle hooks for
                   workspaces using this template
@@ -1875,6 +1888,32 @@ spec:
                     description: MinIdleTimeoutInMinutes is the minimum allowed timeout
                     type: integer
                 type: object
+              labelRequirements:
+                description: LabelRequirements specifies validation rules for workspace
+                  labels
+                items:
+                  description: LabelRequirement defines a validation rule for a workspace
+                    label
+                  properties:
+                    key:
+                      description: Key is the label key to validate
+                      minLength: 1
+                      type: string
+                    regex:
+                      description: |-
+                        Regex is a regular expression the label value must match
+                        If empty, any value is accepted
+                      type: string
+                    required:
+                      default: false
+                      description: Required indicates whether the label must be present
+                        on the workspace
+                      type: boolean
+                  required:
+                  - key
+                  type: object
+                maxItems: 50
+                type: array
               primaryStorage:
                 description: PrimaryStorage defines storage configuration
                 properties:
