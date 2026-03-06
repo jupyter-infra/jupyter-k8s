@@ -73,8 +73,8 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 	}
 
 	// Validate default labels
-	if violation := validateDefaultLabels(workspace, template); violation != nil {
-		violations = append(violations, *violation)
+	if labelViolations := validateLabelRequirements(workspace, template); len(labelViolations) > 0 {
+		violations = append(violations, labelViolations...)
 	}
 
 	if len(violations) > 0 {
