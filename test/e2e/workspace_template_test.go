@@ -220,12 +220,12 @@ var _ = Describe("Workspace Template", Ordered, func() {
 				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
 		})
 
-		It("should inject addLabels when workspace has no labels", func() {
+		It("should inject baseLabels when workspace has no labels", func() {
 			templateFilename := defaultLabelsTemplate
 			workspaceName := "no-labels-workspace"
 			workspaceFilename := "no-labels-workspace"
 
-			By("creating template with addLabels")
+			By("creating template with baseLabels")
 			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
 
 			By("creating workspace with no labels")
@@ -239,7 +239,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 				ConditionTrue,
 			)
 
-			By("verifying addLabels were injected")
+			By("verifying baseLabels were injected")
 			output, err := kubectlGet("workspace", workspaceName, workspaceNamespace, "{.metadata.labels.env}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("production"))
@@ -303,7 +303,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(regionValue).To(Equal("us-west-2"))
 
-			By("verifying template addEnv was merged in")
+			By("verifying template baseEnv was merged in")
 			defaultValue, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
 				"{.spec.env[?(@.name=='DEFAULT_VAR')].value}")
 			Expect(err).NotTo(HaveOccurred())
@@ -748,12 +748,12 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			)
 		})
 
-		It("should inherit env variables from template via addEnv", func() {
+		It("should inherit env variables from template via baseEnv", func() {
 			templateFilename := envTemplateFilename
 			workspaceName := "workspace-no-config"
 			workspaceFilename := "workspace-no-config"
 
-			By("creating template with addEnv environment variables")
+			By("creating template with baseEnv environment variables")
 			createTemplateForTest(templateFilename, groupDir, subgroupDefaults)
 
 			By("creating workspace without env")
@@ -786,12 +786,12 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			Expect(jupyterLabValue).To(Equal("yes"))
 		})
 
-		It("should let workspace env override template addEnv by name", func() {
+		It("should let workspace env override template baseEnv by name", func() {
 			templateFilename := envTemplateFilename
 			workspaceName := "workspace-env-override"
 			workspaceFilename := "workspace-env-override"
 
-			By("creating template with addEnv environment variables")
+			By("creating template with baseEnv environment variables")
 			createTemplateForTest(templateFilename, groupDir, subgroupDefaults)
 
 			By("creating workspace with its own env")
@@ -821,12 +821,12 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			Expect(workspaceVarValue).To(Equal("workspace-value"))
 		})
 
-		It("should let workspace env win when name collides with template addEnv", func() {
+		It("should let workspace env win when name collides with template baseEnv", func() {
 			templateFilename := envTemplateFilename
 			workspaceName := "env-name-collision-workspace"
 			workspaceFilename := "env-name-collision-workspace"
 
-			By("creating template with addEnv including TEMPLATE_VAR")
+			By("creating template with baseEnv including TEMPLATE_VAR")
 			createTemplateForTest(templateFilename, groupDir, subgroupDefaults)
 
 			By("creating workspace that also sets TEMPLATE_VAR with different value")

@@ -6,7 +6,7 @@ metadata:
 spec:
   displayName: "Env Requirements Template"
   defaultImage: jk8s-application-jupyter-uv:latest
-  addEnv:
+  baseEnv:
     - name: DEFAULT_VAR
       value: default-value
   envRequirements:

@@ -5,9 +5,9 @@ metadata:
   namespace: jupyter-k8s-shared
 spec:
   displayName: "Default Labels Template"
-  description: "Template with addLabels and labelRequirements"
+  description: "Template with baseLabels and labelRequirements"
   defaultImage: jk8s-application-jupyter-uv:latest
-  addLabels:
+  baseLabels:
     - key: "env"
       value: "production"
     - key: "managed-by"

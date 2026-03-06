@@ -59,11 +59,11 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultContainerConfig *ContainerConfig `json:"defaultContainerConfig,omitempty"`
 
-	// AddEnv specifies environment variables to add to workspaces using this template
+	// BaseEnv specifies environment variables to add to workspaces using this template
 	// Variables are added during defaulting if no variable with the same name exists on the workspace
 	// +kubebuilder:validation:MaxItems=50
 	// +optional
-	AddEnv []corev1.EnvVar `json:"addEnv,omitempty"`
+	BaseEnv []corev1.EnvVar `json:"baseEnv,omitempty"`
 
 	// EnvRequirements specifies validation rules for workspace environment variables
 	// +kubebuilder:validation:MaxItems=50
@@ -95,11 +95,11 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultOwnershipType string `json:"defaultOwnershipType,omitempty"`
 
-	// AddLabels specifies labels to add to workspaces using this template
+	// BaseLabels specifies labels to add to workspaces using this template
 	// Labels are added during defaulting if not already present on the workspace
 	// +kubebuilder:validation:MaxItems=50
 	// +optional
-	AddLabels []TemplateLabel `json:"addLabels,omitempty"`
+	BaseLabels []TemplateLabel `json:"baseLabels,omitempty"`
 
 	// LabelRequirements specifies validation rules for workspace labels
 	// +kubebuilder:validation:MaxItems=50

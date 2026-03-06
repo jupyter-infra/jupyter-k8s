@@ -814,8 +814,8 @@ func (in *WorkspaceTemplateSpec) DeepCopyInto(out *WorkspaceTemplateSpec) {
 		*out = new(ContainerConfig)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.AddEnv != nil {
-		in, out := &in.AddEnv, &out.AddEnv
+	if in.BaseEnv != nil {
+		in, out := &in.BaseEnv, &out.BaseEnv
 		*out = make([]v1.EnvVar, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
@@ -852,8 +852,8 @@ func (in *WorkspaceTemplateSpec) DeepCopyInto(out *WorkspaceTemplateSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	if in.AddLabels != nil {
-		in, out := &in.AddLabels, &out.AddLabels
+	if in.BaseLabels != nil {
+		in, out := &in.BaseLabels, &out.BaseLabels
 		*out = make([]TemplateLabel, len(*in))
 		copy(*out, *in)
 	}
@@ -863,11 +863,6 @@ func (in *WorkspaceTemplateSpec) DeepCopyInto(out *WorkspaceTemplateSpec) {
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
-	}
-	if in.ForbiddenLabels != nil {
-		in, out := &in.ForbiddenLabels, &out.ForbiddenLabels
-		*out = make([]string, len(*in))
-		copy(*out, *in)
 	}
 	if in.DefaultIdleShutdown != nil {
 		in, out := &in.DefaultIdleShutdown, &out.DefaultIdleShutdown

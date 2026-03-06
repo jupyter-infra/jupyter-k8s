@@ -1025,7 +1025,7 @@ spec:
               env:
                 description: |-
                   Env specifies environment variables for the workspace container
-                  When a template is used, template's AddEnv vars are merged (workspace vars take precedence by name)
+                  When a template is used, template's BaseEnv vars are merged (workspace vars take precedence by name)
                 items:
                   description: EnvVar represents an environment variable present in
                     a Container.

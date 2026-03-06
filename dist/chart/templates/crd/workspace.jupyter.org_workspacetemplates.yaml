@@ -58,9 +58,34 @@ spec:
           spec:
             description: WorkspaceTemplateSpec defines the desired state of WorkspaceTemplate
             properties:
-              addEnv:
+              allowCustomImages:
+                default: false
                 description: |-
-                  AddEnv specifies environment variables to add to workspaces using this template
+                  AllowCustomImages allows workspaces to use any container image, bypassing the AllowedImages restriction
+                  When true, workspaces can specify any image regardless of the AllowedImages list
+                type: boolean
+              allowSecondaryStorages:
+                default: true
+                description: |-
+                  AllowSecondaryStorages controls whether workspaces using this template
+                  can mount additional storage volumes beyond the primary storage
+                type: boolean
+              allowedImages:
+                description: |-
+                  AllowedImages is a list of container images that can be used with this template
+                  If empty, only DefaultImage is allowed (secure by default)
+                  If populated, workspace can override image with any from this list
+                items:
+                  type: string
+                maxItems: 50
+                type: array
+              appType:
+                description: AppType specifies the application type for workspaces
+                  using this template
+                type: string
+              baseEnv:
+                description: |-
+                  BaseEnv specifies environment variables to add to workspaces using this template
                   Variables are added during defaulting if no variable with the same name exists on the workspace
                 items:
                   description: EnvVar represents an environment variable present in
@@ -218,9 +243,9 @@ spec:
                   type: object
                 maxItems: 50
                 type: array
-              addLabels:
+              baseLabels:
                 description: |-
-                  AddLabels specifies labels to add to workspaces using this template
+                  BaseLabels specifies labels to add to workspaces using this template
                   Labels are added during defaulting if not already present on the workspace
                 items:
                   description: TemplateLabel defines a label key-value pair to add
@@ -239,31 +264,6 @@ spec:
                   type: object
                 maxItems: 50
                 type: array
-              allowCustomImages:
-                default: false
-                description: |-
-                  AllowCustomImages allows workspaces to use any container image, bypassing the AllowedImages restriction
-                  When true, workspaces can specify any image regardless of the AllowedImages list
-                type: boolean
-              allowSecondaryStorages:
-                default: true
-                description: |-
-                  AllowSecondaryStorages controls whether workspaces using this template
-                  can mount additional storage volumes beyond the primary storage
-                type: boolean
-              allowedImages:
-                description: |-
-                  AllowedImages is a list of container images that can be used with this template
-                  If empty, only DefaultImage is allowed (secure by default)
-                  If populated, workspace can override image with any from this list
-                items:
-                  type: string
-                maxItems: 50
-                type: array
-              appType:
-                description: AppType specifies the application type for workspaces
-                  using this template
-                type: string
               defaultAccessStrategy:
                 description: DefaultAccessStrategy specifies the default access strategy
                   for workspaces using this template
@@ -1898,13 +1898,6 @@ spec:
                   required:
                   - name
                   type: object
-                maxItems: 50
-                type: array
-              forbiddenLabels:
-                description: ForbiddenLabels specifies label keys that workspaces
-                  must not have
-                items:
-                  type: string
                 maxItems: 50
                 type: array
               idleShutdownOverrides:

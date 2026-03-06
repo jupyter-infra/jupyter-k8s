@@ -139,7 +139,7 @@ type WorkspaceSpec struct {
 	ContainerConfig *ContainerConfig `json:"containerConfig,omitempty"`
 
 	// Env specifies environment variables for the workspace container
-	// When a template is used, template's AddEnv vars are merged (workspace vars take precedence by name)
+	// When a template is used, template's BaseEnv vars are merged (workspace vars take precedence by name)
 	// +optional
 	Env []corev1.EnvVar `json:"env,omitempty"`
 
