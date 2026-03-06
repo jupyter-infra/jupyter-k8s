@@ -29,14 +29,18 @@ var _ = Describe("Workspace Template", Ordered, func() {
 	// Define a test case structure for template feature inheritance tests
 
 	const (
-		workspaceNamespace   = "default"
-		groupDir             = "template"
-		subgroupBase         = "base"
-		subgroupValidation   = "validation"
-		subgroupMutability   = "mutability"
-		subgroupDefaults     = "defaults"
-		baseTemplateName     = "base-template"
-		baseTemplateFilename = "base-template"
+		workspaceNamespace      = "default"
+		groupDir                = "template"
+		subgroupBase            = "base"
+		subgroupValidation      = "validation"
+		subgroupMutability      = "mutability"
+		subgroupDefaults        = "defaults"
+		baseTemplateName        = "base-template"
+		baseTemplateFilename    = "base-template"
+		defaultLabelsTemplate   = "default-labels-template"
+		envRequirementsTemplate = "env-requirements-template"
+		validEnvWorkspace       = "valid-env-workspace"
+		envTemplateFilename     = "env-template"
 	)
 
 	AfterEach(func() {
@@ -178,7 +182,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 
 		It("should accept workspace with matching default labels", func() {
-			templateFilename := "default-labels-template"
+			templateFilename := defaultLabelsTemplate
 			workspaceName := "matching-labels-workspace"
 			workspaceFilename := "matching-labels-workspace"
 
@@ -203,7 +207,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 
 		It("should reject workspace with mismatched default labels", func() {
-			templateFilename := "default-labels-template"
+			templateFilename := defaultLabelsTemplate
 			workspaceName := "mismatched-labels-workspace"
 			workspaceFilename := "mismatched-labels-workspace"
 
@@ -216,7 +220,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 
 		It("should inject addLabels when workspace has no labels", func() {
-			templateFilename := "default-labels-template"
+			templateFilename := defaultLabelsTemplate
 			workspaceName := "no-labels-workspace"
 			workspaceFilename := "no-labels-workspace"
 
@@ -291,9 +295,9 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 
 		It("should accept workspace with valid env matching requirements", func() {
-			templateFilename := "env-requirements-template"
-			workspaceName := "valid-env-workspace"
-			workspaceFilename := "valid-env-workspace"
+			templateFilename := envRequirementsTemplate
+			workspaceName := validEnvWorkspace
+			workspaceFilename := validEnvWorkspace
 
 			By("creating template with env requirements")
 			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
@@ -323,7 +327,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 
 		It("should reject workspace missing required env variable", func() {
-			templateFilename := "env-requirements-template"
+			templateFilename := envRequirementsTemplate
 			workspaceName := "missing-required-env-workspace"
 			workspaceFilename := "missing-required-env-workspace"
 
@@ -336,7 +340,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 
 		It("should reject workspace with env value not matching regex", func() {
-			templateFilename := "env-requirements-template"
+			templateFilename := envRequirementsTemplate
 			workspaceName := "invalid-env-regex-workspace"
 			workspaceFilename := "invalid-env-regex-workspace"
 
@@ -349,7 +353,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 
 		It("should reject workspace with optional env var failing regex", func() {
-			templateFilename := "env-requirements-template"
+			templateFilename := envRequirementsTemplate
 			workspaceName := "optional-env-bad-regex-workspace"
 			workspaceFilename := "optional-env-bad-regex-workspace"
 
@@ -362,9 +366,9 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 
 		It("should reject update that violates env requirements", func() {
-			templateFilename := "env-requirements-template"
-			workspaceName := "valid-env-workspace"
-			workspaceFilename := "valid-env-workspace"
+			templateFilename := envRequirementsTemplate
+			workspaceName := validEnvWorkspace
+			workspaceFilename := validEnvWorkspace
 
 			By("creating template with env requirements")
 			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
@@ -389,9 +393,9 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 
 		It("should warn when template envRequirements change", func() {
-			templateFilename := "env-requirements-template"
-			workspaceName := "valid-env-workspace"
-			workspaceFilename := "valid-env-workspace"
+			templateFilename := envRequirementsTemplate
+			workspaceName := validEnvWorkspace
+			workspaceFilename := validEnvWorkspace
 
 			By("creating template with env requirements")
 			createTemplateForTest(templateFilename, groupDir, subgroupValidation)
@@ -409,12 +413,12 @@ var _ = Describe("Workspace Template", Ordered, func() {
 
 			By("updating template envRequirements")
 			patchCmd := `{"spec":{"envRequirements":[{"name":"NEW_REQUIRED","required":true}]}}`
-			cmd := exec.Command("kubectl", "patch", "workspacetemplate", "env-requirements-template",
+			cmd := exec.Command("kubectl", "patch", "workspacetemplate", envRequirementsTemplate,
 				"-n", SharedNamespace, "--type=merge", "-p", patchCmd)
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			// Template webhook returns a warning when constraints change
-			Expect(string(output)).To(ContainSubstring("Warning"), "Expected warning about constraint change")
+			Expect(output).To(ContainSubstring("Warning"), "Expected warning about constraint change")
 		})
 	})
 
@@ -761,7 +765,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 
 		It("should inherit env variables from template via addEnv", func() {
-			templateFilename := "env-template"
+			templateFilename := envTemplateFilename
 			workspaceName := "workspace-no-config"
 			workspaceFilename := "workspace-no-config"
 
@@ -799,7 +803,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 
 		It("should let workspace env override template addEnv by name", func() {
-			templateFilename := "env-template"
+			templateFilename := envTemplateFilename
 			workspaceName := "workspace-env-override"
 			workspaceFilename := "workspace-env-override"
 
@@ -834,7 +838,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 
 		It("should let workspace env win when name collides with template addEnv", func() {
-			templateFilename := "env-template"
+			templateFilename := envTemplateFilename
 			workspaceName := "env-name-collision-workspace"
 			workspaceFilename := "env-name-collision-workspace"
 
