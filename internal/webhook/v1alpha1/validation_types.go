@@ -34,5 +34,6 @@ const (
 	ViolationTypeInvalidTemplate                = "InvalidTemplate"
 	ViolationTypeIdleShutdownOverrideNotAllowed = "IdleShutdownOverrideNotAllowed"
 	ViolationTypeIdleShutdownTimeoutOutOfBounds = "IdleShutdownTimeoutOutOfBounds"
-	ViolationTypeDefaultLabelMismatch           = "DefaultLabelMismatch"
+	ViolationTypeLabelRequired                 = "LabelRequired"
+	ViolationTypeLabelRegexMismatch            = "LabelRegexMismatch"
 )
