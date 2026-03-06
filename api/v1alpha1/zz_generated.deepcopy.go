@@ -830,6 +830,11 @@ func (in *WorkspaceTemplateSpec) DeepCopyInto(out *WorkspaceTemplateSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.ForbiddenLabels != nil {
+		in, out := &in.ForbiddenLabels, &out.ForbiddenLabels
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.DefaultIdleShutdown != nil {
 		in, out := &in.DefaultIdleShutdown, &out.DefaultIdleShutdown
 		*out = new(IdleShutdownSpec)

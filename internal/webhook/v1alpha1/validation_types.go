@@ -36,4 +36,5 @@ const (
 	ViolationTypeIdleShutdownTimeoutOutOfBounds = "IdleShutdownTimeoutOutOfBounds"
 	ViolationTypeLabelRequired                  = "LabelRequired"
 	ViolationTypeLabelRegexMismatch             = "LabelRegexMismatch"
+	ViolationTypeForbiddenLabel                 = "ForbiddenLabel"
 )

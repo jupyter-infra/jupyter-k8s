@@ -95,6 +95,11 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	LabelRequirements []LabelRequirement `json:"labelRequirements,omitempty"`
 
+	// ForbiddenLabels specifies label keys that workspaces must not have
+	// +kubebuilder:validation:MaxItems=50
+	// +optional
+	ForbiddenLabels []string `json:"forbiddenLabels,omitempty"`
+
 	// DefaultIdleShutdown provides default idle shutdown configuration
 	// Includes timeout, detection endpoint, and enable/disable
 	// +optional

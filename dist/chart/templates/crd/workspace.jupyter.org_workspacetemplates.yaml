@@ -1872,6 +1872,13 @@ spec:
                 maxLength: 100
                 minLength: 1
                 type: string
+              forbiddenLabels:
+                description: ForbiddenLabels specifies label keys that workspaces
+                  must not have
+                items:
+                  type: string
+                maxItems: 50
+                type: array
               idleShutdownOverrides:
                 description: IdleShutdownOverrides controls override behavior and
                   bounds
