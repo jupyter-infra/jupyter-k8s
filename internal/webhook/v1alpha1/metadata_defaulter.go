@@ -24,13 +24,15 @@ func applyMetadataDefaults(workspace *workspacev1alpha1.Workspace, template *wor
 	templateNamespace := workspacequery.GetTemplateRefNamespace(workspace)
 	workspace.Labels[controller.LabelWorkspaceTemplateNamespace] = templateNamespace
 
-	// Apply default labels from template
-	// Only set labels that don't already exist (user-provided labels take precedence during creation)
-	if template.Spec.DefaultLabels != nil {
-		for key, value := range template.Spec.DefaultLabels {
-			if _, exists := workspace.Labels[key]; !exists {
-				workspace.Labels[key] = value
-			}
+	// Add template labels to workspace if not already present
+	addLabels(workspace, template)
+}
+
+// addLabels adds template labels to workspace if the key doesn't already exist
+func addLabels(workspace *workspacev1alpha1.Workspace, template *workspacev1alpha1.WorkspaceTemplate) {
+	for _, label := range template.Spec.AddLabels {
+		if _, exists := workspace.Labels[label.Key]; !exists {
+			workspace.Labels[label.Key] = label.Value
 		}
 	}
 }

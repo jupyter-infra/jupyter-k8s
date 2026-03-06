@@ -60,11 +60,13 @@ var _ = Describe("MetadataDefaulter", func() {
 
 			Expect(workspace.Labels).To(HaveKeyWithValue(controller.LabelWorkspaceTemplate, "production-template"))
 		})
+	})
 
-		It("should apply DefaultLabels from template", func() {
-			template.Spec.DefaultLabels = map[string]string{
-				"env":  "production",
-				"team": "data-science",
+	Context("addLabels", func() {
+		It("should add labels from template", func() {
+			template.Spec.AddLabels = []workspacev1alpha1.TemplateLabel{
+				{Key: "env", Value: "production"},
+				{Key: "team", Value: "data-science"},
 			}
 
 			applyMetadataDefaults(workspace, template)
@@ -73,13 +75,13 @@ var _ = Describe("MetadataDefaulter", func() {
 			Expect(workspace.Labels).To(HaveKeyWithValue("team", "data-science"))
 		})
 
-		It("should not override existing workspace labels with DefaultLabels", func() {
+		It("should not override existing workspace labels", func() {
 			workspace.Labels = map[string]string{
 				"env": "development",
 			}
-			template.Spec.DefaultLabels = map[string]string{
-				"env":  "production",
-				"team": "data-science",
+			template.Spec.AddLabels = []workspacev1alpha1.TemplateLabel{
+				{Key: "env", Value: "production"},
+				{Key: "team", Value: "data-science"},
 			}
 
 			applyMetadataDefaults(workspace, template)
@@ -88,7 +90,7 @@ var _ = Describe("MetadataDefaulter", func() {
 			Expect(workspace.Labels).To(HaveKeyWithValue("team", "data-science"))
 		})
 
-		It("should handle template with no DefaultLabels", func() {
+		It("should handle template with no AddLabels", func() {
 			workspace.Labels = map[string]string{
 				"custom": "label",
 			}
