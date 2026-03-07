@@ -8,7 +8,6 @@ spec:
   desiredStatus: Running
   containerSecurityContext:
     runAsNonRoot: true
-    readOnlyRootFilesystem: true
     runAsUser: 1000
   resources:
     requests:

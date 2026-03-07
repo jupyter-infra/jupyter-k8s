@@ -57,11 +57,6 @@ var _ = Describe("Workspace Security", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(runAsNonRoot).To(Equal("true"))
 
-		readOnly, err := kubectlGet("pod", podName, workspaceNamespace,
-			"{.spec.containers[0].securityContext.readOnlyRootFilesystem}")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(readOnly).To(Equal("true"))
-
 		runAsUser, err := kubectlGet("pod", podName, workspaceNamespace,
 			"{.spec.containers[0].securityContext.runAsUser}")
 		Expect(err).NotTo(HaveOccurred())

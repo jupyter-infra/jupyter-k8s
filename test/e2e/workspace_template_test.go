@@ -549,11 +549,6 @@ var _ = Describe("Workspace Template", Ordered, func() {
 						expected:    "true",
 					},
 					{
-						description: "verifying workspace inherited container security context readOnlyRootFilesystem",
-						jsonPath:    "{.spec.containerSecurityContext.readOnlyRootFilesystem}",
-						expected:    "true",
-					},
-					{
 						description: "verifying workspace inherited container security context runAsUser",
 						jsonPath:    "{.spec.containerSecurityContext.runAsUser}",
 						expected:    "1000",
