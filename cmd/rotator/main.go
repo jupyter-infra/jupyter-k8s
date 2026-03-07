@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"log"
+	"math"
 	"os"
 	"strconv"
 	"time"
@@ -22,10 +23,12 @@ import (
 
 // Environment variable names
 const (
-	EnvSecretName      = "SECRET_NAME"
-	EnvSecretNamespace = "SECRET_NAMESPACE"
-	EnvNumberOfKeys    = "NUMBER_OF_KEYS"
-	EnvDryRun          = "DRY_RUN"
+	EnvSecretName       = "SECRET_NAME"
+	EnvSecretNamespace  = "SECRET_NAMESPACE"
+	EnvNumberOfKeys     = "NUMBER_OF_KEYS"
+	EnvDryRun           = "DRY_RUN"
+	EnvTokenTTL         = "TOKEN_TTL"
+	EnvRotationInterval = "ROTATION_INTERVAL"
 )
 
 // Default values
@@ -40,8 +43,10 @@ func main() {
 	// Parse configuration from environment
 	secretName := getEnv(EnvSecretName, DefaultSecretName)
 	secretNamespace := os.Getenv(EnvSecretNamespace)
-	numberOfKeys := getEnvInt(EnvNumberOfKeys, DefaultNumberOfKeys)
 	dryRun := getEnvBool(EnvDryRun, false)
+
+	// Determine numberOfKeys: derived from TOKEN_TTL + ROTATION_INTERVAL, or explicit NUMBER_OF_KEYS
+	numberOfKeys := resolveNumberOfKeys()
 
 	log.Printf("Starting JWT key rotation...")
 	log.Printf("  Secret: %s", secretName)
@@ -102,6 +107,44 @@ func main() {
 	}
 
 	log.Printf("Key rotation completed successfully")
+}
+
+// resolveNumberOfKeys determines the number of keys to retain.
+// Explicit NUMBER_OF_KEYS takes precedence. Otherwise derives from TOKEN_TTL + ROTATION_INTERVAL.
+func resolveNumberOfKeys() int {
+	// Explicit NUMBER_OF_KEYS takes precedence
+	if v := os.Getenv(EnvNumberOfKeys); v != "" {
+		return getEnvInt(EnvNumberOfKeys, DefaultNumberOfKeys)
+	}
+
+	// Derive from TOKEN_TTL + ROTATION_INTERVAL
+	tokenTTLStr := os.Getenv(EnvTokenTTL)
+	rotationIntervalStr := os.Getenv(EnvRotationInterval)
+
+	if tokenTTLStr != "" && rotationIntervalStr != "" {
+		tokenTTL, err := time.ParseDuration(tokenTTLStr)
+		if err != nil {
+			log.Fatalf("Invalid %s value %q: %v", EnvTokenTTL, tokenTTLStr, err)
+		}
+		rotationInterval, err := time.ParseDuration(rotationIntervalStr)
+		if err != nil {
+			log.Fatalf("Invalid %s value %q: %v", EnvRotationInterval, rotationIntervalStr, err)
+		}
+		n := deriveNumberOfKeys(tokenTTL, rotationInterval)
+		log.Printf("Derived numberOfKeys=%d from TOKEN_TTL=%s, ROTATION_INTERVAL=%s", n, tokenTTL, rotationInterval)
+		return n
+	}
+
+	return DefaultNumberOfKeys
+}
+
+// deriveNumberOfKeys computes ceil(ttl / interval) + 1.
+// The +1 ensures the previous signing key is always available during rotation.
+func deriveNumberOfKeys(ttl, interval time.Duration) int {
+	if interval <= 0 {
+		log.Fatalf("ROTATION_INTERVAL must be > 0")
+	}
+	return int(math.Ceil(float64(ttl)/float64(interval))) + 1
 }
 
 // getEnv retrieves an environment variable or returns a default value

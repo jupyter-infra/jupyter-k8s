@@ -6,6 +6,8 @@ Distributed under the terms of the MIT license
 // Package extensionapi provides extension API server functionality.
 package extensionapi
 
+import "time"
+
 // Default values
 const (
 	// Server defaults
@@ -18,6 +20,12 @@ const (
 	DefaultReadTimeoutSeconds  = 30
 	DefaultWriteTimeoutSeconds = 120
 	DefaultAllowedOrigin       = "*"
+
+	// JWT defaults
+	DefaultJwtIssuer      = "workspaces-controller"
+	DefaultJwtAudience    = "workspaces-controller"
+	DefaultJwtTTL         = 5 * time.Minute
+	DefaultNewKeyUseDelay = 5 * time.Second
 )
 
 // ExtensionConfig contains the configuration for the extension API server
@@ -35,6 +43,16 @@ type ExtensionConfig struct {
 	ClusterId string
 	KMSKeyID  string
 	Domain    string
+
+	// Controller namespace (from Downward API)
+	ControllerNamespace string
+
+	// JWT signing section
+	JwtIssuer      string
+	JwtAudience    string
+	JwtSecretName  string
+	JwtTTL         time.Duration
+	NewKeyUseDelay time.Duration
 }
 
 // ConfigOption is a function that modifies an ExtensionConfig
@@ -121,6 +139,49 @@ func WithDomain(domain string) ConfigOption {
 func WithClusterId(id string) ConfigOption {
 	return func(c *ExtensionConfig) {
 		c.ClusterId = id
+	}
+}
+
+// WithControllerNamespace sets the namespace the controller is running in.
+func WithControllerNamespace(ns string) ConfigOption {
+	return func(c *ExtensionConfig) {
+		c.ControllerNamespace = ns
+	}
+}
+
+// WithJwtIssuer sets the JWT issuer claim.
+func WithJwtIssuer(issuer string) ConfigOption {
+	return func(c *ExtensionConfig) {
+		c.JwtIssuer = issuer
+	}
+}
+
+// WithJwtAudience sets the JWT audience claim.
+func WithJwtAudience(audience string) ConfigOption {
+	return func(c *ExtensionConfig) {
+		c.JwtAudience = audience
+	}
+}
+
+// WithJwtSecretName sets the K8s Secret name for JWT signing keys.
+// When set, the extension API uses StandardSignerFactory instead of AWSSignerFactory.
+func WithJwtSecretName(name string) ConfigOption {
+	return func(c *ExtensionConfig) {
+		c.JwtSecretName = name
+	}
+}
+
+// WithJwtTTL sets the JWT expiration duration.
+func WithJwtTTL(ttl time.Duration) ConfigOption {
+	return func(c *ExtensionConfig) {
+		c.JwtTTL = ttl
+	}
+}
+
+// WithNewKeyUseDelay sets the cooloff delay before using a newly rotated signing key.
+func WithNewKeyUseDelay(delay time.Duration) ConfigOption {
+	return func(c *ExtensionConfig) {
+		c.NewKeyUseDelay = delay
 	}
 }
 

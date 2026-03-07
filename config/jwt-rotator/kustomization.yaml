@@ -1,0 +1,5 @@
+resources:
+- secret.yaml
+- serviceaccount.yaml
+- rbac.yaml
+- cronjob.yaml

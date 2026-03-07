@@ -1,0 +1,8 @@
+apiVersion: connection.workspace.jupyter.org/v1alpha1
+kind: WorkspaceConnection
+metadata:
+  name: test-connection-default-handler
+  namespace: default
+spec:
+  workspaceName: workspace-connection-default-handler
+  workspaceConnectionType: web-ui

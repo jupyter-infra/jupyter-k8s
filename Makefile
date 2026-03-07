@@ -313,6 +313,8 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 	@echo "Using kubectl context: $$(kubectl config current-context)"
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
+	@echo "Applying extension API auth RoleBinding in kube-system (not managed by kustomize)..."
+	$(KUBECTL) apply -f config/rbac/extension_api_auth_binding.yaml
 	@if [ "$(USE_KIND)" = "true" ]; then \
 		echo "Using Kind cluster mode, patching deployment for local images..."; \
 		$(MAKE) load-images; \
@@ -354,6 +356,15 @@ setup-kind: ## Set up a Kind cluster for development if it does not exist
 	else \
 		echo "cert-manager is already installed, skipping installation"; \
 	fi
+	@if ! kubectl get crds ingressroutes.traefik.io > /dev/null 2>&1; then \
+		echo "Installing Traefik CRDs"; \
+		helm repo add traefik https://traefik.github.io/charts; \
+		helm install traefik-crd traefik/traefik-crds \
+			--namespace traefik \
+			--create-namespace; \
+	else \
+		echo "Traefik CRDs are already installed, skipping installation"; \
+	fi
 
 .PHONY: test-e2e-focus
 test-e2e-focus: setup-test-e2e manifests generate fmt vet load-images-e2e ## Run specific e2e tests using FOCUS parameter. Usage: make test-e2e-focus FOCUS="Primary Storage"
@@ -383,18 +394,27 @@ teardown-kind: ## Tear down the Kind cluster, registry, and clean up images
 	$(MAKE) -C images clean CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: load-images
-load-images: docker-build ## Build and load images into the Kind cluster
+load-images: docker-build build-rotator ## Build and load images into the Kind cluster
 	@echo "Loading controller image ${IMG} into kind cluster ${DEV_KIND_CLUSTER}..."
 	@mkdir -p /tmp/kind-images
 	$(CONTAINER_TOOL) save ${IMG} -o /tmp/kind-images/controller.tar
 	$(KIND) load image-archive /tmp/kind-images/controller.tar --name $(DEV_KIND_CLUSTER)
 	rm -f /tmp/kind-images/controller.tar
+	@echo "Loading rotator image into kind cluster ${DEV_KIND_CLUSTER}..."
+	$(CONTAINER_TOOL) save docker.io/library/rotator:local -o /tmp/kind-images/rotator.tar
+	$(KIND) load image-archive /tmp/kind-images/rotator.tar --name $(DEV_KIND_CLUSTER)
+	rm -f /tmp/kind-images/rotator.tar
 	$(MAKE) -C images push-all-kind CLUSTER_NAME=$(DEV_KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: load-images-e2e
-load-images-e2e: ## Build and load application images into the e2e test Kind cluster
+load-images-e2e: build-rotator ## Build and load application images into the e2e test Kind cluster
 	@echo "Loading application images into e2e test cluster ${KIND_CLUSTER}..."
 	@echo "Note: Controller image is built and loaded by the e2e test suite itself"
+	@echo "Loading rotator image into e2e test cluster ${KIND_CLUSTER}..."
+	@mkdir -p /tmp/kind-images
+	$(CONTAINER_TOOL) save docker.io/library/rotator:local -o /tmp/kind-images/rotator.tar
+	$(KIND) load image-archive /tmp/kind-images/rotator.tar --name $(KIND_CLUSTER)
+	rm -f /tmp/kind-images/rotator.tar
 	$(MAKE) -C images push-all-kind CLUSTER_NAME=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: kubectl-kind
@@ -415,12 +435,25 @@ kubectl-kind: ## Configure kubectl to use kind cluster
 	}
 
 .PHONY: deploy-kind
-deploy-kind: docker-build kubectl-kind ## Build, load, and deploy controller to a kind cluster.
-	$(MAKE) deploy USE_KIND=true EXTRA_HELM_ARGS="--set application.imagesPullPolicy=Never --set application.imagesRegistry='docker.io/library' --set extensionApi.enable=true"
+deploy-kind: docker-build build-rotator helm-generate kubectl-kind ## Build, load, and deploy controller to a kind cluster.
+	$(MAKE) load-images
+	helm upgrade --install jk8s dist/chart \
+		--namespace jupyter-k8s-system --create-namespace \
+		--set controllerManager.container.imagePullPolicy=Never \
+		--set application.imagesPullPolicy=Never \
+		--set application.imagesRegistry='docker.io/library' \
+		--set extensionApi.enable=true \
+		--set extensionApi.jwtSecret.enable=true \
+		--set extensionApi.jwtSecret.rotator.repository=docker.io/library \
+		--set extensionApi.jwtSecret.rotator.imageName=rotator \
+		--set extensionApi.jwtSecret.rotator.imageTag=local \
+		--set extensionApi.jwtSecret.rotator.imagePullPolicy=Never \
+		--set workspacePodWatching.enable=true \
+		--set accessResources.traefik.enable=true
 
 .PHONY: redeploy-kind
-redeploy-kind: kubectl-kind
-	$(KUBECTL) delete deployment jupyter-k8s-controller-manager -n jupyter-k8s-system
+redeploy-kind: kubectl-kind ## Rebuild and redeploy controller to the kind cluster.
+	$(KUBECTL) delete deployment jupyter-k8s-controller-manager -n jupyter-k8s-system --ignore-not-found
 	$(MAKE) deploy-kind
 
 ##@ Local Auth Middleware & Rotator
@@ -756,6 +789,7 @@ port-forward:
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+	$(KUBECTL) delete -f config/rbac/extension_api_auth_binding.yaml --ignore-not-found
 
 ##@ Dependencies
 
