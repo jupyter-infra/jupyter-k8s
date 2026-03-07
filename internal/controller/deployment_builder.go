@@ -236,6 +236,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 		Name:            "workspace",
 		Image:           image,
 		ImagePullPolicy: db.options.ApplicationImagesPullPolicy,
+		SecurityContext: workspace.Spec.ContainerSecurityContext,
 		Command:         command,
 		Args:            args,
 		Lifecycle:       workspace.Spec.Lifecycle,

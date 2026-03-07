@@ -111,6 +111,10 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultPodSecurityContext *corev1.PodSecurityContext `json:"defaultPodSecurityContext,omitempty"`
 
+	// DefaultContainerSecurityContext specifies default container-level security context for the main workspace container
+	// +optional
+	DefaultContainerSecurityContext *corev1.SecurityContext `json:"defaultContainerSecurityContext,omitempty"`
+
 	// AppType specifies the application type for workspaces using this template
 	// +optional
 	AppType string `json:"appType,omitempty"`
