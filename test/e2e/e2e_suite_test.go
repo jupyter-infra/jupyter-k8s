@@ -225,13 +225,10 @@ var _ = BeforeSuite(func() {
 	// Clean up any leftover resources before starting tests
 	ensureCleanState()
 
-	By("deploying the controller-manager with webhook enabled")
-	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
-	_, err = utils.Run(cmd)
-	Expect(err).NotTo(HaveOccurred(), "Failed to deploy controller-manager")
-
-	By("creating extension API authentication RoleBinding")
-	// Delete first if it exists from a previous run
+	By("creating extension API authentication RoleBinding before deploy")
+	// The controller needs this RoleBinding at startup to read the
+	// extension-apiserver-authentication configmap from kube-system.
+	// Creating it before deploy prevents CrashLoopBackOff on first start.
 	cmd = exec.Command("kubectl", "delete", "rolebinding", "jupyter-k8s-extension-api-auth",
 		"-n", "kube-system", "--ignore-not-found")
 	_, _ = utils.Run(cmd)
@@ -241,6 +238,28 @@ var _ = BeforeSuite(func() {
 		fmt.Sprintf("--serviceaccount=%s:jupyter-k8s-controller-manager", OperatorNamespace))
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to create extension API auth RoleBinding")
+
+	By("deploying the controller-manager with webhook enabled")
+	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to deploy controller-manager")
+
+	By("patching controller deployment to enable k8s-native JWT signing")
+	// The jwt-rotator Secret is deployed via kustomize (config/jwt-rotator/).
+	// The secret name gets the kustomize namePrefix "jupyter-k8s-".
+	jwtPatch := `[{"op":"add","path":"/spec/template/spec/containers/0/args/-",` +
+		`"value":"--jwt-secret-name=jupyter-k8s-extensionapi-secrets"}]`
+	cmd = exec.Command("kubectl", "patch", "deployment/jupyter-k8s-controller-manager",
+		"-n", OperatorNamespace, "--type=json", "-p="+jwtPatch)
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to patch controller with --jwt-secret-name")
+
+	By("waiting for controller rollout after JWT secret patch")
+	cmd = exec.Command("kubectl", "rollout", "status",
+		"deployment/jupyter-k8s-controller-manager",
+		"-n", OperatorNamespace, "--timeout=5m")
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Controller rollout failed after JWT secret patch")
 
 	By("waiting for controller deployment to be available")
 	cmd = exec.Command("kubectl", "wait", "deployment/jupyter-k8s-controller-manager",

@@ -1,0 +1,8 @@
+apiVersion: connection.workspace.jupyter.org/v1alpha1
+kind: WorkspaceConnection
+metadata:
+  name: test-connection-no-webui
+  namespace: default
+spec:
+  workspaceName: workspace-connection-no-webui
+  workspaceConnectionType: web-ui

@@ -42,6 +42,21 @@ spec:
             {{- end}}
             {{- if .Values.extensionApi.enable }}
             - "--enable-extension-api"
+            {{- if .Values.extensionApi.jwtIssuer }}
+            - "--jwt-issuer={{ .Values.extensionApi.jwtIssuer }}"
+            {{- end}}
+            {{- if .Values.extensionApi.jwtAudience }}
+            - "--jwt-audience={{ .Values.extensionApi.jwtAudience }}"
+            {{- end}}
+            {{- end}}
+            {{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}
+            - "--jwt-secret-name={{ .Values.extensionApi.jwtSecret.secretName }}"
+            {{- if .Values.extensionApi.jwtSecret.tokenTTL }}
+            - "--jwt-ttl={{ .Values.extensionApi.jwtSecret.tokenTTL }}"
+            {{- end}}
+            {{- if .Values.extensionApi.jwtSecret.newKeyUseDelay }}
+            - "--new-key-use-delay={{ .Values.extensionApi.jwtSecret.newKeyUseDelay }}"
+            {{- end}}
             {{- end}}
             {{- if .Values.workspacePodWatching.enable }}
             - "--enable-workspace-pod-watching"

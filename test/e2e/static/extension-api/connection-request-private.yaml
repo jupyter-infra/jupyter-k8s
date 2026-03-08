@@ -1,0 +1,8 @@
+apiVersion: connection.workspace.jupyter.org/v1alpha1
+kind: WorkspaceConnection
+metadata:
+  name: test-connection-private
+  namespace: default
+spec:
+  workspaceName: workspace-connection-private
+  workspaceConnectionType: web-ui

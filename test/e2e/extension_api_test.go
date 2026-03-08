@@ -9,7 +9,10 @@ Distributed under the terms of the MIT license
 package e2e
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"net/url"
 	"os/exec"
 	"strings"
 	"time"
@@ -211,6 +214,222 @@ var _ = Describe("Extension API", Ordered, func() {
 			_, _ = fmt.Fprintf(GinkgoWriter, "Workspace not found test - allowed: %v, notFound: %v, reason: %s\n", allowed, notFound, reason)
 		})
 	})
+
+	Context("Create Connection", func() {
+		BeforeAll(func() {
+			By("creating access strategies for connection tests")
+			cmd := exec.Command("kubectl", "apply", "-f", getFixturePath("connection-access-strategy"))
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "apply", "-f", getFixturePath("connection-access-strategy-default-handler"))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "apply", "-f", getFixturePath("connection-access-strategy-no-webui"))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating RBAC for connection tests")
+			// Reuse the existing workspace-connection-role (create workspaceconnections permission)
+			cmd = exec.Command("kubectl", "apply", "-f", getFixturePath("workspace-connection-role"))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Reuse workspace-creator-role and bind connection-owner-user to it
+			cmd = exec.Command("kubectl", "apply", "-f", getFixturePath("workspace-creator-role"))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "apply", "-f", getFixturePath("connection-creator-binding"))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "apply", "-f", getFixturePath("connection-owner-binding"))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating public workspace for connection tests")
+			createWorkspaceForTest("workspace-connection-public", extensionAPIGroupDir, extensionAPISubgroupDir)
+
+			By("creating workspace with default handler access strategy")
+			createWorkspaceForTest("workspace-connection-default-handler", extensionAPIGroupDir, extensionAPISubgroupDir)
+
+			By("creating workspace with no-webui access strategy")
+			createWorkspaceForTest("workspace-connection-no-webui", extensionAPIGroupDir, extensionAPISubgroupDir)
+
+			By("creating private workspace as connection-owner-user")
+			privatePath := getFixturePath("workspace-connection-private")
+			cmd = exec.Command("kubectl", "create", "-f", privatePath, "--as=connection-owner-user")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for workspaces to be available")
+			WaitForWorkspaceToReachCondition("workspace-connection-public", extensionAPITestNamespace, ConditionTypeAvailable, ConditionTrue)
+			WaitForWorkspaceToReachCondition("workspace-connection-default-handler", extensionAPITestNamespace, ConditionTypeAvailable, ConditionTrue)
+			WaitForWorkspaceToReachCondition("workspace-connection-no-webui", extensionAPITestNamespace, ConditionTypeAvailable, ConditionTrue)
+			WaitForWorkspaceToReachCondition("workspace-connection-private", extensionAPITestNamespace, ConditionTypeAvailable, ConditionTrue)
+		})
+
+		AfterAll(func() {
+			deleteResourcesForExtensionAPITest()
+		})
+
+		It("should return bearer token URL for public workspace", func() {
+			By("creating WorkspaceConnection for public workspace")
+			connType, connURL, err := createWorkspaceConnectionAndGetResponse(
+				getFixturePath("connection-request-webui"))
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying response contains web-ui connection type")
+			Expect(connType).To(Equal("web-ui"))
+
+			By("verifying connection URL contains a token")
+			Expect(connURL).To(ContainSubstring("?token="))
+			Expect(connURL).To(ContainSubstring("bearer-auth"))
+			_, _ = fmt.Fprintf(GinkgoWriter, "Connection URL: %s\n", connURL)
+		})
+
+		It("should return a valid JWT in the bearer token URL", func() {
+			By("creating WorkspaceConnection and extracting JWT")
+			_, connURL, err := createWorkspaceConnectionAndGetResponse(
+				getFixturePath("connection-request-webui"))
+			Expect(err).NotTo(HaveOccurred())
+
+			By("parsing token from URL")
+			parsed, err := url.Parse(connURL)
+			Expect(err).NotTo(HaveOccurred())
+			token := parsed.Query().Get("token")
+			Expect(token).NotTo(BeEmpty(), "Token should be present in URL query params")
+
+			By("validating JWT structure (header.payload.signature)")
+			parts := strings.Split(token, ".")
+			Expect(parts).To(HaveLen(3), "JWT should have 3 parts separated by dots")
+
+			By("decoding and validating JWT header")
+			headerJSON, err := base64.RawURLEncoding.DecodeString(parts[0])
+			Expect(err).NotTo(HaveOccurred(), "JWT header should be valid base64url")
+
+			var header map[string]interface{}
+			err = json.Unmarshal(headerJSON, &header)
+			Expect(err).NotTo(HaveOccurred(), "JWT header should be valid JSON")
+
+			Expect(header).To(HaveKey("alg"))
+			Expect(header["alg"]).To(Equal("HS384"), "JWT should use HS384 algorithm")
+			Expect(header).To(HaveKey("kid"))
+			Expect(header["kid"]).NotTo(BeEmpty(), "JWT should have a key ID")
+			_, _ = fmt.Fprintf(GinkgoWriter, "JWT header: alg=%s, kid=%s\n", header["alg"], header["kid"])
+		})
+
+		It("should work with empty createConnectionHandler (default)", func() {
+			By("creating WorkspaceConnection for workspace with default handler")
+			connType, connURL, err := createWorkspaceConnectionAndGetResponse(
+				getFixturePath("connection-request-default-handler"))
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying response is valid")
+			Expect(connType).To(Equal("web-ui"))
+			Expect(connURL).To(ContainSubstring("?token="))
+			_, _ = fmt.Fprintf(GinkgoWriter, "Default handler connection URL: %s\n", connURL)
+		})
+
+		It("should allow owner to create connection for private workspace", func() {
+			By("creating WorkspaceConnection as owner user")
+			output, err := createWorkspaceConnectionAsUser(
+				getFixturePath("connection-request-private"), "connection-owner-user", []string{})
+			Expect(err).NotTo(HaveOccurred(), "Owner should be able to create connection for private workspace")
+			Expect(output).To(ContainSubstring("workspaceConnectionUrl"))
+			Expect(output).To(ContainSubstring("?token="))
+			_, _ = fmt.Fprintf(GinkgoWriter, "Owner connection response:\n%s\n", output)
+		})
+
+		It("should deny non-owner connection to private workspace", func() {
+			By("creating WorkspaceConnection as non-owner user")
+			_, err := createWorkspaceConnectionAsUser(
+				getFixturePath("connection-request-private"), "connection-other-user", []string{})
+			Expect(err).To(HaveOccurred(), "Non-owner should be denied connection to private workspace")
+			Expect(err.Error()).To(SatisfyAny(
+				ContainSubstring("Forbidden"),
+				ContainSubstring("forbidden"),
+				ContainSubstring("not the workspace owner"),
+			))
+		})
+
+		It("should reject connection when WebUI not enabled", func() {
+			By("creating WorkspaceConnection for workspace without bearerAuthURLTemplate")
+			_, err := createWorkspaceConnectionAsUser(
+				getFixturePath("connection-request-no-webui"), "connection-owner-user", []string{})
+			Expect(err).To(HaveOccurred(), "Connection should be rejected when WebUI is not enabled")
+			Expect(err.Error()).To(ContainSubstring("web browser access is not enabled"))
+		})
+
+		It("should reject connection for non-existent workspace", func() {
+			By("creating WorkspaceConnection for non-existent workspace")
+			_, err := createWorkspaceConnectionAsUser(
+				getFixturePath("connection-request-not-found"), "connection-owner-user", []string{})
+			Expect(err).To(HaveOccurred(), "Connection to non-existent workspace should fail")
+			Expect(err.Error()).To(SatisfyAny(
+				ContainSubstring("not found"),
+				ContainSubstring("NotFound"),
+			))
+		})
+
+		It("should deny unauthorized user from creating connection", func() {
+			By("creating WorkspaceConnection as user without RBAC permissions")
+			_, err := createWorkspaceConnectionAsUser(
+				getFixturePath("connection-request-webui"), "unauthorized-user", []string{})
+			Expect(err).To(HaveOccurred(), "Unauthorized user should be denied")
+			Expect(err.Error()).To(SatisfyAny(
+				ContainSubstring("Forbidden"),
+				ContainSubstring("forbidden"),
+			))
+		})
+
+		It("should use a new signing key after JWT secret rotation", func() {
+			By("creating a connection to capture the initial kid")
+			_, connURL1, err := createWorkspaceConnectionAndGetResponse(
+				getFixturePath("connection-request-webui"))
+			Expect(err).NotTo(HaveOccurred())
+
+			kid1, err := extractKidFromConnectionURL(connURL1)
+			Expect(err).NotTo(HaveOccurred())
+			_, _ = fmt.Fprintf(GinkgoWriter, "Initial kid: %s\n", kid1)
+
+			By("triggering JWT key rotation via CronJob")
+			cmd := exec.Command("kubectl", "create", "job",
+				"--from=cronjob/jupyter-k8s-jwt-rotator",
+				"jwt-rotation-e2e", "-n", OperatorNamespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for rotation job to complete")
+			cmd = exec.Command("kubectl", "wait", "job/jwt-rotation-e2e",
+				"-n", OperatorNamespace,
+				"--for=condition=complete", "--timeout=60s")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Rotation job did not complete")
+
+			By("waiting for controller to pick up rotated key and start signing with new kid")
+			// The controller's informer detects the secret change, then newKeyUseDelay
+			// (default 5s) must elapse before the new key is used for signing.
+			Eventually(func(g Gomega) {
+				_, connURL2, err := createWorkspaceConnectionAndGetResponse(
+					getFixturePath("connection-request-webui"))
+				g.Expect(err).NotTo(HaveOccurred())
+
+				kid2, err := extractKidFromConnectionURL(connURL2)
+				g.Expect(err).NotTo(HaveOccurred())
+
+				_, _ = fmt.Fprintf(GinkgoWriter, "Polling kid: %s (waiting for != %s)\n", kid2, kid1)
+				g.Expect(kid2).NotTo(Equal(kid1), "Expected new kid after rotation")
+			}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
+			By("cleaning up rotation job")
+			cmd = exec.Command("kubectl", "delete", "job", "jwt-rotation-e2e",
+				"-n", OperatorNamespace, "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+	})
 })
 
 // deleteResourcesForExtensionAPITest cleans up resources created during extension API tests
@@ -222,6 +441,11 @@ func deleteResourcesForExtensionAPITest() {
 	By("cleaning up workspaces")
 	cmd := exec.Command("kubectl", "delete", "workspace", "--all", "-n", extensionAPITestNamespace,
 		"--ignore-not-found", "--wait=true", "--timeout=120s")
+	_, _ = utils.Run(cmd)
+
+	By("cleaning up access strategies")
+	cmd = exec.Command("kubectl", "delete", "workspaceaccessstrategy", "--all", "-n", SharedNamespace,
+		"--ignore-not-found", "--wait=true", "--timeout=60s")
 	_, _ = utils.Run(cmd)
 
 	By("cleaning up RBAC resources by label")

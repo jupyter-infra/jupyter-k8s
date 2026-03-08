@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -40,6 +41,8 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -116,6 +119,11 @@ func main() {
 	var watchResourcesGVK string
 	var enableWorkspacePodWatching bool
 	var defaultTemplateNamespace string
+	var jwtIssuer string
+	var jwtAudience string
+	var jwtSecretName string
+	var jwtTTL time.Duration
+	var newKeyUseDelay time.Duration
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -147,6 +155,16 @@ func main() {
 		"Enable workspace pod event watching for workspace lifecycle management")
 	flag.StringVar(&defaultTemplateNamespace, "default-template-namespace", "",
 		"Default namespace for WorkspaceTemplate resolution when templateRef.namespace is not specified")
+	flag.StringVar(&jwtIssuer, "jwt-issuer", "",
+		"JWT issuer claim. Uses server default if not set.")
+	flag.StringVar(&jwtAudience, "jwt-audience", "",
+		"JWT audience claim. Uses server default if not set.")
+	flag.StringVar(&jwtSecretName, "jwt-secret-name", "",
+		"K8s Secret name for JWT signing keys (enables k8s-native signing)")
+	flag.DurationVar(&jwtTTL, "jwt-ttl", 0,
+		"JWT expiration duration (e.g. 5m). Uses server default if not set.")
+	flag.DurationVar(&newKeyUseDelay, "new-key-use-delay", 0,
+		"Delay before using a newly rotated signing key (e.g. 5s). Uses server default if not set.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -222,7 +240,7 @@ func main() {
 		metricsServerOptions.KeyName = metricsCertKey
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	mgrOptions := ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
@@ -240,7 +258,23 @@ func main() {
 		// if you are doing or is intended to do any operation such as perform cleanups
 		// after the manager stops then its usage might be unsafe.
 		// LeaderElectionReleaseOnCancel: true,
-	})
+	}
+
+	// Scope Secret watching to the controller's namespace to avoid requiring
+	// cluster-wide secret list/watch permissions (needed for JWT secret informer).
+	if podNamespace := os.Getenv("CONTROLLER_POD_NAMESPACE"); podNamespace != "" {
+		mgrOptions.Cache = cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				&corev1.Secret{}: {
+					Namespaces: map[string]cache.Config{
+						podNamespace: {},
+					},
+				},
+			},
+		}
+	}
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOptions)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
@@ -315,12 +349,31 @@ func main() {
 	if enableExtensionAPI {
 		setupLog.Info("Setting up extension API server")
 		// Create config with a different port to avoid conflict with metrics
-		config := extensionapi.NewConfig(
+		configOpts := []extensionapi.ConfigOption{
 			extensionapi.WithServerPort(7443),
+			extensionapi.WithControllerNamespace(os.Getenv("CONTROLLER_POD_NAMESPACE")),
 			extensionapi.WithClusterId(os.Getenv("CLUSTER_ID")),
 			extensionapi.WithKMSKeyID(os.Getenv("KMS_KEY_ID")),
 			extensionapi.WithDomain(os.Getenv("DOMAIN")),
-		)
+		}
+
+		if jwtIssuer != "" {
+			configOpts = append(configOpts, extensionapi.WithJwtIssuer(jwtIssuer))
+		}
+		if jwtAudience != "" {
+			configOpts = append(configOpts, extensionapi.WithJwtAudience(jwtAudience))
+		}
+		if jwtSecretName != "" {
+			configOpts = append(configOpts, extensionapi.WithJwtSecretName(jwtSecretName))
+		}
+		if jwtTTL > 0 {
+			configOpts = append(configOpts, extensionapi.WithJwtTTL(jwtTTL))
+		}
+		if newKeyUseDelay > 0 {
+			configOpts = append(configOpts, extensionapi.WithNewKeyUseDelay(newKeyUseDelay))
+		}
+
+		config := extensionapi.NewConfig(configOpts...)
 		if err := extensionapi.SetupExtensionAPIServerWithManager(mgr, config); err != nil {
 			setupLog.Error(err, "unable to create extension API server", "extensionapi", "Server")
 			os.Exit(1)

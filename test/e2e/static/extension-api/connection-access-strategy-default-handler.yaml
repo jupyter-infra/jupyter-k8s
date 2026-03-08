@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: connection-test-default-handler
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: Connection Test Default Handler
+  accessResourceTemplates: []
+  accessURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
+  bearerAuthURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/bearer-auth"

@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	genericapiserver "k8s.io/apiserver/pkg/server"
@@ -542,14 +543,31 @@ var _ = Describe("Server", func() {
 	})
 
 	Context("Helper Functions", func() {
-		Describe("createJWTSignerFactory", func() {
+		Describe("createJWTCompositeSignerFactory", func() {
 			It("Should not fail startup with empty KMS key ID", func() {
 				config := NewConfig(WithKMSKeyID(""))
-				_, err := createJWTSignerFactory(config)
+				_, err := createJWTCompositeSignerFactory(config)
 				// Should not fail startup due to empty KMS key ID
 				if err != nil {
 					Skip("Requires AWS KMS setup")
 				}
+			})
+
+			It("Should create CompositeSignerFactory with k8s-native when JwtSecretName is set", func() {
+				config := NewConfig(WithJwtSecretName("test-secret"))
+				factory, err := createJWTCompositeSignerFactory(config)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(factory).NotTo(BeNil())
+
+				composite, ok := factory.(*jwt.CompositeSignerFactory)
+				Expect(ok).To(BeTrue())
+
+				nativeFactory, found := composite.GetFactory("k8s-native")
+				Expect(found).To(BeTrue())
+
+				stdFactory, ok := nativeFactory.(*jwt.StandardSignerFactory)
+				Expect(ok).To(BeTrue())
+				Expect(stdFactory.Signer()).NotTo(BeNil())
 			})
 
 			It("Should create JWT manager with valid KMS key", func() {
@@ -606,7 +624,7 @@ var _ = Describe("Server", func() {
 				config := NewConfig(WithKMSKeyID("test-key"))
 
 				// This may or may not fail depending on environment
-				_, _ = createJWTSignerFactory(config)
+				_, _ = createJWTCompositeSignerFactory(config)
 
 				// We just want to test the code path is executed
 				Expect(true).To(BeTrue())
@@ -836,9 +854,9 @@ var _ = Describe("ServerWithManager", func() {
 			options := createRecommendedOptions(config)
 			Expect(options.SecureServing.BindPort).To(Equal(9999))
 
-			// Test createJWTSignerFactory with empty KMS key ID - should not fail startup
+			// Test createJWTCompositeSignerFactory with empty KMS key ID - should not fail startup
 			config = NewConfig(WithKMSKeyID(""))
-			_, err := createJWTSignerFactory(config)
+			_, err := createJWTCompositeSignerFactory(config)
 			// Should not fail startup due to empty KMS key ID
 			if err != nil {
 				Skip("Requires AWS KMS setup")
