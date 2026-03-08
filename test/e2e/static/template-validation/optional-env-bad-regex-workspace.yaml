@@ -1,0 +1,16 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: optional-env-bad-regex-workspace
+  namespace: default
+spec:
+  displayName: "Workspace with Optional Env Bad Regex"
+  desiredStatus: Running
+  templateRef:
+    name: env-requirements-template
+    namespace: jupyter-k8s-shared
+  env:
+    - name: AWS_REGION
+      value: us-west-2
+    - name: OPTIONAL_VAR
+      value: invalid-value

@@ -1,17 +1,20 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
-  name: env-template
+  name: env-requirements-template
   namespace: jupyter-k8s-shared
 spec:
-  displayName: "Environment Template"
-  description: "Template with baseEnv for environment variable injection"
+  displayName: "Env Requirements Template"
   defaultImage: jk8s-application-jupyter-uv:latest
   baseEnv:
-    - name: TEMPLATE_VAR
-      value: template-value
-    - name: JUPYTER_ENABLE_LAB
-      value: "yes"
+    - name: DEFAULT_VAR
+      value: default-value
+  envRequirements:
+    - name: AWS_REGION
+      required: true
+      regex: "^[a-z]{2}-[a-z]+-[0-9]+$"
+    - name: OPTIONAL_VAR
+      regex: "^(yes|no)$"
   resourceBounds:
     resources:
       cpu:

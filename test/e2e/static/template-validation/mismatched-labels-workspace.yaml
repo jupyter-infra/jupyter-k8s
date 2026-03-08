@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: mismatched-labels-workspace
+  namespace: default
+  labels:
+    env: "development"
+spec:
+  displayName: "Workspace with Mismatched Labels"
+  templateRef:
+    name: default-labels-template
+    namespace: jupyter-k8s-shared

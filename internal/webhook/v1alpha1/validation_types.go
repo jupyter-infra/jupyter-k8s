@@ -34,4 +34,8 @@ const (
 	ViolationTypeInvalidTemplate                = "InvalidTemplate"
 	ViolationTypeIdleShutdownOverrideNotAllowed = "IdleShutdownOverrideNotAllowed"
 	ViolationTypeIdleShutdownTimeoutOutOfBounds = "IdleShutdownTimeoutOutOfBounds"
+	ViolationTypeLabelRequired                  = "LabelRequired"
+	ViolationTypeLabelRegexMismatch             = "LabelRegexMismatch"
+	ViolationTypeEnvRequired                    = "EnvRequired"
+	ViolationTypeEnvRegexMismatch               = "EnvRegexMismatch"
 )

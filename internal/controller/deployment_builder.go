@@ -222,14 +222,12 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.Workspace, resources corev1.ResourceRequirements) corev1.Container {
 	image := db.imageResolver.ResolveImage(workspace)
 
-	// Get command, args, and env from workspace spec if specified
+	// Get command and args from container config if specified
 	var command []string
 	var args []string
-	var env []corev1.EnvVar
 	if workspace.Spec.ContainerConfig != nil {
 		command = workspace.Spec.ContainerConfig.Command
 		args = workspace.Spec.ContainerConfig.Args
-		env = workspace.Spec.ContainerConfig.Env
 	}
 
 	container := corev1.Container{
@@ -239,6 +237,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 		Command:         command,
 		Args:            args,
 		Lifecycle:       workspace.Spec.Lifecycle,
+		Env:             workspace.Spec.Env,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "http",
@@ -247,7 +246,6 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 			},
 		},
 		Resources: resources,
-		Env:       env,
 		// TODO: Add probes
 	}
 

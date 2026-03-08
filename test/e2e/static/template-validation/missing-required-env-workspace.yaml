@@ -1,14 +1,11 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
-  name: workspace-env-override
+  name: missing-required-env-workspace
   namespace: default
 spec:
-  displayName: "Workspace with Env Override"
+  displayName: "Workspace Missing Required Env"
   desiredStatus: Running
   templateRef:
-    name: env-template
+    name: env-requirements-template
     namespace: jupyter-k8s-shared
-  env:
-    - name: WORKSPACE_VAR
-      value: workspace-value

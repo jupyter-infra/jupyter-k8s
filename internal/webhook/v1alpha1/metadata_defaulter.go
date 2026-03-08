@@ -23,4 +23,16 @@ func applyMetadataDefaults(workspace *workspacev1alpha1.Workspace, template *wor
 	// This follows Kubernetes convention (e.g., ConfigMapRef, SecretRef default to same namespace)
 	templateNamespace := workspacequery.GetTemplateRefNamespace(workspace)
 	workspace.Labels[controller.LabelWorkspaceTemplateNamespace] = templateNamespace
+
+	// Add template labels to workspace if not already present
+	baseLabels(workspace, template)
+}
+
+// baseLabels adds template labels to workspace if the key doesn't already exist
+func baseLabels(workspace *workspacev1alpha1.Workspace, template *workspacev1alpha1.WorkspaceTemplate) {
+	for _, label := range template.Spec.BaseLabels {
+		if _, exists := workspace.Labels[label.Key]; !exists {
+			workspace.Labels[label.Key] = label.Value
+		}
+	}
 }

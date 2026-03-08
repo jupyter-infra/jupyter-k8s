@@ -1,0 +1,20 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: default-labels-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Default Labels Template"
+  description: "Template with baseLabels and labelRequirements"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  baseLabels:
+    - key: "env"
+      value: "production"
+    - key: "managed-by"
+      value: "platform-team"
+  labelRequirements:
+    - key: "env"
+      required: true
+      regex: "^(production|staging)$"
+    - key: "managed-by"
+      required: true

@@ -1,14 +1,14 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
-  name: workspace-env-override
+  name: invalid-env-regex-workspace
   namespace: default
 spec:
-  displayName: "Workspace with Env Override"
+  displayName: "Workspace with Invalid Env Regex"
   desiredStatus: Running
   templateRef:
-    name: env-template
+    name: env-requirements-template
     namespace: jupyter-k8s-shared
   env:
-    - name: WORKSPACE_VAR
-      value: workspace-value
+    - name: AWS_REGION
+      value: not-a-valid-region
