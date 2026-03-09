@@ -28,7 +28,7 @@ var _ = Describe("Workspace Security", Ordered, func() {
 		_ = kubectlDeleteAllNamespaces("workspaces", "--ignore-not-found", "--wait=true", "--timeout=180s")
 	})
 
-	It("workspace container security context passed onto main container in pod", func() {
+	It("should pass the workspace container security context onto the main container of the pod", func() {
 		workspaceName := "container-sc-workspace"
 		workspaceFilename := "container-sc-workspace"
 
@@ -63,7 +63,7 @@ var _ = Describe("Workspace Security", Ordered, func() {
 		Expect(runAsUser).To(Equal("1000"))
 	})
 
-	It("workspace pod security context passed onto pod", func() {
+	It("should pass the workspace pod security context into the underlying pod", func() {
 		workspaceName := "pod-sc-workspace"
 		workspaceFilename := "pod-sc-workspace"
 
