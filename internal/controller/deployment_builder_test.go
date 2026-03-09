@@ -624,6 +624,51 @@ var _ = Describe("DeploymentBuilder", func() {
 		})
 	})
 
+	Context("Container Security Context", func() {
+		It("should not set container security context when not specified", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-no-container-sc",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := deployment.Spec.Template.Spec.Containers[0]
+			Expect(container.SecurityContext).To(BeNil())
+		})
+
+		It("should apply container security context to main container", func() {
+			privileged := false
+			runAsUser := int64(1000)
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-container-sc",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					ContainerSecurityContext: &corev1.SecurityContext{
+						Privileged:   &privileged,
+						RunAsNonRoot: boolPtr(true),
+						RunAsUser:    &runAsUser,
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := deployment.Spec.Template.Spec.Containers[0]
+			Expect(container.SecurityContext).NotTo(BeNil())
+			Expect(*container.SecurityContext.Privileged).To(BeFalse())
+			Expect(*container.SecurityContext.RunAsNonRoot).To(BeTrue())
+			Expect(*container.SecurityContext.RunAsUser).To(Equal(int64(1000)))
+		})
+	})
+
 	Context("Annotations Propagation", func() {
 		It("should copy workspace annotations to deployment and pod", func() {
 			workspace := &workspacev1alpha1.Workspace{
@@ -699,3 +744,7 @@ var _ = Describe("DeploymentBuilder", func() {
 		})
 	})
 })
+
+func boolPtr(b bool) *bool {
+	return &b
+}
