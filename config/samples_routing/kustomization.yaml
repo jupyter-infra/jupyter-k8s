@@ -1,7 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# AccessStrategies are NOT included here. They are applied individually (with envsubst)
+# before this kustomization, to ensure they exist before workspaces that reference them.
+# See apply-sample-routing in Makefile.
 resources:
-  - workspace_access_strategy.yaml
   - workspace_with_access_strategy.yaml
   - workspace_with_access_strategy_private.yaml
+  - workspace_with_bearer_access_strategy.yaml
+  - workspace_with_bearer_access_strategy_private.yaml

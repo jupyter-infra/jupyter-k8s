@@ -1,10 +1,11 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceAccessStrategy
 metadata:
-  name: oauth-access-strategy
+  name: bearer-access-strategy
   namespace: default
 spec:
-  displayName: JupyterLab Routing Strategy with GitHub authentication
+  displayName: JupyterLab Routing Strategy with bearer token authentication
+  createConnectionHandler: "k8s-native"
   accessResourceTemplates:
     # Network policy to restrict pod access
     - kind: NetworkPolicy
@@ -60,26 +61,24 @@ spec:
                   namespace: "{{ .Service.Namespace }}"
                   port: 8888
 
-    # The unauthorized route - handles auth path for initial authentication
+    # The bearer auth route - exchanges bearer token for session cookie
     - kind: IngressRoute
       apiVersion: traefik.io/v1alpha1
-      namePrefix: unauthorized-route
+      namePrefix: bearer-auth-route
       template: |
         spec:
           entryPoints:
             - websecure
           routes:
-            - match: "Host(`$DOMAIN`) && PathPrefix(`/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/auth`)"
+            - match: "Host(`$DOMAIN`) && PathPrefix(`/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/bearer-auth`)"
               kind: Rule
-              priority: 110  # Higher priority specifically for auth paths
+              priority: 110
               middlewares:
                 - name: auth-headers
                   namespace: jupyter-k8s-router
-                - name: oauth-auth-redirect
+                - name: authmiddleware-bearer-auth
                   namespace: jupyter-k8s-router
-                - name: authmiddleware-auth
-                  namespace: jupyter-k8s-router
-                - name: strip-auth-suffix
+                - name: strip-bearer-auth-suffix
                   namespace: jupyter-k8s-router
               services:
                 - name: "{{ .Service.Name }}"
@@ -91,4 +90,5 @@ spec:
         mergeEnv:
           - name: JUPYTER_BASE_URL
             valueTemplate: "/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
-  accessURLTemplate: "https://$DOMAIN/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/auth"
+  accessURLTemplate: "https://$DOMAIN/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
+  bearerAuthURLTemplate: "https://$DOMAIN/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/bearer-auth"

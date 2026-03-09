@@ -1,18 +1,16 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
-  name: ws-gh-oauth-public
+  name: ws-bearer-private
   namespace: default
 spec:
-  displayName: "Sample Workspace with Access Strategy"
-  # Container image to use
-  # Using the built-in 'uv' image shortcut
+  displayName: "Private Workspace with Bearer Auth"
   image: uv
   desiredStatus: Running
-  accessType: Public
-  ownershipType: Public
+  accessType: OwnerOnly
+  ownershipType: OwnerOnly
   accessStrategy:
-    name: oauth-access-strategy
+    name: bearer-access-strategy
     namespace: default
   resources:
     limits:
