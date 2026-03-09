@@ -92,10 +92,12 @@ func TestHandleBearerAuthInvalidToken(t *testing.T) {
 	server := &Server{
 		logger:     logger,
 		jwtManager: jwtHandler,
+		config:     &Config{KMSKeyId: "test-kms-key"},
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
 	req.Header.Set(HeaderForwardedURI, "/workspaces/test/workspace?token=invalid")
+	req.Header.Set(HeaderForwardedHost, "example.com")
 	w := httptest.NewRecorder()
 
 	server.handleBearerAuth(w, req)
@@ -123,10 +125,12 @@ func TestHandleBearerAuthInvalidTokenType(t *testing.T) {
 	server := &Server{
 		logger:     logger,
 		jwtManager: jwtHandler,
+		config:     &Config{KMSKeyId: "test-kms-key"},
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
 	req.Header.Set(HeaderForwardedURI, "/workspaces/test/workspace?token=session-token")
+	req.Header.Set(HeaderForwardedHost, "example.com")
 	w := httptest.NewRecorder()
 
 	server.handleBearerAuth(w, req)
@@ -141,19 +145,9 @@ func TestHandleBearerAuthInvalidTokenType(t *testing.T) {
 
 func TestHandleBearerAuthMissingForwardedHost(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
-			return &jwt.Claims{
-				User:      "test-user",
-				Groups:    []string{"users"},
-				Path:      "/workspaces/test/workspace",
-				TokenType: jwt.TokenTypeBootstrap,
-			}, nil
-		},
-	}
 	server := &Server{
-		logger:     logger,
-		jwtManager: jwtHandler,
+		logger: logger,
+		config: &Config{},
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
@@ -184,6 +178,7 @@ func TestHandleBearerAuthTokenPathMismatch(t *testing.T) {
 	}
 	config := &Config{
 		PathRegexPattern: "^(/workspaces/[^/]+/[^/]+)(?:/.*)?$",
+		KMSKeyId:         "test-kms-key",
 	}
 	server := &Server{
 		logger:     logger,
@@ -235,8 +230,8 @@ func TestHandleBearerAuthSuccess(t *testing.T) {
 		},
 	}
 	config := &Config{
-		// Use the actual production regex pattern
 		PathRegexPattern: DefaultPathRegexPattern,
+		KMSKeyId:         "test-kms-key",
 	}
 	server := &Server{
 		logger:        logger,

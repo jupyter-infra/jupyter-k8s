@@ -46,22 +46,7 @@ func (s *Server) handleBearerAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate the short-lived JWT token
-	claims, err := s.jwtManager.ValidateToken(token)
-	if err != nil {
-		s.logger.Error("Invalid token", "error", err)
-		http.Error(w, "Invalid token", http.StatusUnauthorized)
-		return
-	}
-
-	// Validate token type - bearer auth should only accept bootstrap tokens
-	if claims.TokenType != jwt.TokenTypeBootstrap {
-		s.logger.Error("Invalid token type for bearer auth", "expected", jwt.TokenTypeBootstrap, "actual", claims.TokenType)
-		http.Error(w, "Invalid token type", http.StatusUnauthorized)
-		return
-	}
-
-	// Get headers for path extraction
+	// Get headers for path/host extraction
 	fullPath := forwardedURI
 	host := r.Header.Get(HeaderForwardedHost)
 
@@ -76,18 +61,74 @@ func (s *Server) handleBearerAuth(w http.ResponseWriter, r *http.Request) {
 	appPath := ExtractAppPath(fullPath, s.config.PathRegexPattern)
 	s.logger.Debug("Extracted app path for validation", "full_path", fullPath, "app_path", appPath)
 
-	// Validate token claims against current path
-	if claims.Path != appPath {
-		s.logger.Error("Token path mismatch", "token_path", claims.Path, "request_path", appPath)
-		http.Error(w, "Token path mismatch", http.StatusForbidden)
-		return
+	var user, uid string
+	var groups []string
+	var extra map[string][]string
+
+	if s.config.KMSKeyId != "" {
+		// Local KMS validation — existing behavior
+		claims, err := s.jwtManager.ValidateToken(token)
+		if err != nil {
+			s.logger.Error("Invalid token", "error", err)
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		if claims.TokenType != jwt.TokenTypeBootstrap {
+			s.logger.Error("Invalid token type for bearer auth", "expected", jwt.TokenTypeBootstrap, "actual", claims.TokenType)
+			http.Error(w, "Invalid token type", http.StatusUnauthorized)
+			return
+		}
+
+		if claims.Path != appPath {
+			s.logger.Error("Token path mismatch", "token_path", claims.Path, "request_path", appPath)
+			http.Error(w, "Token path mismatch", http.StatusForbidden)
+			return
+		}
+
+		user = claims.Subject
+		uid = claims.UID
+		groups = claims.Groups
+		extra = claims.Extra
+	} else {
+		// Delegate to BearerTokenReview API — token is opaque
+		wsInfo, err := s.ExtractWorkspaceInfo(r)
+		if err != nil {
+			s.logger.Error("Failed to extract workspace info", "error", err)
+			http.Error(w, "Failed to extract workspace info", http.StatusBadRequest)
+			return
+		}
+
+		reviewStatus, err := s.createBearerTokenReview(r.Context(), token, wsInfo.Namespace)
+		if err != nil {
+			s.logger.Error("BearerTokenReview failed", "error", err)
+			http.Error(w, "Token verification failed", http.StatusInternalServerError)
+			return
+		}
+
+		if !reviewStatus.Authenticated {
+			s.logger.Error("Bearer token not authenticated", "error", reviewStatus.Error)
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		if reviewStatus.Path != appPath {
+			s.logger.Error("Token path mismatch", "token_path", reviewStatus.Path, "request_path", appPath)
+			http.Error(w, "Token path mismatch", http.StatusForbidden)
+			return
+		}
+
+		user = reviewStatus.User.Username
+		uid = reviewStatus.User.UID
+		groups = reviewStatus.User.Groups
+		extra = reviewStatus.User.Extra
 	}
 
 	// Generate new long-term session token
 	sessionToken, err := s.jwtManager.GenerateToken(
-		claims.Subject, claims.Groups, claims.UID, claims.Extra, appPath, host, jwt.TokenTypeSession)
+		user, groups, uid, extra, appPath, host, jwt.TokenTypeSession)
 	if err != nil {
-		s.logger.Error("Failed to generate session token", "error", err, "user", claims.Subject)
+		s.logger.Error("Failed to generate session token", "error", err, "user", user)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -97,7 +138,7 @@ func (s *Server) handleBearerAuth(w http.ResponseWriter, r *http.Request) {
 
 	// Log successful token exchange
 	s.logger.Info("Token exchange successful",
-		"user", claims.Subject,
+		"user", user,
 		"path", appPath,
 		"host", host)
 

@@ -1,0 +1,11 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: bearer-review-access-strategy
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: Bearer Review Test Access Strategy
+  accessResourceTemplates: []
+  accessURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
+  bearerAuthURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/bearer-auth"
+  createConnectionHandler: "k8s-native"

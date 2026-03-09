@@ -21,7 +21,7 @@ import (
 func (s *ExtensionServer) handleConnectionAccessReview(w http.ResponseWriter, r *http.Request) {
 	logger := GetLoggerFromContext(r.Context())
 
-	if r.Method != "POST" {
+	if r.Method != http.MethodPost {
 		WriteError(w, http.StatusBadRequest, "ConnectionAccessReview must use POST method")
 		return
 	}

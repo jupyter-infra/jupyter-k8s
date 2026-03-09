@@ -205,7 +205,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 		}
 	}
 
-	if r.Method != "POST" {
+	if r.Method != http.MethodPost {
 		logger.Error(nil, "Invalid HTTP method", "method", r.Method)
 		WriteKubernetesError(w, http.StatusBadRequest, "Connection must use POST method")
 		return

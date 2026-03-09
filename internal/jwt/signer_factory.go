@@ -13,3 +13,10 @@ import (
 type SignerFactory interface {
 	CreateSigner(accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (Signer, error)
 }
+
+// TokenValidator validates JWT tokens across all configured signers.
+// This is separate from SignerFactory because signing requires AccessStrategy context
+// while validation must try all signers (the caller doesn't know which signer was used).
+type TokenValidator interface {
+	ValidateToken(tokenString string) (*Claims, error)
+}

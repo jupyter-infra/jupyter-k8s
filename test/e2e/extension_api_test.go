@@ -430,6 +430,171 @@ var _ = Describe("Extension API", Ordered, func() {
 			_, _ = utils.Run(cmd)
 		})
 	})
+
+	Context("Create BearerTokenReview", func() {
+		BeforeAll(func() {
+			By("creating access strategy for bearer token review tests")
+			cmd := exec.Command("kubectl", "apply", "-f", getFixturePath("bearer-review-access-strategy"))
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating RBAC roles for bearer token review and connection creation")
+			cmd = exec.Command("kubectl", "apply", "-f", getFixturePath("bearer-review-role"))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "apply", "-f", getFixturePath("bearer-review-connection-role"))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating RoleBindings for bearer-review-user")
+			cmd = exec.Command("kubectl", "apply", "-f", getFixturePath("bearer-review-binding"))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "apply", "-f", getFixturePath("bearer-review-connection-binding"))
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating workspace for bearer token review tests")
+			createWorkspaceForTest("workspace-bearer-review", extensionAPIGroupDir, extensionAPISubgroupDir)
+
+			By("waiting for workspace to be available")
+			WaitForWorkspaceToReachCondition("workspace-bearer-review", extensionAPITestNamespace, ConditionTypeAvailable, ConditionTrue)
+		})
+
+		AfterAll(func() {
+			deleteResourcesForExtensionAPITest()
+		})
+
+		It("should verify a valid bearer token and return correct claims", func() {
+			By("creating a WorkspaceConnection to obtain a bearer token")
+			_, connURL, err := createWorkspaceConnectionAndGetResponse(
+				getFixturePath("bearer-review-connection-request"))
+			Expect(err).NotTo(HaveOccurred())
+
+			token, err := extractTokenFromConnectionURL(connURL)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating BearerTokenReview with the valid token")
+			result, err := createBearerTokenReview(token, "")
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying the response contains correct authenticated identity")
+			Expect(result.Authenticated).To(BeTrue(), "Valid bearer token should be authenticated")
+			Expect(result.Username).NotTo(BeEmpty(), "Username should be populated")
+			Expect(result.Path).To(ContainSubstring("workspace-bearer-review"),
+				"Path should reference the workspace")
+			Expect(result.Domain).To(Equal("example.com"), "Domain should match access strategy template")
+			Expect(result.Error).To(BeEmpty(), "Error should be empty for valid token")
+			_, _ = fmt.Fprintf(GinkgoWriter,
+				"BearerTokenReview happy path: authenticated=%v, user=%s, path=%s, domain=%s\n",
+				result.Authenticated, result.Username, result.Path, result.Domain)
+		})
+
+		It("should reject an invalid token", func() {
+			By("creating BearerTokenReview with a garbage token")
+			result, err := createBearerTokenReview("invalid-token-string", "")
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying the token is not authenticated")
+			Expect(result.Authenticated).To(BeFalse(), "Invalid token should not be authenticated")
+			Expect(result.Error).To(Equal("invalid or expired token"))
+		})
+
+		It("should deny user without RBAC permission to create BearerTokenReview", func() {
+			By("creating BearerTokenReview as user with no bearertokenreviews RBAC")
+			_, err := createBearerTokenReview("any-token", "no-bearer-review-user")
+			Expect(err).To(HaveOccurred(), "User without RBAC should be denied")
+			Expect(err.Error()).To(SatisfyAny(
+				ContainSubstring("Forbidden"),
+				ContainSubstring("forbidden"),
+			))
+		})
+
+		It("should allow authorized user to create BearerTokenReview via RBAC", func() {
+			By("obtaining a bearer token")
+			_, connURL, err := createWorkspaceConnectionAndGetResponse(
+				getFixturePath("bearer-review-connection-request"))
+			Expect(err).NotTo(HaveOccurred())
+
+			token, err := extractTokenFromConnectionURL(connURL)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating BearerTokenReview as bearer-review-user (has bearertokenreviews RBAC)")
+			result, err := createBearerTokenReview(token, "bearer-review-user")
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying the authorized user gets a valid response")
+			Expect(result.Authenticated).To(BeTrue(), "Authorized user should get authenticated response")
+			Expect(result.Username).NotTo(BeEmpty())
+			_, _ = fmt.Fprintf(GinkgoWriter,
+				"BearerTokenReview RBAC pass: user=%s, path=%s\n", result.Username, result.Path)
+		})
+
+		It("should still verify tokens after JWT key rotation", func() {
+			By("obtaining a bearer token before rotation")
+			_, connURL1, err := createWorkspaceConnectionAndGetResponse(
+				getFixturePath("bearer-review-connection-request"))
+			Expect(err).NotTo(HaveOccurred())
+
+			preRotationToken, err := extractTokenFromConnectionURL(connURL1)
+			Expect(err).NotTo(HaveOccurred())
+
+			preRotationKid, err := extractKidFromConnectionURL(connURL1)
+			Expect(err).NotTo(HaveOccurred())
+			_, _ = fmt.Fprintf(GinkgoWriter, "Pre-rotation kid: %s\n", preRotationKid)
+
+			By("triggering JWT key rotation")
+			cmd := exec.Command("kubectl", "create", "job",
+				"--from=cronjob/jupyter-k8s-jwt-rotator",
+				"jwt-rotation-bearer-review-e2e", "-n", OperatorNamespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "wait", "job/jwt-rotation-bearer-review-e2e",
+				"-n", OperatorNamespace,
+				"--for=condition=complete", "--timeout=60s")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Rotation job did not complete")
+
+			By("waiting for controller to start signing with new key")
+			var postRotationToken string
+			Eventually(func(g Gomega) {
+				_, connURL2, err := createWorkspaceConnectionAndGetResponse(
+					getFixturePath("bearer-review-connection-request"))
+				g.Expect(err).NotTo(HaveOccurred())
+
+				kid2, err := extractKidFromConnectionURL(connURL2)
+				g.Expect(err).NotTo(HaveOccurred())
+
+				_, _ = fmt.Fprintf(GinkgoWriter, "Polling kid: %s (waiting for != %s)\n", kid2, preRotationKid)
+				g.Expect(kid2).NotTo(Equal(preRotationKid), "Expected new kid after rotation")
+
+				postRotationToken, err = extractTokenFromConnectionURL(connURL2)
+				g.Expect(err).NotTo(HaveOccurred())
+			}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
+			By("verifying pre-rotation token is still valid (old key retained)")
+			result1, err := createBearerTokenReview(preRotationToken, "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result1.Authenticated).To(BeTrue(),
+				"Pre-rotation token should still be valid (old key retained)")
+			_, _ = fmt.Fprintf(GinkgoWriter, "Pre-rotation token still valid: user=%s\n", result1.Username)
+
+			By("verifying post-rotation token is also valid (new key active)")
+			result2, err := createBearerTokenReview(postRotationToken, "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result2.Authenticated).To(BeTrue(),
+				"Post-rotation token should be valid (new key active)")
+			_, _ = fmt.Fprintf(GinkgoWriter, "Post-rotation token valid: user=%s\n", result2.Username)
+
+			By("cleaning up rotation job")
+			cmd = exec.Command("kubectl", "delete", "job", "jwt-rotation-bearer-review-e2e",
+				"-n", OperatorNamespace, "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+	})
 })
 
 // deleteResourcesForExtensionAPITest cleans up resources created during extension API tests
