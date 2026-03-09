@@ -1,3 +1,6 @@
+## This RoleBinding is applied separately from kustomize because it must live
+## in kube-system, and kustomize's global namespace transform would override that.
+## See Makefile deploy/undeploy targets.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -10,4 +13,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: jupyter-k8s-controller-manager
-  namespace: system
+  namespace: jupyter-k8s-system

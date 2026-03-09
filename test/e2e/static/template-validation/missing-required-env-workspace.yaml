@@ -1,0 +1,11 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: missing-required-env-workspace
+  namespace: default
+spec:
+  displayName: "Workspace Missing Required Env"
+  desiredStatus: Running
+  templateRef:
+    name: env-requirements-template
+    namespace: jupyter-k8s-shared

@@ -1,0 +1,11 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: required-label-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Required Label Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  labelRequirements:
+    - key: "cost-center"
+      required: true

@@ -1,0 +1,14 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: matching-labels-workspace
+  namespace: default
+  labels:
+    env: "production"
+    team: "data-science"
+    managed-by: "platform-team"
+spec:
+  displayName: "Workspace with Matching Labels"
+  templateRef:
+    name: default-labels-template
+    namespace: jupyter-k8s-shared

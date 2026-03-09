@@ -34,10 +34,5 @@ WORKDIR /
 COPY --from=builder /workspace/rotator /rotator
 USER 65532:65532
 
-# Set default environment variables
-ENV SECRET_NAME=authmiddleware-secrets \
-    SECRET_NAMESPACE=jupyter-k8s-system \
-    NUMBER_OF_KEYS=6 \
-    DRY_RUN=false
 
 ENTRYPOINT ["/rotator"]

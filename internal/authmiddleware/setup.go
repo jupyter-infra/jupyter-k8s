@@ -6,17 +6,11 @@ Distributed under the terms of the MIT license
 package authmiddleware
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"os"
 
-	"github.com/go-logr/logr"
-	corev1 "k8s.io/api/core/v1"
-	toolscache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
-
-	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 )
 
 // SetupAuthMiddlewareWithManager sets up the authentication middleware server
@@ -49,11 +43,10 @@ func SetupAuthMiddlewareWithManager(mgr ctrl.Manager, cfg *Config) error {
 			"secret", cfg.JwtSecretName,
 			"namespace", cfg.Namespace)
 
-		if err := registerSecretWatchHandlers(
+		if err := standardSigner.RegisterSecretWatch(
 			mgr,
 			cfg.JwtSecretName,
 			cfg.Namespace,
-			standardSigner,
 			logrLogger.WithName("secret-watch"),
 		); err != nil {
 			return fmt.Errorf("failed to register secret watch handlers: %w", err)
@@ -86,97 +79,5 @@ func SetupAuthMiddlewareWithManager(mgr ctrl.Manager, cfg *Config) error {
 	}
 
 	logrLogger.Info("Authentication middleware setup complete")
-	return nil
-}
-
-// registerSecretWatchHandlers registers informer event handlers to watch for secret changes
-// and update the StandardSigner when keys are rotated.
-func registerSecretWatchHandlers(
-	mgr ctrl.Manager,
-	secretName string,
-	namespace string,
-	standardSigner *jwt.StandardSigner,
-	logger logr.Logger,
-) error {
-	// Get informer for Secrets from the manager's cache
-	// This provides automatic retry/backoff and reconnection
-	ctx := context.Background()
-	informer, err := mgr.GetCache().GetInformer(ctx, &corev1.Secret{})
-	if err != nil {
-		return fmt.Errorf("failed to get secret informer: %w", err)
-	}
-
-	// Helper function to update signer from secret
-	updateSignerFromSecret := func(secret *corev1.Secret) {
-		// Parse signing keys from secret
-		signingKeys, latestKid, err := jwt.ParseSigningKeysFromSecret(secret)
-		if err != nil {
-			logger.Error(err, "Failed to parse signing keys")
-			return
-		}
-
-		// Update signer with new keys
-		if err := standardSigner.UpdateKeys(signingKeys, latestKid); err != nil {
-			logger.Error(err, "Failed to update signing keys")
-			return
-		}
-
-		logger.Info("Successfully updated signing keys from secret",
-			"keyCount", len(signingKeys),
-			"latestKid", latestKid)
-	}
-
-	// Add event handler with filtering by secret name and namespace
-	_, err = informer.AddEventHandler(toolscache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			secret, ok := obj.(*corev1.Secret)
-			if !ok {
-				logger.Error(fmt.Errorf("unexpected object type: %T", obj),
-					"Failed to cast add event object to Secret")
-				return
-			}
-
-			// Filter: only process our specific secret
-			if secret.Name == secretName && secret.Namespace == namespace {
-				logger.Info("Secret added event received", "secret", secret.Name, "namespace", secret.Namespace)
-				updateSignerFromSecret(secret)
-			}
-		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			secret, ok := newObj.(*corev1.Secret)
-			if !ok {
-				logger.Error(fmt.Errorf("unexpected object type: %T", newObj),
-					"Failed to cast update event object to Secret")
-				return
-			}
-
-			// Filter: only process our specific secret
-			if secret.Name == secretName && secret.Namespace == namespace {
-				logger.Info("Secret updated event received", "secret", secret.Name, "namespace", secret.Namespace)
-				updateSignerFromSecret(secret)
-			}
-		},
-		DeleteFunc: func(obj interface{}) {
-			secret, ok := obj.(*corev1.Secret)
-			if !ok {
-				logger.Error(fmt.Errorf("unexpected object type: %T", obj),
-					"Failed to cast delete event object to Secret")
-				return
-			}
-
-			// Filter: only process our specific secret
-			if secret.Name == secretName && secret.Namespace == namespace {
-				logger.Error(fmt.Errorf("secret was deleted"), "Secret deleted",
-					"secret", secretName,
-					"namespace", namespace)
-				// No action needed - secret might be recreated and we'll get an Add event
-			}
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to add event handler to informer: %w", err)
-	}
-
-	logger.Info("Secret watch event handlers registered")
 	return nil
 }

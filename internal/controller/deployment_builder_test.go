@@ -185,16 +185,14 @@ var _ = Describe("DeploymentBuilder", func() {
 					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					ContainerConfig: &workspacev1alpha1.ContainerConfig{
-						Env: []corev1.EnvVar{
-							{
-								Name:  "MY_VAR",
-								Value: "my-value",
-							},
-							{
-								Name:  "ANOTHER_VAR",
-								Value: "another-value",
-							},
+					Env: []corev1.EnvVar{
+						{
+							Name:  "MY_VAR",
+							Value: "my-value",
+						},
+						{
+							Name:  "ANOTHER_VAR",
+							Value: "another-value",
 						},
 					},
 				},
@@ -220,28 +218,26 @@ var _ = Describe("DeploymentBuilder", func() {
 					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					ContainerConfig: &workspacev1alpha1.ContainerConfig{
-						Env: []corev1.EnvVar{
-							{
-								Name: "SECRET_VALUE",
-								ValueFrom: &corev1.EnvVarSource{
-									SecretKeyRef: &corev1.SecretKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "my-secret",
-										},
-										Key: "password",
+					Env: []corev1.EnvVar{
+						{
+							Name: "SECRET_VALUE",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "my-secret",
 									},
+									Key: "password",
 								},
 							},
-							{
-								Name: "CONFIG_VALUE",
-								ValueFrom: &corev1.EnvVarSource{
-									ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "my-config",
-										},
-										Key: "config-key",
+						},
+						{
+							Name: "CONFIG_VALUE",
+							ValueFrom: &corev1.EnvVarSource{
+								ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "my-config",
 									},
+									Key: "config-key",
 								},
 							},
 						},
@@ -276,9 +272,7 @@ var _ = Describe("DeploymentBuilder", func() {
 					Namespace: "default",
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					ContainerConfig: &workspacev1alpha1.ContainerConfig{
-						Env: []corev1.EnvVar{},
-					},
+					Env: []corev1.EnvVar{},
 				},
 			}
 
@@ -319,11 +313,11 @@ var _ = Describe("DeploymentBuilder", func() {
 					ContainerConfig: &workspacev1alpha1.ContainerConfig{
 						Command: []string{"/bin/sh"},
 						Args:    []string{"-c", "echo $MY_VAR"},
-						Env: []corev1.EnvVar{
-							{
-								Name:  "MY_VAR",
-								Value: "test-value",
-							},
+					},
+					Env: []corev1.EnvVar{
+						{
+							Name:  "MY_VAR",
+							Value: "test-value",
 						},
 					},
 				},

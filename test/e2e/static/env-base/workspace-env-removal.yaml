@@ -14,9 +14,8 @@ spec:
     limits:
       cpu: 500m
       memory: 512Mi
-  containerConfig:
-    env:
-      - name: REMOVE_ME
-        value: will-be-removed
-      - name: ALSO_REMOVE
-        value: also-removed
+  env:
+    - name: REMOVE_ME
+      value: will-be-removed
+    - name: ALSO_REMOVE
+      value: also-removed

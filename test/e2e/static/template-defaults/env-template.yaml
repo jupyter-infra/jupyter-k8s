@@ -5,14 +5,13 @@ metadata:
   namespace: jupyter-k8s-shared
 spec:
   displayName: "Environment Template"
-  description: "Template with container config including environment variables"
+  description: "Template with baseEnv for environment variable injection"
   defaultImage: jk8s-application-jupyter-uv:latest
-  defaultContainerConfig:
-    env:
-      - name: TEMPLATE_VAR
-        value: template-value
-      - name: JUPYTER_ENABLE_LAB
-        value: "yes"
+  baseEnv:
+    - name: TEMPLATE_VAR
+      value: template-value
+    - name: JUPYTER_ENABLE_LAB
+      value: "yes"
   resourceBounds:
     resources:
       cpu:

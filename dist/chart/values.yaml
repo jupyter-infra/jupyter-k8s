@@ -129,7 +129,31 @@ accessResources:
   # Additional Group-Version-Kind to watch
   additionalGvk: []
 
-# [EXTENSION_API]: Extension API server configuration  
+# [EXTENSION_API]: Extension API server configuration
 extensionApi:
   # Enable extension API server for WorkspaceConnection
   enable: true
+  # JWT issuer and audience claims
+  jwtIssuer: "workspaces-controller"
+  jwtAudience: "workspaces-controller"
+  # K8s-native JWT secret configuration
+  # When enabled, JWTs are signed with HMAC keys from a K8s Secret
+  # instead of AWS KMS. The secret is rotated by a CronJob.
+  jwtSecret:
+    enable: false
+    secretName: "extensionapi-secrets"
+    tokenTTL: "5m"
+    newKeyUseDelay: "5s"
+    rotationInterval: "15m"
+    rotator:
+      repository: "docker.io"
+      imageName: "jupyter-k8s-rotator"
+      imageTag: "latest"
+      imagePullPolicy: "IfNotPresent"
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi

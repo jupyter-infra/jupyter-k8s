@@ -1,0 +1,25 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: env-requirements-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Env Requirements Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  baseEnv:
+    - name: DEFAULT_VAR
+      value: default-value
+  envRequirements:
+    - name: AWS_REGION
+      required: true
+      regex: "^[a-z]{2}-[a-z]+-[0-9]+$"
+    - name: OPTIONAL_VAR
+      regex: "^(yes|no)$"
+  resourceBounds:
+    resources:
+      cpu:
+        min: 100m
+        max: "2"
+      memory:
+        min: 128Mi
+        max: 4Gi

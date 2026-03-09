@@ -1,0 +1,14 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: invalid-env-regex-workspace
+  namespace: default
+spec:
+  displayName: "Workspace with Invalid Env Regex"
+  desiredStatus: Running
+  templateRef:
+    name: env-requirements-template
+    namespace: jupyter-k8s-shared
+  env:
+    - name: AWS_REGION
+      value: not-a-valid-region

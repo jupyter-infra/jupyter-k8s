@@ -238,17 +238,53 @@ func createGenericAPIServer(recommendedOptions *genericoptions.RecommendedOption
 	return genericServer, nil
 }
 
-func createJWTSignerFactory(config *ExtensionConfig) (jwt.SignerFactory, error) {
-	// Create KMS client and signer factory
-	ctx := context.Background()
-	kmsClient, err := aws.NewKMSClient(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create KMS client: %w", err)
+func createJWTCompositeSignerFactory(config *ExtensionConfig) (jwt.SignerFactory, error) {
+	factories := map[string]jwt.SignerFactory{}
+	var defaultFactory jwt.SignerFactory
+
+	if config.JwtSecretName != "" {
+		ttl := config.JwtTTL
+		if ttl == 0 {
+			ttl = DefaultJwtTTL
+		}
+		newKeyDelay := config.NewKeyUseDelay
+		if newKeyDelay == 0 {
+			newKeyDelay = DefaultNewKeyUseDelay
+		}
+		issuer := config.JwtIssuer
+		if issuer == "" {
+			issuer = DefaultJwtIssuer
+		}
+		audience := config.JwtAudience
+		if audience == "" {
+			audience = DefaultJwtAudience
+		}
+		signer := jwt.NewStandardSigner(issuer, audience, ttl, newKeyDelay)
+		stdFactory := jwt.NewStandardSignerFactory(signer)
+		factories["k8s-native"] = stdFactory
+		defaultFactory = stdFactory
 	}
 
-	signerFactory := aws.NewAWSSignerFactory(kmsClient, config.KMSKeyID, time.Minute*5)
+	if config.KMSKeyID != "" || defaultFactory == nil {
+		ctx := context.Background()
+		kmsClient, err := aws.NewKMSClient(ctx)
+		if err != nil {
+			if defaultFactory != nil {
+				// k8s-native is available; AWS is optional
+				setupLog.Info("AWS KMS not available, using k8s-native signing only", "error", err)
+			} else {
+				return nil, fmt.Errorf("failed to create KMS client: %w", err)
+			}
+		} else {
+			awsFactory := aws.NewAWSSignerFactory(kmsClient, config.KMSKeyID, time.Minute*5)
+			factories["aws"] = awsFactory
+			if defaultFactory == nil {
+				defaultFactory = awsFactory
+			}
+		}
+	}
 
-	return signerFactory, nil
+	return jwt.NewCompositeSignerFactory(factories, defaultFactory), nil
 }
 
 // createExtensionServer creates and configures the extension server
@@ -275,10 +311,44 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 
 	logger := mgr.GetLogger().WithName("extension-api")
 
-	// Create JWT manager
-	signerFactory, err := createJWTSignerFactory(config)
+	// Create JWT signer factory
+	signerFactory, err := createJWTCompositeSignerFactory(config)
 	if err != nil {
 		return err
+	}
+
+	// When using k8s-native signing, register secret watch and initial key loader
+	if config.JwtSecretName != "" {
+		composite := signerFactory.(*jwt.CompositeSignerFactory)
+		nativeFactory, _ := composite.GetFactory("k8s-native")
+		stdFactory := nativeFactory.(*jwt.StandardSignerFactory)
+
+		namespace := config.ControllerNamespace
+		if namespace == "" {
+			return fmt.Errorf("ControllerNamespace must be set when using JWT secret")
+		}
+
+		logger.Info("Registering JWT secret watch event handlers",
+			"secret", config.JwtSecretName,
+			"namespace", namespace)
+
+		if err := stdFactory.Signer().RegisterSecretWatch(
+			mgr,
+			config.JwtSecretName,
+			namespace,
+			logger.WithName("jwt-secret-watch"),
+		); err != nil {
+			return fmt.Errorf("failed to register JWT secret watch handlers: %w", err)
+		}
+
+		if err := mgr.Add(jwt.NewSecretInitializer(
+			stdFactory.Signer(),
+			config.JwtSecretName,
+			namespace,
+			logger.WithName("jwt-secret-init"),
+		)); err != nil {
+			return fmt.Errorf("failed to add k8s secret JWT initializer: %w", err)
+		}
 	}
 
 	// Create SAR client

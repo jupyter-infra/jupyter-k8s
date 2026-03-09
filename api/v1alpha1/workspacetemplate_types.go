@@ -59,6 +59,17 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultContainerConfig *ContainerConfig `json:"defaultContainerConfig,omitempty"`
 
+	// BaseEnv specifies environment variables to add to workspaces using this template
+	// Variables are added during defaulting if no variable with the same name exists on the workspace
+	// +kubebuilder:validation:MaxItems=50
+	// +optional
+	BaseEnv []corev1.EnvVar `json:"baseEnv,omitempty"`
+
+	// EnvRequirements specifies validation rules for workspace environment variables
+	// +kubebuilder:validation:MaxItems=50
+	// +optional
+	EnvRequirements []EnvRequirement `json:"envRequirements,omitempty"`
+
 	// AllowSecondaryStorages controls whether workspaces using this template
 	// can mount additional storage volumes beyond the primary storage
 	// +kubebuilder:default=true
@@ -83,6 +94,17 @@ type WorkspaceTemplateSpec struct {
 	// +kubebuilder:default="Public"
 	// +optional
 	DefaultOwnershipType string `json:"defaultOwnershipType,omitempty"`
+
+	// BaseLabels specifies labels to add to workspaces using this template
+	// Labels are added during defaulting if not already present on the workspace
+	// +kubebuilder:validation:MaxItems=50
+	// +optional
+	BaseLabels []TemplateLabel `json:"baseLabels,omitempty"`
+
+	// LabelRequirements specifies validation rules for workspace labels
+	// +kubebuilder:validation:MaxItems=50
+	// +optional
+	LabelRequirements []LabelRequirement `json:"labelRequirements,omitempty"`
 
 	// DefaultIdleShutdown provides default idle shutdown configuration
 	// Includes timeout, detection endpoint, and enable/disable
@@ -118,6 +140,54 @@ type WorkspaceTemplateSpec struct {
 	// AppType specifies the application type for workspaces using this template
 	// +optional
 	AppType string `json:"appType,omitempty"`
+}
+
+// TemplateLabel defines a label key-value pair to add to workspaces
+type TemplateLabel struct {
+	// Key is the label key
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Key string `json:"key"`
+
+	// Value is the label value
+	// +kubebuilder:validation:Required
+	Value string `json:"value"`
+}
+
+// LabelRequirement defines a validation rule for a workspace label
+type LabelRequirement struct {
+	// Key is the label key to validate
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Key string `json:"key"`
+
+	// Required indicates whether the label must be present on the workspace
+	// +kubebuilder:default=false
+	// +optional
+	Required *bool `json:"required,omitempty"`
+
+	// Regex is a regular expression the label value must match
+	// If empty, any value is accepted
+	// +optional
+	Regex string `json:"regex,omitempty"`
+}
+
+// EnvRequirement defines a validation rule for a workspace environment variable
+type EnvRequirement struct {
+	// Name is the environment variable name to validate
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Required indicates whether the environment variable must be present on the workspace
+	// +kubebuilder:default=false
+	// +optional
+	Required *bool `json:"required,omitempty"`
+
+	// Regex is a regular expression the environment variable value must match
+	// If empty, any value is accepted
+	// +optional
+	Regex string `json:"regex,omitempty"`
 }
 
 // ResourceBounds defines minimum and maximum resource limits for any resource type.

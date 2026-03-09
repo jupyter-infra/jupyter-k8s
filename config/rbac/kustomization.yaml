@@ -10,7 +10,9 @@ resources:
 - leader_election_role.yaml
 - leader_election_role_binding.yaml
 # Extension API authentication permissions
-- extension_api_auth_binding.yaml
+# NOTE: extension_api_auth_binding.yaml is NOT included here because kustomize's
+# global namespace transform would override its kube-system namespace. It is
+# applied separately in the Makefile deploy/undeploy targets.
 # The following RBAC configurations are used to protect
 # the metrics endpoint with authn/authz. These configurations
 # ensure that only authorized users and service accounts

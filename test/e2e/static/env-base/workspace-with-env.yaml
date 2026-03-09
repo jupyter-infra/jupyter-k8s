@@ -14,9 +14,8 @@ spec:
     limits:
       cpu: 500m
       memory: 512Mi
-  containerConfig:
-    env:
-      - name: MY_VAR
-        value: my-value
-      - name: ANOTHER_VAR
-        value: another-value
+  env:
+    - name: MY_VAR
+      value: my-value
+    - name: ANOTHER_VAR
+      value: another-value

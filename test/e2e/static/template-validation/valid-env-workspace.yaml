@@ -1,0 +1,14 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: valid-env-workspace
+  namespace: default
+spec:
+  displayName: "Workspace with Valid Env"
+  desiredStatus: Running
+  templateRef:
+    name: env-requirements-template
+    namespace: jupyter-k8s-shared
+  env:
+    - name: AWS_REGION
+      value: us-west-2
