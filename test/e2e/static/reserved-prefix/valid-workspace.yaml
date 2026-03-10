@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: valid-workspace
+  labels:
+    team: "data-science"
+spec:
+  image: jk8s-application-jupyter-uv:latest
+  displayName: "Valid Workspace"
