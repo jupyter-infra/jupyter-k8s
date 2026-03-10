@@ -102,7 +102,31 @@ const (
 
 	// ResourcePrefix is the prefix for workspace resource names
 	ResourcePrefix = "workspace"
+
+	// ReservedMetadataPrefix is the prefix reserved for system-managed labels and annotations
+	ReservedMetadataPrefix = "workspace.jupyter.org/"
 )
+
+// MetadataKeyPolicy defines how a system-managed metadata key behaves across operations
+type MetadataKeyPolicy int
+
+const (
+	// SetOnCreateOnly indicates the key is set on create and immutable after
+	SetOnCreateOnly MetadataKeyPolicy = iota
+	// SetAlways indicates the key is set on every create/update by the system
+	SetAlways
+)
+
+// SystemManagedMetadataKeys defines all workspace.jupyter.org/ prefixed keys that the system manages.
+// Any new system-managed key with the reserved prefix MUST be added here.
+var SystemManagedMetadataKeys = map[string]MetadataKeyPolicy{
+	AnnotationCreatedBy:             SetOnCreateOnly,
+	AnnotationLastUpdatedBy:         SetAlways,
+	LabelWorkspaceTemplate:          SetAlways,
+	LabelWorkspaceTemplateNamespace: SetAlways,
+	LabelAccessStrategyName:         SetAlways,
+	LabelAccessStrategyNamespace:    SetAlways,
+}
 
 // GenerateDeploymentName creates a consistent deployment name
 func GenerateDeploymentName(workspaceName string) string {
