@@ -98,6 +98,7 @@ type WorkspaceTemplateSpec struct {
 	// BaseLabels specifies labels to add to workspaces using this template
 	// Labels are added during defaulting if not already present on the workspace
 	// +kubebuilder:validation:MaxItems=50
+	// +kubebuilder:validation:XValidation:rule="self.all(l, !l.key.startsWith('workspace.jupyter.org/'))",message="baseLabels cannot use reserved prefix workspace.jupyter.org/"
 	// +optional
 	BaseLabels []TemplateLabel `json:"baseLabels,omitempty"`
 
