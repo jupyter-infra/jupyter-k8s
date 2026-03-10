@@ -15,4 +15,9 @@ func applySecurityDefaults(workspace *workspacev1alpha1.Workspace, template *wor
 	if workspace.Spec.PodSecurityContext == nil && template.Spec.DefaultPodSecurityContext != nil {
 		workspace.Spec.PodSecurityContext = template.Spec.DefaultPodSecurityContext.DeepCopy()
 	}
+
+	// Apply container security context defaults
+	if workspace.Spec.ContainerSecurityContext == nil && template.Spec.DefaultContainerSecurityContext != nil {
+		workspace.Spec.ContainerSecurityContext = template.Spec.DefaultContainerSecurityContext.DeepCopy()
+	}
 }

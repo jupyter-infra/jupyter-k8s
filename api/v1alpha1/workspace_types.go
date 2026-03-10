@@ -181,6 +181,12 @@ type WorkspaceSpec struct {
 	// Overrides template defaults when specified
 	// +optional
 	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+
+	// ContainerSecurityContext specifies container-level security context for the main workspace container
+	// Takes precedence over PodSecurityContext for the main container
+	// Overrides template defaults when specified
+	// +optional
+	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
 }
 
 // AccessResourceStatus defines the status of a resource created from a template
