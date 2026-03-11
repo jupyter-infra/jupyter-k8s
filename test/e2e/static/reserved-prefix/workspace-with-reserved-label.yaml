@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: reserved-label-workspace
+  labels:
+    workspace.jupyter.org/custom-label: "should-be-rejected"
+spec:
+  image: jk8s-application-jupyter-uv:latest
+  displayName: "Reserved Label Workspace"

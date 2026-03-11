@@ -364,6 +364,11 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, obj runti
 		return nil, nil
 	}
 
+	// Validate no user-submitted reserved prefix labels/annotations
+	if err := validateReservedPrefixOnCreate(workspace); err != nil {
+		return nil, err
+	}
+
 	// Validate service account access
 	if err := v.serviceAccountValidator.ValidateServiceAccountAccess(ctx, workspace); err != nil {
 		return nil, err
@@ -401,21 +406,14 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 		return nil, nil
 	}
 
-	// Validate service account access for new workspace
-	if err := v.serviceAccountValidator.ValidateServiceAccountAccess(ctx, newWorkspace); err != nil {
+	// Validate no user modifications to reserved prefix labels/annotations
+	if err := validateReservedPrefixOnUpdate(oldWorkspace, newWorkspace); err != nil {
 		return nil, err
 	}
 
-	// Validate that ownership annotations are immutable
-	if oldWorkspace.Annotations != nil && oldWorkspace.Annotations[controller.AnnotationCreatedBy] != "" {
-		oldCreatedBy := oldWorkspace.Annotations[controller.AnnotationCreatedBy]
-		// Check if annotations are being cleared
-		if newWorkspace.Annotations == nil {
-			return nil, fmt.Errorf("created-by annotation cannot be removed")
-		}
-		if newCreatedBy := newWorkspace.Annotations[controller.AnnotationCreatedBy]; newCreatedBy != oldCreatedBy {
-			return nil, fmt.Errorf("created-by annotation is immutable")
-		}
+	// Validate service account access for new workspace
+	if err := v.serviceAccountValidator.ValidateServiceAccountAccess(ctx, newWorkspace); err != nil {
+		return nil, err
 	}
 
 	originalOwnershipType := getEffectiveOwnershipType(oldWorkspace.Spec.OwnershipType)
