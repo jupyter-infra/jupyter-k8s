@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -598,6 +599,99 @@ func TestExtractWorkspaceInfo_UnsupportedMode(t *testing.T) {
 	if !strings.Contains(err.Error(), "unsupported routing mode") {
 		t.Errorf("expected routing mode error, got: %v", err)
 	}
+}
+
+func TestExtractWorkspaceInfoFromPath_NamespaceMatchesButNameFails(t *testing.T) {
+	server := &Server{
+		config: &Config{
+			RoutingMode:                 RoutingModePath,
+			WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
+			WorkspaceNamePathRegex:      `^/services/[^/]+/([^/]+)`, // won't match /workspaces paths
+		},
+		logger: slog.Default(),
+	}
+
+	req := createTestRequest("/workspaces/default/myapp")
+	info, err := server.ExtractWorkspaceInfo(req)
+
+	assert.Error(t, err)
+	assert.Nil(t, info)
+	assert.Contains(t, err.Error(), "failed to extract workspace name")
+}
+
+func TestExtractWorkspaceInfoFromSubdomain_NameMatchesButNamespaceFails(t *testing.T) {
+	server := &Server{
+		config: &Config{
+			RoutingMode:                      RoutingModeSubdomain,
+			WorkspaceNameSubdomainRegex:      `^([^-]+)-.*$`,
+			WorkspaceNamespaceSubdomainRegex: `^NOMATCH$`, // won't match anything
+		},
+	}
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set(HeaderForwardedHost, "myws-mrswmylvnr2a.example.com")
+	req.Header.Set(HeaderForwardedURI, "/test")
+
+	info, err := server.ExtractWorkspaceInfo(req)
+
+	assert.Error(t, err)
+	assert.Nil(t, info)
+	assert.Contains(t, err.Error(), "failed to extract namespace from subdomain")
+}
+
+func TestExtractWorkspaceInfoFromSubdomain_MissingForwardedHost(t *testing.T) {
+	server := &Server{
+		config: &Config{
+			RoutingMode:                      RoutingModeSubdomain,
+			WorkspaceNameSubdomainRegex:      `^([^-]+)-.*$`,
+			WorkspaceNamespaceSubdomainRegex: `^[^-]+-(.*)$`,
+		},
+	}
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	// No X-Forwarded-Host header
+
+	info, err := server.ExtractWorkspaceInfo(req)
+
+	assert.Error(t, err)
+	assert.Nil(t, info)
+}
+
+func TestCreateBearerTokenReview_ReturnsErrorWhenK8SClientNotSet(t *testing.T) {
+	server := &Server{
+		config:     &Config{},
+		logger:     slog.Default(),
+		restClient: nil,
+	}
+
+	result, err := server.createBearerTokenReview(context.TODO(), "token", "default")
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "REST client not initialized")
+}
+
+func TestVerifyWorkspaceAccessFromJwt_ExtractWorkspaceInfoError(t *testing.T) {
+	server := &Server{
+		config: &Config{
+			RoutingMode:                 RoutingModePath,
+			WorkspaceNamespacePathRegex: `^/NOMATCH/([^/]+)`,
+			WorkspaceNamePathRegex:      `^/NOMATCH/[^/]+/([^/]+)`,
+		},
+		logger: slog.Default(),
+	}
+
+	claims := &jwt.Claims{
+		User:   "user",
+		Groups: []string{"g1"},
+	}
+
+	req := createTestRequest("/workspaces/default/myapp/lab")
+	result, wsInfo, err := server.VerifyWorkspaceAccessFromJwt(context.Background(), req, claims)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Nil(t, wsInfo)
 }
 
 func TestExtractWorkspaceInfo_SubdomainModeInvalidHost(t *testing.T) {

@@ -16,11 +16,13 @@ import (
 	"testing"
 
 	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const (
-	testAppPath2 = "/workspaces/ns2/app2"
+	testAppPath2    = "/workspaces/ns2/app2"
+	testCookieToken = "token"
 )
 
 // TestHandleVerifyMissingUriHeader tests that handleVerify returns 400 if missing X-Forwarded-Uri header
@@ -706,4 +708,211 @@ func TestHandleVerifyWithRefresh_ConnectionAccessReviewFails_UpdateCookieToSkipF
 	if !cookieSet {
 		t.Error("SetCookie was not called")
 	}
+}
+
+func TestHandleVerify_InvalidTokenType(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cookieHandler := &MockCookieHandler{
+		GetCookieFunc: func(r *http.Request, path string) (string, error) {
+			return testCookieToken, nil
+		},
+	}
+	jwtHandler := &MockJWTHandler{
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
+			return &jwt.Claims{
+				User:      "user",
+				Path:      testAppPath2,
+				Domain:    "example.com",
+				TokenType: jwt.TokenTypeBootstrap, // Wrong type for verify
+			}, nil
+		},
+	}
+	server := &Server{
+		config:        &Config{PathRegexPattern: DefaultPathRegexPattern},
+		logger:        logger,
+		cookieManager: cookieHandler,
+		jwtManager:    jwtHandler,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
+	req.Header.Set(HeaderForwardedURI, testAppPath2+"/lab")
+	req.Header.Set(HeaderForwardedHost, "example.com")
+	w := httptest.NewRecorder()
+
+	server.handleVerify(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestHandleVerify_PathMismatch(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cookieHandler := &MockCookieHandler{
+		GetCookieFunc: func(r *http.Request, path string) (string, error) {
+			return testCookieToken, nil
+		},
+	}
+	jwtHandler := &MockJWTHandler{
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
+			return &jwt.Claims{
+				User:      "user",
+				Path:      "/workspaces/ns1/app1",
+				Domain:    "example.com",
+				TokenType: jwt.TokenTypeSession,
+			}, nil
+		},
+	}
+	server := &Server{
+		config:        &Config{PathRegexPattern: DefaultPathRegexPattern},
+		logger:        logger,
+		cookieManager: cookieHandler,
+		jwtManager:    jwtHandler,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
+	req.Header.Set(HeaderForwardedURI, "/workspaces/ns2/app2/lab") // different workspace
+	req.Header.Set(HeaderForwardedHost, "example.com")
+	w := httptest.NewRecorder()
+
+	server.handleVerify(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "Path not authorized")
+}
+
+func TestHandleVerify_DomainMismatch(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cookieHandler := &MockCookieHandler{
+		GetCookieFunc: func(r *http.Request, path string) (string, error) {
+			return testCookieToken, nil
+		},
+	}
+	jwtHandler := &MockJWTHandler{
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
+			return &jwt.Claims{
+				User:      "user",
+				Path:      testAppPath2,
+				Domain:    "other.com",
+				TokenType: jwt.TokenTypeSession,
+			}, nil
+		},
+	}
+	server := &Server{
+		config:        &Config{PathRegexPattern: DefaultPathRegexPattern},
+		logger:        logger,
+		cookieManager: cookieHandler,
+		jwtManager:    jwtHandler,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
+	req.Header.Set(HeaderForwardedURI, testAppPath2+"/lab")
+	req.Header.Set(HeaderForwardedHost, "example.com")
+	w := httptest.NewRecorder()
+
+	server.handleVerify(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "Domain not authorized")
+}
+
+func TestHandleVerifyWithRefresh_RefreshTokenError_StillReturns200(t *testing.T) {
+	claims := &jwt.Claims{
+		User:      "user",
+		Groups:    []string{"g1"},
+		UID:       "uid",
+		Path:      testAppPath2,
+		Domain:    "example.com",
+		TokenType: jwt.TokenTypeSession,
+	}
+
+	cookieHandler := &MockCookieHandler{
+		GetCookieFunc: func(r *http.Request, path string) (string, error) {
+			return testCookieToken, nil
+		},
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {
+			t.Error("SetCookie should not be called when refresh fails")
+		},
+	}
+
+	jwtHandler := &MockJWTHandler{
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
+			return claims, nil
+		},
+		ShouldRefreshTokenFunc: func(c *jwt.Claims) bool { return true },
+		RefreshTokenFunc: func(c *jwt.Claims) (string, error) {
+			return "", errors.New("refresh failed")
+		},
+	}
+
+	server := createVerifyRefreshTestServer(cookieHandler, jwtHandler)
+
+	// Mock K8s server returning allowed
+	mockServer := NewMockK8sServer(t)
+	defer mockServer.Close()
+	mockedResponse := CreateConnectionAccessReviewResponse("ns2", "app2", claims.User, claims.Groups, claims.UID, true, false, "allowed")
+	mockServer.SetupServer200OK(mockedResponse)
+	restClient, err := mockServer.CreateRESTClient()
+	require.NoError(t, err)
+	server.restClient = restClient
+
+	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
+	req.Header.Set(HeaderForwardedURI, testAppPath2+"/lab")
+	req.Header.Set(HeaderForwardedHost, "example.com")
+	w := httptest.NewRecorder()
+
+	server.handleVerify(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestHandleVerifyWithRefresh_UpdateSkipRefreshTokenError_StillReturns200(t *testing.T) {
+	claims := &jwt.Claims{
+		User:      "user",
+		Groups:    []string{"g1"},
+		UID:       "uid",
+		Path:      testAppPath2,
+		Domain:    "example.com",
+		TokenType: jwt.TokenTypeSession,
+	}
+
+	cookieHandler := &MockCookieHandler{
+		GetCookieFunc: func(r *http.Request, path string) (string, error) {
+			return testCookieToken, nil
+		},
+		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {
+			t.Error("SetCookie should not be called when UpdateSkipRefreshToken fails")
+		},
+	}
+
+	jwtHandler := &MockJWTHandler{
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
+			return claims, nil
+		},
+		ShouldRefreshTokenFunc: func(c *jwt.Claims) bool { return true },
+		// RefreshTokenFunc must be non-nil for the mock to delegate to UpdateSkipRefreshTokenFunc
+		RefreshTokenFunc: func(c *jwt.Claims) (string, error) {
+			return "", errors.New("unused")
+		},
+		UpdateSkipRefreshTokenFunc: func(c *jwt.Claims) (string, error) {
+			return "", errors.New("skip update failed")
+		},
+	}
+
+	server := createVerifyRefreshTestServer(cookieHandler, jwtHandler)
+
+	// Mock K8s server returning 500 to trigger the accessErr path
+	mockServer := NewMockK8sServer(t)
+	defer mockServer.Close()
+	mockServer.SetupServer500InternalServerError()
+	restClient, err := mockServer.CreateRESTClient()
+	require.NoError(t, err)
+	server.restClient = restClient
+
+	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
+	req.Header.Set(HeaderForwardedURI, testAppPath2+"/lab")
+	req.Header.Set(HeaderForwardedHost, "example.com")
+	w := httptest.NewRecorder()
+
+	server.handleVerify(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
 }

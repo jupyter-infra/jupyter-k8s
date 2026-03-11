@@ -154,6 +154,41 @@ func TestCompositeSignerFactory_ValidateToken_MultipleFactories(t *testing.T) {
 	assert.Equal(t, "bob", claims.User)
 }
 
+// erroringSignerFactory is a mock factory whose CreateSigner always returns an error
+type erroringSignerFactory struct{}
+
+func (e *erroringSignerFactory) CreateSigner(_ *workspacev1alpha1.WorkspaceAccessStrategy) (Signer, error) {
+	return nil, assert.AnError
+}
+
+func TestCompositeSignerFactory_ValidateToken_CreateSignerError(t *testing.T) {
+	// One factory errors on CreateSigner, the other succeeds
+	goodFactory := newTestFactory("good")
+	composite := NewCompositeSignerFactory(map[string]SignerFactory{
+		"broken": &erroringSignerFactory{},
+		"good":   goodFactory,
+	}, goodFactory)
+
+	token, err := goodFactory.Signer().GenerateToken("alice", nil, "uid", nil, "/ws", "d.com", TokenTypeBootstrap)
+	require.NoError(t, err)
+
+	claims, err := composite.ValidateToken(token)
+	require.NoError(t, err)
+	assert.Equal(t, "alice", claims.User)
+}
+
+func TestCompositeSignerFactory_ValidateToken_AllCreateSignerError(t *testing.T) {
+	// All factories error on CreateSigner → validation fails
+	composite := NewCompositeSignerFactory(map[string]SignerFactory{
+		"broken1": &erroringSignerFactory{},
+		"broken2": &erroringSignerFactory{},
+	}, &erroringSignerFactory{})
+
+	_, err := composite.ValidateToken("some-token")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "token validation failed")
+}
+
 func TestCompositeSignerFactory_GetFactory(t *testing.T) {
 	nativeFactory := newTestFactory("native")
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{

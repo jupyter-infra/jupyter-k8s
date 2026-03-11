@@ -456,3 +456,83 @@ func TestHandleBearerAuth_BearerTokenReview_Success(t *testing.T) {
 	mockServer.AssertRequestPath(expectedPath)
 	mockServer.AssertRequestMethod("POST")
 }
+
+func TestHandleBearerAuth_BearerTokenReview_GenerateTokenError(t *testing.T) {
+	mockServer := NewMockK8sServer(t)
+	defer mockServer.Close()
+
+	response := CreateBearerTokenReviewResponse(
+		TestDefaultNamespace,
+		true,
+		"/workspaces/default/myworkspace",
+		testUserValue, testUIDValue, []string{"users"}, nil,
+		"",
+	)
+	mockServer.SetupServerBearerTokenReview200OK(response)
+
+	restClient, err := mockServer.CreateRESTClient()
+	require.NoError(t, err)
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	jwtHandler := &MockJWTHandler{
+		GenerateTokenFunc: func(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string) (string, error) {
+			return "", assert.AnError
+		},
+	}
+	server := &Server{
+		logger:     logger,
+		restClient: restClient,
+		jwtManager: jwtHandler,
+		config: &Config{
+			PathRegexPattern:            DefaultPathRegexPattern,
+			RoutingMode:                 DefaultRoutingMode,
+			WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+			WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
+	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/?token=valid-token")
+	req.Header.Set(HeaderForwardedHost, "example.com")
+	w := httptest.NewRecorder()
+
+	server.handleBearerAuth(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "Internal server error")
+}
+
+func TestHandleBearerAuth_KMS_GenerateTokenError(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	jwtHandler := &MockJWTHandler{
+		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
+			return &jwt.Claims{
+				User:      testUserValue,
+				Groups:    []string{"users"},
+				Path:      "/workspaces/default/myworkspace",
+				TokenType: jwt.TokenTypeBootstrap,
+			}, nil
+		},
+		GenerateTokenFunc: func(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string) (string, error) {
+			return "", assert.AnError
+		},
+	}
+	server := &Server{
+		logger:     logger,
+		jwtManager: jwtHandler,
+		config: &Config{
+			KMSKeyId:         "test-kms-key",
+			PathRegexPattern: DefaultPathRegexPattern,
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
+	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/?token=valid")
+	req.Header.Set(HeaderForwardedHost, "example.com")
+	w := httptest.NewRecorder()
+
+	server.handleBearerAuth(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "Internal server error")
+}
