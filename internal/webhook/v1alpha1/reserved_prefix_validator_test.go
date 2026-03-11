@@ -180,5 +180,17 @@ var _ = Describe("Reserved Prefix Validator", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("annotation 'workspace.jupyter.org/created-by' is immutable"))
 		})
+
+		It("should allow update when preemption-reason annotation is unchanged", func() {
+			oldWorkspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy:        "user1",
+				controller.PreemptionReasonAnnotation: controller.PreemptedReason,
+			}
+			workspace.Annotations = map[string]string{
+				controller.AnnotationCreatedBy:        "user1",
+				controller.PreemptionReasonAnnotation: controller.PreemptedReason,
+			}
+			Expect(validateReservedPrefixOnUpdate(oldWorkspace, workspace)).To(Succeed())
+		})
 	})
 })

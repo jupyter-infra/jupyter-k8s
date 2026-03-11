@@ -122,6 +122,7 @@ const (
 var SystemManagedMetadataKeys = map[string]MetadataKeyPolicy{
 	AnnotationCreatedBy:             SetOnCreateOnly,
 	AnnotationLastUpdatedBy:         SetAlways,
+	PreemptionReasonAnnotation:      SetAlways,
 	LabelWorkspaceTemplate:          SetAlways,
 	LabelWorkspaceTemplateNamespace: SetAlways,
 	LabelAccessStrategyName:         SetAlways,
