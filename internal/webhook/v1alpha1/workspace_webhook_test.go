@@ -371,7 +371,7 @@ var _ = Describe("Workspace Webhook", func() {
 
 			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("created-by annotation is immutable"))
+			Expect(err.Error()).To(Equal("annotation 'workspace.jupyter.org/created-by' is immutable"))
 			Expect(warnings).To(BeEmpty())
 		})
 
@@ -467,7 +467,7 @@ var _ = Describe("Workspace Webhook", func() {
 
 			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("created-by annotation is immutable"))
+			Expect(err.Error()).To(Equal("annotation 'workspace.jupyter.org/created-by' cannot be removed"))
 			Expect(warnings).To(BeEmpty())
 		})
 
@@ -484,7 +484,7 @@ var _ = Describe("Workspace Webhook", func() {
 
 			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("created-by annotation cannot be removed"))
+			Expect(err.Error()).To(Equal("annotation 'workspace.jupyter.org/created-by' cannot be removed"))
 			Expect(warnings).To(BeEmpty())
 		})
 
@@ -519,7 +519,7 @@ var _ = Describe("Workspace Webhook", func() {
 
 			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("created-by annotation is immutable"))
+			Expect(err.Error()).To(Equal("annotation 'workspace.jupyter.org/created-by' is immutable"))
 			Expect(warnings).To(BeEmpty())
 		})
 

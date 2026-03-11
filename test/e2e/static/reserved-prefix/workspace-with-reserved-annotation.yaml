@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: reserved-annotation-workspace
+  annotations:
+    workspace.jupyter.org/custom-annotation: "should-be-rejected"
+spec:
+  image: jk8s-application-jupyter-uv:latest
+  displayName: "Reserved Annotation Workspace"
