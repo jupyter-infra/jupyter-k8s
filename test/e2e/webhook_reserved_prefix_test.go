@@ -62,6 +62,18 @@ var _ = Describe("Reserved Prefix Validation", Ordered, func() {
 			By("verifying workspace was not created")
 			VerifyResourceDoesNotExist("workspace", "reserved-annotation-workspace", namespace)
 		})
+
+		It("should allow workspace with non-reserved annotations", func() {
+			By("creating a valid workspace as test user")
+			validWorkspacePath := BuildTestResourcePath("valid-workspace", groupDir, "")
+			err := createObjectAsUser(validWorkspacePath, testUser, []string{})
+			Expect(err).NotTo(HaveOccurred(), "workspace with non-reserved labels should be created")
+
+			By("cleaning up for next tests")
+			cmd := exec.Command("kubectl", "delete", "workspace", "valid-workspace",
+				"-n", namespace, "--ignore-not-found", "--wait=true", "--timeout=60s")
+			_, _ = utils.Run(cmd)
+		})
 	})
 
 	Context("Update validation", func() {
@@ -84,6 +96,18 @@ var _ = Describe("Reserved Prefix Validation", Ordered, func() {
 			Expect(err).To(HaveOccurred(), "patch with reserved prefix label should be rejected")
 		})
 
+		It("should reject adding reserved prefix annotation on update", func() {
+			By("patching workspace to add reserved prefix annotation")
+			cmd := exec.Command("kubectl", "patch", "workspace", "valid-workspace",
+				"-n", namespace,
+				"--type=merge",
+				"-p", `{"metadata":{"annotations":{"workspace.jupyter.org/custom":"bad"}}}`,
+				"--as="+testUser,
+			)
+			_, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "patch with reserved prefix annotation should be rejected")
+		})
+
 		It("should allow adding non-reserved label on update", func() {
 			By("patching workspace to add a normal label")
 			cmd := exec.Command("kubectl", "patch", "workspace", "valid-workspace",
@@ -100,6 +124,24 @@ var _ = Describe("Reserved Prefix Validation", Ordered, func() {
 				"{.metadata.labels.environment}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(value).To(Equal("staging"))
+		})
+
+		It("should allow adding non-reserved annotation on update", func() {
+			By("patching workspace to add a normal annotation")
+			cmd := exec.Command("kubectl", "patch", "workspace", "valid-workspace",
+				"-n", namespace,
+				"--type=merge",
+				"-p", `{"metadata":{"annotations":{"note":"test-value"}}}`,
+				"--as="+testUser,
+			)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "patch with non-reserved annotation should succeed")
+
+			By("verifying the annotation was applied")
+			value, err := kubectlGet("workspace", "valid-workspace", namespace,
+				"{.metadata.annotations.note}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(value).To(Equal("test-value"))
 		})
 	})
 })
