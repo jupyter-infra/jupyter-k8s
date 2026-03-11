@@ -369,7 +369,10 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	}
 
 	// The composite factory implements both SignerFactory and TokenValidator
-	tokenValidator := signerFactory.(*jwt.CompositeSignerFactory)
+	tokenValidator, ok := signerFactory.(jwt.TokenValidator)
+	if !ok {
+		return fmt.Errorf("signer factory does not implement TokenValidator interface")
+	}
 
 	// Create and configure extension server
 	server := createExtensionServer(genericServer, config, &logger, mgr.GetClient(), sarClient, signerFactory, tokenValidator)

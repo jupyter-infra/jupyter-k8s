@@ -142,5 +142,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 // Handler methods are implemented in separate files:
 // - serverroute_auth.go
-// - serverroute_verify.go
+// - serverroute_bearer_auth.go
 // - serverroute_health.go
+// - serverroute_verify.go
