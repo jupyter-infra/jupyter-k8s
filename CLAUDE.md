@@ -79,7 +79,7 @@ The auth middleware component provides authentication and authorization for work
 - install: `make deps`
 - create local kind cluster: `make setup-kind`
 
-### When changing controller code
+### When changing any go code
 - build: `make build`
 - lint: `make lint-fix`
 - unit tests: `make test`

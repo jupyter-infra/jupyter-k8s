@@ -211,6 +211,40 @@ func TestManager_UpdateSkipRefreshToken_NilClaims(t *testing.T) {
 	}
 }
 
+func TestManager_ShouldRefreshToken_AlreadyExpired(t *testing.T) {
+	signer := &mockSigner{}
+	manager := NewManager(signer, true, 10*time.Minute, time.Hour)
+
+	now := time.Now().UTC()
+	claims := &Claims{
+		RegisteredClaims: jwt5.RegisteredClaims{
+			ExpiresAt: jwt5.NewNumericDate(now.Add(-1 * time.Minute)), // Already expired
+			IssuedAt:  jwt5.NewNumericDate(now.Add(-30 * time.Minute)),
+		},
+	}
+
+	if manager.ShouldRefreshToken(claims) {
+		t.Fatal("Expected no refresh when token is already expired")
+	}
+}
+
+func TestManager_ShouldRefreshToken_BeyondHorizon(t *testing.T) {
+	signer := &mockSigner{}
+	manager := NewManager(signer, true, 10*time.Minute, time.Hour)
+
+	now := time.Now().UTC()
+	claims := &Claims{
+		RegisteredClaims: jwt5.RegisteredClaims{
+			ExpiresAt: jwt5.NewNumericDate(now.Add(5 * time.Minute)),
+			IssuedAt:  jwt5.NewNumericDate(now.Add(-2 * time.Hour)),
+		},
+	}
+
+	if manager.ShouldRefreshToken(claims) {
+		t.Fatal("Expected no refresh when beyond refresh horizon")
+	}
+}
+
 func TestManager_ShouldRefreshToken_NilExpiresAt(t *testing.T) {
 	signer := &mockSigner{}
 	manager := NewManager(signer, true, 10*time.Minute, time.Hour)

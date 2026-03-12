@@ -1,0 +1,20 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-bearer-review
+  namespace: default
+spec:
+  displayName: "Bearer Review Test Workspace"
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  accessType: Public
+  accessStrategy:
+    name: bearer-review-access-strategy
+    namespace: jupyter-k8s-shared
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

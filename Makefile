@@ -288,7 +288,8 @@ helm-test-aws-traefik-dex: ## Test the Helm chart with guided mode (aws-traefik-
 		--set github.orgs[0].teams[0]=ace-devs \
 		--set githubRbac.orgs[0].name=some-org \
 		--set githubRbac.orgs[0].teams[0]=ace-devs \
-		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET)
+		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
+		--set authmiddleware.enableBearerAuth=true
 	# Clean up temporary chart directory
 	rm -rf /tmp/helm-test-chart
 	# Run helm tests to verify resources
@@ -620,7 +621,10 @@ deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remot
 		--set application.imagesRegistry=$(ECR_REGISTRY) \
 		$(if $(filter true,$(ENABLE_TRAEFIK_ACCESS_RESOURCES)),--set accessResources.traefik.enable=true) \
 		--set workspacePodWatching.enable=true \
-		--set extensionApi.enable=true
+		--set extensionApi.enable=true \
+		--set extensionApi.jwtSecret.enable=true \
+		--set extensionApi.jwtSecret.rotator.repository=$(ECR_REGISTRY) \
+		--set extensionApi.jwtSecret.rotator.imageName=$(ECR_REPOSITORY_ROTATOR)
 	@echo "Helm chart jupyter-k8s deployed successfully to remote AWS cluster"
 	@echo "Restarting deployments to use new images..."
 	kubectl rollout restart deployment -n jupyter-k8s-system jupyter-k8s-controller-manager
@@ -662,6 +666,7 @@ deploy-aws-traefik-dex-internal:
 			--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
 			--set authmiddleware.repository=$(ECR_REGISTRY) \
 			--set authmiddleware.imageName=$(ECR_REPOSITORY_AUTH) \
+			--set authmiddleware.enableBearerAuth=true \
 			--set rotator.repository=$(ECR_REGISTRY) \
 			--set rotator.imageName=$(ECR_REPOSITORY_ROTATOR)"; \
 		if [ ! -z "$$DEX_OAUTH2_SECRET" ]; then \
@@ -746,12 +751,28 @@ apply-sample-routing:
 		. ./.env; \
 		export DOMAIN=$$DOMAIN; \
 		kubectl apply -f config/samples_routing/workspace_access_strategy.yaml --dry-run=client -o yaml | envsubst | kubectl apply -f -; \
+		kubectl apply -f config/samples_routing/workspace_access_strategy_bearer.yaml --dry-run=client -o yaml | envsubst | kubectl apply -f -; \
 		kubectl apply -k config/samples_routing --dry-run=client -o yaml | envsubst | kubectl apply -f -; \
 	)
+
+WS_NAMESPACE ?= default
+.PHONY: bearer-token
+bearer-token: ## Create a bearer token connection for a workspace. Usage: make bearer-token WS_NAME=<name> [WS_NAMESPACE=default]
+	@BODY='{"apiVersion":"connection.workspace.jupyter.org/v1alpha1","kind":"WorkspaceConnection","metadata":{"namespace":"$(WS_NAMESPACE)"},"spec":{"workspaceName":"$(WS_NAME)","workspaceConnectionType":"web-ui"}}'; \
+	RESULT=$$(echo "$$BODY" | kubectl create --raw "/apis/connection.workspace.jupyter.org/v1alpha1/namespaces/$(WS_NAMESPACE)/workspaceconnections" -f - 2>&1); \
+	URL=$$(echo "$$RESULT" | jq -r '.status.workspaceConnectionUrl // empty'); \
+	if [ -z "$$URL" ]; then \
+		echo "Error creating connection:"; \
+		echo "$$RESULT" | jq . 2>/dev/null || echo "$$RESULT"; \
+		exit 1; \
+	fi; \
+	echo "$$URL"
 
 .PHONY: delete-sample-routing
 delete-sample-routing:
 	kubectl delete -k config/samples_routing
+	kubectl delete -f config/samples_routing/workspace_access_strategy.yaml
+	kubectl delete -f config/samples_routing/workspace_access_strategy_bearer.yaml
 
 .PHONY: undeploy-aws
 undeploy-aws: ## Uninstall the Helm chart from remote cluster

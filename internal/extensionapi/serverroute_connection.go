@@ -197,15 +197,7 @@ func (s *ExtensionServer) generateWebUIBearerTokenURL(r *http.Request, ws *works
 func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.Request) {
 	logger := GetLoggerFromContext(r.Context())
 
-	// Ensure AWS resources are initialized (only happens once, only when AWS is configured)
-	if s.config.ClusterId != "" {
-		if err := aws.EnsureResourcesInitialized(r.Context()); err != nil {
-			WriteKubernetesError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to initialize resources: %v", err))
-			return
-		}
-	}
-
-	if r.Method != "POST" {
+	if r.Method != http.MethodPost {
 		logger.Error(nil, "Invalid HTTP method", "method", r.Method)
 		WriteKubernetesError(w, http.StatusBadRequest, "Connection must use POST method")
 		return
@@ -246,6 +238,11 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 		if s.config.ClusterId == "" {
 			logger.Error(nil, "CLUSTER_ID environment variable not configured")
 			WriteKubernetesError(w, http.StatusBadRequest, "CLUSTER_ID not configured. Please set controllerManager.container.env.CLUSTER_ID in helm values")
+			return
+		}
+		// Ensure AWS resources are initialized (only happens once, only when AWS is configured)
+		if err := aws.EnsureResourcesInitialized(r.Context()); err != nil {
+			WriteKubernetesError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to initialize resources: %v", err))
 			return
 		}
 	}

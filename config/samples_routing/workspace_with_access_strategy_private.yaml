@@ -1,7 +1,7 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
-  name: private-ws-with-access
+  name: ws-gh-oauth-private
   namespace: default
 spec:
   displayName: "Sample Workspace with Access Strategy"
@@ -12,7 +12,7 @@ spec:
   accessType: OwnerOnly
   ownershipType: OwnerOnly
   accessStrategy:
-    name: sample-access-strategy
+    name: oauth-access-strategy
     namespace: default
   resources:
     limits:
