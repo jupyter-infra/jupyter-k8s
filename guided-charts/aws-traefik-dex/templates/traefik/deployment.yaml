@@ -103,6 +103,7 @@ spec:
           - "--entrypoints.metrics.address=:9100/tcp"
           - "--entrypoints.traefik.address=:9000/tcp"
           - "--entrypoints.web.address=:8000/tcp"
+          - "--entrypoints.web.forwardedHeaders.insecure=true"
         {{- if .Values.traefik.redirectHttp }}
           - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
           - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
@@ -118,6 +119,7 @@ spec:
           - "--providers.kubernetescrd.allowcrossnamespace={{ .Values.traefik.allowCrossNamespace }}"
           - "--providers.kubernetesingress"
           - "--entrypoints.websecure.http.tls=true"
+          - "--entrypoints.websecure.forwardedHeaders.insecure=true"
         {{- if .Values.traefik.debug }}
           - "--log.level=DEBUG"
         {{- end }}

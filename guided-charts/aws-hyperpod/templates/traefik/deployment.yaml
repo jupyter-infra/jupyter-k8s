@@ -106,6 +106,7 @@ spec:
           - "--entrypoints.metrics.address=:9100/tcp"
           - "--entrypoints.traefik.address=:9000/tcp"
           - "--entrypoints.web.address=:8000/tcp"
+          - "--entrypoints.web.forwardedHeaders.insecure=true"
         {{- if .Values.clusterWebUI.traefik.redirectHttp }}
           - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
           - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
