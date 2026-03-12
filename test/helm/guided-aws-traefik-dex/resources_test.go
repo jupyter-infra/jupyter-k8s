@@ -13,6 +13,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/yaml"
 
 	"github.com/jupyter-infra/jupyter-k8s/test/helm"
@@ -127,5 +128,47 @@ var _ = Describe("AWS Traefik Dex Resources", func() {
 		// Verify the key is exactly 48 bytes (384 bits) as required by RFC 7518 for HS384
 		Expect(keyValue).To(HaveLen(48),
 			"JWT signing key %s should be 48 bytes for HS384, but got %d bytes", keyName, len(keyValue))
+	})
+
+	It("should include bearertokenreviews RBAC when enableBearerAuth is true", func() {
+		rootDir, err := filepath.Abs("../../..")
+		Expect(err).NotTo(HaveOccurred())
+
+		rbacPath := filepath.Join(
+			rootDir, "dist", "test-output-guided", "jupyter-k8s-aws-traefik-dex",
+			"templates", "authmiddleware", "rbac.yaml")
+
+		rbacBytes, err := os.ReadFile(rbacPath)
+		Expect(err).NotTo(HaveOccurred())
+
+		// The file contains multiple YAML documents; find the ClusterRole
+		docs := strings.Split(string(rbacBytes), "---")
+		var clusterRole rbacv1.ClusterRole
+		found := false
+		for _, doc := range docs {
+			trimmed := strings.TrimSpace(doc)
+			if trimmed == "" {
+				continue
+			}
+			if !strings.Contains(trimmed, "kind: ClusterRole") ||
+				strings.Contains(trimmed, "kind: ClusterRoleBinding") {
+				continue
+			}
+			err = yaml.Unmarshal([]byte(trimmed), &clusterRole)
+			Expect(err).NotTo(HaveOccurred())
+			found = true
+			break
+		}
+		Expect(found).To(BeTrue(), "ClusterRole not found in authmiddleware rbac.yaml")
+
+		// Verify both extension API resources are present
+		resourceNames := []string{}
+		for _, rule := range clusterRole.Rules {
+			resourceNames = append(resourceNames, rule.Resources...)
+		}
+		Expect(resourceNames).To(ContainElement("connectionaccessreviews"),
+			"ClusterRole should grant access to connectionaccessreviews")
+		Expect(resourceNames).To(ContainElement("bearertokenreviews"),
+			"ClusterRole should grant access to bearertokenreviews when enableBearerAuth=true")
 	})
 })

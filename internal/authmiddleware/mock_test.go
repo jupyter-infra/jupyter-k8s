@@ -415,6 +415,57 @@ func (m *MockK8sServer) AssertRequestBody(expectedBody string) {
 	assert.Equal(m.T, expectedBody, string(req.Body), "Request body does not match")
 }
 
+// BearerTokenReviewResponse is a test helper for BearerTokenReview JSON responses
+type BearerTokenReviewResponse struct {
+	Kind       string                            `json:"kind"`
+	ApiVersion string                            `json:"apiVersion"`
+	Metadata   *metav1.ObjectMeta                `json:"metadata"`
+	Spec       *v1alpha1.BearerTokenReviewSpec   `json:"spec"`
+	Status     *v1alpha1.BearerTokenReviewStatus `json:"status"`
+}
+
+// CreateBearerTokenReviewResponse builds a BearerTokenReview response for tests
+func CreateBearerTokenReviewResponse(
+	namespace string,
+	authenticated bool,
+	path string,
+	username string,
+	uid string,
+	groups []string,
+	extra map[string][]string,
+	reviewErr string,
+) *BearerTokenReviewResponse {
+	return &BearerTokenReviewResponse{
+		Kind:       "BearerTokenReview",
+		ApiVersion: fmt.Sprintf("%s/%s", v1alpha1.SchemeGroupVersion.Group, v1alpha1.SchemeGroupVersion.Version),
+		Metadata:   &metav1.ObjectMeta{Namespace: namespace},
+		Spec:       &v1alpha1.BearerTokenReviewSpec{Token: "redacted"},
+		Status: &v1alpha1.BearerTokenReviewStatus{
+			Authenticated: authenticated,
+			Path:          path,
+			User: v1alpha1.BearerTokenReviewUser{
+				Username: username,
+				UID:      uid,
+				Groups:   groups,
+				Extra:    extra,
+			},
+			Error: reviewErr,
+		},
+	}
+}
+
+// SetupServerBearerTokenReview200OK configures server to return 200 OK with a BearerTokenReview response
+func (m *MockK8sServer) SetupServerBearerTokenReview200OK(response *BearerTokenReviewResponse) {
+	bytesResponse, _ := json.Marshal(response)
+
+	m.SetupServerWithHandler(func(w http.ResponseWriter, r *http.Request) {
+		m.RecordRequest(r)
+		w.Header().Set("Content-Type", runtime.ContentTypeJSON)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(bytesResponse)
+	})
+}
+
 // MockOIDCVerifier is a mock implementation of an OIDC verifier for testing
 type MockOIDCVerifier struct {
 	VerifyTokenFunc func(ctx context.Context, tokenString string, logger *slog.Logger) (*OIDCClaims, bool, error)

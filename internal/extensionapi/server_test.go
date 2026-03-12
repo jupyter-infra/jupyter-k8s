@@ -195,7 +195,7 @@ var _ = Describe("Server", func() {
 				NonGoRestfulMux: mux.NewPathRecorderMux("test"),
 			},
 		}
-		server = NewExtensionServer(genericServer, config, &logger, k8sClient, sarClient, mockSignerFactory)
+		server = NewExtensionServer(genericServer, config, &logger, k8sClient, sarClient, mockSignerFactory, &mockTokenValidator{})
 		server.registerAllRoutes()
 
 		// Create a minimal fake routes server without automatic route registration
@@ -263,10 +263,11 @@ var _ = Describe("Server", func() {
 			Expect(server.routes).To(HaveKey(config.ApiPath))
 		})
 
-		It("Should register /workspaceconnections and /connectionaccessreviews routes as namespaced", func() {
+		It("Should register /workspaceconnections, /connectionaccessreviews and /bearertokenreviews routes as namespaced", func() {
 			namespacedPathPrefix := config.ApiPath + "/namespaces/*/"
 			Expect(server.routes).To(HaveKey(namespacedPathPrefix + "workspaceconnections"))
 			Expect(server.routes).To(HaveKey(namespacedPathPrefix + "connectionaccessreviews"))
+			Expect(server.routes).To(HaveKey(namespacedPathPrefix + "bearertokenreviews"))
 		})
 	})
 
@@ -524,7 +525,7 @@ var _ = Describe("Server", func() {
 					NonGoRestfulMux: mux.NewPathRecorderMux("test"),
 				},
 			}
-			server := NewExtensionServer(genericServer, config, &logger, k8sClient, sarClient, mockSignerFactory)
+			server := NewExtensionServer(genericServer, config, &logger, k8sClient, sarClient, mockSignerFactory, &mockTokenValidator{})
 
 			resourceHandlers := map[string]func(http.ResponseWriter, *http.Request){
 				"test": func(w http.ResponseWriter, _ *http.Request) {
@@ -598,7 +599,7 @@ var _ = Describe("Server", func() {
 					},
 				}
 
-				server := createExtensionServer(genericServer, config, &logger, k8sClient, sarClient, &mockSignerFactory{signer: &mockSigner{token: "test-token"}})
+				server := createExtensionServer(genericServer, config, &logger, k8sClient, sarClient, &mockSignerFactory{signer: &mockSigner{token: "test-token"}}, &mockTokenValidator{})
 
 				Expect(server).NotTo(BeNil())
 				Expect(server.config).To(Equal(config))

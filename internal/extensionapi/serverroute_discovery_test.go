@@ -183,6 +183,36 @@ var _ = Describe("ServerRouteDiscovery", func() {
 			Expect(verbs).To(ContainElement("create"))
 		})
 
+		It("Should include 'kind: BearerTokenReview' and 'verbs: [create]' in one entry", func() {
+			server.handleDiscovery(recorder, req)
+
+			var response map[string]interface{}
+			err := json.Unmarshal(recorder.Body.Bytes(), &response)
+			Expect(err).NotTo(HaveOccurred())
+
+			resources, ok := response["resources"].([]interface{})
+			Expect(ok).To(BeTrue(), "resources should be an array")
+
+			var bearerTokenReviewResource map[string]interface{}
+			for _, res := range resources {
+				resource, ok := res.(map[string]interface{})
+				Expect(ok).To(BeTrue(), "resource should be an object")
+
+				if resource["kind"] == "BearerTokenReview" {
+					bearerTokenReviewResource = resource
+					break
+				}
+			}
+
+			Expect(bearerTokenReviewResource).NotTo(BeNil(), "should have a BearerTokenReview resource")
+			Expect(bearerTokenReviewResource["kind"]).To(Equal("BearerTokenReview"))
+			Expect(bearerTokenReviewResource["namespaced"]).To(BeTrue())
+
+			verbs, ok := bearerTokenReviewResource["verbs"].([]interface{})
+			Expect(ok).To(BeTrue(), "verbs should be an array")
+			Expect(verbs).To(ContainElement("create"))
+		})
+
 		It("Should write a 500 if writing the body fails", func() {
 			// Create an error writer that will fail on Write
 			errorWriter := &ErrorWriter{}

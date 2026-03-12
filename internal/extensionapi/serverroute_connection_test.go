@@ -126,6 +126,16 @@ func (m *mockSigner) ValidateToken(tokenString string) (*jwt.Claims, error) {
 	return nil, nil
 }
 
+// mockTokenValidator for testing
+type mockTokenValidator struct {
+	claims *jwt.Claims
+	err    error
+}
+
+func (m *mockTokenValidator) ValidateToken(tokenString string) (*jwt.Claims, error) {
+	return m.claims, m.err
+}
+
 func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 	tests := []struct {
 		name        string

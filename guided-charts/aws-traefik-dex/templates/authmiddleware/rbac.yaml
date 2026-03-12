@@ -16,8 +16,14 @@ metadata:
 rules:
   # Access to workspace resources for session creation
   - apiGroups: ["connection.workspace.jupyter.org"]
-    resources: ["connectionaccessreview"]
+    resources: ["connectionaccessreviews"]
     verbs: ["create"]
+  {{- if .Values.authmiddleware.enableBearerAuth }}
+  # Bearer token verification via extension API
+  - apiGroups: ["connection.workspace.jupyter.org"]
+    resources: ["bearertokenreviews"]
+    verbs: ["create"]
+  {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

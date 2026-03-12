@@ -84,6 +84,41 @@ spec:
       - "X-Forwarded-Uri"
       - "X-Forwarded-Host"
       - "X-Forwarded-Proto"
+{{- if .Values.authmiddleware.enableBearerAuth }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authmiddleware-bearer-auth
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: authmiddleware
+    component: auth
+spec:
+  forwardAuth:
+    address: "http://authmiddleware.{{ .Values.namespace }}:8080/bearer-auth"
+    trustForwardHeader: true
+    addAuthCookiesToResponse:
+      - "{{ $.Values.authmiddleware.cookieName }}"
+    authRequestHeaders:
+      - "Cookie"
+      - "X-Forwarded-Uri"
+      - "X-Forwarded-Host"
+      - "X-Forwarded-Proto"
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-bearer-auth-suffix
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: authmiddleware
+    component: auth
+spec:
+  replacePathRegex:
+    regex: "^(/workspaces/[^/]+/[^/]+)/bearer-auth$"
+    replacement: "$1/"
+{{- end }}
 {{- end }}
 ---
 apiVersion: traefik.io/v1alpha1

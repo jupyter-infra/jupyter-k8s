@@ -1,0 +1,8 @@
+apiVersion: connection.workspace.jupyter.org/v1alpha1
+kind: WorkspaceConnection
+metadata:
+  name: test-bearer-review-connection
+  namespace: default
+spec:
+  workspaceName: workspace-bearer-review
+  workspaceConnectionType: web-ui

@@ -118,6 +118,77 @@ func extractKidFromConnectionURL(connURL string) (string, error) {
 	return kid, nil
 }
 
+// bearerTokenReviewResult holds the parsed status from a BearerTokenReview response.
+type bearerTokenReviewResult struct {
+	Authenticated bool
+	Username      string
+	Groups        []string
+	Path          string
+	Domain        string
+	Error         string
+}
+
+// createBearerTokenReview creates a BearerTokenReview via kubectl --raw and returns the parsed result.
+// If asUser is non-empty, kubectl impersonation is used.
+func createBearerTokenReview(token, asUser string) (*bearerTokenReviewResult, error) {
+	ginkgo.GinkgoHelper()
+	ns := extensionAPITestNamespace
+	body := fmt.Sprintf(`{"apiVersion":"connection.workspace.jupyter.org/v1alpha1","kind":"BearerTokenReview","metadata":{"namespace":"%s"},"spec":{"token":"%s"}}`, ns, token)
+	apiPath := fmt.Sprintf("/apis/connection.workspace.jupyter.org/v1alpha1/namespaces/%s/bearertokenreviews", ns)
+
+	args := []string{"create", "--raw", apiPath, "-f", "-"}
+	if asUser != "" {
+		args = append(args, "--as="+asUser)
+	}
+	cmd := exec.Command("kubectl", args...)
+	cmd.Stdin = strings.NewReader(body)
+	output, err := utils.Run(cmd)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal([]byte(output), &raw); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	status, _ := raw["status"].(map[string]interface{})
+	if status == nil {
+		return nil, fmt.Errorf("response missing status field")
+	}
+
+	result := &bearerTokenReviewResult{}
+	result.Authenticated, _ = status["authenticated"].(bool)
+	result.Path, _ = status["path"].(string)
+	result.Domain, _ = status["domain"].(string)
+	result.Error, _ = status["error"].(string)
+	if user, ok := status["user"].(map[string]interface{}); ok {
+		result.Username, _ = user["username"].(string)
+		if groups, ok := user["groups"].([]interface{}); ok {
+			for _, g := range groups {
+				if s, ok := g.(string); ok {
+					result.Groups = append(result.Groups, s)
+				}
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// extractTokenFromConnectionURL parses a connection URL and returns the token query param.
+func extractTokenFromConnectionURL(connURL string) (string, error) {
+	parsed, err := url.Parse(connURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse URL: %w", err)
+	}
+	token := parsed.Query().Get("token")
+	if token == "" {
+		return "", fmt.Errorf("no token query param in URL")
+	}
+	return token, nil
+}
+
 // updateObjectAsUser updates a Kubernetes object with kubectl impersonation
 func updateObjectAsUser(filepath, user string, groups []string) error {
 	ginkgo.GinkgoHelper()

@@ -33,6 +33,12 @@ func (s *ExtensionServer) handleDiscovery(w http.ResponseWriter, _ *http.Request
 			"namespaced": true,
 			"kind": "ConnectionAccessReview",
 			"verbs": ["create"]
+		}, {
+			"name": "bearertokenreviews",
+			"singularName": "bearertokenreview",
+			"namespaced": true,
+			"kind": "BearerTokenReview",
+			"verbs": ["create"]
 		}]
 	}`, connectionv1alpha1.WorkspaceConnectionAPIVersion, connectionv1alpha1.WorkspaceConnectionKind)
 

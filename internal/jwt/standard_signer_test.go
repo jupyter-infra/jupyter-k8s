@@ -6,11 +6,18 @@ Distributed under the terms of the MIT license
 package jwt
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
 
 	jwt5 "github.com/golang-jwt/jwt/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 const testUser = "testuser"
@@ -405,6 +412,37 @@ func TestStandardSigner_HS384Algorithm(t *testing.T) {
 	}
 }
 
+func TestStandardSigner_UpdateKeys_LatestKidNotInMap(t *testing.T) {
+	signer := NewStandardSigner("test-issuer", "test-audience", time.Hour, 0)
+	_ = signer.UpdateKeys(map[string][]byte{
+		"1000": []byte("key-32-characters-long-enough-here"),
+	}, "1000")
+
+	err := signer.UpdateKeys(map[string][]byte{
+		"1000": []byte("key-32-characters-long-enough-here"),
+	}, "9999") // latestKid not in map
+
+	if err == nil {
+		t.Fatal("Expected error when latestKid not in signingKeys")
+	}
+	if !strings.Contains(err.Error(), "latestKid 9999 not found") {
+		t.Errorf("Expected 'latestKid not found' error, got: %v", err)
+	}
+}
+
+func TestStandardSigner_UpdateKeys_EmptyKeys(t *testing.T) {
+	signer := NewStandardSigner("test-issuer", "test-audience", time.Hour, 0)
+
+	err := signer.UpdateKeys(map[string][]byte{}, "1000")
+
+	if err == nil {
+		t.Fatal("Expected error for empty signingKeys")
+	}
+	if !strings.Contains(err.Error(), "signingKeys cannot be empty") {
+		t.Errorf("Expected 'signingKeys cannot be empty' error, got: %v", err)
+	}
+}
+
 func TestStandardSigner_CoolOffKeySelection(t *testing.T) {
 	t.Run("no keys beyond cooloff returns error", func(t *testing.T) {
 		signingKeys := map[string][]byte{
@@ -703,4 +741,80 @@ func TestStandardSigner_ConcurrentAccess(t *testing.T) {
 	for i := 0; i < 30; i++ {
 		<-done
 	}
+}
+
+func TestStandardSigner_RetrieveInitialSecret_Success(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "jwt-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"jwt-signing-key-1000": []byte("key-value-at-least-48-bytes-long-for-hs384-ok!!"),
+			"jwt-signing-key-2000": []byte("newer-key-at-least-48-bytes-long-for-hs384-ok!"),
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(secret).
+		Build()
+
+	signer := NewStandardSigner("issuer", "audience", time.Hour, 0)
+
+	err := signer.RetrieveInitialSecret(context.Background(), fakeClient, "jwt-secret", "default")
+	require.NoError(t, err)
+
+	// Verify keys were loaded — signer should be able to generate and validate tokens
+	token, err := signer.GenerateToken("user", nil, "uid", nil, "/path", "domain", TokenTypeSession)
+	require.NoError(t, err)
+	assert.NotEmpty(t, token)
+
+	claims, err := signer.ValidateToken(token)
+	require.NoError(t, err)
+	assert.Equal(t, "user", claims.User)
+}
+
+func TestStandardSigner_RetrieveInitialSecret_SecretNotFound(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		Build()
+
+	signer := NewStandardSigner("issuer", "audience", time.Hour, 0)
+
+	err := signer.RetrieveInitialSecret(context.Background(), fakeClient, "nonexistent", "default")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get JWT signing secret")
+}
+
+func TestStandardSigner_RetrieveInitialSecret_NoSigningKeys(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "jwt-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"unrelated-key": []byte("some-value"),
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(secret).
+		Build()
+
+	signer := NewStandardSigner("issuer", "audience", time.Hour, 0)
+
+	err := signer.RetrieveInitialSecret(context.Background(), fakeClient, "jwt-secret", "default")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse signing keys")
 }

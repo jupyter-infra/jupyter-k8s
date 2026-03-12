@@ -37,14 +37,15 @@ var (
 
 // ExtensionServer represents the extension API HTTP server
 type ExtensionServer struct {
-	config        *ExtensionConfig
-	k8sClient     client.Client
-	sarClient     v1.SubjectAccessReviewInterface
-	signerFactory jwt.SignerFactory
-	logger        *logr.Logger
-	genericServer *genericapiserver.GenericAPIServer
-	routes        map[string]func(http.ResponseWriter, *http.Request)
-	mux           *mux.PathRecorderMux
+	config         *ExtensionConfig
+	k8sClient      client.Client
+	sarClient      v1.SubjectAccessReviewInterface
+	signerFactory  jwt.SignerFactory
+	tokenValidator jwt.TokenValidator
+	logger         *logr.Logger
+	genericServer  *genericapiserver.GenericAPIServer
+	routes         map[string]func(http.ResponseWriter, *http.Request)
+	mux            *mux.PathRecorderMux
 }
 
 // NewExtensionServer creates a new extension API server using GenericAPIServer
@@ -54,17 +55,19 @@ func NewExtensionServer(
 	logger *logr.Logger,
 	k8sClient client.Client,
 	sarClient v1.SubjectAccessReviewInterface,
-	signerFactory jwt.SignerFactory) *ExtensionServer {
+	signerFactory jwt.SignerFactory,
+	tokenValidator jwt.TokenValidator) *ExtensionServer {
 
 	server := &ExtensionServer{
-		config:        config,
-		logger:        logger,
-		k8sClient:     k8sClient,
-		sarClient:     sarClient,
-		signerFactory: signerFactory,
-		routes:        make(map[string]func(http.ResponseWriter, *http.Request)),
-		genericServer: genericServer,
-		mux:           genericServer.Handler.NonGoRestfulMux,
+		config:         config,
+		logger:         logger,
+		k8sClient:      k8sClient,
+		sarClient:      sarClient,
+		signerFactory:  signerFactory,
+		tokenValidator: tokenValidator,
+		routes:         make(map[string]func(http.ResponseWriter, *http.Request)),
+		genericServer:  genericServer,
+		mux:            genericServer.Handler.NonGoRestfulMux,
 	}
 
 	return server
@@ -170,6 +173,7 @@ func (s *ExtensionServer) registerAllRoutes() {
 	s.registerNamespacedRoutes(map[string]func(http.ResponseWriter, *http.Request){
 		"workspaceconnections":    s.HandleConnectionCreate,
 		"connectionaccessreviews": s.handleConnectionAccessReview,
+		"bearertokenreviews":      s.handleBearerTokenReview,
 	})
 }
 
@@ -288,8 +292,8 @@ func createJWTCompositeSignerFactory(config *ExtensionConfig) (jwt.SignerFactory
 }
 
 // createExtensionServer creates and configures the extension server
-func createExtensionServer(genericServer *genericapiserver.GenericAPIServer, config *ExtensionConfig, logger *logr.Logger, k8sClient client.Client, sarClient v1.SubjectAccessReviewInterface, jwtSingerFactory jwt.SignerFactory) *ExtensionServer {
-	server := NewExtensionServer(genericServer, config, logger, k8sClient, sarClient, jwtSingerFactory)
+func createExtensionServer(genericServer *genericapiserver.GenericAPIServer, config *ExtensionConfig, logger *logr.Logger, k8sClient client.Client, sarClient v1.SubjectAccessReviewInterface, jwtSignerFactory jwt.SignerFactory, tokenValidator jwt.TokenValidator) *ExtensionServer {
+	server := NewExtensionServer(genericServer, config, logger, k8sClient, sarClient, jwtSignerFactory, tokenValidator)
 	server.registerAllRoutes()
 	return server
 }
@@ -364,8 +368,14 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 		return err
 	}
 
+	// The composite factory implements both SignerFactory and TokenValidator
+	tokenValidator, ok := signerFactory.(jwt.TokenValidator)
+	if !ok {
+		return fmt.Errorf("signer factory does not implement TokenValidator interface")
+	}
+
 	// Create and configure extension server
-	server := createExtensionServer(genericServer, config, &logger, mgr.GetClient(), sarClient, signerFactory)
+	server := createExtensionServer(genericServer, config, &logger, mgr.GetClient(), sarClient, signerFactory, tokenValidator)
 
 	// Add server to manager
 	return addServerToManager(mgr, server)
