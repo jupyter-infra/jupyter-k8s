@@ -142,6 +142,8 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 })
 
 // createResourceForTest applies a YAML resource from the static test directory
+//
+//nolint:unparam
 func createResourceForTest(filename, group, subgroup string) {
 	GinkgoHelper()
 	path := BuildTestResourcePath(filename, group, subgroup)
