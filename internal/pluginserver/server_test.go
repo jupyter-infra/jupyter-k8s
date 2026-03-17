@@ -19,7 +19,6 @@ func newTestServer() *Server {
 	return NewServer(nil, nil, 0)
 }
 
-
 func TestHealthz(t *testing.T) {
 	srv := newTestServer()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
