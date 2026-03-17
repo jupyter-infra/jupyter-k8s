@@ -34,12 +34,23 @@ func (tg *TemplateGetter) ApplyTemplateName(ctx context.Context, workspace *work
 		return nil
 	}
 
-	// List all WorkspaceTemplates with the default cluster template label
-	templateList := &workspacev1alpha1.WorkspaceTemplateList{}
-	err := tg.client.List(ctx, templateList, client.MatchingLabels{
-		webhookconst.DefaultClusterTemplateLabel: "true",
-	})
+	// Check namespace scope strategy to determine search scope
+	scope, err := GetTemplateScopeStrategy(ctx, tg.client, workspace.Namespace)
 	if err != nil {
+		return fmt.Errorf("failed to get template scope strategy: %w", err)
+	}
+
+	// List WorkspaceTemplates with the default cluster template label
+	listOpts := []client.ListOption{
+		client.MatchingLabels{webhookconst.DefaultClusterTemplateLabel: "true"},
+	}
+	// When namespace is scoped, only search within the workspace's namespace
+	if scope == webhookconst.TemplateScopeNamespaced {
+		listOpts = append(listOpts, client.InNamespace(workspace.Namespace))
+	}
+
+	templateList := &workspacev1alpha1.WorkspaceTemplateList{}
+	if err := tg.client.List(ctx, templateList, listOpts...); err != nil {
 		return fmt.Errorf("failed to list templates with default-cluster-template label: %w", err)
 	}
 

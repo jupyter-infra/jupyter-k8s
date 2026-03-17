@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ws-same-ns-explicit
+  namespace: scoped-ns
+spec:
+  displayName: "Workspace with same-ns template"
+  templateRef:
+    name: local-template
+    namespace: scoped-ns
+  desiredStatus: Running
+  ownershipType: Public

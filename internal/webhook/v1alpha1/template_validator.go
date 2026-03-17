@@ -13,18 +13,21 @@ import (
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
+	webhookconst "github.com/jupyter-infra/jupyter-k8s/internal/webhook"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
 // TemplateValidator handles template validation for webhooks
 type TemplateValidator struct {
-	resolver *workspaceutil.TemplateResolver
+	resolver  *workspaceutil.TemplateResolver
+	k8sClient client.Client
 }
 
 // NewTemplateValidator creates a new TemplateValidator
 func NewTemplateValidator(k8sClient client.Client, defaultTemplateNamespace string) *TemplateValidator {
 	return &TemplateValidator{
-		resolver: workspaceutil.NewTemplateResolver(k8sClient, defaultTemplateNamespace),
+		resolver:  workspaceutil.NewTemplateResolver(k8sClient, defaultTemplateNamespace),
+		k8sClient: k8sClient,
 	}
 }
 
@@ -37,6 +40,18 @@ func (tv *TemplateValidator) fetchTemplate(ctx context.Context, templateRef *wor
 func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
 	if workspace.Spec.TemplateRef == nil {
 		return nil
+	}
+
+	// Reject if templateRef explicitly targets a different namespace, check scope
+	if workspace.Spec.TemplateRef.Namespace != "" && workspace.Spec.TemplateRef.Namespace != workspace.Namespace {
+		scope, err := GetTemplateScopeStrategy(ctx, tv.k8sClient, workspace.Namespace)
+		if err != nil {
+			return err
+		}
+		if scope == webhookconst.TemplateScopeNamespaced {
+			return fmt.Errorf("workspace namespace '%s' has template-scope=Namespaced: cannot reference template '%s' in namespace '%s'",
+				workspace.Namespace, workspace.Spec.TemplateRef.Name, workspace.Spec.TemplateRef.Namespace)
+		}
 	}
 
 	template, err := tv.fetchTemplate(ctx, workspace.Spec.TemplateRef, workspace.Namespace)

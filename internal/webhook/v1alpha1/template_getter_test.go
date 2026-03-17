@@ -10,6 +10,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
@@ -137,6 +138,115 @@ var _ = Describe("TemplateGetter", func() {
 			}
 			names := getTemplateNames(templates)
 			Expect(names).To(Equal([]string{"template-1", "template-2"}))
+		})
+	})
+
+	Context("Namespace Scope", func() {
+		It("should inject default template from same namespace when scoped", func() {
+			nsName := "getter-scope-same"
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: nsName,
+					Labels: map[string]string{
+						webhookconst.LabelTemplateScope: string(webhookconst.TemplateScopeNamespaced),
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+			template := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "scoped-default-template",
+					Namespace: nsName,
+					Labels: map[string]string{
+						webhookconst.DefaultClusterTemplateLabel: "true",
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Scoped Default",
+					DefaultImage: "jupyter/base-notebook:latest",
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+			defer func() { Expect(k8sClient.Delete(ctx, template)).To(Succeed()) }()
+
+			workspace.Namespace = nsName
+			workspace.Spec.TemplateRef = nil
+
+			err := templateGetter.ApplyTemplateName(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspace.Spec.TemplateRef).NotTo(BeNil())
+			Expect(workspace.Spec.TemplateRef.Name).To(Equal("scoped-default-template"))
+		})
+
+		It("should not inject default template from different namespace when scoped", func() {
+			nsName := "getter-scope-cross"
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: nsName,
+					Labels: map[string]string{
+						webhookconst.LabelTemplateScope: string(webhookconst.TemplateScopeNamespaced),
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+			// Create default template in "default" namespace, but workspace is in scoped namespace
+			template := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "other-ns-default-template",
+					Namespace: "default",
+					Labels: map[string]string{
+						webhookconst.DefaultClusterTemplateLabel: "true",
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Other NS Default",
+					DefaultImage: "jupyter/base-notebook:latest",
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+			defer func() { Expect(k8sClient.Delete(ctx, template)).To(Succeed()) }()
+
+			workspace.Namespace = nsName
+			workspace.Spec.TemplateRef = nil
+
+			err := templateGetter.ApplyTemplateName(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspace.Spec.TemplateRef).To(BeNil())
+		})
+
+		It("should inject cross-namespace default template when namespace is not scoped", func() {
+			// Create an unscoped namespace
+			nsName := "getter-scope-unscoped"
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: nsName},
+			}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+			template := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "unscoped-default-template",
+					Namespace: nsName,
+					Labels: map[string]string{
+						webhookconst.DefaultClusterTemplateLabel: "true",
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Unscoped Default",
+					DefaultImage: "jupyter/base-notebook:latest",
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+			defer func() { Expect(k8sClient.Delete(ctx, template)).To(Succeed()) }()
+
+			workspace.Namespace = nsName
+			workspace.Spec.TemplateRef = nil
+
+			err := templateGetter.ApplyTemplateName(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspace.Spec.TemplateRef).NotTo(BeNil())
+			Expect(workspace.Spec.TemplateRef.Name).To(Equal("unscoped-default-template"))
 		})
 	})
 })

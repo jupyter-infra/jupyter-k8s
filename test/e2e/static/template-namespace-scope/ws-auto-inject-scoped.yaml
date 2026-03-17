@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ws-auto-inject-scoped
+  namespace: scoped-ns
+spec:
+  displayName: "Workspace with no templateRef in scoped ns"
+  desiredStatus: Running
+  ownershipType: Public

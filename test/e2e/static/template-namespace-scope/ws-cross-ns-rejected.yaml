@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ws-cross-ns-rejected
+  namespace: scoped-ns
+spec:
+  displayName: "Workspace with cross-ns template"
+  templateRef:
+    name: base-template
+    namespace: jupyter-k8s-shared
+  desiredStatus: Running
+  ownershipType: Public
