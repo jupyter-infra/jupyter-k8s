@@ -20,6 +20,16 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - namespaces
+  - pods
+  - serviceaccounts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - persistentvolumeclaims
   - services
   verbs:
@@ -29,15 +39,6 @@ rules:
   - list
   - patch
   - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  - serviceaccounts
-  verbs:
-  - get
-  - list
   - watch
 - apiGroups:
   - ""

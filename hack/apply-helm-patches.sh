@@ -211,6 +211,24 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
 ' "${CHART_DIR}/values.yaml" && rm "${CHART_DIR}/values.yaml.bak"
     fi
 
+    # Override controller manager resource limits/requests
+    # kubebuilder scaffolds default values that are too low for this controller
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' '/controllerManager:/,/serviceAccountName:/{
+            s/cpu: 500m/cpu: 1000m/
+            s/memory: 128Mi/memory: 256Mi/
+            s/cpu: 10m/cpu: 20m/
+            s/memory: 64Mi/memory: 128Mi/
+        }' "${CHART_DIR}/values.yaml"
+    else
+        sed -i '/controllerManager:/,/serviceAccountName:/{
+            s/cpu: 500m/cpu: 1000m/
+            s/memory: 128Mi/memory: 256Mi/
+            s/cpu: 10m/cpu: 20m/
+            s/memory: 64Mi/memory: 128Mi/
+        }' "${CHART_DIR}/values.yaml"
+    fi
+
     # Check if the application section already exists
     if grep -q "^# \[APPLICATION\]" "${CHART_DIR}/values.yaml"; then
         echo "Removing existing APPLICATION section from values.yaml"
