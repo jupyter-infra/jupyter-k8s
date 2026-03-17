@@ -23,3 +23,20 @@ const (
 	DefaultClusterTemplateLabel = "workspace.jupyter.org/default-cluster-template"
 	DefaultServiceAccountLabel  = "workspace.jupyter.org/default-service-account"
 )
+
+// Namespace scope label constants
+const (
+	// LabelTemplateScope is the namespace label key that controls template scope enforcement
+	LabelTemplateScope = "workspace.jupyter.org/template-scope"
+)
+
+// TemplateScopeStrategy defines the template scope enforcement strategy for a namespace
+type TemplateScopeStrategy string
+
+const (
+	// TemplateScopeNamespaced restricts workspaces to only use templates from their own namespace
+	TemplateScopeNamespaced TemplateScopeStrategy = "Namespaced"
+
+	// TemplateScopeCluster allows workspaces to use templates from any namespace (default)
+	TemplateScopeCluster TemplateScopeStrategy = "Cluster"
+)
