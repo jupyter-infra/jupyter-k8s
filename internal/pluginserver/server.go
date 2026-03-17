@@ -78,13 +78,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 }
 
 func (s *Server) registerRoutes() {
-	s.mux.Handle("POST /v1alpha1/jwt/sign", s.withMiddleware(s.handleNotImplemented))
-	s.mux.Handle("POST /v1alpha1/jwt/verify", s.withMiddleware(s.handleNotImplemented))
-	s.mux.Handle("POST /v1alpha1/remote-access/initialize", s.withMiddleware(s.handleNotImplemented))
-	s.mux.Handle("POST /v1alpha1/remote-access/register-node", s.withMiddleware(s.handleNotImplemented))
-	s.mux.Handle("POST /v1alpha1/remote-access/deregister-node", s.withMiddleware(s.handleNotImplemented))
-	s.mux.Handle("POST /v1alpha1/remote-access/create-session", s.withMiddleware(s.handleNotImplemented))
-	s.mux.Handle("GET /healthz", s.withMiddleware(s.handleHealthz))
+	s.mux.Handle(pluginapi.RouteJWTSign.Pattern(), s.withMiddleware(s.handleNotImplemented))
+	s.mux.Handle(pluginapi.RouteJWTVerify.Pattern(), s.withMiddleware(s.handleNotImplemented))
+	s.mux.Handle(pluginapi.RouteRemoteAccessInit.Pattern(), s.withMiddleware(s.handleNotImplemented))
+	s.mux.Handle(pluginapi.RouteRegisterNode.Pattern(), s.withMiddleware(s.handleNotImplemented))
+	s.mux.Handle(pluginapi.RouteDeregisterNode.Pattern(), s.withMiddleware(s.handleNotImplemented))
+	s.mux.Handle(pluginapi.RouteCreateSession.Pattern(), s.withMiddleware(s.handleNotImplemented))
+	s.mux.Handle(pluginapi.RouteHealthz.Pattern(), s.withMiddleware(s.handleHealthz))
 }
 
 // withMiddleware wraps a handler with request ID extraction, panic recovery, and request logging.
