@@ -53,9 +53,9 @@ func TestPluginRemoteAccessClient_SetupContainers_ReturnsNotImplemented(t *testi
 	}
 }
 
-func TestPluginRemoteAccessClient_DeregisterNode_ReturnsNotImplemented(t *testing.T) {
+func TestPluginRemoteAccessClient_DeregisterNodeAgent_ReturnsNotImplemented(t *testing.T) {
 	strategy := NewPluginRemoteAccessClient("http://localhost:8080")
-	err := strategy.DeregisterNode(context.Background(), nil)
+	err := strategy.DeregisterNodeAgent(context.Background(), nil)
 	if !errors.Is(err, ErrNotImplemented) {
 		t.Errorf("expected ErrNotImplemented, got %v", err)
 	}

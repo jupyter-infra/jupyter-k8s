@@ -108,8 +108,8 @@ func TestRoutes_ReturnNotImplemented(t *testing.T) {
 		{http.MethodPost, "/v1alpha1/jwt/sign"},
 		{http.MethodPost, "/v1alpha1/jwt/verify"},
 		{http.MethodPost, "/v1alpha1/remote-access/initialize"},
-		{http.MethodPost, "/v1alpha1/remote-access/register-node"},
-		{http.MethodPost, "/v1alpha1/remote-access/deregister-node"},
+		{http.MethodPost, "/v1alpha1/remote-access/register-node-agent"},
+		{http.MethodPost, "/v1alpha1/remote-access/deregister-node-agent"},
 		{http.MethodPost, "/v1alpha1/remote-access/create-session"},
 	}
 

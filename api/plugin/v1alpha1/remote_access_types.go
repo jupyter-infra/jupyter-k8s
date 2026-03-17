@@ -11,27 +11,27 @@ type InitializeRequest struct{}
 // InitializeResponse is the response body for POST /v1alpha1/remote-access/initialize.
 type InitializeResponse struct{}
 
-// RegisterNodeRequest is the request body for POST /v1alpha1/remote-access/register-node.
-type RegisterNodeRequest struct {
+// RegisterNodeAgentRequest is the request body for POST /v1alpha1/remote-access/register-node-agent.
+type RegisterNodeAgentRequest struct {
 	PodUID           string            `json:"podUID"`
 	WorkspaceName    string            `json:"workspaceName"`
 	Namespace        string            `json:"namespace"`
 	PodEventsContext map[string]string `json:"podEventsContext,omitempty"`
 }
 
-// RegisterNodeResponse is the response body for POST /v1alpha1/remote-access/register-node.
-type RegisterNodeResponse struct {
+// RegisterNodeAgentResponse is the response body for POST /v1alpha1/remote-access/register-node-agent.
+type RegisterNodeAgentResponse struct {
 	ActivationID   string `json:"activationId"`
 	ActivationCode string `json:"activationCode"`
 }
 
-// DeregisterNodeRequest is the request body for POST /v1alpha1/remote-access/deregister-node.
-type DeregisterNodeRequest struct {
+// DeregisterNodeAgentRequest is the request body for POST /v1alpha1/remote-access/deregister-node-agent.
+type DeregisterNodeAgentRequest struct {
 	PodUID string `json:"podUID"`
 }
 
-// DeregisterNodeResponse is the response body for POST /v1alpha1/remote-access/deregister-node.
-type DeregisterNodeResponse struct{}
+// DeregisterNodeAgentResponse is the response body for POST /v1alpha1/remote-access/deregister-node-agent.
+type DeregisterNodeAgentResponse struct{}
 
 // CreateSessionRequest is the request body for POST /v1alpha1/remote-access/create-session.
 type CreateSessionRequest struct {

@@ -81,8 +81,8 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle(pluginapi.RouteJWTSign.Pattern(), s.withMiddleware(s.handleNotImplemented))
 	s.mux.Handle(pluginapi.RouteJWTVerify.Pattern(), s.withMiddleware(s.handleNotImplemented))
 	s.mux.Handle(pluginapi.RouteRemoteAccessInit.Pattern(), s.withMiddleware(s.handleNotImplemented))
-	s.mux.Handle(pluginapi.RouteRegisterNode.Pattern(), s.withMiddleware(s.handleNotImplemented))
-	s.mux.Handle(pluginapi.RouteDeregisterNode.Pattern(), s.withMiddleware(s.handleNotImplemented))
+	s.mux.Handle(pluginapi.RouteRegisterNodeAgent.Pattern(), s.withMiddleware(s.handleNotImplemented))
+	s.mux.Handle(pluginapi.RouteDeregisterNodeAgent.Pattern(), s.withMiddleware(s.handleNotImplemented))
 	s.mux.Handle(pluginapi.RouteCreateSession.Pattern(), s.withMiddleware(s.handleNotImplemented))
 	s.mux.Handle(pluginapi.RouteHealthz.Pattern(), s.withMiddleware(s.handleHealthz))
 }

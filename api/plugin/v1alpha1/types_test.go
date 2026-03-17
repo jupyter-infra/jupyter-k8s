@@ -92,8 +92,8 @@ func TestVerifyResponseRoundTrip(t *testing.T) {
 	}
 }
 
-func TestRegisterNodeRoundTrip(t *testing.T) {
-	req := RegisterNodeRequest{
+func TestRegisterNodeAgentRoundTrip(t *testing.T) {
+	req := RegisterNodeAgentRequest{
 		PodUID:        "pod-uid-1",
 		WorkspaceName: "my-ws",
 		Namespace:     "default",
@@ -105,7 +105,7 @@ func TestRegisterNodeRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	var got RegisterNodeRequest
+	var got RegisterNodeAgentRequest
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -114,8 +114,8 @@ func TestRegisterNodeRoundTrip(t *testing.T) {
 	}
 }
 
-func TestRegisterNodeResponseRoundTrip(t *testing.T) {
-	resp := RegisterNodeResponse{
+func TestRegisterNodeAgentResponseRoundTrip(t *testing.T) {
+	resp := RegisterNodeAgentResponse{
 		ActivationID:   "act-123",
 		ActivationCode: "code-456",
 	}
@@ -123,7 +123,7 @@ func TestRegisterNodeResponseRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	var got RegisterNodeResponse
+	var got RegisterNodeAgentResponse
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}

@@ -24,7 +24,7 @@ type JWTHandler interface {
 // for remote access operations.
 type RemoteAccessHandler interface {
 	Initialize(ctx context.Context, req *pluginapi.InitializeRequest) (*pluginapi.InitializeResponse, error)
-	RegisterNode(ctx context.Context, req *pluginapi.RegisterNodeRequest) (*pluginapi.RegisterNodeResponse, error)
-	DeregisterNode(ctx context.Context, req *pluginapi.DeregisterNodeRequest) (*pluginapi.DeregisterNodeResponse, error)
+	RegisterNodeAgent(ctx context.Context, req *pluginapi.RegisterNodeAgentRequest) (*pluginapi.RegisterNodeAgentResponse, error)
+	DeregisterNodeAgent(ctx context.Context, req *pluginapi.DeregisterNodeAgentRequest) (*pluginapi.DeregisterNodeAgentResponse, error)
 	CreateSession(ctx context.Context, req *pluginapi.CreateSessionRequest) (*pluginapi.CreateSessionResponse, error)
 }

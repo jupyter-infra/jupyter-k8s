@@ -26,13 +26,13 @@ func NewPluginRemoteAccessClient(baseURL string) *PluginRemoteAccessClient {
 	}
 }
 
-// SetupContainers delegates pod setup to the plugin via POST /v1alpha1/remote-access/register-node.
+// SetupContainers delegates pod setup to the plugin via POST /v1alpha1/remote-access/register-node-agent.
 func (s *PluginRemoteAccessClient) SetupContainers(_ context.Context, _ *corev1.Pod, _ *workspacev1alpha1.Workspace, _ *workspacev1alpha1.WorkspaceAccessStrategy) error {
 	return ErrNotImplemented
 }
 
-// DeregisterNode delegates cleanup to the plugin via POST /v1alpha1/remote-access/deregister-node.
-func (s *PluginRemoteAccessClient) DeregisterNode(_ context.Context, _ *corev1.Pod) error {
+// DeregisterNodeAgent delegates cleanup to the plugin via POST /v1alpha1/remote-access/deregister-node-agent.
+func (s *PluginRemoteAccessClient) DeregisterNodeAgent(_ context.Context, _ *corev1.Pod) error {
 	return ErrNotImplemented
 }
 

@@ -17,6 +17,7 @@ type SignRequest struct {
 	Path              string              `json:"path"`
 	Domain            string              `json:"domain"`
 	TokenType         string              `json:"tokenType"`
+	SigningType       string              `json:"signingType,omitempty"`
 	ConnectionContext map[string]string   `json:"connectionContext,omitempty"`
 }
 

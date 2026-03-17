@@ -10,13 +10,13 @@ const BasePath = "/v1alpha1"
 
 // Plugin HTTP routes. Each route defines its path and HTTP method.
 var (
-	RouteJWTSign          = Route{Method: "POST", Path: BasePath + "/jwt/sign"}
-	RouteJWTVerify        = Route{Method: "POST", Path: BasePath + "/jwt/verify"}
-	RouteRemoteAccessInit = Route{Method: "POST", Path: BasePath + "/remote-access/initialize"}
-	RouteRegisterNode     = Route{Method: "POST", Path: BasePath + "/remote-access/register-node"}
-	RouteDeregisterNode   = Route{Method: "POST", Path: BasePath + "/remote-access/deregister-node"}
-	RouteCreateSession    = Route{Method: "POST", Path: BasePath + "/remote-access/create-session"}
-	RouteHealthz          = Route{Method: "GET", Path: "/healthz"}
+	RouteJWTSign             = Route{Method: "POST", Path: BasePath + "/jwt/sign"}
+	RouteJWTVerify           = Route{Method: "POST", Path: BasePath + "/jwt/verify"}
+	RouteRemoteAccessInit    = Route{Method: "POST", Path: BasePath + "/remote-access/initialize"}
+	RouteRegisterNodeAgent   = Route{Method: "POST", Path: BasePath + "/remote-access/register-node-agent"}
+	RouteDeregisterNodeAgent = Route{Method: "POST", Path: BasePath + "/remote-access/deregister-node-agent"}
+	RouteCreateSession       = Route{Method: "POST", Path: BasePath + "/remote-access/create-session"}
+	RouteHealthz             = Route{Method: "GET", Path: "/healthz"}
 )
 
 // Route defines an HTTP method and path for a plugin endpoint.
