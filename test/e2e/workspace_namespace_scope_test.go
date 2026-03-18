@@ -73,7 +73,8 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 			controller.ConditionTypeAvailable, ConditionTrue)
 	})
 
-	It("should reject workspace referencing cross-namespace template when namespace has template-namespace-scope label set to Namespaced", func() {
+	It("should reject workspace referencing cross-namespace template "+
+		"when namespace has template-namespace-scope label set to Namespaced", func() {
 		By("creating base template in shared namespace")
 		createTemplateForTest("base-template", "template", "base")
 
@@ -91,7 +92,8 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 		Expect(output).To(BeEmpty())
 	})
 
-	It("should auto-inject default template from same namespace when namespace has template-namespace-scope label set to Namespaced", func() {
+	It("should auto-inject default template from same namespace "+
+		"when namespace has template-namespace-scope label set to Namespaced", func() {
 		By("creating default-labeled template in scoped namespace")
 		createResourceForTest("local-default-template", groupDir, subgroup)
 
