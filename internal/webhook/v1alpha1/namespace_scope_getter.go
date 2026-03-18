@@ -15,10 +15,10 @@ import (
 	webhookconst "github.com/jupyter-infra/jupyter-k8s/internal/webhook"
 )
 
-// GetTemplateScopeStrategy returns the template scope strategy for a namespace.
+// GetTemplateScopeNamespaceStrategy returns the template scope strategy for a namespace.
 // Returns TemplateScopeCluster if the label is absent (backward compatible default).
 // Returns an error for unrecognized label values.
-func GetTemplateScopeStrategy(ctx context.Context, k8sClient client.Client, namespaceName string) (webhookconst.TemplateScopeStrategy, error) {
+func GetTemplateScopeNamespaceStrategy(ctx context.Context, k8sClient client.Client, namespaceName string) (webhookconst.TemplateScopeNamespaceStrategy, error) {
 	ns := &corev1.Namespace{}
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: namespaceName}, ns); err != nil {
 		return "", fmt.Errorf("failed to get namespace %s: %w", namespaceName, err)
@@ -29,7 +29,7 @@ func GetTemplateScopeStrategy(ctx context.Context, k8sClient client.Client, name
 		return webhookconst.TemplateScopeCluster, nil
 	}
 
-	switch webhookconst.TemplateScopeStrategy(value) {
+	switch webhookconst.TemplateScopeNamespaceStrategy(value) {
 	case webhookconst.TemplateScopeNamespaced:
 		return webhookconst.TemplateScopeNamespaced, nil
 	case webhookconst.TemplateScopeCluster:

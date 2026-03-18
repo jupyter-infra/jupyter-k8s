@@ -35,7 +35,7 @@ func (tg *TemplateGetter) ApplyTemplateName(ctx context.Context, workspace *work
 	}
 
 	// Check namespace scope strategy to determine search scope
-	scope, err := GetTemplateScopeStrategy(ctx, tg.client, workspace.Namespace)
+	scope, err := GetTemplateScopeNamespaceStrategy(ctx, tg.client, workspace.Namespace)
 	if err != nil {
 		return fmt.Errorf("failed to get template scope strategy: %w", err)
 	}

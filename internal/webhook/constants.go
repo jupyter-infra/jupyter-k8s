@@ -30,13 +30,13 @@ const (
 	TemplateScopeNamespaceLabel = "workspace.jupyter.org/template-namespace-scope"
 )
 
-// TemplateScopeStrategy defines the template scope enforcement strategy for a namespace
-type TemplateScopeStrategy string
+// TemplateScopeNamespaceStrategy defines the template scope enforcement strategy for a namespace
+type TemplateScopeNamespaceStrategy string
 
 const (
 	// TemplateScopeNamespaced restricts workspaces to only use templates from their own namespace
-	TemplateScopeNamespaced TemplateScopeStrategy = "Namespaced"
+	TemplateScopeNamespaced TemplateScopeNamespaceStrategy = "Namespaced"
 
 	// TemplateScopeCluster allows workspaces to use templates from any namespace (default)
-	TemplateScopeCluster TemplateScopeStrategy = "Cluster"
+	TemplateScopeCluster TemplateScopeNamespaceStrategy = "Cluster"
 )
