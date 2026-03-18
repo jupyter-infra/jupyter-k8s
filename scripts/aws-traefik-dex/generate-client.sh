@@ -7,6 +7,7 @@ DEX_URL=$2
 AWS_REGION=${3:-us-west-2}
 PORT=${4:-9800}
 OUT_FILEPATH=${5:-dist/users-scripts/set-kubeconfig.sh}
+CLIENT_SECRET=${6:-""}
 
 API_ENDPOINT=$(aws eks describe-cluster --region ${AWS_REGION} --name ${CLUSTER_NAME} --query "cluster.endpoint" --output text)
 API_CERT=$(aws eks describe-cluster --region ${AWS_REGION} --name ${CLUSTER_NAME} --query "cluster.certificateAuthority.data" --output text)
@@ -44,6 +45,7 @@ kubectl config set-credentials github-user \
   --exec-arg=get-token \
   --exec-arg="--oidc-issuer-url=${DEX_URL}" \
   --exec-arg="--oidc-client-id=kubectl-oidc" \
+  --exec-arg="--oidc-client-secret=${CLIENT_SECRET}" \
   --exec-arg="--listen-address=localhost:${PORT}" \
   --exec-arg="--oidc-extra-scope=profile" \
   --exec-arg="--oidc-extra-scope=groups"

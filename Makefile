@@ -699,7 +699,8 @@ deploy-aws-traefik-dex-internal:
 			https://$$DOMAIN/dex \
 			$(AWS_REGION) \
 			9800 \
-			dist/users-scripts/set-kubeconfig.sh; \
+			dist/users-scripts/set-kubeconfig.sh \
+			"$$(kubectl get configmap dex-config -n jupyter-k8s-router -o jsonpath='{.data.config\.yaml}' | grep 'secret:' | head -1 | awk '{print $$2}')"; \
 	)
 	@echo "Restarting deployments to use new images..."
 	kubectl rollout restart deployment -n jupyter-k8s-router \
