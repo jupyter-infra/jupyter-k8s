@@ -34,7 +34,9 @@ func (tg *TemplateGetter) ApplyTemplateName(ctx context.Context, workspace *work
 		return nil
 	}
 
-	// Check namespace scope strategy to determine search scope
+	// No template specified in Workspace.TemplateRef, so we try to find the default template.
+	// We need to know whether the workspace's namespace allows using a default template from another namespace.
+	// Fetch the namespace and lookup the template-scope strategy label.
 	scope, err := GetTemplateScopeStrategyFromWorkspaceNamespaceLabel(ctx, tg.client, workspace.Namespace)
 	if err != nil {
 		return fmt.Errorf("failed to get template scope strategy: %w", err)

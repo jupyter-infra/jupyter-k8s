@@ -42,7 +42,9 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		return nil
 	}
 
-	// Reject if templateRef explicitly targets a different namespace, check scope
+	// If templateRef explicitly targets a different namespace, check whether the workspace's namespace
+	// allows cross-namespace template references by looking up the template-scope strategy label.
+	// Namespaced-scoped namespaces reject cross-namespace references to enforce isolation.
 	if workspace.Spec.TemplateRef.Namespace != "" && workspace.Spec.TemplateRef.Namespace != workspace.Namespace {
 		scope, err := GetTemplateScopeStrategyFromWorkspaceNamespaceLabel(ctx, tv.k8sClient, workspace.Namespace)
 		if err != nil {
