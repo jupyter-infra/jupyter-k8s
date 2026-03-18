@@ -60,7 +60,8 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 		_, _ = utils.Run(cmd)
 	})
 
-	It("should allow workspace to use template from same namespace when namespace has template-namespace-scope label set to Namespaced", func() {
+	It("should allow workspace to use template from same namespace "+
+		"when namespace has template-namespace-scope label set to Namespaced", func() {
 		By("creating local template in scoped namespace")
 		createResourceForTest("local-template", groupDir, subgroup)
 
