@@ -148,7 +148,7 @@ var _ = Describe("TemplateGetter", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: nsName,
 					Labels: map[string]string{
-						webhookconst.LabelTemplateScope: string(webhookconst.TemplateScopeNamespaced),
+						webhookconst.TemplateScopeNamespaceLabel: string(webhookconst.TemplateScopeNamespaced),
 					},
 				},
 			}
@@ -185,7 +185,7 @@ var _ = Describe("TemplateGetter", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: nsName,
 					Labels: map[string]string{
-						webhookconst.LabelTemplateScope: string(webhookconst.TemplateScopeNamespaced),
+						webhookconst.TemplateScopeNamespaceLabel: string(webhookconst.TemplateScopeNamespaced),
 					},
 				},
 			}

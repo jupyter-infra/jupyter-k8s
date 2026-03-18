@@ -24,7 +24,7 @@ func GetTemplateScopeStrategy(ctx context.Context, k8sClient client.Client, name
 		return "", fmt.Errorf("failed to get namespace %s: %w", namespaceName, err)
 	}
 
-	value, exists := ns.Labels[webhookconst.LabelTemplateScope]
+	value, exists := ns.Labels[webhookconst.TemplateScopeNamespaceLabel]
 	if !exists || value == "" {
 		return webhookconst.TemplateScopeCluster, nil
 	}
