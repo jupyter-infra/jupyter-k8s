@@ -7,6 +7,7 @@ package v1alpha1
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -193,21 +194,8 @@ func TestOmitEmptyFields(t *testing.T) {
 	str := string(data)
 	// Fields with omitempty should not appear when zero-valued
 	for _, field := range []string{"extra", "connectionContext"} {
-		if contains(str, field) {
+		if strings.Contains(str, field) {
 			t.Errorf("expected %q to be omitted, got: %s", field, str)
 		}
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && searchString(s, substr)
-}
-
-func searchString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

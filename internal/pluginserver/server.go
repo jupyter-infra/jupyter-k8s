@@ -114,9 +114,7 @@ func (s *Server) withMiddleware(next http.HandlerFunc) http.Handler {
 					"error", rec,
 					"stack", string(debug.Stack()),
 				)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusInternalServerError)
-				_ = json.NewEncoder(w).Encode(pluginapi.ErrorResponse{Error: "internal server error"})
+				writeJSON(w, http.StatusInternalServerError, pluginapi.ErrorResponse{Error: "internal server error"})
 			}
 		}()
 
@@ -136,14 +134,16 @@ func generateRequestID() string {
 	return hex.EncodeToString(b)
 }
 
-func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
+func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(struct{}{})
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, struct{}{})
 }
 
 func (s *Server) handleNotImplemented(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented) // 501
-	_ = json.NewEncoder(w).Encode(pluginapi.ErrorResponse{Error: "not implemented"})
+	writeJSON(w, http.StatusNotImplemented, pluginapi.ErrorResponse{Error: "not implemented"})
 }
