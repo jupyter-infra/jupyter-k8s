@@ -18,12 +18,8 @@ rules:
   - ""
   resources:
   - namespaces
-  - pods
-  - serviceaccounts
   verbs:
   - get
-  - list
-  - watch
 - apiGroups:
   - ""
   resources:
@@ -36,6 +32,15 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - serviceaccounts
+  verbs:
+  - get
+  - list
   - watch
 - apiGroups:
   - ""
