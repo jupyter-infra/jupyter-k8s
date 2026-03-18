@@ -35,7 +35,7 @@ var _ = Describe("GetTemplateScopeStrategy", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "scope-test-namespaced",
 				Labels: map[string]string{
-					webhookconst.LabelTemplateScope: string(webhookconst.TemplateScopeNamespaced),
+					webhookconst.TemplateScopeNamespaceLabel: string(webhookconst.TemplateScopeNamespaced),
 				},
 			},
 		}
@@ -52,7 +52,7 @@ var _ = Describe("GetTemplateScopeStrategy", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "scope-test-cluster",
 				Labels: map[string]string{
-					webhookconst.LabelTemplateScope: string(webhookconst.TemplateScopeCluster),
+					webhookconst.TemplateScopeNamespaceLabel: string(webhookconst.TemplateScopeCluster),
 				},
 			},
 		}
@@ -69,7 +69,7 @@ var _ = Describe("GetTemplateScopeStrategy", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "scope-test-empty",
 				Labels: map[string]string{
-					webhookconst.LabelTemplateScope: "",
+					webhookconst.TemplateScopeNamespaceLabel: "",
 				},
 			},
 		}
@@ -86,7 +86,7 @@ var _ = Describe("GetTemplateScopeStrategy", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "scope-test-invalid",
 				Labels: map[string]string{
-					webhookconst.LabelTemplateScope: "InvalidValue",
+					webhookconst.TemplateScopeNamespaceLabel: "InvalidValue",
 				},
 			},
 		}

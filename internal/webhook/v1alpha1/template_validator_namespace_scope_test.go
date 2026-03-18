@@ -38,12 +38,12 @@ var _ = Describe("TemplateValidator Namespace Scope", func() {
 	}
 
 	Context("ValidateCreateWorkspace with namespace scope", func() {
-		It("should reject explicit cross-namespace templateRef when namespace is Namespaced", func() {
+		It("should reject cross-namespace templateRef when namespace has template-scope label set to Namespaced", func() {
 			scopedNs := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "team-a",
 					Labels: map[string]string{
-						webhookconst.LabelTemplateScope: string(webhookconst.TemplateScopeNamespaced),
+						webhookconst.TemplateScopeNamespaceLabel: string(webhookconst.TemplateScopeNamespaced),
 					},
 				},
 			}
@@ -76,12 +76,12 @@ var _ = Describe("TemplateValidator Namespace Scope", func() {
 			Expect(err.Error()).To(ContainSubstring("team-b"))
 		})
 
-		It("should allow same-namespace templateRef when namespace is Namespaced", func() {
+		It("should allow same-namespace templateRef when namespace has template-scope label set to Namespaced", func() {
 			scopedNs := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "team-a",
 					Labels: map[string]string{
-						webhookconst.LabelTemplateScope: string(webhookconst.TemplateScopeNamespaced),
+						webhookconst.TemplateScopeNamespaceLabel: string(webhookconst.TemplateScopeNamespaced),
 					},
 				},
 			}
@@ -111,12 +111,12 @@ var _ = Describe("TemplateValidator Namespace Scope", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should allow cross-namespace templateRef when namespace is Cluster", func() {
+		It("should allow cross-namespace templateRef when namespace has template-scope label set to Cluster", func() {
 			unscopedNs := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "team-open",
 					Labels: map[string]string{
-						webhookconst.LabelTemplateScope: string(webhookconst.TemplateScopeCluster),
+						webhookconst.TemplateScopeNamespaceLabel: string(webhookconst.TemplateScopeCluster),
 					},
 				},
 			}
@@ -146,7 +146,7 @@ var _ = Describe("TemplateValidator Namespace Scope", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should allow cross-namespace templateRef when namespace has no scope label", func() {
+		It("should allow cross-namespace templateRef when namespace has no template-scope label", func() {
 			unscopedNs := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "team-default",
@@ -178,12 +178,12 @@ var _ = Describe("TemplateValidator Namespace Scope", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should allow templateRef without explicit namespace in Namespaced namespace", func() {
+		It("should allow templateRef without explicit namespace when namespace has template-scope label set to Namespaced", func() {
 			scopedNs := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "team-a",
 					Labels: map[string]string{
-						webhookconst.LabelTemplateScope: string(webhookconst.TemplateScopeNamespaced),
+						webhookconst.TemplateScopeNamespaceLabel: string(webhookconst.TemplateScopeNamespaced),
 					},
 				},
 			}
@@ -218,7 +218,7 @@ var _ = Describe("TemplateValidator Namespace Scope", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "team-a",
 					Labels: map[string]string{
-						webhookconst.LabelTemplateScope: string(webhookconst.TemplateScopeNamespaced),
+						webhookconst.TemplateScopeNamespaceLabel: string(webhookconst.TemplateScopeNamespaced),
 					},
 				},
 			}
