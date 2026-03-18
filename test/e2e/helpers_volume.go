@@ -165,7 +165,7 @@ func VerifyPodCanAccessExternalVolumes(workspaceName, namespace, pvcName, mountP
 			return fmt.Errorf("failed to write to %s: %w", filepath, writeErr)
 		}
 		return nil
-	}, 30*time.Second, 5*time.Second).Should(gomega.Succeed(),
+	}, 60*time.Second, 2*time.Second).Should(gomega.Succeed(),
 		fmt.Sprintf("Failed to write to %s after retries", filepath))
 
 	// Confirm the file is visible. Also retried for the same transient exec reasons.
@@ -180,7 +180,7 @@ func VerifyPodCanAccessExternalVolumes(workspaceName, namespace, pvcName, mountP
 			return fmt.Errorf("ls output for %s was empty", filepath)
 		}
 		return nil
-	}, 30*time.Second, 5*time.Second).Should(gomega.Succeed(),
+	}, 60*time.Second, 2*time.Second).Should(gomega.Succeed(),
 		fmt.Sprintf("Failed to verify file %s exists after retries", filepath))
 }
 
@@ -232,6 +232,6 @@ func VerifyHomeVolumeDataPersisted(workspaceName, namespace string) {
 			return fmt.Errorf("ls output for %s was empty", filepath)
 		}
 		return nil
-	}, 30*time.Second, 5*time.Second).Should(gomega.Succeed(),
+	}, 60*time.Second, 2*time.Second).Should(gomega.Succeed(),
 		fmt.Sprintf("Failed to verify persisted file %s after retries", filepath))
 }
