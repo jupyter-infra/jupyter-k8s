@@ -16,7 +16,7 @@ import (
 	webhookconst "github.com/jupyter-infra/jupyter-k8s/internal/webhook"
 )
 
-var _ = Describe("GetTemplateScopeNamespaceStrategy", func() {
+var _ = Describe("GetTemplateScopeStrategyFromWorkspaceNamespaceLabel", func() {
 	var ctx context.Context
 
 	BeforeEach(func() {
@@ -25,7 +25,7 @@ var _ = Describe("GetTemplateScopeNamespaceStrategy", func() {
 
 	It("should return Cluster when namespace has no template-namespace-scope label", func() {
 		// "default" namespace exists in envtest and has no template-namespace-scope label
-		scope, err := GetTemplateScopeNamespaceStrategy(ctx, k8sClient, "default")
+		scope, err := GetTemplateScopeStrategyFromWorkspaceNamespaceLabel(ctx, k8sClient, "default")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(scope).To(Equal(webhookconst.TemplateScopeCluster))
 	})
@@ -42,7 +42,7 @@ var _ = Describe("GetTemplateScopeNamespaceStrategy", func() {
 		Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 		defer func() { Expect(k8sClient.Delete(ctx, ns)).To(Succeed()) }()
 
-		scope, err := GetTemplateScopeNamespaceStrategy(ctx, k8sClient, ns.Name)
+		scope, err := GetTemplateScopeStrategyFromWorkspaceNamespaceLabel(ctx, k8sClient, ns.Name)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(scope).To(Equal(webhookconst.TemplateScopeNamespaced))
 	})
@@ -59,7 +59,7 @@ var _ = Describe("GetTemplateScopeNamespaceStrategy", func() {
 		Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 		defer func() { Expect(k8sClient.Delete(ctx, ns)).To(Succeed()) }()
 
-		scope, err := GetTemplateScopeNamespaceStrategy(ctx, k8sClient, ns.Name)
+		scope, err := GetTemplateScopeStrategyFromWorkspaceNamespaceLabel(ctx, k8sClient, ns.Name)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(scope).To(Equal(webhookconst.TemplateScopeCluster))
 	})
@@ -76,7 +76,7 @@ var _ = Describe("GetTemplateScopeNamespaceStrategy", func() {
 		Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 		defer func() { Expect(k8sClient.Delete(ctx, ns)).To(Succeed()) }()
 
-		scope, err := GetTemplateScopeNamespaceStrategy(ctx, k8sClient, ns.Name)
+		scope, err := GetTemplateScopeStrategyFromWorkspaceNamespaceLabel(ctx, k8sClient, ns.Name)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(scope).To(Equal(webhookconst.TemplateScopeCluster))
 	})
@@ -93,13 +93,13 @@ var _ = Describe("GetTemplateScopeNamespaceStrategy", func() {
 		Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 		defer func() { Expect(k8sClient.Delete(ctx, ns)).To(Succeed()) }()
 
-		_, err := GetTemplateScopeNamespaceStrategy(ctx, k8sClient, ns.Name)
+		_, err := GetTemplateScopeStrategyFromWorkspaceNamespaceLabel(ctx, k8sClient, ns.Name)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("unrecognized template-namespace-scope value"))
 	})
 
 	It("should return error when namespace does not exist", func() {
-		_, err := GetTemplateScopeNamespaceStrategy(ctx, k8sClient, "nonexistent-namespace")
+		_, err := GetTemplateScopeStrategyFromWorkspaceNamespaceLabel(ctx, k8sClient, "nonexistent-namespace")
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("failed to get namespace"))
 	})

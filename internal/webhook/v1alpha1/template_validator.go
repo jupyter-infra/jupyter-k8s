@@ -44,7 +44,7 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 
 	// Reject if templateRef explicitly targets a different namespace, check scope
 	if workspace.Spec.TemplateRef.Namespace != "" && workspace.Spec.TemplateRef.Namespace != workspace.Namespace {
-		scope, err := GetTemplateScopeNamespaceStrategy(ctx, tv.k8sClient, workspace.Namespace)
+		scope, err := GetTemplateScopeStrategyFromWorkspaceNamespaceLabel(ctx, tv.k8sClient, workspace.Namespace)
 		if err != nil {
 			return err
 		}
