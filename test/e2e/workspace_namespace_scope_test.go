@@ -29,20 +29,12 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 
 	BeforeAll(func() {
 		By("creating scoped namespace with Namespaced label")
-		cmd := exec.Command("kubectl", "create", "ns", scopedNs, "--dry-run=client", "-o", "yaml")
-		nsYaml, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
-		cmd = exec.Command("sh", "-c", fmt.Sprintf("echo '%s' | kubectl apply -f -", nsYaml))
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
-
-		cmd = exec.Command("kubectl", "label", "--overwrite", "ns", scopedNs,
-			"workspace.jupyter.org/template-namespace-scope=Namespaced")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
+		createNamespaceForTest(scopedNs, map[string]string{
+			"workspace.jupyter.org/template-namespace-scope": "Namespaced",
+		})
 	})
 
-	AfterEach(func() {
+	AfterAll(func() {
 		By("cleaning up workspaces in scoped namespace")
 		cmd := exec.Command("kubectl", "delete", "workspace", "--all", "-n", scopedNs,
 			"--ignore-not-found", "--wait=true", "--timeout=120s")
@@ -63,12 +55,8 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 			"--ignore-not-found", "--wait=true", "--timeout=60s")
 		_, _ = utils.Run(cmd)
 
-		time.Sleep(1 * time.Second)
-	})
-
-	AfterAll(func() {
 		By("deleting scoped namespace")
-		cmd := exec.Command("kubectl", "delete", "ns", scopedNs, "--ignore-not-found", "--wait=true", "--timeout=60s")
+		cmd = exec.Command("kubectl", "delete", "ns", scopedNs, "--ignore-not-found", "--wait=true", "--timeout=60s")
 		_, _ = utils.Run(cmd)
 	})
 
