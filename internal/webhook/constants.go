@@ -27,7 +27,7 @@ const (
 // Namespace scope label constants
 const (
 	// TemplateScopeNamespaceLabel is the Namespace label key that controls template scope enforcement
-	TemplateScopeNamespaceLabel = "workspace.jupyter.org/template-scope"
+	TemplateScopeNamespaceLabel = "workspace.jupyter.org/template-namespace-scope"
 )
 
 // TemplateScopeStrategy defines the template scope enforcement strategy for a namespace

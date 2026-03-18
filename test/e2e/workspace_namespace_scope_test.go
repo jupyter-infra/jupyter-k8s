@@ -37,7 +37,7 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		cmd = exec.Command("kubectl", "label", "--overwrite", "ns", scopedNs,
-			"workspace.jupyter.org/template-scope=Namespaced")
+			"workspace.jupyter.org/template-namespace-scope=Namespaced")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -72,7 +72,7 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 		_, _ = utils.Run(cmd)
 	})
 
-	It("should allow workspace to use template from same namespace when scoped", func() {
+	It("should allow workspace to use template from same namespace when namespace has template-namespace-scope label set to Namespaced", func() {
 		By("creating local template in scoped namespace")
 		createResourceForTest("local-template", groupDir, subgroup)
 
@@ -84,7 +84,7 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 			controller.ConditionTypeAvailable, ConditionTrue)
 	})
 
-	It("should reject workspace referencing cross-namespace template when scoped", func() {
+	It("should reject workspace referencing cross-namespace template when namespace has template-namespace-scope label set to Namespaced", func() {
 		By("creating base template in shared namespace")
 		createTemplateForTest("base-template", "template", "base")
 
@@ -102,7 +102,7 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 		Expect(output).To(BeEmpty())
 	})
 
-	It("should auto-inject default template from same namespace when scoped", func() {
+	It("should auto-inject default template from same namespace when namespace has template-namespace-scope label set to Namespaced", func() {
 		By("creating default-labeled template in scoped namespace")
 		createResourceForTest("local-default-template", groupDir, subgroup)
 
@@ -122,7 +122,7 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 			controller.ConditionTypeAvailable, ConditionTrue)
 	})
 
-	It("should allow cross-namespace template reference when namespace is not scoped", func() {
+	It("should allow cross-namespace template reference when namespace has no template-namespace-scope label", func() {
 		By("creating base template in shared namespace")
 		createTemplateForTest("base-template", "template", "base")
 

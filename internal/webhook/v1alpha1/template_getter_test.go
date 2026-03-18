@@ -141,8 +141,8 @@ var _ = Describe("TemplateGetter", func() {
 		})
 	})
 
-	Context("Namespace Scope", func() {
-		It("should inject default template from same namespace when scoped", func() {
+	Context("Namespace Template Scope", func() {
+		It("should inject default template from same namespace when namespace has template-namespace-scope label set to Namespaced", func() {
 			nsName := "getter-scope-same"
 			ns := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -179,7 +179,7 @@ var _ = Describe("TemplateGetter", func() {
 			Expect(workspace.Spec.TemplateRef.Name).To(Equal("scoped-default-template"))
 		})
 
-		It("should not inject default template from different namespace when scoped", func() {
+		It("should not inject default template from different namespace when namespace has template-namespace-scope label set to Namespaced", func() {
 			nsName := "getter-scope-cross"
 			ns := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -216,7 +216,7 @@ var _ = Describe("TemplateGetter", func() {
 			Expect(workspace.Spec.TemplateRef).To(BeNil())
 		})
 
-		It("should inject cross-namespace default template when namespace is not scoped", func() {
+		It("should inject cross-namespace default template when namespace has no template-namespace-scope label", func() {
 			// Create an unscoped namespace
 			nsName := "getter-scope-unscoped"
 			ns := &corev1.Namespace{

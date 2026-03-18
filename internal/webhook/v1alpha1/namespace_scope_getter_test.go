@@ -23,14 +23,14 @@ var _ = Describe("GetTemplateScopeStrategy", func() {
 		ctx = context.Background()
 	})
 
-	It("should return Cluster when namespace has no template-scope label", func() {
-		// "default" namespace exists in envtest and has no template-scope label
+	It("should return Cluster when namespace has no template-namespace-scope label", func() {
+		// "default" namespace exists in envtest and has no template-namespace-scope label
 		scope, err := GetTemplateScopeStrategy(ctx, k8sClient, "default")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(scope).To(Equal(webhookconst.TemplateScopeCluster))
 	})
 
-	It("should return Namespaced when namespace has Namespaced label", func() {
+	It("should return Namespaced when namespace has template-namespace-scope label set to Namespaced", func() {
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "scope-test-namespaced",
@@ -47,7 +47,7 @@ var _ = Describe("GetTemplateScopeStrategy", func() {
 		Expect(scope).To(Equal(webhookconst.TemplateScopeNamespaced))
 	})
 
-	It("should return Cluster when namespace has Cluster label", func() {
+	It("should return Cluster when namespace has template-namespace-scope label set to Cluster", func() {
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "scope-test-cluster",
@@ -64,7 +64,7 @@ var _ = Describe("GetTemplateScopeStrategy", func() {
 		Expect(scope).To(Equal(webhookconst.TemplateScopeCluster))
 	})
 
-	It("should return Cluster when namespace has empty label value", func() {
+	It("should return Cluster when namespace has empty template-namespace-scope label value", func() {
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "scope-test-empty",
@@ -81,7 +81,7 @@ var _ = Describe("GetTemplateScopeStrategy", func() {
 		Expect(scope).To(Equal(webhookconst.TemplateScopeCluster))
 	})
 
-	It("should return error for unrecognized label value", func() {
+	It("should return error for unrecognized template-namespace-scope label value", func() {
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "scope-test-invalid",
@@ -95,7 +95,7 @@ var _ = Describe("GetTemplateScopeStrategy", func() {
 
 		_, err := GetTemplateScopeStrategy(ctx, k8sClient, ns.Name)
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("unrecognized template-scope value"))
+		Expect(err.Error()).To(ContainSubstring("unrecognized template-namespace-scope value"))
 	})
 
 	It("should return error when namespace does not exist", func() {

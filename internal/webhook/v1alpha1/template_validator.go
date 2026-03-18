@@ -49,7 +49,7 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 			return err
 		}
 		if scope == webhookconst.TemplateScopeNamespaced {
-			return fmt.Errorf("workspace namespace '%s' has template-scope=Namespaced: cannot reference template '%s' in namespace '%s'",
+			return fmt.Errorf("workspace namespace '%s' has template-namespace-scope=Namespaced: cannot reference template '%s' in namespace '%s'",
 				workspace.Namespace, workspace.Spec.TemplateRef.Name, workspace.Spec.TemplateRef.Namespace)
 		}
 	}

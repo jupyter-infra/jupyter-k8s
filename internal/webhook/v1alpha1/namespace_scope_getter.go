@@ -35,7 +35,7 @@ func GetTemplateScopeStrategy(ctx context.Context, k8sClient client.Client, name
 	case webhookconst.TemplateScopeCluster:
 		return webhookconst.TemplateScopeCluster, nil
 	default:
-		return "", fmt.Errorf("unrecognized template-scope value %q on namespace %s: must be %q or %q",
+		return "", fmt.Errorf("unrecognized template-namespace-scope value %q on namespace %s: must be %q or %q",
 			value, namespaceName, webhookconst.TemplateScopeNamespaced, webhookconst.TemplateScopeCluster)
 	}
 }
