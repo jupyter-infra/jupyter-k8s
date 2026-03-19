@@ -29,9 +29,7 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 
 	BeforeAll(func() {
 		By("creating scoped namespace with Namespaced label")
-		createNamespaceForTest(scopedNs, map[string]string{
-			"workspace.jupyter.org/template-namespace-scope": "Namespaced",
-		})
+		createNamespaceForTest("scoped-ns", groupDir, subgroup)
 	})
 
 	AfterAll(func() {
