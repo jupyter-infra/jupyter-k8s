@@ -146,6 +146,16 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 			Eventually(verifyMetricsServerStarted).Should(Succeed())
 
+			By("waiting for the controller to acquire leader lease")
+			verifyLeaderAcquired := func(g Gomega) {
+				cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", OperatorNamespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(ContainSubstring("successfully acquired lease"),
+					"Controller has not yet acquired leader lease")
+			}
+			Eventually(verifyLeaderAcquired).Should(Succeed())
+
 			By("creating the curl-metrics pod to access the metrics endpoint")
 			cmd = exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
 				"-n", OperatorNamespace,
