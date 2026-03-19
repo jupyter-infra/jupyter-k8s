@@ -42,23 +42,22 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		return nil
 	}
 
-	// If templateRef explicitly targets a different namespace, check whether the workspace's namespace
-	// allows cross-namespace template references by looking up the template-scope strategy label.
-	// Namespaced-scoped namespaces reject cross-namespace references to enforce isolation.
-	if workspace.Spec.TemplateRef.Namespace != "" && workspace.Spec.TemplateRef.Namespace != workspace.Namespace {
+	template, err := tv.fetchTemplate(ctx, workspace.Spec.TemplateRef, workspace.Namespace)
+	if err != nil {
+		return err
+	}
+
+	// Check whether the resolved template's namespace differs from the workspace's namespace.
+	// This catches both explicit cross-namespace templateRef and implicit fallback to defaultTemplateNamespace.
+	if template.Namespace != workspace.Namespace {
 		scope, err := GetTemplateScopeStrategyFromWorkspaceNamespaceLabel(ctx, tv.k8sClient, workspace.Namespace)
 		if err != nil {
 			return err
 		}
 		if scope == webhookconst.TemplateScopeNamespaced {
 			return fmt.Errorf("workspace namespace '%s' has template-namespace-scope=Namespaced: cannot reference template '%s' in namespace '%s'",
-				workspace.Namespace, workspace.Spec.TemplateRef.Name, workspace.Spec.TemplateRef.Namespace)
+				workspace.Namespace, workspace.Spec.TemplateRef.Name, template.Namespace)
 		}
-	}
-
-	template, err := tv.fetchTemplate(ctx, workspace.Spec.TemplateRef, workspace.Namespace)
-	if err != nil {
-		return err
 	}
 
 	var violations []TemplateViolation
