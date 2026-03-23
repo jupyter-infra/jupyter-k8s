@@ -8,6 +8,7 @@ package pluginclient
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -174,43 +175,39 @@ func newTestClient(baseURL string) *PluginClient {
 }
 
 func TestDoPost_RetriesOnConnectionRefused(t *testing.T) {
-	// First two attempts: connection refused (server not started).
-	// Third attempt: server is up.
-	var attempts int
-	var srv *httptest.Server
-	srv = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		attempts++
+	// Grab a fixed listener so the client address stays valid across retries.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := ln.Addr().String()
+	// Close the listener so the port is unbound — first attempts get ECONNREFUSED.
+	require.NoError(t, ln.Close())
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(pluginapi.SignResponse{Token: "ok"})
-	}))
+		_ = json.NewEncoder(w).Encode(pluginapi.SignResponse{Token: "recovered"})
+	})
 
-	// Point client at the server's listener address before starting it.
-	client := newTestClient("http://" + srv.Listener.Addr().String())
-	srv.Close() // Close the unstarted server to free the port.
+	client := newTestClient("http://" + addr)
 
-	// Start the server after a brief delay (simulates sidecar coming up).
+	// Re-bind the same port after a delay, simulating the sidecar coming up.
+	srv := &http.Server{Handler: handler}
+	listenErr := make(chan error, 1)
 	go func() {
 		time.Sleep(15 * time.Millisecond)
-		srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			attempts++
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(pluginapi.SignResponse{Token: "ok"})
-		}))
+		newLn, err := net.Listen("tcp", addr)
+		if err != nil {
+			listenErr <- err
+			return
+		}
+		listenErr <- nil
+		_ = srv.Serve(newLn) // returns when listener is closed
 	}()
+	defer srv.Close()
 
-	// Wait for the goroutine to start the server, then update the client URL.
-	time.Sleep(30 * time.Millisecond)
-	if srv != nil {
-		defer srv.Close()
-		client.baseURL = srv.URL
-	}
-
-	// Directly test that connection refused IS retried by using an unreachable port.
-	unreachableClient := newTestClient("http://127.0.0.1:1")
-	_, _, err := doPost[pluginapi.SignResponse](context.Background(), unreachableClient, "/test", &pluginapi.SignRequest{})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "attempts")
-	assert.Contains(t, err.Error(), "failed")
+	resp, _, err := doPost[pluginapi.SignResponse](context.Background(), client, "/test", &pluginapi.SignRequest{})
+	require.NoError(t, <-listenErr, "failed to re-bind listener in background")
+	require.NoError(t, err)
+	assert.Equal(t, "recovered", resp.Token)
 }
 
 func TestDoPost_DoesNotRetryOnHTTPError(t *testing.T) {
@@ -261,11 +258,11 @@ func TestDoPost_SucceedsAfterTransientFailure(t *testing.T) {
 		if attempts <= 1 {
 			// Simulate transient failure by closing the connection.
 			hj, ok := w.(http.Hijacker)
-			if ok {
-				conn, _, _ := hj.Hijack()
-				_ = conn.Close()
-				return
-			}
+			require.True(t, ok, "ResponseWriter must support Hijacker")
+			conn, _, err := hj.Hijack()
+			require.NoError(t, err, "Hijack must succeed")
+			require.NoError(t, conn.Close(), "connection close must succeed")
+			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(pluginapi.SignResponse{Token: "recovered"})

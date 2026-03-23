@@ -7,12 +7,12 @@ package pluginclient
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	pluginapi "github.com/jupyter-infra/jupyter-k8s/api/plugin/v1alpha1"
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
-	"github.com/jupyter-infra/jupyter-k8s/internal/plugin"
 
 	jwt5 "github.com/golang-jwt/jwt/v5"
 )
@@ -74,7 +74,7 @@ func (s *PluginSigner) ValidateToken(tokenString string) (*jwt.Claims, error) {
 		return nil, err
 	}
 	if resp.Claims == nil {
-		return nil, &plugin.StatusError{Code: 200, Message: "verify returned nil claims"}
+		return nil, fmt.Errorf("plugin: verify returned nil claims")
 	}
 	return verifyClaims(resp.Claims), nil
 }
