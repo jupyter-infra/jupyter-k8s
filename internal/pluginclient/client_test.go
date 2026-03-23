@@ -202,7 +202,7 @@ func TestDoPost_RetriesOnConnectionRefused(t *testing.T) {
 		listenErr <- nil
 		_ = srv.Serve(newLn) // returns when listener is closed
 	}()
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	resp, _, err := doPost[pluginapi.SignResponse](context.Background(), client, "/test", &pluginapi.SignRequest{})
 	require.NoError(t, <-listenErr, "failed to re-bind listener in background")
