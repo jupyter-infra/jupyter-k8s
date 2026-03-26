@@ -1,5 +1,5 @@
 ### Usage
-- set the value of `DOMAIN` in your `.env` file
+- set the value of `TRAEFIK_DEX_DOMAIN` or `HYPERPOD_DOMAIN` in your `.env` file
 - run `make apply-sample-routing`
 
 ### Clean-up

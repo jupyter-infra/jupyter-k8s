@@ -1,0 +1,14 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ${WS_USER}-jupyterlab-public
+  namespace: default
+spec:
+  displayName: "${WS_USER} JupyterLab Public"
+  appType: jupyterlab
+  desiredStatus: Running
+  ownershipType: Public
+  accessType: Public
+  templateRef:
+    name: sagemaker-jupyter-template
+    namespace: jupyter-k8s-system

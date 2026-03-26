@@ -61,68 +61,37 @@ func (s *Server) handleBearerAuth(w http.ResponseWriter, r *http.Request) {
 	appPath := ExtractAppPath(fullPath, s.config.PathRegexPattern)
 	s.logger.Debug("Extracted app path for validation", "full_path", fullPath, "app_path", appPath)
 
-	var user, uid string
-	var groups []string
-	var extra map[string][]string
-
-	if s.config.KMSKeyId != "" {
-		// Local KMS validation — existing behavior
-		claims, err := s.jwtManager.ValidateToken(token)
-		if err != nil {
-			s.logger.Error("Invalid token", "error", err)
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
-			return
-		}
-
-		if claims.TokenType != jwt.TokenTypeBootstrap {
-			s.logger.Error("Invalid token type for bearer auth", "expected", jwt.TokenTypeBootstrap, "actual", claims.TokenType)
-			http.Error(w, "Invalid token type", http.StatusUnauthorized)
-			return
-		}
-
-		if claims.Path != appPath {
-			s.logger.Error("Token path mismatch", "token_path", claims.Path, "request_path", appPath)
-			http.Error(w, "Token path mismatch", http.StatusForbidden)
-			return
-		}
-
-		user = claims.Subject
-		uid = claims.UID
-		groups = claims.Groups
-		extra = claims.Extra
-	} else {
-		// Delegate to BearerTokenReview API — token is opaque
-		wsInfo, err := s.ExtractWorkspaceInfo(r)
-		if err != nil {
-			s.logger.Error("Failed to extract workspace info", "error", err)
-			http.Error(w, "Failed to extract workspace info", http.StatusBadRequest)
-			return
-		}
-
-		reviewStatus, err := s.createBearerTokenReview(r.Context(), token, wsInfo.Namespace)
-		if err != nil {
-			s.logger.Error("BearerTokenReview failed", "error", err)
-			http.Error(w, "Token verification failed", http.StatusInternalServerError)
-			return
-		}
-
-		if !reviewStatus.Authenticated {
-			s.logger.Error("Bearer token not authenticated", "error", reviewStatus.Error)
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
-			return
-		}
-
-		if reviewStatus.Path != appPath {
-			s.logger.Error("Token path mismatch", "token_path", reviewStatus.Path, "request_path", appPath)
-			http.Error(w, "Token path mismatch", http.StatusForbidden)
-			return
-		}
-
-		user = reviewStatus.User.Username
-		uid = reviewStatus.User.UID
-		groups = reviewStatus.User.Groups
-		extra = reviewStatus.User.Extra
+	// Delegate to BearerTokenReview API for token verification
+	wsInfo, err := s.ExtractWorkspaceInfo(r)
+	if err != nil {
+		s.logger.Error("Failed to extract workspace info", "error", err)
+		http.Error(w, "Failed to extract workspace info", http.StatusBadRequest)
+		return
 	}
+
+	reviewStatus, err := s.createBearerTokenReview(r.Context(), token, wsInfo.Namespace)
+	if err != nil {
+		s.logger.Error("BearerTokenReview failed", "error", err)
+		http.Error(w, "Token verification failed", http.StatusInternalServerError)
+		return
+	}
+
+	if !reviewStatus.Authenticated {
+		s.logger.Error("Bearer token not authenticated", "error", reviewStatus.Error)
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	if reviewStatus.Path != appPath {
+		s.logger.Error("Token path mismatch", "token_path", reviewStatus.Path, "request_path", appPath)
+		http.Error(w, "Token path mismatch", http.StatusForbidden)
+		return
+	}
+
+	user := reviewStatus.User.Username
+	uid := reviewStatus.User.UID
+	groups := reviewStatus.User.Groups
+	extra := reviewStatus.User.Extra
 
 	// Generate new long-term session token
 	sessionToken, err := s.jwtManager.GenerateToken(

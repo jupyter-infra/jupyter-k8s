@@ -84,67 +84,6 @@ func TestHandleBearerAuthMissingToken(t *testing.T) {
 	}
 }
 
-func TestHandleBearerAuthInvalidToken(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
-			return nil, jwt.ErrInvalidToken
-		},
-	}
-	server := &Server{
-		logger:     logger,
-		jwtManager: jwtHandler,
-		config:     &Config{KMSKeyId: "test-kms-key"},
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
-	req.Header.Set(HeaderForwardedURI, "/workspaces/test/workspace?token=invalid")
-	req.Header.Set(HeaderForwardedHost, "example.com")
-	w := httptest.NewRecorder()
-
-	server.handleBearerAuth(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, w.Code)
-	}
-	if w.Body.String() != "Invalid token\n" {
-		t.Errorf("Unexpected body: %s", w.Body.String())
-	}
-}
-
-func TestHandleBearerAuthInvalidTokenType(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
-			return &jwt.Claims{
-				User:      "test-user",
-				Groups:    []string{"users"},
-				Path:      "/workspaces/test/workspace",
-				TokenType: jwt.TokenTypeSession, // Wrong type - should be bootstrap
-			}, nil
-		},
-	}
-	server := &Server{
-		logger:     logger,
-		jwtManager: jwtHandler,
-		config:     &Config{KMSKeyId: "test-kms-key"},
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
-	req.Header.Set(HeaderForwardedURI, "/workspaces/test/workspace?token=session-token")
-	req.Header.Set(HeaderForwardedHost, "example.com")
-	w := httptest.NewRecorder()
-
-	server.handleBearerAuth(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, w.Code)
-	}
-	if w.Body.String() != "Invalid token type\n" {
-		t.Errorf("Unexpected body: %s", w.Body.String())
-	}
-}
-
 func TestHandleBearerAuthMissingForwardedHost(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server := &Server{
@@ -166,96 +105,7 @@ func TestHandleBearerAuthMissingForwardedHost(t *testing.T) {
 	}
 }
 
-func TestHandleBearerAuthTokenPathMismatch(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
-			return &jwt.Claims{
-				User:      "test-user",
-				Groups:    []string{"users"},
-				Path:      "/workspaces/different/workspace",
-				TokenType: jwt.TokenTypeBootstrap,
-			}, nil
-		},
-	}
-	config := &Config{
-		PathRegexPattern: "^(/workspaces/[^/]+/[^/]+)(?:/.*)?$",
-		KMSKeyId:         "test-kms-key",
-	}
-	server := &Server{
-		logger:     logger,
-		jwtManager: jwtHandler,
-		config:     config,
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
-	req.Header.Set(HeaderForwardedURI, "/workspaces/test/workspace?token=valid")
-	req.Header.Set(HeaderForwardedHost, "example.com")
-	w := httptest.NewRecorder()
-
-	server.handleBearerAuth(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Errorf("Expected status %d, got %d", http.StatusForbidden, w.Code)
-	}
-	if w.Body.String() != "Token path mismatch\n" {
-		t.Errorf("Unexpected body: %s", w.Body.String())
-	}
-}
-
-func TestHandleBearerAuthSuccess(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
-			return &jwt.Claims{
-				User:      "test-user",
-				Groups:    []string{"users"},
-				Path:      "/workspaces/test/workspace",
-				TokenType: jwt.TokenTypeBootstrap, // Correct type for bearer auth
-			}, nil
-		},
-		GenerateTokenFunc: func(
-			user string,
-			groups []string,
-			uid string,
-			extra map[string][]string,
-			path string,
-			domain string,
-			tokenType string) (string, error) {
-			return "session-token", nil
-		},
-	}
-	cookieHandler := &MockCookieHandler{
-		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {
-			// Mock cookie setting
-		},
-	}
-	config := &Config{
-		PathRegexPattern: DefaultPathRegexPattern,
-		KMSKeyId:         "test-kms-key",
-	}
-	server := &Server{
-		logger:        logger,
-		jwtManager:    jwtHandler,
-		cookieManager: cookieHandler,
-		config:        config,
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
-	// Use a path that matches the production regex - add trailing slash to match (?:/.*)?
-	req.Header.Set(HeaderForwardedURI, "/workspaces/test/workspace/?token=valid")
-	req.Header.Set(HeaderForwardedHost, "example.com")
-	w := httptest.NewRecorder()
-
-	server.handleBearerAuth(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status %d, got %d. Body: %s", http.StatusOK, w.Code, w.Body.String())
-	}
-}
-
-// --- BearerTokenReview code path tests (KMSKeyId is empty) ---
+// --- BearerTokenReview tests ---
 
 func TestHandleBearerAuth_BearerTokenReview_ExtractWorkspaceInfoFailure(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -493,41 +343,6 @@ func TestHandleBearerAuth_BearerTokenReview_GenerateTokenError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
 	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/?token=valid-token")
-	req.Header.Set(HeaderForwardedHost, "example.com")
-	w := httptest.NewRecorder()
-
-	server.handleBearerAuth(w, req)
-
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "Internal server error")
-}
-
-func TestHandleBearerAuth_KMS_GenerateTokenError(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	jwtHandler := &MockJWTHandler{
-		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
-			return &jwt.Claims{
-				User:      testUserValue,
-				Groups:    []string{"users"},
-				Path:      "/workspaces/default/myworkspace",
-				TokenType: jwt.TokenTypeBootstrap,
-			}, nil
-		},
-		GenerateTokenFunc: func(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string) (string, error) {
-			return "", assert.AnError
-		},
-	}
-	server := &Server{
-		logger:     logger,
-		jwtManager: jwtHandler,
-		config: &Config{
-			KMSKeyId:         "test-kms-key",
-			PathRegexPattern: DefaultPathRegexPattern,
-		},
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
-	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/?token=valid")
 	req.Header.Set(HeaderForwardedHost, "example.com")
 	w := httptest.NewRecorder()
 

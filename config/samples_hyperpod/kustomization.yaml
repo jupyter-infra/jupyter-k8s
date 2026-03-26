@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - workspace_jupyterlab_public.yaml
+  - workspace_code_editor_public.yaml
+  - workspace_jupyterlab_private.yaml
+  - workspace_code_editor_private.yaml

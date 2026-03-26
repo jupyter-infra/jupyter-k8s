@@ -76,24 +76,22 @@ spec:
             value: "{{ .Values.clusterWebUI.auth.writeTimeout }}"
           - name: SHUTDOWN_TIMEOUT
             value: "{{ .Values.clusterWebUI.auth.shutdownTimeout }}"
-          - name: JWT_SIGNING_TYPE
-            value: "{{ .Values.clusterWebUI.auth.jwtSigningType }}"
-          - name: KMS_KEY_ID
-            value: "{{ .Values.clusterWebUI.auth.kmsKeyId }}"
-          {{- if .Values.clusterWebUI.auth.kmsEncryptionContext.enabled }}
-          - name: KMS_ENCRYPTION_CONTEXT
-            value: '{"sagemaker:component":"amazon-sagemaker-spaces","sagemaker:eks-cluster-arn":"{{ .Values.clusterWebUI.auth.kmsEncryptionContext.eksClusterArn }}"}'
-          {{- end }}
+          - name: JWT_SECRET_NAME
+            value: "{{ .Values.clusterWebUI.auth.secretName }}"
           - name: JWT_ISSUER
             value: "{{ .Values.clusterWebUI.auth.jwtIssuer }}"
           - name: JWT_AUDIENCE
             value: "{{ .Values.clusterWebUI.auth.jwtAudience }}"
           - name: JWT_EXPIRATION
             value: "{{ .Values.clusterWebUI.auth.jwtExpiration }}"
+          - name: JWT_REFRESH_ENABLE
+            value: "{{ .Values.clusterWebUI.auth.jwtRefreshEnable }}"
           - name: JWT_REFRESH_WINDOW
             value: "{{ .Values.clusterWebUI.auth.jwtRefreshWindow }}"
           - name: JWT_REFRESH_HORIZON
             value: "{{ .Values.clusterWebUI.auth.jwtRefreshHorizon }}"
+          - name: NEW_KEY_USE_DELAY
+            value: "{{ .Values.clusterWebUI.auth.jwtNewKeyUseDelay }}"
           - name: COOKIE_NAME
             value: "{{ .Values.clusterWebUI.auth.cookieName }}"
           - name: COOKIE_SECURE

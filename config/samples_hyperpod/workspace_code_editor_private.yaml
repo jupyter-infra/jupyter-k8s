@@ -1,0 +1,14 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ${WS_USER}-code-editor-private
+  namespace: default
+spec:
+  displayName: "${WS_USER} Code Editor Private"
+  appType: code-editor
+  desiredStatus: Running
+  ownershipType: OwnerOnly
+  accessType: OwnerOnly
+  templateRef:
+    name: sagemaker-code-editor-template
+    namespace: jupyter-k8s-system

@@ -45,39 +45,6 @@ var _ = Describe("NewJWTHandler", func() {
 
 	})
 
-	Context("KMS Signing Type", func() {
-		BeforeEach(func() {
-			cfg.JWTSigningType = JWTSigningTypeKMS
-			cfg.KMSKeyId = "arn:aws:kms:us-west-2:123456789012:key/12345678-1234-1234-1234-123456789012"
-		})
-
-		It("Should return error if KMS key ID is missing", func() {
-			cfg.KMSKeyId = ""
-
-			handler, standardSigner, err := NewJWTHandler(cfg, logger)
-
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("KMS_KEY_ID required when JWT_SIGNING_TYPE is kms"))
-			Expect(handler).To(BeNil())
-			Expect(standardSigner).To(BeNil())
-		})
-
-		It("Should return nil StandardSigner for KMS signing (no secret watching needed)", func() {
-			// Note: This test will fail to create KMS client in test environment
-			// We're just verifying the logic flow
-			_, standardSigner, err := NewJWTHandler(cfg, logger)
-
-			// We expect an error creating KMS client in test environment
-			// but we can verify the standardSigner would be nil if it succeeded
-			if err == nil {
-				Expect(standardSigner).To(BeNil(), "KMS signing should not create a StandardSigner")
-			} else {
-				// Expected in test environment without AWS credentials
-				Expect(err.Error()).To(ContainSubstring("failed to create KMS client"))
-			}
-		})
-	})
-
 	Context("Invalid Configuration", func() {
 		It("Should return error if config is nil", func() {
 			handler, standardSigner, err := NewJWTHandler(nil, logger)
@@ -94,7 +61,18 @@ var _ = Describe("NewJWTHandler", func() {
 			handler, standardSigner, err := NewJWTHandler(cfg, logger)
 
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("unknown JWT signing type: unknown-type"))
+			Expect(err.Error()).To(ContainSubstring("unsupported JWT signing type"))
+			Expect(handler).To(BeNil())
+			Expect(standardSigner).To(BeNil())
+		})
+
+		It("Should return error for kms JWT signing type with migration guidance", func() {
+			cfg.JWTSigningType = "kms"
+
+			handler, standardSigner, err := NewJWTHandler(cfg, logger)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("unsupported JWT signing type"))
 			Expect(handler).To(BeNil())
 			Expect(standardSigner).To(BeNil())
 		})

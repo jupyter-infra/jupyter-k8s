@@ -7,10 +7,6 @@
 {{- fail "clusterWebUI.domain is required when clusterWebUI.enabled is true" }}
 {{- end }}
 
-{{- if and .Values.clusterWebUI.enabled (eq .Values.clusterWebUI.auth.jwtSigningType "kms") (not .Values.clusterWebUI.auth.kmsKeyId) }}
-{{- fail "clusterWebUI.auth.kmsKeyId is required when jwtSigningType is 'kms'" }}
-{{- end }}
-
 {{- if and .Values.remoteAccess.enabled (not .Values.remoteAccess.ssmManagedNodeRole) }}
 {{- fail "remoteAccess.ssmManagedNodeRole is required when remoteAccess.enabled is true" }}
 {{- end }}

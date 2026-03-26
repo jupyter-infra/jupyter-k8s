@@ -54,18 +54,15 @@ clusterWebUI:
       requests:
         cpu: 200m
         memory: 256Mi
-    jwtSigningType: "kms"
-    kmsKeyId: ""
-    # KMS encryption context configuration
-    kmsEncryptionContext:
-      enabled: false
-      # EKS cluster ARN for encryption context (required when enabled: true)
-      eksClusterArn: ""
     jwtIssuer: "jupyter-k8s-auth"
     jwtAudience: "workspace-users"
-    jwtExpiration: "12h"
+    jwtExpiration: "3h"
+    jwtRefreshEnable: "true"
     jwtRefreshWindow: "15m"
     jwtRefreshHorizon: "12h"
+    jwtNewKeyUseDelay: "5s"
+    # Secret name for multi-key JWT signing (StandardSigner)
+    secretName: "authmiddleware-jwt-secrets"
     cookieName: "workspace_auth"
     cookieSecure: "true"
     cookiePath: "/"
@@ -74,15 +71,36 @@ clusterWebUI:
     cookieSameSite: "lax"
     pathRegexPattern: "^(/).*$"
     routingMode: "subdomain"
-    workspaceNameSubdomainRegex: "^([^-]+)-.*$"
-    workspaceNamespaceSubdomainRegex: "^[^-]+-(.*)$"
+    # Subdomain format: {workspace-name}-{b32-encoded-namespace}.domain
+    # Split on last hyphen — safe because base32 alphabet is [A-Z2-7=], which never contains hyphens
+    workspaceNameSubdomainRegex: "^(.*)-[^-]+$"
+    workspaceNamespaceSubdomainRegex: "^.*-([^-]+)$"
     maxCookiePaths: "20"
     readTimeout: "10s"
     writeTimeout: "10s"
     shutdownTimeout: "30s"
     oauthEnabled: false
     enableBearerAuth: true
-    enableRefresh: false
+
+  # JWT Secret Rotator configuration
+  rotator:
+    enabled: true
+    imagePullPolicy: Always
+    repository: docker.io
+    imageName: jupyter-k8s-rotator
+    imageTag: latest
+    rotationInterval: "15m"
+    # Number of keys to keep (older keys are pruned after rotation)
+    # Must satisfy: numberOfKeys * rotationInterval >= jwtExpiration + buffer
+    # 14 keys * 15m rotation = 3.5h retention >= 3h expiration
+    numberOfKeys: 14
+    resources:
+      limits:
+        cpu: 100m
+        memory: 64Mi
+      requests:
+        cpu: 50m
+        memory: 32Mi
 
 # Remote access configuration
 remoteAccess:
