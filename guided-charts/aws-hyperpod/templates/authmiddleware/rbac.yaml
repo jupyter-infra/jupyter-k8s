@@ -15,6 +15,10 @@ metadata:
   name: authmiddleware-role
 rules:
   {{- if .Values.clusterWebUI.auth.enableBearerAuth }}
+  # Workspace access review via extension API (used during token refresh)
+  - apiGroups: ["connection.workspace.jupyter.org"]
+    resources: ["connectionaccessreviews"]
+    verbs: ["create"]
   # Bearer token verification via extension API
   - apiGroups: ["connection.workspace.jupyter.org"]
     resources: ["bearertokenreviews"]
