@@ -4,7 +4,7 @@ metadata:
   name: local-default-template
   namespace: scope-team-a
   labels:
-    workspace.jupyter.org/default-cluster-template: "true"
+    workspace.jupyter.org/default-template: "true"
 spec:
   displayName: "Local Default Template"
   defaultImage: jk8s-application-jupyter-uv:latest

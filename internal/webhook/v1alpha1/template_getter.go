@@ -38,7 +38,7 @@ func (tg *TemplateGetter) ApplyTemplateName(ctx context.Context, workspace *work
 		return nil
 	}
 
-	defaultLabel := client.MatchingLabels{webhookconst.DefaultClusterTemplateLabel: "true"}
+	defaultLabel := client.MatchingLabels{webhookconst.DefaultTemplateLabel: "true"}
 
 	// Search the workspace's own namespace first
 	template, err := tg.findDefaultTemplate(ctx, workspace.Namespace, defaultLabel)
@@ -80,7 +80,7 @@ func (tg *TemplateGetter) findDefaultTemplate(ctx context.Context, namespace str
 
 	if len(templateList.Items) > 1 {
 		return nil, fmt.Errorf(
-			"multiple templates found with default-cluster-template label in namespace %s: %v, expected exactly one",
+			"multiple templates found with default-template label in namespace %s: %v, expected exactly one",
 			namespace, getTemplateNames(templateList.Items),
 		)
 	}

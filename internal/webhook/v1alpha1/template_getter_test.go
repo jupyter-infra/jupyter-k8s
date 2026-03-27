@@ -63,7 +63,7 @@ var _ = Describe("TemplateGetter", func() {
 					Name:      "default-template",
 					Namespace: "default",
 					Labels: map[string]string{
-						webhookconst.DefaultClusterTemplateLabel: "true",
+						webhookconst.DefaultTemplateLabel: "true",
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
@@ -89,7 +89,7 @@ var _ = Describe("TemplateGetter", func() {
 					Name:      "default-template-1",
 					Namespace: "default",
 					Labels: map[string]string{
-						webhookconst.DefaultClusterTemplateLabel: "true",
+						webhookconst.DefaultTemplateLabel: "true",
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
@@ -102,7 +102,7 @@ var _ = Describe("TemplateGetter", func() {
 					Name:      "default-template-2",
 					Namespace: "default",
 					Labels: map[string]string{
-						webhookconst.DefaultClusterTemplateLabel: "true",
+						webhookconst.DefaultTemplateLabel: "true",
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
@@ -157,7 +157,7 @@ var _ = Describe("TemplateGetter", func() {
 					Name:      "local-default",
 					Namespace: "default",
 					Labels: map[string]string{
-						webhookconst.DefaultClusterTemplateLabel: "true",
+						webhookconst.DefaultTemplateLabel: "true",
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
@@ -182,7 +182,7 @@ var _ = Describe("TemplateGetter", func() {
 					Name:      "shared-default",
 					Namespace: sharedNamespace,
 					Labels: map[string]string{
-						webhookconst.DefaultClusterTemplateLabel: "true",
+						webhookconst.DefaultTemplateLabel: "true",
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
@@ -207,7 +207,7 @@ var _ = Describe("TemplateGetter", func() {
 					Name:      "local-priority",
 					Namespace: "default",
 					Labels: map[string]string{
-						webhookconst.DefaultClusterTemplateLabel: "true",
+						webhookconst.DefaultTemplateLabel: "true",
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
@@ -220,7 +220,7 @@ var _ = Describe("TemplateGetter", func() {
 					Name:      "shared-priority",
 					Namespace: sharedNamespace,
 					Labels: map[string]string{
-						webhookconst.DefaultClusterTemplateLabel: "true",
+						webhookconst.DefaultTemplateLabel: "true",
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
@@ -254,7 +254,7 @@ var _ = Describe("TemplateGetter", func() {
 					Name:      "unrelated-default",
 					Namespace: "getter-unrelated-ns",
 					Labels: map[string]string{
-						webhookconst.DefaultClusterTemplateLabel: "true",
+						webhookconst.DefaultTemplateLabel: "true",
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
@@ -277,7 +277,7 @@ var _ = Describe("TemplateGetter", func() {
 					Name:      "shared-no-fallback",
 					Namespace: sharedNamespace,
 					Labels: map[string]string{
-						webhookconst.DefaultClusterTemplateLabel: "true",
+						webhookconst.DefaultTemplateLabel: "true",
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
