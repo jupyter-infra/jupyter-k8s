@@ -212,7 +212,7 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace string) error {
 	templateValidator := NewTemplateValidator(mgr.GetClient(), defaultTemplateNamespace)
 	templateDefaulter := NewTemplateDefaulter(mgr.GetClient(), defaultTemplateNamespace)
-	templateGetter := NewTemplateGetter(mgr.GetClient())
+	templateGetter := NewTemplateGetter(mgr.GetClient(), defaultTemplateNamespace)
 	serviceAccountValidator := NewServiceAccountValidator(mgr.GetClient())
 	serviceAccountDefaulter := NewServiceAccountDefaulter(mgr.GetClient())
 	volumeValidator := NewVolumeValidator(mgr.GetClient())

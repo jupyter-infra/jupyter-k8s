@@ -18,13 +18,15 @@ import (
 
 // TemplateValidator handles template validation for webhooks
 type TemplateValidator struct {
-	resolver *workspaceutil.TemplateResolver
+	resolver                 *workspaceutil.TemplateResolver
+	defaultTemplateNamespace string
 }
 
 // NewTemplateValidator creates a new TemplateValidator
 func NewTemplateValidator(k8sClient client.Client, defaultTemplateNamespace string) *TemplateValidator {
 	return &TemplateValidator{
-		resolver: workspaceutil.NewTemplateResolver(k8sClient, defaultTemplateNamespace),
+		resolver:                 workspaceutil.NewTemplateResolver(k8sClient, defaultTemplateNamespace),
+		defaultTemplateNamespace: defaultTemplateNamespace,
 	}
 }
 
@@ -33,10 +35,45 @@ func (tv *TemplateValidator) fetchTemplate(ctx context.Context, templateRef *wor
 	return tv.resolver.ResolveTemplate(ctx, templateRef, workspaceNamespace)
 }
 
+// validateTemplateNamespace checks that templateRef.namespace targets an allowed namespace.
+// Workspaces can only reference templates from their own namespace or the shared namespace
+// (defaultTemplateNamespace). If templateRef.namespace is empty, it is resolved later by the
+// TemplateResolver using the same namespace fallback logic, so no check is needed here.
+func (tv *TemplateValidator) validateTemplateNamespace(workspace *workspacev1alpha1.Workspace) error {
+	templateNamespace := workspace.Spec.TemplateRef.Namespace
+	workspaceNamespace := workspace.Namespace
+
+	if templateNamespace == "" || templateNamespace == workspaceNamespace {
+		return nil
+	}
+
+	if tv.defaultTemplateNamespace != "" && templateNamespace == tv.defaultTemplateNamespace {
+		return nil
+	}
+
+	if tv.defaultTemplateNamespace != "" {
+		return fmt.Errorf(
+			"templateRef.namespace %q is not allowed: templates must be in the workspace namespace %q or the shared namespace %q",
+			templateNamespace, workspaceNamespace, tv.defaultTemplateNamespace,
+		)
+	}
+
+	return fmt.Errorf(
+		"templateRef.namespace %q is not allowed: templates must be in the workspace namespace %q",
+		templateNamespace, workspaceNamespace,
+	)
+}
+
 // ValidateCreateWorkspace validates workspace against template constraints
 func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
 	if workspace.Spec.TemplateRef == nil {
 		return nil
+	}
+
+	// Reject templateRef.namespace if it targets a namespace other than the workspace's own
+	// or the shared namespace. This enforces namespace-local template access with a shared fallback.
+	if err := tv.validateTemplateNamespace(workspace); err != nil {
+		return err
 	}
 
 	template, err := tv.fetchTemplate(ctx, workspace.Spec.TemplateRef, workspace.Namespace)
