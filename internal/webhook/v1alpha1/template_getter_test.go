@@ -24,7 +24,7 @@ var _ = Describe("TemplateGetter", func() {
 	)
 
 	BeforeEach(func() {
-		templateGetter = NewTemplateGetter(k8sClient)
+		templateGetter = NewTemplateGetter(k8sClient, "")
 		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-workspace",
