@@ -16,6 +16,10 @@ CONTAINER_TOOL ?= finch
 BUILD_OPTS :=
 CLOUD_PROVIDER :=
 
+# Traefik CRD chart version — pinned because latest (1.16.0+) exceeds the 1MB
+# Kubernetes Secret size limit for Helm release metadata.
+TRAEFIK_CRD_CHART_VERSION ?= 1.15.0
+
 # Use Finch as the container provider for Kind when using Finch
 # Update goproxy for cloud desktop compatibility
 ifeq ($(CONTAINER_TOOL),finch)
@@ -381,7 +385,8 @@ setup-kind: ## Set up a Kind cluster for development if it does not exist
 		helm repo add traefik https://traefik.github.io/charts; \
 		helm install traefik-crd traefik/traefik-crds \
 			--namespace traefik \
-			--create-namespace; \
+			--create-namespace \
+			--version $(TRAEFIK_CRD_CHART_VERSION); \
 	else \
 		echo "Traefik CRDs are already installed, skipping installation"; \
 	fi
@@ -559,7 +564,8 @@ setup-aws-internal: ## Setup connection to remote cluster
 		helm repo update; \
 		helm install traefik-crd traefik/traefik-crds \
 			--namespace traefik \
-  			--create-namespace; \
+  			--create-namespace \
+			--version $(TRAEFIK_CRD_CHART_VERSION); \
 		echo "Successfully installed traefik CRDs"; \
 	else \
 		echo "traefik is already installed, skipping installation"; \
