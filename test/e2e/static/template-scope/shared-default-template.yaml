@@ -1,10 +1,12 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
-  name: local-template
-  namespace: default
+  name: shared-default-template
+  namespace: jupyter-k8s-shared
+  labels:
+    workspace.jupyter.org/default-template: "true"
 spec:
-  displayName: "Local Template"
+  displayName: "Shared Default Template"
   defaultImage: jk8s-application-jupyter-uv:latest
   allowedImages:
     - jk8s-application-jupyter-uv:latest

@@ -21,33 +21,23 @@ import (
 
 var _ = Describe("Namespace Template Scope", Ordered, func() {
 	const (
-		teamNamespace = "scope-team-a"
-		groupDir      = "template"
-		subgroup      = "scope"
+		workspaceNamespace = "default"
+		groupDir           = "template"
+		subgroup           = "scope"
 	)
 
 	BeforeAll(func() {
-		createNamespaceForTest("namespace-team-a", groupDir, subgroup)
+		createNamespaceForTest("namespace-team-b", groupDir, subgroup)
+		createTemplateForTest("team-b-template", groupDir, subgroup)
+	})
+
+	AfterEach(func() {
+		deleteResourcesForScopeTest()
 	})
 
 	AfterAll(func() {
-		By("cleaning up workspaces")
-		cmd := exec.Command("kubectl", "delete", "workspace", "--all", "-n", teamNamespace,
-			"--ignore-not-found", "--wait=true", "--timeout=120s")
-		_, _ = utils.Run(cmd)
-
-		By("cleaning up templates in team namespace")
-		cmd = exec.Command("kubectl", "delete", "workspacetemplate", "--all", "-n", teamNamespace,
-			"--ignore-not-found", "--wait=true", "--timeout=60s")
-		_, _ = utils.Run(cmd)
-
-		By("cleaning up templates in shared namespace")
-		cmd = exec.Command("kubectl", "delete", "workspacetemplate", "--all", "-n", SharedNamespace,
-			"--ignore-not-found", "--wait=true", "--timeout=60s")
-		_, _ = utils.Run(cmd)
-
-		By("deleting team namespace")
-		cmd = exec.Command("kubectl", "delete", "ns", teamNamespace,
+		By("cleaning up team-b namespace")
+		cmd := exec.Command("kubectl", "delete", "ns", "scope-team-b",
 			"--ignore-not-found", "--wait=true", "--timeout=60s")
 		_, _ = utils.Run(cmd)
 	})
@@ -56,7 +46,7 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 		createTemplateForTest("local-template", groupDir, subgroup)
 		createWorkspaceForTest("ws-local-template", groupDir, subgroup)
 
-		WaitForWorkspaceToReachCondition("ws-local-template", teamNamespace,
+		WaitForWorkspaceToReachCondition("ws-local-template", workspaceNamespace,
 			controller.ConditionTypeAvailable, ConditionTrue)
 	})
 
@@ -64,7 +54,7 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 		createTemplateForTest("base-template", "template", "base")
 		createWorkspaceForTest("ws-shared-template", groupDir, subgroup)
 
-		WaitForWorkspaceToReachCondition("ws-shared-template", teamNamespace,
+		WaitForWorkspaceToReachCondition("ws-shared-template", workspaceNamespace,
 			controller.ConditionTypeAvailable, ConditionTrue)
 	})
 
@@ -75,24 +65,67 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 		Expect(err).To(HaveOccurred(), "Expected webhook to reject cross-namespace template reference")
 
 		cmd = exec.Command("kubectl", "get", "workspace", "ws-cross-ns-rejected",
-			"-n", teamNamespace, "--ignore-not-found")
+			"-n", workspaceNamespace, "--ignore-not-found")
 		output, err := utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(output).To(BeEmpty())
 	})
 
-	It("should auto-inject default template from the workspace's own namespace", func() {
+	It("should auto-inject local default template over shared default template", func() {
+		By("creating default-labeled template in both local and shared namespaces")
 		createTemplateForTest("local-default-template", groupDir, subgroup)
+		createTemplateForTest("shared-default-template", groupDir, subgroup)
+
+		By("creating workspace without templateRef")
 		createWorkspaceForTest("ws-no-templateref", groupDir, subgroup)
 
+		By("verifying local default template was injected")
 		Eventually(func(g Gomega) {
-			output, err := kubectlGet("workspace", "ws-no-templateref", teamNamespace,
+			output, err := kubectlGet("workspace", "ws-no-templateref", workspaceNamespace,
 				"{.spec.templateRef.name}")
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(output).To(Equal("local-default-template"))
 		}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
 
-		WaitForWorkspaceToReachCondition("ws-no-templateref", teamNamespace,
+		WaitForWorkspaceToReachCondition("ws-no-templateref", workspaceNamespace,
+			controller.ConditionTypeAvailable, ConditionTrue)
+	})
+
+	It("should fall back to shared default template when no local default exists", func() {
+		By("creating default-labeled template only in shared namespace")
+		createTemplateForTest("shared-default-template", groupDir, subgroup)
+
+		By("creating workspace without templateRef")
+		createWorkspaceForTest("ws-no-templateref", groupDir, subgroup)
+
+		By("verifying shared default template was injected")
+		Eventually(func(g Gomega) {
+			output, err := kubectlGet("workspace", "ws-no-templateref", workspaceNamespace,
+				"{.spec.templateRef.name}")
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(output).To(Equal("shared-default-template"))
+		}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
+		WaitForWorkspaceToReachCondition("ws-no-templateref", workspaceNamespace,
 			controller.ConditionTypeAvailable, ConditionTrue)
 	})
 })
+
+func deleteResourcesForScopeTest() {
+	By("cleaning up workspaces")
+	cmd := exec.Command("kubectl", "delete", "workspace", "--all", "-n", "default",
+		"--ignore-not-found", "--wait=true", "--timeout=120s")
+	_, _ = utils.Run(cmd)
+
+	By("cleaning up templates in default namespace")
+	cmd = exec.Command("kubectl", "delete", "workspacetemplate", "--all", "-n", "default",
+		"--ignore-not-found", "--wait=true", "--timeout=60s")
+	_, _ = utils.Run(cmd)
+
+	By("cleaning up templates in shared namespace")
+	cmd = exec.Command("kubectl", "delete", "workspacetemplate", "--all", "-n", SharedNamespace,
+		"--ignore-not-found", "--wait=true", "--timeout=60s")
+	_, _ = utils.Run(cmd)
+
+	time.Sleep(1 * time.Second)
+}

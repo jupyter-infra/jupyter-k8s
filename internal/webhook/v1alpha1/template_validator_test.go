@@ -155,16 +155,16 @@ var _ = Describe("TemplateValidator", func() {
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					TemplateRef: &workspacev1alpha1.TemplateRef{
 						Name:      "some-template",
-						Namespace: "team-b",
+						Namespace: "jupyter-k8s-shared",
 					},
 				},
 			}
 
 			err := validator.ValidateCreateWorkspace(ctx, workspace)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("team-b"))
+			Expect(err.Error()).To(ContainSubstring("jupyter-k8s-shared"))
 			Expect(err.Error()).To(ContainSubstring("team-a"))
-			Expect(err.Error()).NotTo(ContainSubstring("shared"))
+			Expect(err.Error()).NotTo(ContainSubstring("shared namespace"))
 		})
 
 		It("should skip validation when workspace has no templateRef", func() {

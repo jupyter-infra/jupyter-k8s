@@ -2,7 +2,7 @@ apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
   name: local-default-template
-  namespace: scope-team-a
+  namespace: default
   labels:
     workspace.jupyter.org/default-template: "true"
 spec:

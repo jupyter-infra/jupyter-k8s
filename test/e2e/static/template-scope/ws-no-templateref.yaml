@@ -2,7 +2,7 @@ apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: ws-no-templateref
-  namespace: scope-team-a
+  namespace: default
 spec:
   displayName: "Workspace without templateRef"
   desiredStatus: Running

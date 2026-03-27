@@ -2,7 +2,7 @@ apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
   name: ws-shared-template
-  namespace: scope-team-a
+  namespace: default
 spec:
   displayName: "Workspace with shared template"
   templateRef:

@@ -1,10 +1,10 @@
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
-  name: local-template
-  namespace: default
+  name: team-b-template
+  namespace: scope-team-b
 spec:
-  displayName: "Local Template"
+  displayName: "Team B Template"
   defaultImage: jk8s-application-jupyter-uv:latest
   allowedImages:
     - jk8s-application-jupyter-uv:latest
