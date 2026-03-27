@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ws-local-template
+  namespace: scope-team-a
+spec:
+  displayName: "Workspace with local template"
+  templateRef:
+    name: local-template
+    namespace: scope-team-a
+  desiredStatus: Running
+  ownershipType: Public

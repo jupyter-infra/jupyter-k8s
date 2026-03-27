@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ws-shared-template
+  namespace: scope-team-a
+spec:
+  displayName: "Workspace with shared template"
+  templateRef:
+    name: base-template
+    namespace: jupyter-k8s-shared
+  desiredStatus: Running
+  ownershipType: Public

@@ -236,6 +236,16 @@ func diagnoseAndCleanupStuckTemplates() {
 // Note: group parameter currently always receives "template" but will be used for other groups in the future
 //
 //nolint:unparam
+// createNamespaceForTest creates a Namespace resource from a YAML file
+func createNamespaceForTest(filename, group, subgroup string) {
+	ginkgo.GinkgoHelper()
+	path := BuildTestResourcePath(filename, group, subgroup)
+	ginkgo.By(fmt.Sprintf("creating namespace %s from %s", filename, path))
+	cmd := exec.Command("kubectl", "apply", "-f", path)
+	_, err := utils.Run(cmd)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+}
+
 func createTemplateForTest(filename, group, subgroup string) {
 	ginkgo.GinkgoHelper()
 	path := BuildTestResourcePath(filename, group, subgroup)
