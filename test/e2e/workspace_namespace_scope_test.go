@@ -23,7 +23,7 @@ var _ = Describe("Namespace Template Scope", Ordered, func() {
 	const (
 		teamNamespace = "scope-team-a"
 		groupDir      = "template"
-		subgroup      = "namespace-scope"
+		subgroup      = "scope"
 	)
 
 	BeforeAll(func() {

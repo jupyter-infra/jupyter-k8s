@@ -46,20 +46,21 @@ func (tv *TemplateValidator) validateTemplateNamespace(workspace *workspacev1alp
 		return nil
 	}
 
-	if tv.defaultTemplateNamespace != "" && templateNamespace == tv.defaultTemplateNamespace {
-		return nil
-	}
-
-	if tv.defaultTemplateNamespace != "" {
+	if tv.defaultTemplateNamespace == "" {
 		return fmt.Errorf(
-			"templateRef.namespace %q is not allowed: templates must be in the workspace namespace %q or the shared namespace %q",
-			templateNamespace, workspaceNamespace, tv.defaultTemplateNamespace,
+			"templateRef.namespace %q is not allowed: templates must be in the workspace namespace %q",
+			templateNamespace, workspaceNamespace,
 		)
 	}
 
+	if templateNamespace == tv.defaultTemplateNamespace {
+		return nil
+	}
+
 	return fmt.Errorf(
-		"templateRef.namespace %q is not allowed: templates must be in the workspace namespace %q",
-		templateNamespace, workspaceNamespace,
+		"templateRef.namespace %q is not allowed: templates must be in the workspace namespace %q or the shared namespace %q",
+		templateNamespace, workspaceNamespace, tv.defaultTemplateNamespace,
+	)
 	)
 }
 
