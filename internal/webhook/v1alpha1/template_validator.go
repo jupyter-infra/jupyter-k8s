@@ -38,7 +38,6 @@ func (tv *TemplateValidator) fetchTemplate(ctx context.Context, templateRef *wor
 // validateTemplateNamespace checks that templateRef.namespace targets an allowed namespace.
 // Workspaces can only reference templates from their own namespace or the shared namespace
 // (defaultTemplateNamespace). If templateRef.namespace is empty, it is resolved later by the
-// TemplateResolver using the same namespace fallback logic, so no check is needed here.
 func (tv *TemplateValidator) validateTemplateNamespace(workspace *workspacev1alpha1.Workspace) error {
 	templateNamespace := workspace.Spec.TemplateRef.Namespace
 	workspaceNamespace := workspace.Namespace
@@ -70,8 +69,7 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		return nil
 	}
 
-	// Reject templateRef.namespace if it targets a namespace other than the workspace's own
-	// or the shared namespace. This enforces namespace-local template access with a shared fallback.
+	// Reject templateRef.namespace if it targets a namespace other than the workspace's own ns
 	if err := tv.validateTemplateNamespace(workspace); err != nil {
 		return err
 	}

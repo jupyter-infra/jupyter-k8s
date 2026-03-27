@@ -22,9 +22,9 @@ type TemplateGetter struct {
 }
 
 // NewTemplateGetter creates a new TemplateGetter instance
-func NewTemplateGetter(client client.Client, defaultTemplateNamespace string) *TemplateGetter {
+func NewTemplateGetter(k8sClient client.Client, defaultTemplateNamespace string) *TemplateGetter {
 	return &TemplateGetter{
-		client:                   client,
+		client:                   k8sClient,
 		defaultTemplateNamespace: defaultTemplateNamespace,
 	}
 }
