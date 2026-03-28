@@ -165,7 +165,8 @@ var _ = BeforeSuite(func() {
 
 		By("installing traefik CRDs")
 		cmd = exec.Command("helm", "install", "traefik-crd", "traefik/traefik-crds",
-			"--namespace", "traefik")
+			"--namespace", "traefik",
+			"--version", "1.15.0")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install traefik CRDs")
 

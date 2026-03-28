@@ -15,11 +15,11 @@ controllerManager:
       - "--health-probe-bind-address=:8081"
     resources:
       limits:
-        cpu: 500m
-        memory: 128Mi
+        cpu: 1000m
+        memory: 256Mi
       requests:
-        cpu: 10m
-        memory: 64Mi
+        cpu: 20m
+        memory: 128Mi
     livenessProbe:
       initialDelaySeconds: 15
       periodSeconds: 20

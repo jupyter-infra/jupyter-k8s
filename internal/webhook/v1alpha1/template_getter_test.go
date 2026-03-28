@@ -10,6 +10,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
@@ -24,7 +25,7 @@ var _ = Describe("TemplateGetter", func() {
 	)
 
 	BeforeEach(func() {
-		templateGetter = NewTemplateGetter(k8sClient)
+		templateGetter = NewTemplateGetter(k8sClient, "")
 		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-workspace",
@@ -62,7 +63,7 @@ var _ = Describe("TemplateGetter", func() {
 					Name:      "default-template",
 					Namespace: "default",
 					Labels: map[string]string{
-						webhookconst.DefaultClusterTemplateLabel: "true",
+						webhookconst.DefaultTemplateLabel: "true",
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
@@ -88,7 +89,7 @@ var _ = Describe("TemplateGetter", func() {
 					Name:      "default-template-1",
 					Namespace: "default",
 					Labels: map[string]string{
-						webhookconst.DefaultClusterTemplateLabel: "true",
+						webhookconst.DefaultTemplateLabel: "true",
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
@@ -101,7 +102,7 @@ var _ = Describe("TemplateGetter", func() {
 					Name:      "default-template-2",
 					Namespace: "default",
 					Labels: map[string]string{
-						webhookconst.DefaultClusterTemplateLabel: "true",
+						webhookconst.DefaultTemplateLabel: "true",
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
@@ -137,6 +138,160 @@ var _ = Describe("TemplateGetter", func() {
 			}
 			names := getTemplateNames(templates)
 			Expect(names).To(Equal([]string{"template-1", "template-2"}))
+		})
+	})
+
+	Context("Namespace-scoped default template resolution", Ordered, func() {
+		const sharedNamespace = "getter-shared-ns"
+
+		BeforeAll(func() {
+			sharedNs := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: sharedNamespace},
+			}
+			Expect(k8sClient.Create(context.Background(), sharedNs)).To(Succeed())
+		})
+
+		It("should inject default template from the workspace's own namespace", func() {
+			template := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "local-default",
+					Namespace: "default",
+					Labels: map[string]string{
+						webhookconst.DefaultTemplateLabel: "true",
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Local Default",
+					DefaultImage: "jupyter/base-notebook:latest",
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+			defer func() { Expect(k8sClient.Delete(ctx, template)).To(Succeed()) }()
+
+			getter := NewTemplateGetter(k8sClient, sharedNamespace)
+			err := getter.ApplyTemplateName(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspace.Spec.TemplateRef).NotTo(BeNil())
+			Expect(workspace.Spec.TemplateRef.Name).To(Equal("local-default"))
+			Expect(workspace.Spec.TemplateRef.Namespace).To(Equal("default"))
+		})
+
+		It("should fall back to shared namespace when no local default exists", func() {
+			template := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "shared-default",
+					Namespace: sharedNamespace,
+					Labels: map[string]string{
+						webhookconst.DefaultTemplateLabel: "true",
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Shared Default",
+					DefaultImage: "jupyter/base-notebook:latest",
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+			defer func() { Expect(k8sClient.Delete(ctx, template)).To(Succeed()) }()
+
+			getter := NewTemplateGetter(k8sClient, sharedNamespace)
+			err := getter.ApplyTemplateName(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspace.Spec.TemplateRef).NotTo(BeNil())
+			Expect(workspace.Spec.TemplateRef.Name).To(Equal("shared-default"))
+			Expect(workspace.Spec.TemplateRef.Namespace).To(Equal(sharedNamespace))
+		})
+
+		It("should prefer local default over shared default", func() {
+			localTemplate := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "local-priority",
+					Namespace: "default",
+					Labels: map[string]string{
+						webhookconst.DefaultTemplateLabel: "true",
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Local Priority",
+					DefaultImage: "jupyter/base-notebook:latest",
+				},
+			}
+			sharedTemplate := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "shared-priority",
+					Namespace: sharedNamespace,
+					Labels: map[string]string{
+						webhookconst.DefaultTemplateLabel: "true",
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Shared Priority",
+					DefaultImage: "jupyter/base-notebook:latest",
+				},
+			}
+			Expect(k8sClient.Create(ctx, localTemplate)).To(Succeed())
+			Expect(k8sClient.Create(ctx, sharedTemplate)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, localTemplate)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, sharedTemplate)).To(Succeed())
+			}()
+
+			getter := NewTemplateGetter(k8sClient, sharedNamespace)
+			err := getter.ApplyTemplateName(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspace.Spec.TemplateRef).NotTo(BeNil())
+			Expect(workspace.Spec.TemplateRef.Name).To(Equal("local-priority"))
+			Expect(workspace.Spec.TemplateRef.Namespace).To(Equal("default"))
+		})
+
+		It("should not inject template from an unrelated namespace", func() {
+			unrelatedNs := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: "getter-unrelated-ns"},
+			}
+			Expect(k8sClient.Create(ctx, unrelatedNs)).To(Succeed())
+
+			template := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "unrelated-default",
+					Namespace: "getter-unrelated-ns",
+					Labels: map[string]string{
+						webhookconst.DefaultTemplateLabel: "true",
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Unrelated Default",
+					DefaultImage: "jupyter/base-notebook:latest",
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+			defer func() { Expect(k8sClient.Delete(ctx, template)).To(Succeed()) }()
+
+			getter := NewTemplateGetter(k8sClient, sharedNamespace)
+			err := getter.ApplyTemplateName(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspace.Spec.TemplateRef).To(BeNil())
+		})
+
+		It("should not fall back to shared namespace when defaultTemplateNamespace is empty", func() {
+			template := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "shared-no-fallback",
+					Namespace: sharedNamespace,
+					Labels: map[string]string{
+						webhookconst.DefaultTemplateLabel: "true",
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Shared No Fallback",
+					DefaultImage: "jupyter/base-notebook:latest",
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+			defer func() { Expect(k8sClient.Delete(ctx, template)).To(Succeed()) }()
+
+			getter := NewTemplateGetter(k8sClient, "")
+			err := getter.ApplyTemplateName(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspace.Spec.TemplateRef).To(BeNil())
 		})
 	})
 })
