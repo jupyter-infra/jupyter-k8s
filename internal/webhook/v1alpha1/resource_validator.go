@@ -52,31 +52,51 @@ func validateResourceBounds(resources corev1.ResourceRequirements, template *wor
 		return violations
 	}
 
-	// Validate resource bounds - iterate over all bounded resources
-	if bounds.Resources != nil && resources.Requests != nil {
-		for resourceName, resourceRange := range bounds.Resources {
-			if request, exists := resources.Requests[resourceName]; exists {
-				// Validate minimum bound
-				if request.Cmp(resourceRange.Min) < 0 {
-					violations = append(violations, TemplateViolation{
-						Type:    ViolationTypeResourceExceeded,
-						Field:   fmt.Sprintf("spec.resources.requests.%s", resourceName),
-						Message: fmt.Sprintf("%s request %s is below minimum %s required by template '%s'", resourceName, request.String(), resourceRange.Min.String(), template.Name),
-						Allowed: fmt.Sprintf("min: %s", resourceRange.Min.String()),
-						Actual:  request.String(),
-					})
-				}
-				// Validate maximum bound
-				if request.Cmp(resourceRange.Max) > 0 {
-					violations = append(violations, TemplateViolation{
-						Type:    ViolationTypeResourceExceeded,
-						Field:   fmt.Sprintf("spec.resources.requests.%s", resourceName),
-						Message: fmt.Sprintf("%s request %s exceeds maximum %s allowed by template '%s'", resourceName, request.String(), resourceRange.Max.String(), template.Name),
-						Allowed: fmt.Sprintf("max: %s", resourceRange.Max.String()),
-						Actual:  request.String(),
-					})
-				}
-			}
+	// Validate both requests and limits against template bounds
+	if bounds.Resources != nil {
+		if resources.Requests != nil {
+			violations = append(violations, validateResourceListBounds(resources.Requests, "request", bounds.Resources, template.Name)...)
+		}
+		if resources.Limits != nil {
+			violations = append(violations, validateResourceListBounds(resources.Limits, "limit", bounds.Resources, template.Name)...)
+		}
+	}
+
+	return violations
+}
+
+// validateResourceListBounds checks a resource list (requests or limits) against template bounds.
+// kind is "request" or "limit", used for field paths and error messages.
+func validateResourceListBounds(
+	resourceList corev1.ResourceList,
+	kind string,
+	bounds map[corev1.ResourceName]workspacev1alpha1.ResourceRange,
+	templateName string,
+) []TemplateViolation {
+	var violations []TemplateViolation
+
+	for resourceName, resourceRange := range bounds {
+		value, exists := resourceList[resourceName]
+		if !exists {
+			continue
+		}
+		if value.Cmp(resourceRange.Min) < 0 {
+			violations = append(violations, TemplateViolation{
+				Type:    ViolationTypeResourceExceeded,
+				Field:   fmt.Sprintf("spec.resources.%ss.%s", kind, resourceName),
+				Message: fmt.Sprintf("%s %s %s is below minimum %s required by template '%s'", resourceName, kind, value.String(), resourceRange.Min.String(), templateName),
+				Allowed: fmt.Sprintf("min: %s", resourceRange.Min.String()),
+				Actual:  value.String(),
+			})
+		}
+		if value.Cmp(resourceRange.Max) > 0 {
+			violations = append(violations, TemplateViolation{
+				Type:    ViolationTypeResourceExceeded,
+				Field:   fmt.Sprintf("spec.resources.%ss.%s", kind, resourceName),
+				Message: fmt.Sprintf("%s %s %s exceeds maximum %s allowed by template '%s'", resourceName, kind, value.String(), resourceRange.Max.String(), templateName),
+				Allowed: fmt.Sprintf("max: %s", resourceRange.Max.String()),
+				Actual:  value.String(),
+			})
 		}
 	}
 
