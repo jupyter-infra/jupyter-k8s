@@ -60,12 +60,8 @@ func (v *AccessStrategyValidator) ValidateCreateWorkspace(workspace *workspacev1
 }
 
 // ValidateUpdateWorkspace validates access strategy namespace on workspace update.
-// Skips validation if accessStrategyRef was removed.
-func (v *AccessStrategyValidator) ValidateUpdateWorkspace(oldWorkspace, newWorkspace *workspacev1alpha1.Workspace) error {
-	// AccessStrategy removed — always safe
-	if oldWorkspace.Spec.AccessStrategy != nil && newWorkspace.Spec.AccessStrategy == nil {
-		return nil
-	}
-
+// No special-casing needed — validateAccessStrategyNamespace already handles nil accessStrategy,
+// which covers the "removed" case. The admission webhook is the single enforcement point.
+func (v *AccessStrategyValidator) ValidateUpdateWorkspace(_, newWorkspace *workspacev1alpha1.Workspace) error {
 	return v.validateAccessStrategyNamespace(newWorkspace)
 }
