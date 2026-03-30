@@ -1,0 +1,20 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ws-cross-ns-as-rejected
+  namespace: default
+spec:
+  displayName: "Workspace with cross-namespace access strategy"
+  image: jk8s-application-jupyter-uv:latest
+  accessStrategy:
+    name: team-b-access-strategy
+    namespace: scope-team-b
+  desiredStatus: Running
+  ownershipType: Public
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
