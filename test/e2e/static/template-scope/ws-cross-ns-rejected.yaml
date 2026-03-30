@@ -1,0 +1,12 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ws-cross-ns-rejected
+  namespace: default
+spec:
+  displayName: "Workspace with cross-namespace template"
+  templateRef:
+    name: team-b-template
+    namespace: scope-team-b
+  desiredStatus: Running
+  ownershipType: Public

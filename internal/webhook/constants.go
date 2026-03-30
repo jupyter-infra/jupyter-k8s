@@ -20,6 +20,6 @@ const (
 
 // Template label constants
 const (
-	DefaultClusterTemplateLabel = "workspace.jupyter.org/default-cluster-template"
-	DefaultServiceAccountLabel  = "workspace.jupyter.org/default-service-account"
+	DefaultTemplateLabel       = "workspace.jupyter.org/default-template"
+	DefaultServiceAccountLabel = "workspace.jupyter.org/default-service-account"
 )

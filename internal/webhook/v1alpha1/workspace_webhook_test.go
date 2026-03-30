@@ -70,7 +70,7 @@ var _ = Describe("Workspace Webhook", func() {
 		defaulter = WorkspaceCustomDefaulter{
 			templateDefaulter:       NewTemplateDefaulter(mockClient, ""),
 			serviceAccountDefaulter: NewServiceAccountDefaulter(mockClient),
-			templateGetter:          NewTemplateGetter(mockClient),
+			templateGetter:          NewTemplateGetter(mockClient, ""),
 			client:                  mockClient, // Add client field for testing
 		}
 		validator = WorkspaceCustomValidator{

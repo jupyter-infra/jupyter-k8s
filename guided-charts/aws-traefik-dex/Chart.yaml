@@ -9,4 +9,4 @@ icon: "https://example.com/icon.png"
 # Dependencies
 # Require traefik CRDs to be installed (https://traefik.github.io/charts)
 # Not adding as a dependency because of `helm` install issues
-# Run `helm upgrade --install traefik-crd traefik/traefik-crds` first
+# Run `helm upgrade --install traefik-crd traefik/traefik-crds --version 1.15.0` first
