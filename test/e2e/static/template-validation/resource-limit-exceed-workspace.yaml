@@ -1,0 +1,19 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: resource-limit-exceed-workspace
+spec:
+  displayName: "Resource Limit Bounds Test"
+  templateRef:
+    name: base-template
+    namespace: jupyter-k8s-shared
+  ownershipType: Public
+  resources:
+    requests:
+      cpu: "1"  # Within template bounds
+      memory: "1Gi"  # Within template bounds
+      nvidia.com/gpu: "1"  # Within template bounds
+    limits:
+      cpu: "10"  # Exceeds template max of 2
+      memory: "16Gi"  # Exceeds template max of 4Gi
+      nvidia.com/gpu: "4"  # Exceeds template max of 1
