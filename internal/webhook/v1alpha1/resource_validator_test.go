@@ -45,12 +45,13 @@ var _ = Describe("Resource Validator", func() {
 		}
 	})
 
-	Context("request bounds validation", func() {
-		It("should allow resources within bounds", func() {
+	Context("request cpu and memory bounds validation", func() {
+		It("should allow all resources (cpu, memory, gpu) within bounds", func() {
 			resources := corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("500m"),
-					corev1.ResourceMemory: resource.MustParse("1Gi"),
+					corev1.ResourceCPU:                    resource.MustParse("500m"),
+					corev1.ResourceMemory:                 resource.MustParse("1Gi"),
+					corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("2"),
 				},
 			}
 			violations := validateResourceBounds(resources, template)
@@ -122,7 +123,7 @@ var _ = Describe("Resource Validator", func() {
 		})
 	})
 
-	Context("limit bounds validation", func() {
+	Context("limit cpu and memory bounds validation", func() {
 		It("should allow limits within bounds", func() {
 			resources := corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
