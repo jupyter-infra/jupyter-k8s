@@ -211,6 +211,7 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 // which is provided by the workspacetemplate controller RBAC markers.
 func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace string) error {
 	templateValidator := NewTemplateValidator(mgr.GetClient(), defaultTemplateNamespace)
+	accessStrategyValidator := NewAccessStrategyValidator(defaultTemplateNamespace)
 	templateDefaulter := NewTemplateDefaulter(mgr.GetClient(), defaultTemplateNamespace)
 	templateGetter := NewTemplateGetter(mgr.GetClient(), defaultTemplateNamespace)
 	serviceAccountValidator := NewServiceAccountValidator(mgr.GetClient())
@@ -220,6 +221,7 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace
 	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.Workspace{}).
 		WithValidator(&WorkspaceCustomValidator{
 			templateValidator:       templateValidator,
+			accessStrategyValidator: accessStrategyValidator,
 			serviceAccountValidator: serviceAccountValidator,
 			volumeValidator:         volumeValidator,
 		}).
@@ -335,6 +337,7 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceCustomValidator struct {
 	templateValidator       *TemplateValidator
+	accessStrategyValidator *AccessStrategyValidator
 	serviceAccountValidator *ServiceAccountValidator
 	volumeValidator         *VolumeValidator
 }
@@ -351,6 +354,11 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, obj runti
 
 	// Validate template constraints
 	if err := v.templateValidator.ValidateCreateWorkspace(ctx, workspace); err != nil {
+		return nil, err
+	}
+
+	// Validate access strategy namespace scope
+	if err := v.accessStrategyValidator.ValidateCreateWorkspace(workspace); err != nil {
 		return nil, err
 	}
 
@@ -434,6 +442,11 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 
 	// Validate template constraints for new workspace (only changed fields)
 	if err := v.templateValidator.ValidateUpdateWorkspace(ctx, oldWorkspace, newWorkspace); err != nil {
+		return nil, err
+	}
+
+	// Validate access strategy namespace scope
+	if err := v.accessStrategyValidator.ValidateUpdateWorkspace(oldWorkspace, newWorkspace); err != nil {
 		return nil, err
 	}
 

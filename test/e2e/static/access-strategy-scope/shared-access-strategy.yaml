@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: shared-access-strategy
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: Shared Access Strategy
+  accessResourceTemplates: []
+  accessURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
