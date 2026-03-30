@@ -775,8 +775,6 @@ var _ = Describe("Workspace Webhook", func() {
 				Expect(storageEqual(storage1, storage2)).To(BeFalse())
 			})
 		})
-
-		// Resource validation tests are in resource_validator_test.go
 	})
 
 	Context("isControllerOrAdminUser", func() {
