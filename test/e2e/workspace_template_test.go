@@ -110,14 +110,26 @@ var _ = Describe("Workspace Template", Ordered, func() {
 				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
 		})
 
-		It("should reject workspace exceeding CPU bounds", func() {
-			workspaceName := "cpu-exceed-workspace"
-			workspaceFilename := "cpu-exceed-workspace"
+		It("should reject workspace exceeding resource request bounds", func() {
+			workspaceName := "resource-request-exceed-workspace"
+			workspaceFilename := "resource-request-exceed-workspace"
 
 			By("creating the template")
 			createTemplateForTest(baseTemplateName, groupDir, subgroupBase)
 
-			By("attempting to create workspace with out of bounds cpu")
+			By("attempting to create workspace with out of bounds resource requests")
+			VerifyCreateWorkspaceRejectedByWebhook(
+				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
+		})
+
+		It("should reject workspace exceeding resource limit bounds", func() {
+			workspaceName := "resource-limit-exceed-workspace"
+			workspaceFilename := "resource-limit-exceed-workspace"
+
+			By("creating the template")
+			createTemplateForTest(baseTemplateName, groupDir, subgroupBase)
+
+			By("attempting to create workspace with out of bounds resource limits")
 			VerifyCreateWorkspaceRejectedByWebhook(
 				workspaceFilename, groupDir, subgroupValidation, workspaceName, workspaceNamespace)
 		})
