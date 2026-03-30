@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: team-b-access-strategy
+  namespace: scope-team-b
+spec:
+  displayName: Team B Access Strategy
+  accessResourceTemplates: []
+  accessURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"

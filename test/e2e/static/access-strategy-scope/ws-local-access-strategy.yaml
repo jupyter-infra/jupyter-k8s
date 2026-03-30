@@ -1,0 +1,20 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ws-local-access-strategy
+  namespace: default
+spec:
+  displayName: "Workspace with local access strategy"
+  image: jk8s-application-jupyter-uv:latest
+  accessStrategy:
+    name: local-access-strategy
+    namespace: default
+  desiredStatus: Running
+  ownershipType: Public
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
