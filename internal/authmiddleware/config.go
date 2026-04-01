@@ -27,19 +27,17 @@ const (
 	EnvNamespace       = "NAMESPACE"
 
 	// Auth configuration
-	EnvJwtSigningType       = "JWT_SIGNING_TYPE"
-	EnvJwtIssuer            = "JWT_ISSUER"
-	EnvJwtAudience          = "JWT_AUDIENCE"
-	EnvJwtExpiration        = "JWT_EXPIRATION"
-	EnvEnableJwtRefresh     = "JWT_REFRESH_ENABLE"
-	EnvJwtRefreshWindow     = "JWT_REFRESH_WINDOW"
-	EnvJwtRefreshHorizon    = "JWT_REFRESH_HORIZON"
-	EnvJwtSecretName        = "JWT_SECRET_NAME"
-	EnvJwtNewKeyUseDelay    = "NEW_KEY_USE_DELAY"
-	EnvEnableOAuth          = "ENABLE_OAUTH"
-	EnvEnableBearerAuth     = "ENABLE_BEARER_URL_AUTH"
-	EnvKMSKeyId             = "KMS_KEY_ID"
-	EnvKMSEncryptionContext = "KMS_ENCRYPTION_CONTEXT"
+	EnvJwtSigningType    = "JWT_SIGNING_TYPE"
+	EnvJwtIssuer         = "JWT_ISSUER"
+	EnvJwtAudience       = "JWT_AUDIENCE"
+	EnvJwtExpiration     = "JWT_EXPIRATION"
+	EnvEnableJwtRefresh  = "JWT_REFRESH_ENABLE"
+	EnvJwtRefreshWindow  = "JWT_REFRESH_WINDOW"
+	EnvJwtRefreshHorizon = "JWT_REFRESH_HORIZON"
+	EnvJwtSecretName     = "JWT_SECRET_NAME"
+	EnvJwtNewKeyUseDelay = "NEW_KEY_USE_DELAY"
+	EnvEnableOAuth       = "ENABLE_OAUTH"
+	EnvEnableBearerAuth  = "ENABLE_BEARER_URL_AUTH"
 
 	// Routing configuration
 	EnvRoutingMode                      = "ROUTING_MODE"
@@ -71,7 +69,6 @@ const (
 // JWT signing types
 const (
 	JWTSigningTypeStandard = "standard"
-	JWTSigningTypeKMS      = "kms"
 )
 
 // Default values
@@ -135,19 +132,17 @@ type Config struct {
 	Namespace       string // Namespace to watch for secrets
 
 	// Auth configuration
-	JWTSigningType       string
-	JWTIssuer            string
-	JWTAudience          string
-	JWTExpiration        time.Duration
-	JWTRefreshEnable     bool
-	JWTRefreshWindow     time.Duration
-	JWTRefreshHorizon    time.Duration
-	JwtSecretName        string
-	JwtNewKeyUseDelay    time.Duration
-	EnableOAuth          bool
-	EnableBearerAuth     bool
-	KMSKeyId             string
-	KMSEncryptionContext string
+	JWTSigningType    string
+	JWTIssuer         string
+	JWTAudience       string
+	JWTExpiration     time.Duration
+	JWTRefreshEnable  bool
+	JWTRefreshWindow  time.Duration
+	JWTRefreshHorizon time.Duration
+	JwtSecretName     string
+	JwtNewKeyUseDelay time.Duration
+	EnableOAuth       bool
+	EnableBearerAuth  bool
 
 	// Cookie configuration
 	CookieName     string
@@ -393,14 +388,6 @@ func applyJWTConfig(config *Config) error {
 
 	if nameSubdomainRegex := os.Getenv(EnvWorkspaceNameSubdomainRegex); nameSubdomainRegex != "" {
 		config.WorkspaceNameSubdomainRegex = nameSubdomainRegex
-	}
-
-	if kmsKeyId := os.Getenv(EnvKMSKeyId); kmsKeyId != "" {
-		config.KMSKeyId = kmsKeyId
-	}
-
-	if kmsEncryptionContext := os.Getenv(EnvKMSEncryptionContext); kmsEncryptionContext != "" {
-		config.KMSEncryptionContext = kmsEncryptionContext
 	}
 
 	if jwtSecretName := os.Getenv(EnvJwtSecretName); jwtSecretName != "" {

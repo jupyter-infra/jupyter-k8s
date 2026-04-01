@@ -95,9 +95,19 @@ The auth middleware component provides authentication and authorization for work
 - interact: `make port-forward`
 
 ### End to end testing against remote cluster (aws)
-- setup: `make setup-aws`
-- deploy: `make deploy-aws`
+
+All AWS make targets read `AWS_REGION` and `EKS_CLUSTER_NAME` from `.env`, command line, or defaults in `Makefile`.
+
+- setup: `make setup-aws EKS_CLUSTER_NAME=<cluster> AWS_REGION=<region>`
+- deploy (CRDs+controller): `make deploy-aws`
 - interact: `make port-forward`
+- deploy oidc chart: `make deploy-aws-traefik-dex`
+- deploy sagemaker chart: `make deploy-aws-hyperpod`
+
+**Switching clusters:**
+- set `AWS_REGION` and `EKS_CLUSTER_NAME` in `.env`
+- call `make kubectl-aws` to switch kubectl context
+All subsequent make targets use the `.env` values.
 
 ### Clean up
 Ask user before running.

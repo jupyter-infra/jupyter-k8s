@@ -32,14 +32,33 @@ ifeq ($(CONTAINER_TOOL),finch)
 endif
 
 # Remote cluster configuration
+# AWS_REGION and EKS_CLUSTER_NAME resolution order (highest priority first):
+#   1. Command line: make setup-aws AWS_REGION=us-east-2 EKS_CLUSTER_NAME=my-cluster
+#   2. .env file: AWS_REGION=us-east-2 (overrides shell environment)
+#   3. Defaults: us-west-2 / jupyter-k8s-cluster
 ifeq ($(CLOUD_PROVIDER),aws)
+	# Read .env values (override env vars, but command-line args still win)
+	ifneq (,$(wildcard .env))
+		ifneq ($(origin AWS_REGION),command line)
+			_ENV_AWS_REGION := $(shell grep -s '^AWS_REGION=' .env | cut -d= -f2)
+			ifneq (,$(_ENV_AWS_REGION))
+				AWS_REGION := $(_ENV_AWS_REGION)
+			endif
+		endif
+		ifneq ($(origin EKS_CLUSTER_NAME),command line)
+			_ENV_EKS_CLUSTER := $(shell grep -s '^EKS_CLUSTER_NAME=' .env | cut -d= -f2)
+			ifneq (,$(_ENV_EKS_CLUSTER))
+				EKS_CLUSTER_NAME := $(_ENV_EKS_CLUSTER)
+			endif
+		endif
+	endif
 	AWS_REGION ?= us-west-2
+	EKS_CLUSTER_NAME ?= jupyter-k8s-cluster
 	AWS_ACCOUNT_ID := $(shell aws sts get-caller-identity --query "Account" --output text)
 	ECR_REGISTRY := $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
 	ECR_REPOSITORY := jupyter-k8s
 	ECR_REPOSITORY_AUTH := jupyter-k8s-auth
 	ECR_REPOSITORY_ROTATOR := jupyter-k8s-rotator
-	EKS_CLUSTER_NAME ?= jupyter-k8s-cluster
 	EKS_CONTEXT := arn:aws:eks:$(AWS_REGION):$(AWS_ACCOUNT_ID):cluster/$(EKS_CLUSTER_NAME)
 endif
 
@@ -630,7 +649,8 @@ deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remot
 		--set extensionApi.enable=true \
 		--set extensionApi.jwtSecret.enable=true \
 		--set extensionApi.jwtSecret.rotator.repository=$(ECR_REGISTRY) \
-		--set extensionApi.jwtSecret.rotator.imageName=$(ECR_REPOSITORY_ROTATOR)
+		--set extensionApi.jwtSecret.rotator.imageName=$(ECR_REPOSITORY_ROTATOR) \
+		--set workspaceTemplates.defaultNamespace=jupyter-k8s-system # guided charts deploy templates here
 	@echo "Helm chart jupyter-k8s deployed successfully to remote AWS cluster"
 	@echo "Restarting deployments to use new images..."
 	kubectl rollout restart deployment -n jupyter-k8s-system jupyter-k8s-controller-manager
@@ -648,7 +668,7 @@ deploy-aws-with-traefik:
 deploy-aws-traefik-dex-internal:
 	@if [ ! -f .env ]; then \
 		echo "❌ .env file not found. Copy the `.env.example` file to `.env` and edit the values."; \
-		echo "Required variables: DOMAIN, LETSENCRYPT_EMAIL, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_ORG_NAME"; \
+		echo "Required variables: TRAEFIK_DEX_DOMAIN, LETSENCRYPT_EMAIL, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_ORG_NAME"; \
 		echo "Optional variables: DEX_OAUTH2_SECRET (defaults to auto-generated), DEX_K8S_SECRET (can be empty for public clients)"; \
 		exit 1; \
 	fi
@@ -660,7 +680,7 @@ deploy-aws-traefik-dex-internal:
 		mkdir /tmp/jk8s-aws-traefik-dex; \
 		cp -r guided-charts/aws-traefik-dex/ /tmp/jk8s-aws-traefik-dex/; \
 		echo 'Deploying AWS traefik dex helm chart'; \
-		HELM_ARGS="--set domain=$$DOMAIN \
+		HELM_ARGS="--set domain=$$TRAEFIK_DEX_DOMAIN \
 			--set certManager.email=$$LETSENCRYPT_EMAIL \
 			--set storageClass.efs.parameters.fileSystemId=$$EFS_ID \
 			--set github.clientId=$$GITHUB_CLIENT_ID \
@@ -702,7 +722,7 @@ deploy-aws-traefik-dex-internal:
 		\
 		$(SHELL) scripts/aws-traefik-dex/generate-client.sh \
 			$(EKS_CLUSTER_NAME) \
-			https://$$DOMAIN/dex \
+			https://$$TRAEFIK_DEX_DOMAIN/dex \
 			$(AWS_REGION) \
 			9800 \
 			dist/users-scripts/set-kubeconfig.sh \
@@ -724,18 +744,43 @@ deploy-aws-traefik-dex:
 deploy-aws-hyperpod-internal:
 	@if [ ! -f .env ]; then \
 		echo "❌ .env file not found. Copy the `.env.example` file to `.env` and edit the values."; \
-		echo "Required variables: DOMAIN"; \
+		echo "Required variables: HYPERPOD_DOMAIN, ACM_CERT_ARN"; \
 		exit 1; \
 	fi
 	@echo "Loading configuration from .env file and deploying aws-hyperpod..."
 	@( \
 		set -e; \
 		. ./.env; \
-		echo 'Deploying AWS HyperPod helm chart'; \
+		HP_DOMAIN=$$HYPERPOD_DOMAIN; \
+		if [ -z "$$HP_DOMAIN" ]; then \
+			echo "❌ HYPERPOD_DOMAIN must be set in .env"; \
+			exit 1; \
+		fi; \
+		echo "Deploying AWS HyperPod helm chart (domain=$$HP_DOMAIN)"; \
+		HELM_ARGS="--set clusterWebUI.enabled=true \
+			--set clusterWebUI.domain=$$HP_DOMAIN \
+			--set clusterWebUI.auth.repository=$(ECR_REGISTRY) \
+			--set clusterWebUI.auth.imageName=$(ECR_REPOSITORY_AUTH) \
+			--set clusterWebUI.rotator.repository=$(ECR_REGISTRY) \
+			--set clusterWebUI.rotator.imageName=$(ECR_REPOSITORY_ROTATOR)"; \
+		if [ -n "$$ACM_CERT_ARN" ]; then \
+			HELM_ARGS="$$HELM_ARGS --set clusterWebUI.awsCertificateArn=$$ACM_CERT_ARN"; \
+		fi; \
+		if [ -n "$$SSM_SIDECAR_REGISTRY" ] && [ -n "$$SSM_SIDECAR_REPO" ] && [ -n "$$SSM_SIDECAR_TAG" ]; then \
+			HELM_ARGS="$$HELM_ARGS --set remoteAccess.enabled=true \
+				--set remoteAccess.ssmSidecarImage.containerRegistry=$$SSM_SIDECAR_REGISTRY \
+				--set remoteAccess.ssmSidecarImage.repository=$$SSM_SIDECAR_REPO \
+				--set remoteAccess.ssmSidecarImage.tag=$$SSM_SIDECAR_TAG"; \
+			if [ -n "$$SSM_MANAGED_NODE_ROLE" ]; then \
+				HELM_ARGS="$$HELM_ARGS --set remoteAccess.ssmManagedNodeRole=$$SSM_MANAGED_NODE_ROLE"; \
+			fi; \
+		fi; \
 		helm upgrade --install aws-hyperpod ./guided-charts/aws-hyperpod \
 			--create-namespace --namespace jupyter-k8s-system \
-			--set domain=$$DOMAIN; \
+			$$HELM_ARGS; \
 	)
+	@echo "Restarting authmiddleware deployment to use new images..."
+	-kubectl rollout restart deployment -n jupyter-k8s-system workspace-auth-middleware 2>/dev/null || true
 
 .PHONY: deploy-aws-hyperpod
 deploy-aws-hyperpod: ## Deploy aws-hyperpod guided chart
@@ -746,7 +791,22 @@ deploy-aws-hyperpod-all: ## Deploy all guided charts (aws-traefik-dex and aws-hy
 	$(MAKE) deploy-aws-traefik-dex CLOUD_PROVIDER=aws
 	$(MAKE) deploy-aws-hyperpod CLOUD_PROVIDER=aws
 
-.PHONY: undeploy-aws-hyperpod  
+WS_USER ?=
+.PHONY: apply-sample-hyperpod
+apply-sample-hyperpod: ## Create sample hyperpod workspaces. Usage: make apply-sample-hyperpod WS_USER=alice
+	@if [ -z "$(WS_USER)" ]; then echo "❌ WS_USER is required. Usage: make apply-sample-hyperpod WS_USER=alice"; exit 1; fi
+	@echo "Creating sample hyperpod workspaces for '$(WS_USER)'..."
+	export WS_USER=$(WS_USER); \
+	kubectl apply -k config/samples_hyperpod --dry-run=client -o yaml | envsubst | kubectl apply -f -
+
+.PHONY: delete-sample-hyperpod
+delete-sample-hyperpod: ## Delete sample hyperpod workspaces. Usage: make delete-sample-hyperpod WS_USER=alice
+	@if [ -z "$(WS_USER)" ]; then echo "❌ WS_USER is required. Usage: make delete-sample-hyperpod WS_USER=alice"; exit 1; fi
+	@echo "Deleting sample hyperpod workspaces for '$(WS_USER)'..."
+	export WS_USER=$(WS_USER); \
+	kubectl apply -k config/samples_hyperpod --dry-run=client -o yaml | envsubst | kubectl delete -f -
+
+.PHONY: undeploy-aws-hyperpod
 undeploy-aws-hyperpod: ## Remove aws-hyperpod guided chart
 	helm uninstall aws-hyperpod --namespace jupyter-k8s-system
 
@@ -756,7 +816,7 @@ apply-sample-routing:
 	@( \
 		set -e; \
 		. ./.env; \
-		export DOMAIN=$$DOMAIN; \
+		export DOMAIN=$${TRAEFIK_DEX_DOMAIN:-$$HYPERPOD_DOMAIN}; \
 		kubectl apply -f config/samples_routing/workspace_access_strategy.yaml --dry-run=client -o yaml | envsubst | kubectl apply -f -; \
 		kubectl apply -f config/samples_routing/workspace_access_strategy_bearer.yaml --dry-run=client -o yaml | envsubst | kubectl apply -f -; \
 		kubectl apply -k config/samples_routing --dry-run=client -o yaml | envsubst | kubectl apply -f -; \
@@ -765,15 +825,23 @@ apply-sample-routing:
 WS_NAMESPACE ?= default
 .PHONY: bearer-token
 bearer-token: ## Create a bearer token connection for a workspace. Usage: make bearer-token WS_NAME=<name> [WS_NAMESPACE=default]
-	@BODY='{"apiVersion":"connection.workspace.jupyter.org/v1alpha1","kind":"WorkspaceConnection","metadata":{"namespace":"$(WS_NAMESPACE)"},"spec":{"workspaceName":"$(WS_NAME)","workspaceConnectionType":"web-ui"}}'; \
-	RESULT=$$(echo "$$BODY" | kubectl create --raw "/apis/connection.workspace.jupyter.org/v1alpha1/namespaces/$(WS_NAMESPACE)/workspaceconnections" -f - 2>&1); \
-	URL=$$(echo "$$RESULT" | jq -r '.status.workspaceConnectionUrl // empty'); \
-	if [ -z "$$URL" ]; then \
-		echo "Error creating connection:"; \
-		echo "$$RESULT" | jq . 2>/dev/null || echo "$$RESULT"; \
-		exit 1; \
-	fi; \
-	echo "$$URL"
+	@bash -c '\
+		RESULT=$$(kubectl create --raw "/apis/connection.workspace.jupyter.org/v1alpha1/namespaces/$(WS_NAMESPACE)/workspaceconnections" \
+			-f <(echo '"'"'{"apiVersion":"connection.workspace.jupyter.org/v1alpha1","kind":"WorkspaceConnection","metadata":{"namespace":"$(WS_NAMESPACE)"},"spec":{"workspaceName":"$(WS_NAME)","workspaceConnectionType":"web-ui"}}'"'"') 2>&1) && \
+		URL=$$(echo "$$RESULT" | jq -r ".status.workspaceConnectionUrl // empty") && \
+		echo "$$URL" || \
+		{ echo "$$RESULT"; exit 1; } \
+	'
+
+.PHONY: vscode-token
+vscode-token: ## Create a VS Code remote connection for a workspace. Usage: make vscode-token WS_NAME=<name> [WS_NAMESPACE=default]
+	@bash -c '\
+		RESULT=$$(kubectl create --raw "/apis/connection.workspace.jupyter.org/v1alpha1/namespaces/$(WS_NAMESPACE)/workspaceconnections" \
+			-f <(echo '"'"'{"apiVersion":"connection.workspace.jupyter.org/v1alpha1","kind":"WorkspaceConnection","metadata":{"namespace":"$(WS_NAMESPACE)"},"spec":{"workspaceName":"$(WS_NAME)","workspaceConnectionType":"vscode-remote"}}'"'"') 2>&1) && \
+		URL=$$(echo "$$RESULT" | jq -r ".status.workspaceConnectionUrl // empty") && \
+		echo "$$URL" || \
+		{ echo "$$RESULT"; exit 1; } \
+	'
 
 .PHONY: delete-sample-routing
 delete-sample-routing:
