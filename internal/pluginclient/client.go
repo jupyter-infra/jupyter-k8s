@@ -47,6 +47,7 @@ func NewPluginClient(baseURL string, logger logr.Logger) *PluginClient {
 }
 
 // doPost sends a JSON POST request to the plugin and decodes the response.
+// This is a free function (not a method) because Go does not allow type parameters on methods.
 //
 // Retry behavior (see isRetryableError for the full contract):
 //   - Retries only on transport-level errors where no response was received
@@ -108,7 +109,7 @@ func doPost[Resp any](ctx context.Context, c *PluginClient, path string, reqBody
 		}
 
 		// Got an HTTP response — never retry from here, regardless of status code.
-		return handleResponse[Resp](c, ctx, path, resp, logger, time.Since(originalStart))
+		return handleResponse[Resp](path, resp, logger, time.Since(originalStart))
 	}
 
 	// All retries exhausted — the sidecar was unreachable on every attempt.
@@ -137,9 +138,13 @@ func (c *PluginClient) doSinglePost(ctx context.Context, path string, body []byt
 
 // handleResponse reads and decodes an HTTP response. Called only when we got a
 // response from the plugin (any status code).
-func handleResponse[Resp any](_ *PluginClient, _ context.Context, path string, resp *http.Response, logger logr.Logger, totalDuration time.Duration) (*Resp, int, error) {
+// This is a free function (not a method) because Go does not allow type parameters on methods.
+func handleResponse[Resp any](path string, resp *http.Response, logger logr.Logger, totalDuration time.Duration) (*Resp, int, error) {
 	defer func() { _ = resp.Body.Close() }()
 
+	// The response body is tied to the
+	// request context via the HTTP transport, so io.ReadAll will return promptly
+	// if the context is canceled (the transport closes the underlying connection).
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, resp.StatusCode, fmt.Errorf("plugin client: read response from %s: %w", path, err)

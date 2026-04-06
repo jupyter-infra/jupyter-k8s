@@ -245,6 +245,34 @@ func TestDoPost_RetriesExhausted_ReturnsLastError(t *testing.T) {
 	assert.Contains(t, err.Error(), "3 attempts") // retryCount(2) + 1 = 3
 }
 
+func TestDoPost_CanceledContextDuringResponseRead(t *testing.T) {
+	handlerDone := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		// Flush headers so the client gets a 200 response, then stall the body.
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		// Block until the test signals — simulates a slow body write.
+		<-handlerDone
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client := newTestClient(srv.URL)
+	// Cancel the context after headers arrive but before body is fully read.
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	_, _, err := doPost[pluginapi.SignResponse](ctx, client, "/test", &pluginapi.SignRequest{})
+	close(handlerDone) // Unblock the handler so srv.Close() doesn't hang.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "context canceled")
+}
+
 func TestDoPost_SucceedsAfterTransientFailure(t *testing.T) {
 	var attempts int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
