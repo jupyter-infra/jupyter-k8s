@@ -23,6 +23,7 @@ type RegisterNodeAgentRequest struct {
 type RegisterNodeAgentResponse struct {
 	ActivationID   string `json:"activationId"`
 	ActivationCode string `json:"activationCode"`
+	Region         string `json:"region"`
 }
 
 // DeregisterNodeAgentRequest is the request body for POST /v1alpha1/remote-access/deregister-node-agent.
