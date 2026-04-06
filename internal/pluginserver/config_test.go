@@ -23,14 +23,29 @@ func TestApplyDefaults_PreservesExplicitListenAddress(t *testing.T) {
 	assert.Equal(t, "0.0.0.0", cfg.ListenAddress)
 }
 
-func TestApplyDefaults_DoesNotSetPort(t *testing.T) {
+func TestApplyDefaults_PortDefaultsTo8080(t *testing.T) {
+	t.Setenv(EnvPluginPort, "")
 	cfg := ServerConfig{}
 	cfg.applyDefaults()
-	assert.Equal(t, 0, cfg.Port, "port should remain zero — it is required, not defaulted")
+	assert.Equal(t, DefaultPort, cfg.Port)
+}
+
+func TestApplyDefaults_PortFromEnv(t *testing.T) {
+	t.Setenv(EnvPluginPort, "9090")
+	cfg := ServerConfig{}
+	cfg.applyDefaults()
+	assert.Equal(t, 9090, cfg.Port)
+}
+
+func TestApplyDefaults_PortExplicitOverridesEnv(t *testing.T) {
+	t.Setenv(EnvPluginPort, "9090")
+	cfg := ServerConfig{Port: 7070}
+	cfg.applyDefaults()
+	assert.Equal(t, 7070, cfg.Port)
 }
 
 func TestNewServer_NilHandlersDefaultToNotImplemented(t *testing.T) {
-	srv := NewServer(ServerConfig{Port: 8080})
+	srv := NewPluginServer(ServerConfig{Port: 8080})
 	assert.NotNil(t, srv.jwtHandler)
 	assert.NotNil(t, srv.remoteAccessHandler)
 	assert.IsType(t, NotImplementedJWTHandler{}, srv.jwtHandler)
@@ -40,17 +55,17 @@ func TestNewServer_NilHandlersDefaultToNotImplemented(t *testing.T) {
 func TestNewServer_PreservesExplicitHandlers(t *testing.T) {
 	jwt := &mockJWTHandler{}
 	ra := &mockRemoteAccessHandler{}
-	srv := NewServer(ServerConfig{Port: 8080, JWTHandler: jwt, RemoteAccessHandler: ra})
+	srv := NewPluginServer(ServerConfig{Port: 8080, JWTHandler: jwt, RemoteAccessHandler: ra})
 	assert.Same(t, jwt, srv.jwtHandler)
 	assert.Same(t, ra, srv.remoteAccessHandler)
 }
 
 func TestNewServer_Addr(t *testing.T) {
-	srv := NewServer(ServerConfig{Port: 9090})
+	srv := NewPluginServer(ServerConfig{Port: 9090})
 	assert.Equal(t, "127.0.0.1:9090", srv.httpServer.Addr)
 }
 
 func TestNewServer_CustomListenAddress(t *testing.T) {
-	srv := NewServer(ServerConfig{Port: 9090, ListenAddress: "0.0.0.0"})
+	srv := NewPluginServer(ServerConfig{Port: 9090, ListenAddress: "0.0.0.0"})
 	assert.Equal(t, "0.0.0.0:9090", srv.httpServer.Addr)
 }

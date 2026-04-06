@@ -13,40 +13,12 @@ import (
 	"testing"
 
 	pluginapi "github.com/jupyter-infra/jupyter-k8s/api/plugin/v1alpha1"
-	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/plugin"
 
+	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 )
-
-func testPod() *corev1.Pod {
-	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ws-pod-0",
-			Namespace: "test-ns",
-			UID:       types.UID("pod-uid-123"),
-		},
-	}
-}
-
-func testAccessStrategy() *workspacev1alpha1.WorkspaceAccessStrategy {
-	return &workspacev1alpha1.WorkspaceAccessStrategy{
-		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			PodEventsHandler: "aws",
-			PodEventsContext: map[string]string{
-				"ssmDocumentName": "test-doc",
-			},
-			CreateConnectionHandler: "aws",
-			CreateConnectionContext: map[string]string{
-				"ssmDocumentName": "test-doc",
-			},
-		},
-	}
-}
 
 func TestInitialize_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -57,8 +29,8 @@ func TestInitialize_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewPluginRemoteAccessClient(NewPluginClient(srv.URL, nil))
-	err := client.Initialize(context.Background())
+	client := NewPluginClient(srv.URL, logr.Discard())
+	_, err := client.Initialize(context.Background(), &pluginapi.InitializeRequest{})
 	require.NoError(t, err)
 }
 
@@ -70,8 +42,8 @@ func TestInitialize_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewPluginRemoteAccessClient(NewPluginClient(srv.URL, nil))
-	err := client.Initialize(context.Background())
+	client := NewPluginClient(srv.URL, logr.Discard())
+	_, err := client.Initialize(context.Background(), &pluginapi.InitializeRequest{})
 	require.Error(t, err)
 
 	var pe *plugin.StatusError
@@ -95,7 +67,7 @@ func TestRegisterNodeAgent_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewPluginRemoteAccessClient(NewPluginClient(srv.URL, nil))
+	client := NewPluginClient(srv.URL, logr.Discard())
 	resp, err := client.RegisterNodeAgent(context.Background(), &pluginapi.RegisterNodeAgentRequest{
 		PodUID:        "pod-uid-123",
 		WorkspaceName: "test-ws",
@@ -119,8 +91,8 @@ func TestDeregisterNodeAgent_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewPluginRemoteAccessClient(NewPluginClient(srv.URL, nil))
-	err := client.DeregisterNodeAgent(context.Background(), testPod())
+	client := NewPluginClient(srv.URL, logr.Discard())
+	_, err := client.DeregisterNodeAgent(context.Background(), &pluginapi.DeregisterNodeAgentRequest{PodUID: "pod-uid-123"})
 	require.NoError(t, err)
 }
 
@@ -132,8 +104,8 @@ func TestDeregisterNodeAgent_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewPluginRemoteAccessClient(NewPluginClient(srv.URL, nil))
-	err := client.DeregisterNodeAgent(context.Background(), testPod())
+	client := NewPluginClient(srv.URL, logr.Discard())
+	_, err := client.DeregisterNodeAgent(context.Background(), &pluginapi.DeregisterNodeAgentRequest{PodUID: "pod-uid-123"})
 	require.Error(t, err)
 
 	var pe *plugin.StatusError
@@ -159,10 +131,17 @@ func TestCreateSession_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewPluginRemoteAccessClient(NewPluginClient(srv.URL, nil))
-	url, err := client.CreateSession(context.Background(), "test-ws", "test-ns", "pod-uid-123", testAccessStrategy())
+	client := NewPluginClient(srv.URL, logr.Discard())
+	resp, err := client.CreateSession(context.Background(), &pluginapi.CreateSessionRequest{
+		PodUID:        "pod-uid-123",
+		WorkspaceName: "test-ws",
+		Namespace:     "test-ns",
+		ConnectionContext: map[string]string{
+			"ssmDocumentName": "test-doc",
+		},
+	})
 	require.NoError(t, err)
-	assert.Equal(t, "vscode://jupyter.workspace/connect?session=abc", url)
+	assert.Equal(t, "vscode://jupyter.workspace/connect?session=abc", resp.ConnectionURL)
 }
 
 func TestCreateSession_ServerError(t *testing.T) {
@@ -173,22 +152,30 @@ func TestCreateSession_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewPluginRemoteAccessClient(NewPluginClient(srv.URL, nil))
-	_, err := client.CreateSession(context.Background(), "test-ws", "test-ns", "pod-uid-123", testAccessStrategy())
+	client := NewPluginClient(srv.URL, logr.Discard())
+	_, err := client.CreateSession(context.Background(), &pluginapi.CreateSessionRequest{
+		PodUID:        "pod-uid-123",
+		WorkspaceName: "test-ws",
+		Namespace:     "test-ns",
+	})
 	require.Error(t, err)
 }
 
 func TestRemoteAccess_ConnectionRefused(t *testing.T) {
-	client := NewPluginRemoteAccessClient(NewPluginClient("http://127.0.0.1:1", nil))
-	client.client.retryCount = 0 // no retries — fail fast for this test
+	client := NewPluginClient("http://127.0.0.1:1", logr.Discard())
+	client.retryCount = 0 // no retries — fail fast for this test
 
-	err := client.Initialize(context.Background())
+	_, err := client.Initialize(context.Background(), &pluginapi.InitializeRequest{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "connection refused")
 
-	err = client.DeregisterNodeAgent(context.Background(), testPod())
+	_, err = client.DeregisterNodeAgent(context.Background(), &pluginapi.DeregisterNodeAgentRequest{PodUID: "uid"})
 	require.Error(t, err)
 
-	_, err = client.CreateSession(context.Background(), "ws", "ns", "uid", testAccessStrategy())
+	_, err = client.CreateSession(context.Background(), &pluginapi.CreateSessionRequest{
+		PodUID:        "uid",
+		WorkspaceName: "ws",
+		Namespace:     "ns",
+	})
 	require.Error(t, err)
 }

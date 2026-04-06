@@ -13,10 +13,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/go-logr/logr"
 	pluginapi "github.com/jupyter-infra/jupyter-k8s/api/plugin/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/plugin"
 )
@@ -25,21 +25,21 @@ import (
 type PluginClient struct {
 	baseURL     string
 	httpClient  *http.Client
-	logger      *slog.Logger
+	logger      logr.Logger
 	retryCount  int
 	retryDelay  time.Duration
 	callTimeout time.Duration
 }
 
 // NewPluginClient creates a new PluginClient for the given plugin base URL.
-func NewPluginClient(baseURL string, logger *slog.Logger) *PluginClient {
-	if logger == nil {
-		logger = slog.Default()
+func NewPluginClient(baseURL string, logger logr.Logger) *PluginClient {
+	if logger.GetSink() == nil {
+		logger = logr.Discard()
 	}
 	return &PluginClient{
 		baseURL:     baseURL,
 		httpClient:  &http.Client{},
-		logger:      logger,
+		logger:      logger.WithName("pluginclient"),
 		retryCount:  defaultRetryCount,
 		retryDelay:  defaultRetryDelay,
 		callTimeout: defaultCallTimeout,
@@ -68,12 +68,9 @@ func doPost[Resp any](ctx context.Context, c *PluginClient, path string, reqBody
 	}
 
 	callID := plugin.GenerateRequestID()
-	logAttrs := []any{
-		"path", path,
-		"pluginRequestID", callID,
-	}
+	logger := c.logger.WithValues("path", path, "pluginRequestID", callID)
 	if originID := plugin.OriginRequestID(ctx); originID != "" {
-		logAttrs = append(logAttrs, "originRequestID", originID)
+		logger = logger.WithValues("originRequestID", originID)
 	}
 
 	originalStart := time.Now()
@@ -82,9 +79,9 @@ func doPost[Resp any](ctx context.Context, c *PluginClient, path string, reqBody
 	var lastDuration time.Duration
 	for attempt := range c.retryCount + 1 {
 		if attempt > 0 {
-			c.logger.WarnContext(ctx, "retrying plugin call",
-				append(logAttrs, "attempt", attempt+1, "maxAttempts", c.retryCount+1,
-					"lastError", lastErr, "lastDuration", lastDuration)...)
+			logger.Info("retrying plugin call",
+				"attempt", attempt+1, "maxAttempts", c.retryCount+1,
+				"lastError", lastErr, "lastDuration", lastDuration)
 
 			// Wait for retry delay, but respect the caller's context.
 			select {
@@ -104,19 +101,19 @@ func doPost[Resp any](ctx context.Context, c *PluginClient, path string, reqBody
 				continue
 			}
 			// Non-retryable transport error (context canceled, timeout, unknown).
-			c.logger.ErrorContext(ctx, "plugin call failed (non-retryable)",
-				append(logAttrs, "attempt", attempt+1, "duration", lastDuration,
-					"totalDuration", time.Since(originalStart), "error", err)...)
+			logger.Error(err, "plugin call failed (non-retryable)",
+				"attempt", attempt+1, "duration", lastDuration,
+				"totalDuration", time.Since(originalStart))
 			return nil, 0, fmt.Errorf("plugin client: do request to %s: %w", path, err)
 		}
 
 		// Got an HTTP response — never retry from here, regardless of status code.
-		return handleResponse[Resp](c, ctx, path, resp, logAttrs, time.Since(originalStart))
+		return handleResponse[Resp](c, ctx, path, resp, logger, time.Since(originalStart))
 	}
 
 	// All retries exhausted — the sidecar was unreachable on every attempt.
-	c.logger.ErrorContext(ctx, "plugin call failed (retries exhausted)",
-		append(logAttrs, "attempts", c.retryCount+1, "totalDuration", time.Since(originalStart), "error", lastErr)...)
+	logger.Error(lastErr, "plugin call failed (retries exhausted)",
+		"attempts", c.retryCount+1, "totalDuration", time.Since(originalStart))
 	return nil, 0, fmt.Errorf("plugin client: %d attempts to %s failed: %w", c.retryCount+1, path, lastErr)
 }
 
@@ -140,7 +137,7 @@ func (c *PluginClient) doSinglePost(ctx context.Context, path string, body []byt
 
 // handleResponse reads and decodes an HTTP response. Called only when we got a
 // response from the plugin (any status code).
-func handleResponse[Resp any](c *PluginClient, ctx context.Context, path string, resp *http.Response, baseLogAttrs []any, totalDuration time.Duration) (*Resp, int, error) {
+func handleResponse[Resp any](_ *PluginClient, _ context.Context, path string, resp *http.Response, logger logr.Logger, totalDuration time.Duration) (*Resp, int, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -148,16 +145,15 @@ func handleResponse[Resp any](c *PluginClient, ctx context.Context, path string,
 		return nil, resp.StatusCode, fmt.Errorf("plugin client: read response from %s: %w", path, err)
 	}
 
-	logAttrs := append(append([]any{}, baseLogAttrs...), "status", resp.StatusCode, "totalDuration", totalDuration)
-
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		var errResp pluginapi.ErrorResponse
 		_ = json.Unmarshal(respBody, &errResp)
-		c.logger.ErrorContext(ctx, "plugin call returned error", append(logAttrs, "error", errResp.Error)...)
+		logger.Error(fmt.Errorf("%s", errResp.Error), "plugin call returned error",
+			"status", resp.StatusCode, "totalDuration", totalDuration)
 		return nil, resp.StatusCode, &plugin.StatusError{Code: resp.StatusCode, Message: errResp.Error}
 	}
 
-	c.logger.InfoContext(ctx, "plugin call succeeded", logAttrs...)
+	logger.Info("plugin call succeeded", "status", resp.StatusCode, "totalDuration", totalDuration)
 
 	var result Resp
 	if err := json.Unmarshal(respBody, &result); err != nil {
