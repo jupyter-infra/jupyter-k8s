@@ -38,6 +38,7 @@ type CreateSessionRequest struct {
 	PodUID            string            `json:"podUID"`
 	WorkspaceName     string            `json:"workspaceName"`
 	Namespace         string            `json:"namespace"`
+	ConnectionType    string            `json:"connectionType,omitempty"`
 	ConnectionContext map[string]string `json:"connectionContext,omitempty"`
 }
 
