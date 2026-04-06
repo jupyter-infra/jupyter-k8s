@@ -23,6 +23,7 @@ type RegisterNodeAgentRequest struct {
 type RegisterNodeAgentResponse struct {
 	ActivationID   string `json:"activationId"`
 	ActivationCode string `json:"activationCode"`
+	Region         string `json:"region"`
 }
 
 // DeregisterNodeAgentRequest is the request body for POST /v1alpha1/remote-access/deregister-node-agent.
@@ -38,6 +39,7 @@ type CreateSessionRequest struct {
 	PodUID            string            `json:"podUID"`
 	WorkspaceName     string            `json:"workspaceName"`
 	Namespace         string            `json:"namespace"`
+	ConnectionType    string            `json:"connectionType,omitempty"`
 	ConnectionContext map[string]string `json:"connectionContext,omitempty"`
 }
 

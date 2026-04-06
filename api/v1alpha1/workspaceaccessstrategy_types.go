@@ -97,11 +97,19 @@ type WorkspaceAccessStrategySpec struct {
 	// +optional
 	BearerAuthURLTemplate string `json:"bearerAuthURLTemplate,omitempty"`
 
-	// CreateConnectionHandler specifies the handler for connection creation
+	// CreateConnectionHandler specifies the default handler for connection creation (e.g., "k8s-native").
+	// Used as fallback when CreateConnectionHandlerMap does not contain the requested connection type.
 	// +optional
 	CreateConnectionHandler string `json:"createConnectionHandler,omitempty"`
 
-	// PodEventsHandler specifies the handler for pod lifecycle events
+	// CreateConnectionHandlerMap maps connection types to handler references in "plugin:action" format.
+	// Example: {"vscode-remote": "aws:createSession"}
+	// Falls back to CreateConnectionHandler if the requested connection type is not in this map.
+	// +optional
+	CreateConnectionHandlerMap map[string]string `json:"createConnectionHandlerMap,omitempty"`
+
+	// PodEventsHandler specifies the handler for pod lifecycle events in "plugin:action" format.
+	// Example: "aws:ssm-remote-access"
 	// +optional
 	PodEventsHandler string `json:"podEventsHandler,omitempty"`
 
