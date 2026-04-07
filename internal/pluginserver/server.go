@@ -9,11 +9,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"runtime/debug"
 	"time"
 
+	"github.com/go-logr/logr"
 	pluginapi "github.com/jupyter-infra/jupyter-k8s/api/plugin/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/plugin"
 )
@@ -29,20 +29,20 @@ func PluginRequestID(ctx context.Context) string {
 	return ""
 }
 
-// Server is the HTTP server that routes requests to plugin handler implementations.
-type Server struct {
-	jwtHandler          JWTHandler
-	remoteAccessHandler RemoteAccessHandler
+// PluginServer is the HTTP server that routes requests to plugin handler implementations.
+type PluginServer struct {
+	jwtHandler          plugin.JwtPluginApis
+	remoteAccessHandler plugin.RemoteAccessPluginApis
 	httpServer          *http.Server
 	mux                 *http.ServeMux
-	logger              *slog.Logger
+	logger              logr.Logger
 }
 
-// NewServer creates a new plugin Server from the given config.
+// NewPluginServer creates a new PluginServer from the given config.
 // The server listens on localhost only, since the plugin runs as a sidecar
 // in the same pod as the controller. Nil handlers default to returning
 // 501 Not Implemented for all their endpoints.
-func NewServer(cfg ServerConfig) *Server {
+func NewPluginServer(cfg ServerConfig) *PluginServer {
 	cfg.applyDefaults()
 	if cfg.JWTHandler == nil {
 		cfg.JWTHandler = NotImplementedJWTHandler{}
@@ -52,8 +52,11 @@ func NewServer(cfg ServerConfig) *Server {
 	}
 
 	mux := http.NewServeMux()
-	logger := slog.Default()
-	s := &Server{
+	logger := cfg.Logger
+	if logger.GetSink() == nil {
+		logger = logr.Discard()
+	}
+	s := &PluginServer{
 		jwtHandler:          cfg.JWTHandler,
 		remoteAccessHandler: cfg.RemoteAccessHandler,
 		mux:                 mux,
@@ -68,23 +71,23 @@ func NewServer(cfg ServerConfig) *Server {
 }
 
 // Handler returns the underlying http.Handler for testing.
-func (s *Server) Handler() http.Handler {
+func (s *PluginServer) Handler() http.Handler {
 	return s.mux
 }
 
 // ListenAndServe starts the HTTP server.
-func (s *Server) ListenAndServe() error {
+func (s *PluginServer) ListenAndServe() error {
 	s.logger.Info("starting plugin server", "addr", s.httpServer.Addr)
 	return s.httpServer.ListenAndServe()
 }
 
 // Shutdown gracefully drains in-flight requests and stops the server.
-func (s *Server) Shutdown(ctx context.Context) error {
+func (s *PluginServer) Shutdown(ctx context.Context) error {
 	s.logger.Info("shutting down plugin server")
 	return s.httpServer.Shutdown(ctx)
 }
 
-func (s *Server) registerRoutes() {
+func (s *PluginServer) registerRoutes() {
 	s.mux.Handle(pluginapi.RouteJWTSign.Pattern(), s.withMiddleware(s.handleJWTSign))
 	s.mux.Handle(pluginapi.RouteJWTVerify.Pattern(), s.withMiddleware(s.handleJWTVerify))
 	s.mux.Handle(pluginapi.RouteRemoteAccessInit.Pattern(), s.withMiddleware(s.handleRemoteAccessInit))
@@ -95,7 +98,7 @@ func (s *Server) registerRoutes() {
 }
 
 // withMiddleware wraps a handler with request ID extraction, panic recovery, and request logging.
-func (s *Server) withMiddleware(next http.HandlerFunc) http.Handler {
+func (s *PluginServer) withMiddleware(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
@@ -114,18 +117,17 @@ func (s *Server) withMiddleware(next http.HandlerFunc) http.Handler {
 		r = r.WithContext(ctx)
 
 		// Build sub-logger with both IDs
-		logger := s.logger.With("pluginRequestID", pluginRequestID)
+		logger := s.logger.WithValues("pluginRequestID", pluginRequestID)
 		if originRequestID != "" {
-			logger = logger.With("originRequestID", originRequestID)
+			logger = logger.WithValues("originRequestID", originRequestID)
 		}
 
 		defer func() {
 			if rec := recover(); rec != nil {
-				logger.Error("panic recovered",
+				logger.Error(fmt.Errorf("%v", rec), "panic recovered",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"duration", time.Since(start),
-					"error", rec,
 					"stack", string(debug.Stack()),
 				)
 				writeJSON(w, http.StatusInternalServerError, pluginapi.ErrorResponse{Error: "internal server error"})
@@ -148,7 +150,7 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
-func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
+func (s *PluginServer) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, struct{}{})
 }
 
@@ -177,26 +179,26 @@ func handleRequest[Req any, Resp any](w http.ResponseWriter, r *http.Request, ha
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (s *Server) handleJWTSign(w http.ResponseWriter, r *http.Request) {
+func (s *PluginServer) handleJWTSign(w http.ResponseWriter, r *http.Request) {
 	handleRequest(w, r, s.jwtHandler.Sign)
 }
 
-func (s *Server) handleJWTVerify(w http.ResponseWriter, r *http.Request) {
+func (s *PluginServer) handleJWTVerify(w http.ResponseWriter, r *http.Request) {
 	handleRequest(w, r, s.jwtHandler.Verify)
 }
 
-func (s *Server) handleRemoteAccessInit(w http.ResponseWriter, r *http.Request) {
+func (s *PluginServer) handleRemoteAccessInit(w http.ResponseWriter, r *http.Request) {
 	handleRequest(w, r, s.remoteAccessHandler.Initialize)
 }
 
-func (s *Server) handleRegisterNodeAgent(w http.ResponseWriter, r *http.Request) {
+func (s *PluginServer) handleRegisterNodeAgent(w http.ResponseWriter, r *http.Request) {
 	handleRequest(w, r, s.remoteAccessHandler.RegisterNodeAgent)
 }
 
-func (s *Server) handleDeregisterNodeAgent(w http.ResponseWriter, r *http.Request) {
+func (s *PluginServer) handleDeregisterNodeAgent(w http.ResponseWriter, r *http.Request) {
 	handleRequest(w, r, s.remoteAccessHandler.DeregisterNodeAgent)
 }
 
-func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
+func (s *PluginServer) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	handleRequest(w, r, s.remoteAccessHandler.CreateSession)
 }

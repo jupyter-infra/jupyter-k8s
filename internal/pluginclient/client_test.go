@@ -14,18 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	pluginapi "github.com/jupyter-infra/jupyter-k8s/api/plugin/v1alpha1"
-	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 	"github.com/jupyter-infra/jupyter-k8s/internal/plugin"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-)
-
-// Compile-time interface conformance checks.
-var (
-	_ jwt.SignerFactory = (*PluginSignerFactory)(nil)
-	_ jwt.Signer        = (*PluginSigner)(nil)
 )
 
 func TestStatusError_Error(t *testing.T) {
@@ -72,7 +66,7 @@ func TestDoPost_ErrorStatusCodes(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			client := NewPluginClient(srv.URL, nil)
+			client := NewPluginClient(srv.URL, logr.Discard())
 			_, _, err := doPost[pluginapi.SignResponse](context.Background(), client, "/test", &pluginapi.SignRequest{})
 			require.Error(t, err)
 
@@ -92,7 +86,7 @@ func TestDoPost_InvalidResponseJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewPluginClient(srv.URL, nil)
+	client := NewPluginClient(srv.URL, logr.Discard())
 	_, _, err := doPost[pluginapi.SignResponse](context.Background(), client, "/test", &pluginapi.SignRequest{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "decode response")
@@ -105,7 +99,7 @@ func TestDoPost_NonJSONErrorBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewPluginClient(srv.URL, nil)
+	client := NewPluginClient(srv.URL, logr.Discard())
 	_, _, err := doPost[pluginapi.SignResponse](context.Background(), client, "/test", &pluginapi.SignRequest{})
 	require.Error(t, err)
 
@@ -124,7 +118,7 @@ func TestDoPost_SendsPluginRequestID(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewPluginClient(srv.URL, nil)
+	client := NewPluginClient(srv.URL, logr.Discard())
 	_, _, err := doPost[pluginapi.SignResponse](context.Background(), client, "/test", &pluginapi.SignRequest{})
 	require.NoError(t, err)
 	assert.NotEmpty(t, receivedPluginID)
@@ -142,7 +136,7 @@ func TestDoPost_PropagatesOriginRequestID(t *testing.T) {
 	defer srv.Close()
 
 	ctx := plugin.ContextWithOriginRequestID(context.Background(), "origin-abc-123")
-	client := NewPluginClient(srv.URL, nil)
+	client := NewPluginClient(srv.URL, logr.Discard())
 	_, _, err := doPost[pluginapi.SignResponse](ctx, client, "/test", &pluginapi.SignRequest{})
 	require.NoError(t, err)
 	assert.Equal(t, "origin-abc-123", receivedOriginID)
@@ -159,7 +153,7 @@ func TestDoPost_NoOriginHeader_WhenNotInContext(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewPluginClient(srv.URL, nil)
+	client := NewPluginClient(srv.URL, logr.Discard())
 	_, _, err := doPost[pluginapi.SignResponse](context.Background(), client, "/test", &pluginapi.SignRequest{})
 	require.NoError(t, err)
 	assert.False(t, hasOriginHeader)
@@ -167,7 +161,7 @@ func TestDoPost_NoOriginHeader_WhenNotInContext(t *testing.T) {
 
 // newTestClient creates a PluginClient with fast retry settings for tests.
 func newTestClient(baseURL string) *PluginClient {
-	c := NewPluginClient(baseURL, nil)
+	c := NewPluginClient(baseURL, logr.Discard())
 	c.retryCount = 2
 	c.retryDelay = 10 * time.Millisecond // fast retries for tests
 	c.callTimeout = 2 * time.Second
@@ -249,6 +243,34 @@ func TestDoPost_RetriesExhausted_ReturnsLastError(t *testing.T) {
 	_, _, err := doPost[pluginapi.SignResponse](context.Background(), client, "/test", &pluginapi.SignRequest{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "3 attempts") // retryCount(2) + 1 = 3
+}
+
+func TestDoPost_CanceledContextDuringResponseRead(t *testing.T) {
+	handlerDone := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		// Flush headers so the client gets a 200 response, then stall the body.
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		// Block until the test signals — simulates a slow body write.
+		<-handlerDone
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client := newTestClient(srv.URL)
+	// Cancel the context after headers arrive but before body is fully read.
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	_, _, err := doPost[pluginapi.SignResponse](ctx, client, "/test", &pluginapi.SignRequest{})
+	close(handlerDone) // Unblock the handler so srv.Close() doesn't hang.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "context canceled")
 }
 
 func TestDoPost_SucceedsAfterTransientFailure(t *testing.T) {

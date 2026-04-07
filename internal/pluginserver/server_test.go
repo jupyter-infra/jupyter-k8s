@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockJWTHandler implements JWTHandler for testing.
+// mockJWTHandler implements plugin.JwtPluginApis for testing.
 type mockJWTHandler struct {
 	signFn   func(ctx context.Context, req *pluginapi.SignRequest) (*pluginapi.SignResponse, error)
 	verifyFn func(ctx context.Context, req *pluginapi.VerifyRequest) (*pluginapi.VerifyResponse, error)
@@ -35,7 +35,7 @@ func (m *mockJWTHandler) Verify(ctx context.Context, req *pluginapi.VerifyReques
 	return m.verifyFn(ctx, req)
 }
 
-// mockRemoteAccessHandler implements RemoteAccessHandler for testing.
+// mockRemoteAccessHandler implements plugin.RemoteAccessPluginApis for testing.
 type mockRemoteAccessHandler struct {
 	initializeFn          func(ctx context.Context, req *pluginapi.InitializeRequest) (*pluginapi.InitializeResponse, error)
 	registerNodeAgentFn   func(ctx context.Context, req *pluginapi.RegisterNodeAgentRequest) (*pluginapi.RegisterNodeAgentResponse, error)
@@ -59,8 +59,8 @@ func (m *mockRemoteAccessHandler) CreateSession(ctx context.Context, req *plugin
 	return m.createSessionFn(ctx, req)
 }
 
-func newMockServer(jwt *mockJWTHandler, ra *mockRemoteAccessHandler) *Server {
-	return NewServer(ServerConfig{
+func newMockServer(jwt *mockJWTHandler, ra *mockRemoteAccessHandler) *PluginServer {
+	return NewPluginServer(ServerConfig{
 		JWTHandler:          jwt,
 		RemoteAccessHandler: ra,
 	})
@@ -69,7 +69,7 @@ func newMockServer(jwt *mockJWTHandler, ra *mockRemoteAccessHandler) *Server {
 // --- Healthz ---
 
 func TestHealthz(t *testing.T) {
-	srv := NewServer(ServerConfig{})
+	srv := NewPluginServer(ServerConfig{})
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -80,7 +80,7 @@ func TestHealthz(t *testing.T) {
 // --- Middleware ---
 
 func TestPanicRecovery(t *testing.T) {
-	srv := NewServer(ServerConfig{})
+	srv := NewPluginServer(ServerConfig{})
 	panicHandler := srv.withMiddleware(func(_ http.ResponseWriter, _ *http.Request) {
 		panic("test panic")
 	})
@@ -97,7 +97,7 @@ func TestPanicRecovery(t *testing.T) {
 }
 
 func TestRequestID_PassedThrough(t *testing.T) {
-	srv := NewServer(ServerConfig{})
+	srv := NewPluginServer(ServerConfig{})
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	req.Header.Set(plugin.HeaderPluginRequestID, "caller-id-123")
 	w := httptest.NewRecorder()
@@ -107,7 +107,7 @@ func TestRequestID_PassedThrough(t *testing.T) {
 }
 
 func TestRequestID_GeneratedWhenMissing(t *testing.T) {
-	srv := NewServer(ServerConfig{})
+	srv := NewPluginServer(ServerConfig{})
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -118,7 +118,7 @@ func TestRequestID_GeneratedWhenMissing(t *testing.T) {
 }
 
 func TestRequestID_AvailableInContext(t *testing.T) {
-	srv := NewServer(ServerConfig{})
+	srv := NewPluginServer(ServerConfig{})
 	var capturedID string
 	handler := srv.withMiddleware(func(_ http.ResponseWriter, r *http.Request) {
 		capturedID = PluginRequestID(r.Context())
