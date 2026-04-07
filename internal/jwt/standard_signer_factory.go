@@ -12,8 +12,8 @@ import (
 )
 
 // StandardSignerFactory creates JWT signers using a shared StandardSigner backed by K8s Secrets.
-// Unlike AWSSignerFactory which creates per-strategy signers, this factory reuses a single
-// StandardSigner instance since all k8s-native strategies share the same Secret-based keys.
+// This factory reuses a single StandardSigner instance since all strategies share the same
+// Secret-based keys.
 type StandardSignerFactory struct {
 	signer *StandardSigner
 }
@@ -31,8 +31,7 @@ func (f *StandardSignerFactory) Signer() *StandardSigner {
 }
 
 // CreateSigner returns the shared StandardSigner for compatible access strategies.
-// Accepts "" (auto/default) and "k8s-native" handlers. Rejects "aws" since that
-// requires AWSSignerFactory.
+// Accepts "" (auto/default) and "k8s-native" handlers.
 func (f *StandardSignerFactory) CreateSigner(accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (Signer, error) {
 	if accessStrategy == nil {
 		return f.signer, nil
@@ -42,8 +41,6 @@ func (f *StandardSignerFactory) CreateSigner(accessStrategy *workspacev1alpha1.W
 	switch handler {
 	case "", "k8s-native":
 		return f.signer, nil
-	case "aws":
-		return nil, fmt.Errorf("access strategy requires \"aws\" handler, but only \"k8s-native\" signing is configured")
 	default:
 		return nil, fmt.Errorf("unsupported connection handler: %s", handler)
 	}
