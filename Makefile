@@ -60,6 +60,7 @@ ifeq ($(CLOUD_PROVIDER),aws)
 	ECR_REPOSITORY_AUTH := jupyter-k8s-auth
 	ECR_REPOSITORY_ROTATOR := jupyter-k8s-rotator
 	ECR_REPOSITORY_AWS_PLUGIN := jupyter-k8s-aws-plugin
+	ECR_REPOSITORY_WEB_APP := jk8s-application-web-app
 	EKS_CONTEXT := arn:aws:eks:$(AWS_REGION):$(AWS_ACCOUNT_ID):cluster/$(EKS_CLUSTER_NAME)
 endif
 
@@ -754,7 +755,9 @@ deploy-aws-traefik-dex-internal:
 			--set authmiddleware.imageName=$(ECR_REPOSITORY_AUTH) \
 			--set authmiddleware.enableBearerAuth=true \
 			--set rotator.repository=$(ECR_REGISTRY) \
-			--set rotator.imageName=$(ECR_REPOSITORY_ROTATOR)"; \
+			--set rotator.imageName=$(ECR_REPOSITORY_ROTATOR) \
+			--set webApp.repository=$(ECR_REGISTRY) \
+			--set webApp.imageName=$(ECR_REPOSITORY_WEB_APP)"; \
 		if [ ! -z "$$DEX_OAUTH2_SECRET" ]; then \
 			HELM_ARGS="$$HELM_ARGS --set dex.oauth2ProxyClientSecret=$$DEX_OAUTH2_SECRET"; \
 		fi; \
@@ -763,8 +766,6 @@ deploy-aws-traefik-dex-internal:
 			HELM_ARGS="$$HELM_ARGS --set dex.kubernetesClientSecret=$$DEX_K8S_SECRET"; \
 		fi; \
 		\
-		# Default redirect ports are set in values.yaml (8000, 18000, 9800) \
-		# But allow overriding with env vars \
 		if [ ! -z "$$KUBECTL_REDIRECT_PORTS" ]; then \
 			IFS=',' read -ra PORTS <<< "$$KUBECTL_REDIRECT_PORTS"; \
 			PORT_INDEX=0; \
@@ -774,7 +775,7 @@ deploy-aws-traefik-dex-internal:
 			done; \
 		fi; \
 		\
-		helm upgrade --install jk8-aws-traefik-dex /tmp/jk8s-aws-traefik-dex/aws-traefik-dex \
+		helm upgrade --install jk8-aws-traefik-dex /tmp/jk8s-aws-traefik-dex \
 			-n jupyter-k8s-router \
 			--create-namespace \
 			--force \
@@ -790,8 +791,8 @@ deploy-aws-traefik-dex-internal:
 	)
 	@echo "Restarting deployments to use new images..."
 	kubectl rollout restart deployment -n jupyter-k8s-router \
-		traefik oauth2-proxy dex authmiddleware
-	@echo "All deployments to use new images..."
+		traefik oauth2-proxy dex authmiddleware web-app
+	@echo "All deployments restarted to use new images..."
 	# Clean up temporary chart directory
 	rm -rf /tmp/jk8s-aws-traefik-dex
 	@echo "Bash script for end-users to set their kubeconfig available at: dist/users-scripts"

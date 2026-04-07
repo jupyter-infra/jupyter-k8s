@@ -74,8 +74,9 @@ dex:
   # Prefix for the k8s groups authenticated through Dex
   oidcGroupPrefix: "github:"
 
-  # Client ID for oauth2-proxy to authenticate with Dex (auto-generated if empty)
-  oauth2ProxyClientId: "oauth2-proxy"
+  # Client ID for oauth2-proxy to authenticate with Dex
+  # Must match the Kubernetes OIDC client ID for tokens to work with K8s API
+  oauth2ProxyClientId: "kubectl-oidc"
   # Client secret for oauth2-proxy to authenticate with Dex (auto-generated if empty)
   # Generate with 'openssl rand -hex 16'
   oauth2ProxyClientSecret: ""
@@ -127,12 +128,67 @@ githubRbac:
 oauth2Proxy:
   # Cookie secret for OAuth2 Proxy (generate with openssl rand -base64 32 | tr -- '+/' '-_')
   cookieSecret: ""
+  # Cookie expiry duration (Go duration string, e.g. "8h", "1h30m")
+  # This is the single source of truth for session timing — web-app session
+  # cookie max age, max lifetime, and near-expiry threshold are derived from this
+  cookieExpire: "8h"
+  # Cookie refresh interval (Go duration string)
+  cookieRefresh: "1h"
   # initContainer config for dex availability checks
   dexCheck:
     # Maximum time to wait for Dex to be available in seconds
     timeout_seconds: 300
   # Skip authentication for certain paths (useful for WebSockets)
   skipAuthRegex: []
+
+# ============================================================================
+# Web App (Self-Service UI) - OPTIONAL
+# ============================================================================
+# Enable this to provide a web-based UI for users to manage their workspaces
+# through a browser instead of using kubectl commands.
+#
+# When enabled:
+#   - Users can access the UI at https://<domain>/
+#   - Create, view, update, and delete workspaces through the web interface
+#   - View workspace templates and their configurations
+#   - Authenticated via GitHub OAuth through Dex
+#
+# When disabled:
+#   - Users must use kubectl to manage workspaces
+#   - All workspace management is done via Kubernetes API
+#   - No web interface is available
+#
+# Set 'enabled: false' if you only want kubectl-based workspace management
+# ============================================================================
+webApp:
+  # Enable or disable the web UI (default: true)
+  enabled: true
+  replicas: 1
+  imagePullPolicy: Always
+  repository: docker.io
+  imageName: jupyter-k8s-web-app
+  imageTag: latest
+  # Kubernetes namespace where workspaces are created and managed
+  # This should match the namespace where your WorkspaceTemplates are deployed
+  namespace: default
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  # Session cookie configuration for auth fast path
+  # Timing values (cookieMaxAge, maxLifetime, nearExpiryThreshold) are
+  # automatically derived from oauth2Proxy.cookieExpire — no need to set them here
+  session:
+    cookieName: "workspace_console_session"
+    cookiePath: "/api/"
+    secretName: "web-app-session-secret"
+    keyPrefix: "session-key-"
+    keySizeBytes: 32
+    numberOfKeys: 3
+    newKeyUseDelaySecs: 60          # Cooloff before using a newly rotated key
 
 # Authmiddleware configuration
 authmiddleware:

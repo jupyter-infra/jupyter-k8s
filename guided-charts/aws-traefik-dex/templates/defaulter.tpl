@@ -44,3 +44,49 @@ Examples: "5m" converts to every 5 minutes, "1h" converts to every hour.
   {{- fail (printf "Unsupported rotation interval format: %s (use Xm for minutes or Xh for hours)" $interval) -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Convert a Go-style duration string (e.g. "8h", "30m", "1h30m") to total seconds.
+Supports hours (h) and minutes (m).
+*/}}
+{{- define "defaulter.durationToSeconds" -}}
+{{- $input := . -}}
+{{- $totalSeconds := 0 -}}
+{{- if regexMatch "^[0-9]+h" $input -}}
+  {{- $hours := regexFind "[0-9]+" $input | int -}}
+  {{- $totalSeconds = mul $hours 3600 -}}
+  {{- $input = regexReplaceAll "^[0-9]+h" $input "" -}}
+{{- end -}}
+{{- if regexMatch "^[0-9]+m" $input -}}
+  {{- $minutes := regexFind "[0-9]+" $input | int -}}
+  {{- $totalSeconds = add $totalSeconds (mul $minutes 60) -}}
+{{- end -}}
+{{- $totalSeconds -}}
+{{- end -}}
+
+{{/*
+Compute session cookie max age in seconds.
+75% of OAuth2 Proxy cookie expiry to ensure session expires before the OAuth2 session.
+*/}}
+{{- define "defaulter.sessionCookieMaxAgeSecs" -}}
+{{- $expirySecs := include "defaulter.durationToSeconds" .Values.oauth2Proxy.cookieExpire | int -}}
+{{- div (mul $expirySecs 3) 4 -}}
+{{- end -}}
+
+{{/*
+Compute session max lifetime in seconds.
+Equal to the OAuth2 Proxy cookie expiry (absolute upper bound).
+*/}}
+{{- define "defaulter.sessionMaxLifetimeSecs" -}}
+{{- include "defaulter.durationToSeconds" .Values.oauth2Proxy.cookieExpire -}}
+{{- end -}}
+
+{{/*
+Compute session near-expiry threshold in seconds.
+Stop refreshing the session cookie when the OAuth2 token is within this window of expiry.
+Set to 25% of cookie expiry (i.e. the remaining 25% after cookieMaxAge).
+*/}}
+{{- define "defaulter.sessionNearExpiryThresholdSecs" -}}
+{{- $expirySecs := include "defaulter.durationToSeconds" .Values.oauth2Proxy.cookieExpire | int -}}
+{{- div $expirySecs 4 -}}
+{{- end -}}

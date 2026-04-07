@@ -1,0 +1,18 @@
+{{- if .Values.webApp.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-app
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: web-app
+    component: web-app
+spec:
+  selector:
+    app: web-app
+  ports:
+    - name: http
+      port: 8090
+      targetPort: http
+      protocol: TCP
+{{- end }}

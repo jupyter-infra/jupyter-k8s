@@ -1,3 +1,12 @@
 # More info: https://docs.docker.com/engine/reference/builder/#dockerignore-file
 # Ignore build and test binaries.
 bin/
+
+# Git and IDE
+.git/
+.vscode/
+.devcontainer/
+
+# Go test artifacts
+cover.out
+dist/

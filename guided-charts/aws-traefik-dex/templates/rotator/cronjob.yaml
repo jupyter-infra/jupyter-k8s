@@ -47,12 +47,17 @@ spec:
               readOnlyRootFilesystem: true
               allowPrivilegeEscalation: false
             env:
-            - name: SECRET_NAME
-              value: "{{ .Values.authmiddleware.secretName }}"
             - name: SECRET_NAMESPACE
               value: "{{ .Values.namespace }}"
-            - name: NUMBER_OF_KEYS
-              value: "{{ .Values.rotator.numberOfKeys }}"
             - name: DRY_RUN
               value: "false"
+            {{- if .Values.webApp.enabled }}
+            - name: SECRETS_CONFIG
+              value: '[{"secretName":"{{ .Values.authmiddleware.secretName }}","keyPrefix":"jwt-signing-key-","keySize":48,"numberOfKeys":{{ .Values.rotator.numberOfKeys }}},{"secretName":"{{ .Values.webApp.session.secretName }}","keyPrefix":"{{ .Values.webApp.session.keyPrefix }}","keySize":{{ .Values.webApp.session.keySizeBytes }},"numberOfKeys":{{ .Values.webApp.session.numberOfKeys }}}]'
+            {{- else }}
+            - name: SECRET_NAME
+              value: "{{ .Values.authmiddleware.secretName }}"
+            - name: NUMBER_OF_KEYS
+              value: "{{ .Values.rotator.numberOfKeys }}"
+            {{- end }}
 {{- end }}

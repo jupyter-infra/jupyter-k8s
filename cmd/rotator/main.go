@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"math"
 	"os"
@@ -29,6 +30,7 @@ const (
 	EnvDryRun           = "DRY_RUN"
 	EnvTokenTTL         = "TOKEN_TTL"
 	EnvRotationInterval = "ROTATION_INTERVAL"
+	EnvSecretsConfig    = "SECRETS_CONFIG"
 )
 
 // Default values
@@ -85,25 +87,47 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Validate secret exists and has valid keys before rotation
-	log.Printf("Validating secret %s in namespace %s...", secretName, secretNamespace)
-	if err := rotator.ValidateSecret(ctx, k8sClient, secretName, secretNamespace); err != nil {
-		log.Printf("Warning: secret validation failed (this is OK for first run): %v", err)
-	} else {
-		log.Printf("Secret validation passed")
+	// Validate secret exists and has valid keys before rotation (single-secret mode only)
+	if os.Getenv(EnvSecretsConfig) == "" {
+		log.Printf("Validating secret %s in namespace %s...", secretName, secretNamespace)
+		if err := rotator.ValidateSecret(ctx, k8sClient, secretName, secretNamespace); err != nil {
+			log.Printf("Warning: secret validation failed (this is OK for first run): %v", err)
+		} else {
+			log.Printf("Secret validation passed")
+		}
 	}
 
+	// Check for multi-secret mode
+	secretsConfigJSON := os.Getenv(EnvSecretsConfig)
+
 	if dryRun {
-		log.Printf("DRY RUN: Would rotate keys in secret %s/%s (numberOfKeys=%d)",
-			secretNamespace, secretName, numberOfKeys)
+		if secretsConfigJSON != "" {
+			log.Printf("DRY RUN: Would rotate multiple secrets in namespace %s", secretNamespace)
+		} else {
+			log.Printf("DRY RUN: Would rotate keys in secret %s/%s (numberOfKeys=%d)",
+				secretNamespace, secretName, numberOfKeys)
+		}
 		log.Printf("DRY RUN: Skipping actual rotation")
 		os.Exit(0)
 	}
 
-	// Perform rotation
 	log.Printf("Rotating keys...")
-	if err := rotator.RotateSecret(ctx, k8sClient, secretName, secretNamespace, numberOfKeys); err != nil {
-		log.Fatalf("Failed to rotate keys: %v", err)
+
+	if secretsConfigJSON != "" {
+		// Multi-secret mode
+		var configs []rotator.SecretConfig
+		if err := json.Unmarshal([]byte(secretsConfigJSON), &configs); err != nil {
+			log.Fatalf("Failed to parse %s: %v", EnvSecretsConfig, err)
+		}
+		log.Printf("Multi-secret mode: rotating %d secrets", len(configs))
+		if err := rotator.RotateSecrets(ctx, k8sClient, secretNamespace, configs); err != nil {
+			log.Fatalf("Failed to rotate secrets: %v", err)
+		}
+	} else {
+		// Single-secret mode (backward compatible)
+		if err := rotator.RotateSecret(ctx, k8sClient, secretName, secretNamespace, numberOfKeys); err != nil {
+			log.Fatalf("Failed to rotate keys: %v", err)
+		}
 	}
 
 	log.Printf("Key rotation completed successfully")

@@ -13,22 +13,17 @@ data:
     web:
       http: 0.0.0.0:5556
     staticClients:
-    - id: {{ .Values.dex.oauth2ProxyClientId }}
-      redirectURIs:
-      - https://{{ .Values.domain }}/oauth2/callback
-      name: 'OAuth2 Proxy'
-      secret: {{ include "defaulter.oauth2ProxyClientSecret" . }}
     - id: {{ .Values.dex.kubernetesClientId }}
       redirectURIs:
+      # OAuth2 Proxy web callback
+      - https://{{ .Values.domain }}/oauth2/callback
+      # kubectl CLI callbacks
       {{- range .Values.dex.kubernetesClientRedirectPorts }}
       - http://localhost:{{ . }}
       {{- end }}
       name: 'Kubernetes Cluster'
-      {{- if .Values.dex.kubernetesClientSecret }}
-      secret: {{ .Values.dex.kubernetesClientSecret }}
-      {{- else }}
-      public: true
-      {{- end }}
+      # Use the OAuth2 Proxy secret for web authentication
+      secret: {{ include "defaulter.oauth2ProxyClientSecret" . }}
     connectors:
     - type: github
       id: github

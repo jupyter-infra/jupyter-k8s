@@ -21,13 +21,43 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// GenerateKey generates a cryptographically random signing key
+// SecretConfig defines the configuration for rotating a single secret.
+type SecretConfig struct {
+	SecretName   string `json:"secretName"`
+	KeyPrefix    string `json:"keyPrefix"`
+	KeySize      int    `json:"keySize"`
+	NumberOfKeys int    `json:"numberOfKeys"`
+}
+
+// GenerateKey generates a cryptographically random signing key of the default size.
 func GenerateKey() ([]byte, error) {
-	key := make([]byte, jwt.KeySizeBytes)
+	return GenerateKeyWithSize(jwt.KeySizeBytes)
+}
+
+// GenerateKeyWithSize generates a cryptographically random key of the specified size.
+// Minimum key size is 16 bytes (128 bits).
+func GenerateKeyWithSize(size int) ([]byte, error) {
+	if size < 16 {
+		return nil, fmt.Errorf("key size must be at least 16 bytes, got %d", size)
+	}
+	key := make([]byte, size)
 	if _, err := rand.Read(key); err != nil {
 		return nil, fmt.Errorf("failed to generate random key: %w", err)
 	}
 	return key, nil
+}
+
+// RotateSecrets performs key rotation on multiple Kubernetes secrets.
+// Each secret is configured independently with its own key prefix, size, and retention count.
+func RotateSecrets(ctx context.Context, k8sClient client.Client, namespace string, configs []SecretConfig) error {
+	for _, cfg := range configs {
+		log.Printf("Rotating secret %s (prefix=%s, keySize=%d, numberOfKeys=%d)",
+			cfg.SecretName, cfg.KeyPrefix, cfg.KeySize, cfg.NumberOfKeys)
+		if err := rotateSecretWithConfig(ctx, k8sClient, cfg.SecretName, namespace, cfg.KeyPrefix, cfg.KeySize, cfg.NumberOfKeys); err != nil {
+			return fmt.Errorf("failed to rotate secret %s: %w", cfg.SecretName, err)
+		}
+	}
+	return nil
 }
 
 // keyEntry represents a signing key with its timestamp
@@ -37,14 +67,18 @@ type keyEntry struct {
 	value     []byte
 }
 
-// RotateSecret performs key rotation on a Kubernetes secret
-// It generates a new key, adds it to the secret, and prunes old keys beyond numberOfKeys
+// RotateSecret performs key rotation on a Kubernetes secret using the default JWT key prefix and size.
+// Backward compatible — delegates to the generalized rotateSecretWithConfig.
 func RotateSecret(ctx context.Context, k8sClient client.Client, secretName string, namespace string, numberOfKeys int) error {
+	return rotateSecretWithConfig(ctx, k8sClient, secretName, namespace, jwt.KeyPrefix, jwt.KeySizeBytes, numberOfKeys)
+}
+
+// rotateSecretWithConfig performs key rotation with configurable prefix and key size.
+func rotateSecretWithConfig(ctx context.Context, k8sClient client.Client, secretName string, namespace string, keyPrefix string, keySize int, numberOfKeys int) error {
 	if numberOfKeys < 1 {
 		return fmt.Errorf("numberOfKeys must be at least 1, got %d", numberOfKeys)
 	}
 
-	// Get current secret
 	secret := &corev1.Secret{}
 	err := k8sClient.Get(ctx, types.NamespacedName{
 		Name:      secretName,
@@ -58,16 +92,15 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, secretName strin
 		secret.Data = make(map[string][]byte)
 	}
 
-	// Parse existing keys
+	// Parse existing keys matching the prefix
 	keys := make([]keyEntry, 0, len(secret.Data))
 	for name, value := range secret.Data {
-		if !strings.HasPrefix(name, jwt.KeyPrefix) {
+		if !strings.HasPrefix(name, keyPrefix) {
 			continue
 		}
 
-		timestamp, err := jwt.ParseKeyTimestamp(name)
+		timestamp, err := parseKeyTimestampWithPrefix(name, keyPrefix)
 		if err != nil {
-			// Log warning but continue - don't fail rotation due to malformed key
 			log.Printf("Warning: skipping malformed key %s: %v\n", name, err)
 			continue
 		}
@@ -79,28 +112,24 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, secretName strin
 		})
 	}
 
-	// Sort keys by timestamp (oldest first)
 	sort.Slice(keys, func(i, j int) bool {
 		return keys[i].timestamp < keys[j].timestamp
 	})
 
-	// Generate new key
-	newKey, err := GenerateKey()
+	newKey, err := GenerateKeyWithSize(keySize)
 	if err != nil {
 		return fmt.Errorf("failed to generate new key: %w", err)
 	}
 
 	now := time.Now().UTC().Unix()
-	newKeyName := jwt.BuildKeyName(now)
+	newKeyName := fmt.Sprintf("%s%d", keyPrefix, now)
 
-	// Check if key with this timestamp already exists (clock skew or very fast rotation)
 	for _, k := range keys {
 		if k.name == newKeyName {
 			return fmt.Errorf("key with timestamp %d already exists, refusing to overwrite", now)
 		}
 	}
 
-	// Add new key
 	secret.Data[newKeyName] = newKey
 	keys = append(keys, keyEntry{
 		name:      newKeyName,
@@ -108,12 +137,10 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, secretName strin
 		value:     newKey,
 	})
 
-	// Re-sort after adding new key
 	sort.Slice(keys, func(i, j int) bool {
 		return keys[i].timestamp < keys[j].timestamp
 	})
 
-	// Keep only the latest numberOfKeys keys
 	if len(keys) > numberOfKeys {
 		keysToRemove := keys[:len(keys)-numberOfKeys]
 		for _, k := range keysToRemove {
@@ -122,7 +149,6 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, secretName strin
 		log.Printf("Pruned %d old keys: %v\n", len(keysToRemove), getKeyNames(keysToRemove))
 	}
 
-	// Update secret
 	err = k8sClient.Update(ctx, secret)
 	if err != nil {
 		return fmt.Errorf("failed to update secret %s: %w", secretName, err)
@@ -133,6 +159,19 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, secretName strin
 		secret.Namespace, secretName, newKeyName, remainingKeys)
 
 	return nil
+}
+
+// parseKeyTimestampWithPrefix extracts the timestamp from a key name with a given prefix.
+func parseKeyTimestampWithPrefix(keyName string, prefix string) (int64, error) {
+	if !strings.HasPrefix(keyName, prefix) {
+		return 0, fmt.Errorf("key name %s does not have prefix %s", keyName, prefix)
+	}
+	timestampStr := strings.TrimPrefix(keyName, prefix)
+	var timestamp int64
+	if _, err := fmt.Sscanf(timestampStr, "%d", &timestamp); err != nil {
+		return 0, fmt.Errorf("invalid timestamp in key name %s: %w", keyName, err)
+	}
+	return timestamp, nil
 }
 
 // getKeyNames extracts key names from keyEntry slice for logging

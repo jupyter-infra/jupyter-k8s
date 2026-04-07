@@ -59,8 +59,8 @@ spec:
         - --oidc-issuer-url=https://{{ .Values.domain }}/dex
         - --cookie-secure=true
         - --cookie-samesite=lax
-        - --cookie-refresh=1h
-        - --cookie-expire=8h
+        - --cookie-refresh={{ .Values.oauth2Proxy.cookieRefresh }}
+        - --cookie-expire={{ .Values.oauth2Proxy.cookieExpire }}
         - --cookie-domain={{ .Values.domain }}
         - --cookie-path=/
         - --session-store-type=cookie
