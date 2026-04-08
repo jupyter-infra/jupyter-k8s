@@ -102,6 +102,27 @@ func parseGVKWatches(gvkList string) ([]GVKWatch, error) {
 	return watches, nil
 }
 
+// parsePluginEndpoints parses a comma-separated list of name=endpoint pairs
+// into a map. Format: "aws=http://localhost:8080,gcp=http://localhost:8081"
+func parsePluginEndpoints(raw string) (map[string]string, error) {
+	if raw == "" {
+		return nil, nil
+	}
+
+	endpoints := map[string]string{}
+	items := strings.Split(raw, ",")
+
+	for _, item := range items {
+		parts := strings.SplitN(item, "=", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return nil, fmt.Errorf("invalid plugin endpoint format: %q. Expected format: name=endpoint", item)
+		}
+		endpoints[parts[0]] = parts[1]
+	}
+
+	return endpoints, nil
+}
+
 // nolint:gocyclo
 func main() {
 	var metricsAddr string
@@ -124,6 +145,7 @@ func main() {
 	var jwtSecretName string
 	var jwtTTL time.Duration
 	var newKeyUseDelay time.Duration
+	var pluginEndpointsFlag string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -165,8 +187,10 @@ func main() {
 		"JWT expiration duration (e.g. 5m). Uses server default if not set.")
 	flag.DurationVar(&newKeyUseDelay, "new-key-use-delay", 0,
 		"Delay before using a newly rotated signing key (e.g. 5s). Uses server default if not set.")
+	flag.StringVar(&pluginEndpointsFlag, "plugin-endpoints", "",
+		"Comma-separated list of plugin name=endpoint pairs (e.g. aws=http://localhost:8080)")
 	opts := zap.Options{
-		Development: true,
+		Development: false,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -287,6 +311,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Parse plugin endpoints
+	pluginEndpoints, err := parsePluginEndpoints(pluginEndpointsFlag)
+	if err != nil {
+		setupLog.Error(err, "Error parsing plugin endpoints")
+		os.Exit(1)
+	}
+
 	// Configure controller options
 	controllerOpts := controller.WorkspaceControllerOptions{
 		ApplicationImagesPullPolicy: getImagePullPolicy(applicationImagesPullPolicy),
@@ -295,6 +326,7 @@ func main() {
 		ResourceWatches:             make([]controller.GVKWatch, 0),
 		EnableWorkspacePodWatching:  enableWorkspacePodWatching,
 		DefaultTemplateNamespace:    defaultTemplateNamespace,
+		PluginEndpoints:             pluginEndpoints,
 	}
 
 	// Convert parsed GVKWatches to controller.GVKWatch format
@@ -352,11 +384,11 @@ func main() {
 		configOpts := []extensionapi.ConfigOption{
 			extensionapi.WithServerPort(7443),
 			extensionapi.WithControllerNamespace(os.Getenv("CONTROLLER_POD_NAMESPACE")),
-			extensionapi.WithClusterId(os.Getenv("CLUSTER_ID")),
-			extensionapi.WithKMSKeyID(os.Getenv("KMS_KEY_ID")),
-			extensionapi.WithDomain(os.Getenv("DOMAIN")),
 		}
 
+		if len(pluginEndpoints) > 0 {
+			configOpts = append(configOpts, extensionapi.WithPluginEndpoints(pluginEndpoints))
+		}
 		if jwtIssuer != "" {
 			configOpts = append(configOpts, extensionapi.WithJwtIssuer(jwtIssuer))
 		}

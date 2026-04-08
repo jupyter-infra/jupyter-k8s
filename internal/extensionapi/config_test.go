@@ -109,11 +109,5 @@ var _ = Describe("ExtensionConfig", func() {
 			Expect(config.AllowedOrigin).To(Equal(customOrigin))
 		})
 
-		It("Should allow to override ClusterId", func() {
-			customClusterId := "test-cluster-123"
-			config := NewConfig(WithClusterId(customClusterId))
-
-			Expect(config.ClusterId).To(Equal(customClusterId))
-		})
 	})
 })

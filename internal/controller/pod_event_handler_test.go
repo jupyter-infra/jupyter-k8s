@@ -7,7 +7,6 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -17,56 +16,36 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
-	awsutil "github.com/jupyter-infra/jupyter-k8s/internal/aws"
+	"github.com/jupyter-infra/jupyter-k8s/internal/pluginadapters"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
-// Mock SSM strategy for testing
-type mockSSMRemoteAccessStrategy struct {
-	cleanupCalled bool
-	cleanupError  error
+// mockPodEventHandler implements pluginadapters.PodEventPluginAdapter for testing
+type mockPodEventHandler struct {
+	handlePodRunningCalled bool
+	handlePodDeletedCalled bool
+	handlePodRunningErr    error
+	handlePodDeletedErr    error
 }
 
-func (m *mockSSMRemoteAccessStrategy) CleanupSSMManagedNodes(ctx context.Context, pod *corev1.Pod) error {
-	m.cleanupCalled = true
-	return m.cleanupError
+func (m *mockPodEventHandler) HandlePodRunning(ctx context.Context, pod *corev1.Pod, workspaceName, namespace string, podEventsContext map[string]string) error {
+	m.handlePodRunningCalled = true
+	return m.handlePodRunningErr
 }
 
-func (m *mockSSMRemoteAccessStrategy) SetupContainers(ctx context.Context, pod *corev1.Pod, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) error {
-	return nil
+func (m *mockPodEventHandler) HandlePodDeleted(ctx context.Context, pod *corev1.Pod, podEventsContext map[string]string) error {
+	m.handlePodDeletedCalled = true
+	return m.handlePodDeletedErr
 }
 
-func TestNewPodEventHandler_Success(t *testing.T) {
-	// Save original
-	original := newSSMRemoteAccessStrategy
-	originalNewPodExecUtil := newPodExecUtil
-	defer func() {
-		newSSMRemoteAccessStrategy = original
-		newPodExecUtil = originalNewPodExecUtil
-	}()
-
-	// Mock successful PodExecUtil creation
-	mockPodExecUtil := &PodExecUtil{}
-	newPodExecUtil = func() (*PodExecUtil, error) {
-		return mockPodExecUtil, nil
-	}
-
-	// Mock successful SSM strategy creation
-	mockStrategy := &awsutil.SSMRemoteAccessStrategy{}
-	newSSMRemoteAccessStrategy = func(podExecUtil awsutil.PodExecInterface) (*awsutil.SSMRemoteAccessStrategy, error) {
-		return mockStrategy, nil
-	}
-
-	// Create test dependencies
+func TestNewPodEventHandler_NoPlugins(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().Build()
-	mockRM := &ResourceManager{} // Use real type with zero values for constructor test
+	mockRM := &ResourceManager{}
 
-	// Test successful creation
-	handler := NewPodEventHandler(fakeClient, mockRM)
+	handler := NewPodEventHandler(fakeClient, mockRM, nil)
 
 	if handler == nil {
 		t.Fatal("Expected non-nil PodEventHandler")
-		return
 	}
 	if handler.client != fakeClient {
 		t.Error("Expected client to be set correctly")
@@ -74,57 +53,12 @@ func TestNewPodEventHandler_Success(t *testing.T) {
 	if handler.resourceManager != mockRM {
 		t.Error("Expected resourceManager to be set correctly")
 	}
-	if handler.ssmRemoteAccessStrategy != mockStrategy {
-		t.Error("Expected ssmRemoteAccessStrategy to be set to mock strategy")
+	if handler.podEventAdapters != nil {
+		t.Error("Expected podEventAdapters to be nil when no plugins provided")
 	}
 }
 
-func TestNewPodEventHandler_SSMStrategyFailure(t *testing.T) {
-	// Save original
-	original := newSSMRemoteAccessStrategy
-	originalNewPodExecUtil := newPodExecUtil
-	defer func() {
-		newSSMRemoteAccessStrategy = original
-		newPodExecUtil = originalNewPodExecUtil
-	}()
-
-	// Mock successful PodExecUtil creation
-	mockPodExecUtil := &PodExecUtil{}
-	newPodExecUtil = func() (*PodExecUtil, error) {
-		return mockPodExecUtil, nil
-	}
-
-	// Mock SSM strategy creation failure
-	expectedError := errors.New("mock SSM strategy creation error")
-	newSSMRemoteAccessStrategy = func(podExecUtil awsutil.PodExecInterface) (*awsutil.SSMRemoteAccessStrategy, error) {
-		return nil, expectedError
-	}
-
-	// Create test dependencies
-	fakeClient := fake.NewClientBuilder().Build()
-	mockRM := &ResourceManager{} // Use real type with zero values for constructor test
-
-	// Test creation with SSM strategy failure
-	handler := NewPodEventHandler(fakeClient, mockRM)
-
-	// Verify handler is still created (main test)
-	if handler == nil {
-		t.Fatal("Expected non-nil PodEventHandler even when SSM strategy fails")
-		return
-	}
-	if handler.client != fakeClient {
-		t.Error("Expected client to be set correctly")
-	}
-	if handler.resourceManager != mockRM {
-		t.Error("Expected resourceManager to be set correctly")
-	}
-	// With interface types, a typed nil (*awsutil.SSMRemoteAccessStrategy)(nil) is stored
-	// The important thing is that the handler was created successfully and won't crash
-	// The nil check in the actual code (h.ssmRemoteAccessStrategy == nil) works correctly
-	// even with typed nils, so this is acceptable behavior
-}
-
-func TestHandleWorkspacePodEvents_PodRunning_SSMSuccess(t *testing.T) {
+func TestHandleWorkspacePodEvents_PodRunning_Success(t *testing.T) {
 	// Create workspace object
 	workspace := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -143,11 +77,13 @@ func TestHandleWorkspacePodEvents_PodRunning_SSMSuccess(t *testing.T) {
 		WithObjects(workspace).
 		Build()
 
-	// Create handler with minimal setup (we'll test the basic flow)
+	mockHandler := &mockPodEventHandler{}
+
+	// Create handler
 	handler := &PodEventHandler{
-		client:                  fakeClient,
-		resourceManager:         &ResourceManager{},                 // Will fail gracefully
-		ssmRemoteAccessStrategy: &awsutil.SSMRemoteAccessStrategy{}, // Will fail gracefully
+		client:           fakeClient,
+		resourceManager:  &ResourceManager{},
+		podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{"aws": mockHandler},
 	}
 
 	// Create running workspace pod
@@ -164,26 +100,21 @@ func TestHandleWorkspacePodEvents_PodRunning_SSMSuccess(t *testing.T) {
 		},
 	}
 
-	// Test handling running workspace pod (will exercise the flow)
 	result := handler.HandleWorkspacePodEvents(context.Background(), pod)
 
 	if result != nil {
 		t.Error("Expected nil result (no reconciliation triggered)")
 	}
-	// Success is indicated by no panics and proper execution flow
 }
 
 func TestHandleWorkspacePodEvents_PodRunning_WorkspaceNotFound(t *testing.T) {
-	// Create fake client without workspace (simulates deleted workspace)
 	fakeClient := fake.NewClientBuilder().Build()
 
-	// Create handler
 	handler := &PodEventHandler{
 		client:          fakeClient,
 		resourceManager: &ResourceManager{},
 	}
 
-	// Create running workspace pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "workspace-pod",
@@ -197,17 +128,14 @@ func TestHandleWorkspacePodEvents_PodRunning_WorkspaceNotFound(t *testing.T) {
 		},
 	}
 
-	// Test handling running pod when workspace is not found
 	result := handler.HandleWorkspacePodEvents(context.Background(), pod)
 
 	if result != nil {
 		t.Error("Expected nil result when workspace not found")
 	}
-	// Success is indicated by graceful handling (no panic)
 }
 
-func TestHandleWorkspacePodEvents_PodRunning_SSMStrategyNil(t *testing.T) {
-	// Create workspace object
+func TestHandleWorkspacePodEvents_PodRunning_HandlersNil(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-workspace",
@@ -215,24 +143,20 @@ func TestHandleWorkspacePodEvents_PodRunning_SSMStrategyNil(t *testing.T) {
 		},
 	}
 
-	// Create scheme and add our types
 	scheme := runtime.NewScheme()
 	_ = workspacev1alpha1.AddToScheme(scheme)
 
-	// Create fake client with workspace
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(workspace).
 		Build()
 
-	// Create handler with nil SSM strategy
 	handler := &PodEventHandler{
-		client:                  fakeClient,
-		resourceManager:         &ResourceManager{}, // Will fail gracefully
-		ssmRemoteAccessStrategy: nil,                // SSM strategy is nil
+		client:           fakeClient,
+		resourceManager:  &ResourceManager{},
+		podEventAdapters: nil,
 	}
 
-	// Create running workspace pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "workspace-pod",
@@ -246,24 +170,20 @@ func TestHandleWorkspacePodEvents_PodRunning_SSMStrategyNil(t *testing.T) {
 		},
 	}
 
-	// Test handling running pod when SSM strategy is nil
 	result := handler.HandleWorkspacePodEvents(context.Background(), pod)
 
 	if result != nil {
-		t.Error("Expected nil result when SSM strategy is nil")
+		t.Error("Expected nil result when handlers are nil")
 	}
-	// Success is indicated by graceful handling (logs error but doesn't crash)
 }
 
 func TestHandleWorkspacePodEvents_PodDeleted_Success(t *testing.T) {
-	// Create handler
 	handler := &PodEventHandler{
-		client:                  fake.NewClientBuilder().Build(),
-		resourceManager:         &ResourceManager{},
-		ssmRemoteAccessStrategy: &awsutil.SSMRemoteAccessStrategy{}, // Will fail gracefully
+		client:           fake.NewClientBuilder().Build(),
+		resourceManager:  &ResourceManager{},
+		podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{"aws": &mockPodEventHandler{}},
 	}
 
-	// Create deleted workspace pod
 	deletionTime := metav1.Now()
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -276,24 +196,20 @@ func TestHandleWorkspacePodEvents_PodDeleted_Success(t *testing.T) {
 		},
 	}
 
-	// Test handling deleted workspace pod
 	result := handler.HandleWorkspacePodEvents(context.Background(), pod)
 
 	if result != nil {
 		t.Error("Expected nil result for deleted pod")
 	}
-	// Success is indicated by no panics and proper execution flow
 }
 
-func TestHandleWorkspacePodEvents_PodDeleted_SSMStrategyNil(t *testing.T) {
-	// Create handler with nil SSM strategy
+func TestHandleWorkspacePodEvents_PodDeleted_HandlersNil(t *testing.T) {
 	handler := &PodEventHandler{
-		client:                  fake.NewClientBuilder().Build(),
-		resourceManager:         &ResourceManager{},
-		ssmRemoteAccessStrategy: nil, // SSM strategy is nil
+		client:           fake.NewClientBuilder().Build(),
+		resourceManager:  &ResourceManager{},
+		podEventAdapters: nil,
 	}
 
-	// Create deleted workspace pod
 	deletionTime := metav1.Now()
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -306,71 +222,34 @@ func TestHandleWorkspacePodEvents_PodDeleted_SSMStrategyNil(t *testing.T) {
 		},
 	}
 
-	// Test handling deleted pod when SSM strategy is nil
 	result := handler.HandleWorkspacePodEvents(context.Background(), pod)
 
 	if result != nil {
-		t.Error("Expected nil result when SSM strategy is nil")
+		t.Error("Expected nil result when handlers are nil")
 	}
-	// Success is indicated by graceful handling (logs error but doesn't crash)
-}
-
-func TestHandleWorkspacePodEvents_PodDeleted_SSMCleanupFailure(t *testing.T) {
-	// Create handler
-	handler := &PodEventHandler{
-		client:                  fake.NewClientBuilder().Build(),
-		resourceManager:         &ResourceManager{},
-		ssmRemoteAccessStrategy: &awsutil.SSMRemoteAccessStrategy{}, // Will fail gracefully
-	}
-
-	// Create deleted workspace pod
-	deletionTime := metav1.Now()
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "workspace-pod",
-			Namespace: "test-namespace",
-			Labels: map[string]string{
-				workspaceutil.LabelWorkspaceName: "test-workspace",
-			},
-			DeletionTimestamp: &deletionTime,
-		},
-	}
-
-	// Test handling deleted pod when SSM cleanup fails
-	result := handler.HandleWorkspacePodEvents(context.Background(), pod)
-
-	if result != nil {
-		t.Error("Expected nil result even when SSM cleanup fails")
-	}
-	// Success is indicated by graceful handling (logs error but doesn't crash)
 }
 
 func TestHandlePodRunning_WithPodEventsHandler(t *testing.T) {
 	tests := []struct {
 		name             string
 		podEventsHandler string
-		expectError      bool
 	}{
 		{
-			name:             "AWS handler processes normally",
-			podEventsHandler: "aws",
-			expectError:      false,
+			name:             "AWS handler dispatches correctly",
+			podEventsHandler: "aws:ssm-remote-access",
 		},
 		{
-			name:             "Empty handler processes normally",
+			name:             "Empty handler skips dispatch",
 			podEventsHandler: "",
-			expectError:      false,
 		},
 		{
-			name:             "Non-AWS handler processes normally",
-			podEventsHandler: "other",
-			expectError:      false,
+			name:             "Unknown handler logs error",
+			podEventsHandler: "other:unknown",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create workspace
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace",
@@ -378,7 +257,6 @@ func TestHandlePodRunning_WithPodEventsHandler(t *testing.T) {
 				},
 			}
 
-			// Create access strategy with specified handler
 			accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-strategy",
@@ -389,7 +267,6 @@ func TestHandlePodRunning_WithPodEventsHandler(t *testing.T) {
 				},
 			}
 
-			// Create fake client with workspace and access strategy
 			scheme := runtime.NewScheme()
 			_ = workspacev1alpha1.AddToScheme(scheme)
 			fakeClient := fake.NewClientBuilder().
@@ -397,13 +274,13 @@ func TestHandlePodRunning_WithPodEventsHandler(t *testing.T) {
 				WithObjects(workspace, accessStrategy).
 				Build()
 
+			mockHandler := &mockPodEventHandler{}
 			handler := &PodEventHandler{
-				client:                  fakeClient,
-				resourceManager:         &ResourceManager{},
-				ssmRemoteAccessStrategy: &awsutil.SSMRemoteAccessStrategy{}, // Will fail gracefully for non-AWS handlers
+				client:           fakeClient,
+				resourceManager:  &ResourceManager{},
+				podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{"aws": mockHandler},
 			}
 
-			// Create pod
 			pod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-pod",
@@ -417,52 +294,40 @@ func TestHandlePodRunning_WithPodEventsHandler(t *testing.T) {
 				},
 			}
 
-			// Test handling the pod event (this will exercise our podEventsHandler logic)
 			result := handler.HandleWorkspacePodEvents(context.Background(), pod)
 
-			if tt.expectError {
-				if result == nil {
-					t.Error("Expected error result but got nil")
-				}
-			} else {
-				if result != nil {
-					t.Errorf("Expected nil result but got: %v", result)
-				}
+			if result != nil {
+				t.Errorf("Expected nil result but got: %v", result)
 			}
 		})
 	}
 }
 
 func TestHandleWorkspacePodEvents_PodDeleted_WithAWSHandler(t *testing.T) {
-	// Create mock SSM strategy
-	mockSSM := &mockSSMRemoteAccessStrategy{}
+	mockHandler := &mockPodEventHandler{}
 
-	// Create access strategy with AWS pod events handler
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "aws-access-strategy",
 			Namespace: "default",
 		},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			PodEventsHandler: "aws",
+			PodEventsHandler: "aws:ssm-remote-access",
 		},
 	}
 
-	// Create scheme and add our types
 	scheme := runtime.NewScheme()
 	_ = workspacev1alpha1.AddToScheme(scheme)
 
-	// Create handler with mock SSM strategy
 	handler := &PodEventHandler{
 		client: fake.NewClientBuilder().
 			WithScheme(scheme).
 			WithObjects(accessStrategy).
 			Build(),
-		resourceManager:         &ResourceManager{},
-		ssmRemoteAccessStrategy: mockSSM,
+		resourceManager:  &ResourceManager{},
+		podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{"aws": mockHandler},
 	}
 
-	// Create deleted workspace pod with AWS access strategy label
 	deletionTime := metav1.Now()
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -477,49 +342,42 @@ func TestHandleWorkspacePodEvents_PodDeleted_WithAWSHandler(t *testing.T) {
 		},
 	}
 
-	// Test handling deleted pod with AWS handler
 	result := handler.HandleWorkspacePodEvents(context.Background(), pod)
 
 	if result != nil {
 		t.Error("Expected nil result for deleted pod with AWS handler")
 	}
 
-	// Verify cleanup was called
-	if !mockSSM.cleanupCalled {
-		t.Error("Expected SSM cleanup to be called for pod with AWS handler")
+	if !mockHandler.handlePodDeletedCalled {
+		t.Error("Expected HandlePodDeleted to be called for pod with AWS handler")
 	}
 }
 
 func TestHandleWorkspacePodEvents_PodDeleted_WithNonAWSHandler(t *testing.T) {
-	// Create mock SSM strategy
-	mockSSM := &mockSSMRemoteAccessStrategy{}
+	mockHandler := &mockPodEventHandler{}
 
-	// Create access strategy with non-AWS pod events handler
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "some-other-access-strategy",
 			Namespace: "default",
 		},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			PodEventsHandler: "other",
+			PodEventsHandler: "other:handler",
 		},
 	}
 
-	// Create scheme and add our types
 	scheme := runtime.NewScheme()
 	_ = workspacev1alpha1.AddToScheme(scheme)
 
-	// Create handler with mock SSM strategy
 	handler := &PodEventHandler{
 		client: fake.NewClientBuilder().
 			WithScheme(scheme).
 			WithObjects(accessStrategy).
 			Build(),
-		resourceManager:         &ResourceManager{},
-		ssmRemoteAccessStrategy: mockSSM,
+		resourceManager:  &ResourceManager{},
+		podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{"aws": mockHandler},
 	}
 
-	// Create deleted workspace pod with non-AWS access strategy label
 	deletionTime := metav1.Now()
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -534,31 +392,26 @@ func TestHandleWorkspacePodEvents_PodDeleted_WithNonAWSHandler(t *testing.T) {
 		},
 	}
 
-	// Test handling deleted pod with non-AWS handler
 	result := handler.HandleWorkspacePodEvents(context.Background(), pod)
 
 	if result != nil {
 		t.Error("Expected nil result for deleted pod with non-AWS handler")
 	}
 
-	// Verify cleanup was NOT called
-	if mockSSM.cleanupCalled {
-		t.Error("Expected SSM cleanup to NOT be called for pod with non-AWS handler")
+	if mockHandler.handlePodDeletedCalled {
+		t.Error("Expected HandlePodDeleted to NOT be called for pod with non-AWS handler")
 	}
 }
 
 func TestHandleWorkspacePodEvents_PodDeleted_WithoutAccessStrategyLabel(t *testing.T) {
-	// Create mock SSM strategy
-	mockSSM := &mockSSMRemoteAccessStrategy{}
+	mockHandler := &mockPodEventHandler{}
 
-	// Create handler with mock SSM strategy
 	handler := &PodEventHandler{
-		client:                  fake.NewClientBuilder().Build(),
-		resourceManager:         &ResourceManager{},
-		ssmRemoteAccessStrategy: mockSSM,
+		client:           fake.NewClientBuilder().Build(),
+		resourceManager:  &ResourceManager{},
+		podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{"aws": mockHandler},
 	}
 
-	// Create deleted workspace pod without access strategy label
 	deletionTime := metav1.Now()
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -566,27 +419,23 @@ func TestHandleWorkspacePodEvents_PodDeleted_WithoutAccessStrategyLabel(t *testi
 			Namespace: "test-namespace",
 			Labels: map[string]string{
 				workspaceutil.LabelWorkspaceName: "test-workspace",
-				// No access strategy labels
 			},
 			DeletionTimestamp: &deletionTime,
 		},
 	}
 
-	// Test handling deleted pod without access strategy label
 	result := handler.HandleWorkspacePodEvents(context.Background(), pod)
 
 	if result != nil {
 		t.Error("Expected nil result for deleted pod without access strategy label")
 	}
 
-	// Verify cleanup was NOT called
-	if mockSSM.cleanupCalled {
-		t.Error("Expected SSM cleanup to NOT be called for pod without access strategy label")
+	if mockHandler.handlePodDeletedCalled {
+		t.Error("Expected HandlePodDeleted to NOT be called for pod without access strategy label")
 	}
 }
 
 func TestHandleKubernetesEvents(t *testing.T) {
-	// Test preemption event
 	event := &corev1.Event{
 		InvolvedObject: corev1.ObjectReference{
 			Kind:      "Pod",
@@ -597,14 +446,12 @@ func TestHandleKubernetesEvents(t *testing.T) {
 		Message: "Pod was Preempted by scheduler",
 	}
 
-	// Test preemption event detection
 	if event.InvolvedObject.Kind != "Pod" ||
 		event.Reason != "Stopped" ||
 		!strings.Contains(event.Message, "Preempted") {
 		t.Error("Should detect preemption event")
 	}
 
-	// Test workspace name extraction
 	podName := event.InvolvedObject.Name
 	if strings.HasPrefix(podName, "jupyter-") {
 		parts := strings.Split(podName, "-")
@@ -617,7 +464,6 @@ func TestHandleKubernetesEvents(t *testing.T) {
 	}
 }
 
-// TestWorkspaceNameExtraction tests workspace name extraction edge cases
 func TestWorkspaceNameExtraction(t *testing.T) {
 	tests := []struct {
 		name         string

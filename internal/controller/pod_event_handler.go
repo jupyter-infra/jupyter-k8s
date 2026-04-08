@@ -15,54 +15,63 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
-	awsutil "github.com/jupyter-infra/jupyter-k8s/internal/aws"
+	"github.com/jupyter-infra/jupyter-k8s/internal/awsadapter"
+	"github.com/jupyter-infra/jupyter-k8s/internal/plugin"
+	"github.com/jupyter-infra/jupyter-k8s/internal/pluginadapters"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
-)
-
-// SSMRemoteAccessStrategyInterface defines the interface for SSM remote access operations
-type SSMRemoteAccessStrategyInterface interface {
-	SetupContainers(ctx context.Context, pod *corev1.Pod, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) error
-	CleanupSSMManagedNodes(ctx context.Context, pod *corev1.Pod) error
-}
-
-// Variables for dependency injection in tests
-var (
-	newSSMRemoteAccessStrategy = func(podExecUtil awsutil.PodExecInterface) (*awsutil.SSMRemoteAccessStrategy, error) {
-		return awsutil.NewSSMRemoteAccessStrategy(nil, podExecUtil)
-	}
-	newPodExecUtil = NewPodExecUtil
 )
 
 // PodEventHandler handles pod events for workspace pods
 type PodEventHandler struct {
-	client                  client.Client
-	resourceManager         *ResourceManager
-	ssmRemoteAccessStrategy SSMRemoteAccessStrategyInterface
+	client          client.Client
+	resourceManager *ResourceManager
+	// podEventAdapters maps plugin names (e.g. "aws") to their pod event adapter implementation.
+	podEventAdapters map[string]pluginadapters.PodEventPluginAdapter
 }
 
-// NewPodEventHandler creates a new PodEventHandler
-func NewPodEventHandler(k8sClient client.Client, resourceManager *ResourceManager) *PodEventHandler {
-	// Create PodExecUtil for SSM strategy
-	podExecUtil, err := newPodExecUtil()
-	if err != nil {
-		logf.Log.Error(err, "Failed to initialize PodExecUtil - SSM features will be disabled")
+// NewPodEventHandler creates a new PodEventHandler.
+// pluginClients maps plugin names to their remote access client implementations.
+// An empty or nil map disables all plugin-based remote access features.
+func NewPodEventHandler(k8sClient client.Client, resourceManager *ResourceManager, pluginClients map[string]plugin.RemoteAccessPluginApis) *PodEventHandler {
+	if len(pluginClients) == 0 {
+		logf.Log.Info("No plugin clients provided - remote access features will be disabled")
 		return &PodEventHandler{
-			client:                  k8sClient,
-			resourceManager:         resourceManager,
-			ssmRemoteAccessStrategy: nil,
+			client:           k8sClient,
+			resourceManager:  resourceManager,
+			podEventAdapters: nil,
 		}
 	}
 
-	ssmStrategy, err := newSSMRemoteAccessStrategy(podExecUtil)
+	// Create PodExecUtil (shared across all adapters)
+	podExecUtil, err := NewPodExecUtil()
 	if err != nil {
-		logf.Log.Error(err, "Failed to initialize SSM remote access strategy - SSM features will be disabled")
-		ssmStrategy = nil
+		logf.Log.Error(err, "Failed to initialize PodExecUtil - remote access features will be disabled")
+		return &PodEventHandler{
+			client:           k8sClient,
+			resourceManager:  resourceManager,
+			podEventAdapters: nil,
+		}
+	}
+
+	podEventAdapters := map[string]pluginadapters.PodEventPluginAdapter{}
+	for name, pluginClient := range pluginClients {
+		switch name {
+		case "aws":
+			adapter, err := awsadapter.NewAwsSsmPodEventAdapter(pluginClient, podExecUtil)
+			if err != nil {
+				logf.Log.Error(err, "Failed to initialize AWS SSM pod event adapter", "plugin", name)
+				continue
+			}
+			podEventAdapters[name] = adapter
+		default:
+			logf.Log.Info("No pod event adapter mapped for plugin - skipping", "plugin", name)
+		}
 	}
 
 	return &PodEventHandler{
-		client:                  k8sClient,
-		resourceManager:         resourceManager,
-		ssmRemoteAccessStrategy: ssmStrategy,
+		client:           k8sClient,
+		resourceManager:  resourceManager,
+		podEventAdapters: podEventAdapters,
 	}
 }
 
@@ -182,13 +191,19 @@ func (h *PodEventHandler) handlePodRunning(ctx context.Context, pod *corev1.Pod,
 		return
 	}
 
-	// Handle AWS pod events (SSM remote access strategy)
-	if accessStrategy != nil && accessStrategy.Spec.PodEventsHandler == "aws" {
-		if h.ssmRemoteAccessStrategy == nil {
-			logger.Error(nil, "SSM remote access strategy not available - cannot setup containers")
+	// Dispatch to the appropriate pod event handler by plugin name
+	if accessStrategy != nil && accessStrategy.Spec.PodEventsHandler != "" {
+		pluginName, _ := plugin.ParseHandlerRef(accessStrategy.Spec.PodEventsHandler)
+		adapter, ok := h.podEventAdapters[pluginName]
+		if !ok || adapter == nil {
+			logger.Error(nil, "Pod event adapter not available - cannot setup containers", "plugin", pluginName)
 		} else {
-			if err := h.ssmRemoteAccessStrategy.SetupContainers(ctx, pod, workspace, accessStrategy); err != nil {
-				logger.Error(err, "Failed to setup containers")
+			// Resolve dynamic values in pod events context
+			resolvedCtx, err := pluginadapters.ResolvePodContext(accessStrategy.Spec.PodEventsContext, pod)
+			if err != nil {
+				logger.Error(err, "Failed to resolve pod events context", "plugin", pluginName)
+			} else if err := adapter.HandlePodRunning(ctx, pod, workspaceName, pod.Namespace, resolvedCtx); err != nil {
+				logger.Error(err, "Failed to setup containers", "plugin", pluginName)
 			}
 		}
 	}
@@ -224,13 +239,19 @@ func (h *PodEventHandler) handlePodDeleted(ctx context.Context, pod *corev1.Pod,
 		return
 	}
 
-	// Handle AWS pod events (SSM remote access strategy)
-	if accessStrategy != nil && accessStrategy.Spec.PodEventsHandler == "aws" {
-		if h.ssmRemoteAccessStrategy == nil {
-			logger.Error(nil, "SSM remote access strategy not available - cannot cleanup SSM managed nodes")
+	// Dispatch to the appropriate pod event adapter by plugin name
+	if accessStrategy.Spec.PodEventsHandler != "" {
+		pluginName, _ := plugin.ParseHandlerRef(accessStrategy.Spec.PodEventsHandler)
+		adapter, ok := h.podEventAdapters[pluginName]
+		if !ok || adapter == nil {
+			logger.Error(nil, "Pod event adapter not available - cannot cleanup managed nodes", "plugin", pluginName)
 		} else {
-			if err := h.ssmRemoteAccessStrategy.CleanupSSMManagedNodes(ctx, pod); err != nil {
-				logger.Error(err, "Failed to cleanup SSM managed nodes")
+			// Resolve dynamic values in pod events context
+			resolvedCtx, err := pluginadapters.ResolvePodContext(accessStrategy.Spec.PodEventsContext, pod)
+			if err != nil {
+				logger.Error(err, "Failed to resolve pod events context", "plugin", pluginName)
+			} else if err := adapter.HandlePodDeleted(ctx, pod, resolvedCtx); err != nil {
+				logger.Error(err, "Failed to cleanup managed nodes", "plugin", pluginName)
 			}
 		}
 	} else {

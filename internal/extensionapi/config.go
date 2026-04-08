@@ -39,10 +39,8 @@ type ExtensionConfig struct {
 	ReadTimeoutSeconds  int
 	WriteTimeoutSeconds int
 	AllowedOrigin       string
-	// AWS section
-	ClusterId string
-	KMSKeyID  string
-	Domain    string
+	// Plugin section
+	PluginEndpoints map[string]string // e.g. {"aws": "http://localhost:8080"} for plugin sidecars
 
 	// Controller namespace (from Downward API)
 	ControllerNamespace string
@@ -121,24 +119,10 @@ func WithAllowedOrigin(origin string) ConfigOption {
 	}
 }
 
-// WithKMSKeyID sets the KMS key ID for JWT token encryption
-func WithKMSKeyID(keyID string) ConfigOption {
+// WithPluginEndpoints sets the plugin name→endpoint map (e.g. {"aws": "http://localhost:8080"}).
+func WithPluginEndpoints(endpoints map[string]string) ConfigOption {
 	return func(c *ExtensionConfig) {
-		c.KMSKeyID = keyID
-	}
-}
-
-// WithDomain sets the domain for Web UI URLs
-func WithDomain(domain string) ConfigOption {
-	return func(c *ExtensionConfig) {
-		c.Domain = domain
-	}
-}
-
-// WithClusterId sets the cluster ID
-func WithClusterId(id string) ConfigOption {
-	return func(c *ExtensionConfig) {
-		c.ClusterId = id
+		c.PluginEndpoints = endpoints
 	}
 }
 
@@ -164,7 +148,7 @@ func WithJwtAudience(audience string) ConfigOption {
 }
 
 // WithJwtSecretName sets the K8s Secret name for JWT signing keys.
-// When set, the extension API uses StandardSignerFactory instead of AWSSignerFactory.
+// When set, the extension API uses StandardSignerFactory for k8s-native JWT signing.
 func WithJwtSecretName(name string) ConfigOption {
 	return func(c *ExtensionConfig) {
 		c.JwtSecretName = name
