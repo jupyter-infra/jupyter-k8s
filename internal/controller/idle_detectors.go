@@ -12,20 +12,15 @@ import (
 	"strings"
 	"time"
 
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/pluginadapters"
 	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
 
 // EndpointIdleResponse represents the response from /api/idle endpoint
 type EndpointIdleResponse struct {
 	LastActivity string `json:"lastActiveTimestamp"`
-}
-
-// PodExecInterface defines the interface for pod execution
-type PodExecInterface interface {
-	ExecInPod(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string, stdin string) (string, error)
 }
 
 // IdleDetector interface for different detection methods
@@ -47,11 +42,11 @@ var CreateIdleDetector = createIdleDetectorImpl
 
 // HTTPGetDetector implements HTTP endpoint checking
 type HTTPGetDetector struct {
-	execUtil PodExecInterface
+	execUtil pluginadapters.PodExecInterface
 }
 
-// NewHTTPGetDetectorWithExec creates a new HTTPGetDetector with the provided PodExecInterface
-func NewHTTPGetDetectorWithExec(execUtil PodExecInterface) *HTTPGetDetector {
+// NewHTTPGetDetectorWithExec creates a new HTTPGetDetector with the provided pluginadapters.PodExecInterface
+func NewHTTPGetDetectorWithExec(execUtil pluginadapters.PodExecInterface) *HTTPGetDetector {
 	return &HTTPGetDetector{
 		execUtil: execUtil,
 	}
