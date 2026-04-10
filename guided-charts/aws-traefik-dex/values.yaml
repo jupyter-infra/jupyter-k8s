@@ -163,7 +163,7 @@ oauth2Proxy:
 webApp:
   # Enable or disable the web UI (default: true)
   enabled: true
-  replicas: 1
+  replicas: 2
   imagePullPolicy: Always
   repository: docker.io
   imageName: jupyter-k8s-web-app

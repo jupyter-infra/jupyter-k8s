@@ -22,9 +22,14 @@ const (
 	KeySizeBytes = 48
 )
 
-// BuildKeyName creates a key name with the given timestamp
-func BuildKeyName(timestamp int64) string {
-	return fmt.Sprintf("%s%d", KeyPrefix, timestamp)
+// BuildKeyName creates a key name with the given timestamp.
+// An optional prefix can be provided; defaults to KeyPrefix.
+func BuildKeyName(timestamp int64, prefix ...string) string {
+	p := KeyPrefix
+	if len(prefix) > 0 {
+		p = prefix[0]
+	}
+	return fmt.Sprintf("%s%d", p, timestamp)
 }
 
 // ParseKeyTimestamp extracts the timestamp from a key name using the default KeyPrefix.

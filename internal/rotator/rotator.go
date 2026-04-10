@@ -128,7 +128,7 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, namespace string
 	}
 
 	now := time.Now().UTC().Unix()
-	newKeyName := fmt.Sprintf("%s%d", keyPrefix, now)
+	newKeyName := jwt.BuildKeyName(now, keyPrefix)
 
 	for _, k := range keys {
 		if k.name == newKeyName {

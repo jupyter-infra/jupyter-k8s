@@ -14,12 +14,22 @@ import (
 
 func TestBuildKeyName(t *testing.T) {
 	timestamp := int64(1609459200) // 2021-01-01 00:00:00 UTC
-	expected := "jwt-signing-key-1609459200"
-	result := BuildKeyName(timestamp)
 
-	if result != expected {
-		t.Errorf("Expected %s, got %s", expected, result)
-	}
+	t.Run("default prefix", func(t *testing.T) {
+		result := BuildKeyName(timestamp)
+		expected := "jwt-signing-key-1609459200"
+		if result != expected {
+			t.Errorf("Expected %s, got %s", expected, result)
+		}
+	})
+
+	t.Run("custom prefix", func(t *testing.T) {
+		result := BuildKeyName(timestamp, "session-key-")
+		expected := "session-key-1609459200"
+		if result != expected {
+			t.Errorf("Expected %s, got %s", expected, result)
+		}
+	})
 }
 
 func TestParseKeyTimestamp(t *testing.T) {
