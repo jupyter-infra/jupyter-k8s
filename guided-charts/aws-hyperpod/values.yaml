@@ -3,6 +3,10 @@
 
 namespace: jupyter-k8s-system
 
+# AWS configuration
+aws:
+  region: ""
+
 # [CLUSTER WEB UI]: Web interface configuration
 clusterWebUI:
   enabled: false
@@ -111,6 +115,15 @@ remoteAccess:
     repository: ""
     tag: ""
   ssmDocumentName: "AWS-StartSSHSession"
+  # Container and path configuration shared between podEventsContext and sidecar spec.
+  # Changing these values updates both the controller context and the sidecar container.
+  sidecarContainerName: "ssm-agent-sidecar"
+  workspaceContainerName: "workspace"
+  registrationMarkerFile: "/tmp/ssm-registered"
+  registrationStateFile: "/opt/amazon/sagemaker/workspace/.ssm-registration-state.json"
+  registrationScript: "/usr/local/bin/register-ssm.sh"
+  remoteAccessServerScript: "/opt/amazon/sagemaker/workspace/remote-access/start-remote-access-server.sh"
+  remoteAccessServerPort: "2222"
 
 # [STORAGE] StorageClasses for Workspaces
 storageClass:

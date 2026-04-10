@@ -55,3 +55,21 @@ extensionApi:
         limits:
           cpu: 100m
           memory: 128Mi
+
+# [CONTROLLER]: Controller configuration
+controller:
+  # Plugin sidecars to deploy alongside the controller
+  # Each plugin runs as a sidecar container in the controller pod
+  # Example:
+  #   plugins:
+  #     - name: aws
+  #       image:
+  #         repository: my-registry/jupyter-k8s-aws-plugin
+  #         tag: latest
+  #       port: 8080
+  #       imagePullPolicy: Always
+  #       healthcheckCommand: ["/aws-plugin", "--healthcheck"]
+  #       env:
+  #         PLUGIN_PORT: "8080"
+  #         AWS_REGION: "us-west-2"
+  plugins: []

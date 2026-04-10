@@ -59,6 +59,7 @@ ifeq ($(CLOUD_PROVIDER),aws)
 	ECR_REPOSITORY := jupyter-k8s
 	ECR_REPOSITORY_AUTH := jupyter-k8s-auth
 	ECR_REPOSITORY_ROTATOR := jupyter-k8s-rotator
+	ECR_REPOSITORY_AWS_PLUGIN := jupyter-k8s-aws-plugin
 	EKS_CONTEXT := arn:aws:eks:$(AWS_REGION):$(AWS_ACCOUNT_ID):cluster/$(EKS_CLUSTER_NAME)
 endif
 
@@ -487,6 +488,11 @@ build-authmiddleware: ## Build authmiddleware image for local testing
 	@echo "Building authmiddleware image..."
 	$(CONTAINER_TOOL) build $(BUILD_OPTS) -t docker.io/library/authmiddleware:local -f images/authmiddleware/Dockerfile .
 
+.PHONY: build-aws-plugin
+build-aws-plugin: ## Build aws-plugin sidecar image for local testing
+	@echo "Building aws-plugin image..."
+	$(CONTAINER_TOOL) build $(BUILD_OPTS) -t docker.io/library/aws-plugin:local -f images/aws-plugin/Dockerfile .
+
 .PHONY: build-rotator
 build-rotator: ## Build rotator image for local testing
 	@echo "Building rotator image..."
@@ -604,6 +610,8 @@ load-images-aws-internal: manifests generate fmt vet ## Build and push container
 		aws ecr create-repository --repository-name $(ECR_REPOSITORY_AUTH) --region $(AWS_REGION)
 	@aws ecr describe-repositories --repository-names $(ECR_REPOSITORY_ROTATOR) --region $(AWS_REGION) > /dev/null 2>&1 || \
 		aws ecr create-repository --repository-name $(ECR_REPOSITORY_ROTATOR) --region $(AWS_REGION)
+	@aws ecr describe-repositories --repository-names $(ECR_REPOSITORY_AWS_PLUGIN) --region $(AWS_REGION) > /dev/null 2>&1 || \
+		aws ecr create-repository --repository-name $(ECR_REPOSITORY_AWS_PLUGIN) --region $(AWS_REGION)
 
 	@echo "Building controller image..."
 	$(CONTAINER_TOOL) build $(BUILD_OPTS) --platform=linux/amd64 -t $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest .
@@ -620,6 +628,11 @@ load-images-aws-internal: manifests generate fmt vet ## Build and push container
 	$(CONTAINER_TOOL) push $(ECR_REGISTRY)/$(ECR_REPOSITORY_ROTATOR):latest
 	@echo "Rotator image built and pushed successfully to $(ECR_REGISTRY)/$(ECR_REPOSITORY_ROTATOR):latest"
 
+	@echo "Building aws-plugin image..."
+	$(CONTAINER_TOOL) build $(BUILD_OPTS) --platform=linux/amd64 -t $(ECR_REGISTRY)/$(ECR_REPOSITORY_AWS_PLUGIN):latest -f images/aws-plugin/Dockerfile .
+	$(CONTAINER_TOOL) push $(ECR_REGISTRY)/$(ECR_REPOSITORY_AWS_PLUGIN):latest
+	@echo "AWS plugin image built and pushed successfully to $(ECR_REGISTRY)/$(ECR_REPOSITORY_AWS_PLUGIN):latest"
+
 	@echo "Building application images..."
 	$(MAKE) -C images push-all-aws CLOUD_PROVIDER=aws CONTAINER_TOOL=$(CONTAINER_TOOL)
 	@echo "All images built and pushed successfully to $(ECR_REGISTRY)"
@@ -628,8 +641,9 @@ load-images-aws-internal: manifests generate fmt vet ## Build and push container
 load-images-aws:
 	$(MAKE) load-images-aws-internal CLOUD_PROVIDER=aws
 
-# Optional traefik access resources parameter
+# Optional deploy parameters
 ENABLE_TRAEFIK_ACCESS_RESOURCES ?= true
+PLUGINS ?=
 
 deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remote cluster
 	@echo "Deploying jupyter-k8s CRD and controller with Helm chart to remote AWS cluster..."
@@ -641,7 +655,6 @@ deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remot
 		--set controllerManager.container.imagePullPolicy=Always \
 		--set controllerManager.container.image.repository=$(ECR_REGISTRY)/$(ECR_REPOSITORY) \
 		--set controllerManager.container.image.tag=latest \
-		--set controllerManager.container.env.CLUSTER_ID="$(EKS_CONTEXT)" \
 		--set application.imagesPullPolicy=Always \
 		--set application.imagesRegistry=$(ECR_REGISTRY) \
 		$(if $(filter true,$(ENABLE_TRAEFIK_ACCESS_RESOURCES)),--set accessResources.traefik.enable=true) \
@@ -650,7 +663,17 @@ deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remot
 		--set extensionApi.jwtSecret.enable=true \
 		--set extensionApi.jwtSecret.rotator.repository=$(ECR_REGISTRY) \
 		--set extensionApi.jwtSecret.rotator.imageName=$(ECR_REPOSITORY_ROTATOR) \
-		--set workspaceTemplates.defaultNamespace=jupyter-k8s-system # guided charts deploy templates here
+		--set workspaceTemplates.defaultNamespace=jupyter-k8s-system \
+		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].name=aws) \
+		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].image.repository=$(ECR_REGISTRY)/$(ECR_REPOSITORY_AWS_PLUGIN)) \
+		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].image.tag=latest) \
+		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].port=8080) \
+		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].imagePullPolicy=Always) \
+		$(if $(filter aws,$(PLUGINS)),--set 'controller.plugins[0].healthcheckCommand[0]=/aws-plugin') \
+		$(if $(filter aws,$(PLUGINS)),--set 'controller.plugins[0].healthcheckCommand[1]=--healthcheck') \
+		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].env.PLUGIN_PORT=8080) \
+		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].env.AWS_REGION=$(AWS_REGION)) \
+		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].env.CLUSTER_ID=$(EKS_CONTEXT))
 	@echo "Helm chart jupyter-k8s deployed successfully to remote AWS cluster"
 	@echo "Restarting deployments to use new images..."
 	kubectl rollout restart deployment -n jupyter-k8s-system jupyter-k8s-controller-manager
@@ -663,6 +686,10 @@ deploy-aws:
 .PHONY: deploy-aws-with-traefik
 deploy-aws-with-traefik:
 	$(MAKE) deploy-aws-internal CLOUD_PROVIDER=aws ENABLE_TRAEFIK_ACCESS_RESOURCES=true
+
+.PHONY: deploy-aws-with-plugin
+deploy-aws-with-plugin: ## Deploy controller with AWS plugin sidecar
+	$(MAKE) deploy-aws-internal CLOUD_PROVIDER=aws PLUGINS=aws
 
 # Load environment variables from .env file for guided deployment
 deploy-aws-traefik-dex-internal:
@@ -757,7 +784,8 @@ deploy-aws-hyperpod-internal:
 			exit 1; \
 		fi; \
 		echo "Deploying AWS HyperPod helm chart (domain=$$HP_DOMAIN)"; \
-		HELM_ARGS="--set clusterWebUI.enabled=true \
+		HELM_ARGS="--set aws.region=$(AWS_REGION) \
+			--set clusterWebUI.enabled=true \
 			--set clusterWebUI.domain=$$HP_DOMAIN \
 			--set clusterWebUI.auth.repository=$(ECR_REGISTRY) \
 			--set clusterWebUI.auth.imageName=$(ECR_REPOSITORY_AUTH) \

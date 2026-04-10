@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/jupyter-infra/jupyter-k8s/internal/awsplugin"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
@@ -23,6 +24,22 @@ import (
 )
 
 func main() {
+	// Health check mode: used by Kubernetes exec probes to check the server is alive.
+	// The plugin binds to 127.0.0.1 (not reachable by kubelet HTTP probes),
+	// so we use an exec probe that runs the same binary with --healthcheck.
+	if len(os.Args) > 1 && os.Args[1] == "--healthcheck" {
+		port := os.Getenv("PLUGIN_PORT")
+		if port == "" {
+			port = "8080"
+		}
+		client := &http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%s/healthz", port))
+		if err != nil || resp.StatusCode != http.StatusOK {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	ctrllog.SetLogger(zap.New(zap.UseDevMode(false)))
 	logger := ctrllog.Log.WithName("aws-plugin")
 

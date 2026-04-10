@@ -61,6 +61,9 @@ spec:
             {{- if .Values.workspacePodWatching.enable }}
             - "--enable-workspace-pod-watching"
             {{- end}}
+            {{- if .Values.controller.plugins }}
+            - "--plugin-endpoints={{ range $i, $p := .Values.controller.plugins }}{{ if $i }},{{ end }}{{ $p.name }}=http://localhost:{{ $p.port }}{{ end }}"
+            {{- end}}
           command:
             - /manager
           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag }}
@@ -114,6 +117,39 @@ spec:
               readOnly: true
             {{- end }}
           {{- end }}
+        {{- range .Values.controller.plugins }}
+        - name: plugin-{{ .name }}
+          image: "{{ .image.repository }}:{{ .image.tag }}"
+          {{- if .imagePullPolicy }}
+          imagePullPolicy: {{ .imagePullPolicy }}
+          {{- end }}
+          ports:
+            - containerPort: {{ .port }}
+              protocol: TCP
+          {{- if .healthcheckCommand }}
+          livenessProbe:
+            exec:
+              command: {{ .healthcheckCommand | toJson }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: {{ .healthcheckCommand | toJson }}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          {{- end }}
+          {{- if .env }}
+          env:
+            {{- range $key, $value := .env }}
+            - name: {{ $key }}
+              value: "{{ $value }}"
+            {{- end }}
+          {{- end }}
+          {{- if .resources }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          {{- end }}
+        {{- end }}
       securityContext:
         {{- toYaml .Values.controllerManager.securityContext | nindent 8 }}
       serviceAccountName: {{ .Values.controllerManager.serviceAccountName }}

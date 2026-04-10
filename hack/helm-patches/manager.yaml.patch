@@ -14,3 +14,6 @@
             {{- if .Values.workspacePodWatching.enable }}
             - --enable-workspace-pod-watching
             {{- end}}
+            {{- if .Values.controller.plugins }}
+            - "--plugin-endpoints={{ range $i, $p := .Values.controller.plugins }}{{ if $i }},{{ end }}{{ $p.name }}=http://localhost:{{ $p.port }}{{ end }}"
+            {{- end}}

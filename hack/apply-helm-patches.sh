@@ -206,8 +206,7 @@ if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
         # Add env section right after container: (macOS compatible)
         sed -i.bak '/container:/a\
     env:\
-      CLUSTER_ADMIN_GROUP: "cluster-workspace-admin"\
-      CLUSTER_ID: ""
+      CLUSTER_ADMIN_GROUP: "cluster-workspace-admin"
 ' "${CHART_DIR}/values.yaml" && rm "${CHART_DIR}/values.yaml.bak"
     fi
 
@@ -336,13 +335,16 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
             {{- end}}\
             {{- if .Values.workspacePodWatching.enable }}\
             - "--enable-workspace-pod-watching"\
+            {{- end}}\
+            {{- if .Values.controller.plugins }}\
+            - "--plugin-endpoints={{ range \$i, \$p := .Values.controller.plugins }}{{ if \$i }},{{ end }}{{ \$p.name }}=http://localhost:{{ \$p.port }}{{ end }}"\
             {{- end}}
                     }' "${MANAGER_YAML}"
                 else
                     # Linux sed
                     sed -i '/args:/,/command:/ {
                     /command:/!d
-                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            - "--default-template-namespace={{ .Values.workspaceTemplates.defaultNamespace }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}\n            {{- if .Values.extensionApi.enable }}\n            - "--enable-extension-api"\n            {{- if .Values.extensionApi.jwtIssuer }}\n            - "--jwt-issuer={{ .Values.extensionApi.jwtIssuer }}"\n            {{- end}}\n            {{- if .Values.extensionApi.jwtAudience }}\n            - "--jwt-audience={{ .Values.extensionApi.jwtAudience }}"\n            {{- end}}\n            {{- end}}\n            {{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}\n            - "--jwt-secret-name={{ .Values.extensionApi.jwtSecret.secretName }}"\n            {{- if .Values.extensionApi.jwtSecret.tokenTTL }}\n            - "--jwt-ttl={{ .Values.extensionApi.jwtSecret.tokenTTL }}"\n            {{- end}}\n            {{- if .Values.extensionApi.jwtSecret.newKeyUseDelay }}\n            - "--new-key-use-delay={{ .Values.extensionApi.jwtSecret.newKeyUseDelay }}"\n            {{- end}}\n            {{- end}}\n            {{- if .Values.workspacePodWatching.enable }}\n            - "--enable-workspace-pod-watching"\n            {{- end}}
+                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            - "--default-template-namespace={{ .Values.workspaceTemplates.defaultNamespace }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}\n            {{- if .Values.extensionApi.enable }}\n            - "--enable-extension-api"\n            {{- if .Values.extensionApi.jwtIssuer }}\n            - "--jwt-issuer={{ .Values.extensionApi.jwtIssuer }}"\n            {{- end}}\n            {{- if .Values.extensionApi.jwtAudience }}\n            - "--jwt-audience={{ .Values.extensionApi.jwtAudience }}"\n            {{- end}}\n            {{- end}}\n            {{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}\n            - "--jwt-secret-name={{ .Values.extensionApi.jwtSecret.secretName }}"\n            {{- if .Values.extensionApi.jwtSecret.tokenTTL }}\n            - "--jwt-ttl={{ .Values.extensionApi.jwtSecret.tokenTTL }}"\n            {{- end}}\n            {{- if .Values.extensionApi.jwtSecret.newKeyUseDelay }}\n            - "--new-key-use-delay={{ .Values.extensionApi.jwtSecret.newKeyUseDelay }}"\n            {{- end}}\n            {{- end}}\n            {{- if .Values.workspacePodWatching.enable }}\n            - "--enable-workspace-pod-watching"\n            {{- end}}\n            {{- if .Values.controller.plugins }}\n            - "--plugin-endpoints={{ range $i, $p := .Values.controller.plugins }}{{ if $i }},{{ end }}{{ $p.name }}=http://localhost:{{ $p.port }}{{ end }}"\n            {{- end}}
                 }' "${MANAGER_YAML}"
                 fi
                 # Also add extension API volume mount if not already present
@@ -443,6 +445,56 @@ if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
         # in the args block above, so no env var injection needed here.
     else
         echo "Warning: manager.yaml not found at ${MANAGER_YAML}"
+    fi
+fi
+
+# Add plugin sidecar containers to manager.yaml
+MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
+if [ -f "${MANAGER_YAML}" ]; then
+    if ! grep -q "plugin-{{ .name }}" "${MANAGER_YAML}"; then
+        echo "Adding plugin sidecar container support to manager.yaml..."
+        # Insert plugin sidecar containers block before securityContext (pod-level)
+        # We target the pod-level securityContext that comes after the manager container's closing volumeMounts
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' '/^      securityContext:$/i\
+        {{- range .Values.controller.plugins }}\
+        - name: plugin-{{ .name }}\
+          image: "{{ .image.repository }}:{{ .image.tag }}"\
+          {{- if .imagePullPolicy }}\
+          imagePullPolicy: {{ .imagePullPolicy }}\
+          {{- end }}\
+          ports:\
+            - containerPort: {{ .port }}\
+              protocol: TCP\
+          {{- if .healthcheckCommand }}\
+          livenessProbe:\
+            exec:\
+              command: {{ .healthcheckCommand | toJson }}\
+            initialDelaySeconds: 5\
+            periodSeconds: 10\
+          readinessProbe:\
+            exec:\
+              command: {{ .healthcheckCommand | toJson }}\
+            initialDelaySeconds: 2\
+            periodSeconds: 5\
+          {{- end }}\
+          {{- if .env }}\
+          env:\
+            {{- range \$key, \$value := .env }}\
+            - name: {{ \$key }}\
+              value: "{{ \$value }}"\
+            {{- end }}\
+          {{- end }}\
+          {{- if .resources }}\
+          resources:\
+            {{- toYaml .resources | nindent 12 }}\
+          {{- end }}\
+        {{- end }}
+' "${MANAGER_YAML}"
+        else
+            sed -i '/^      securityContext:$/i\        {{- range .Values.controller.plugins }}\n        - name: plugin-{{ .name }}\n          image: "{{ .image.repository }}:{{ .image.tag }}"\n          {{- if .imagePullPolicy }}\n          imagePullPolicy: {{ .imagePullPolicy }}\n          {{- end }}\n          ports:\n            - containerPort: {{ .port }}\n              protocol: TCP\n          {{- if .healthcheckCommand }}\n          livenessProbe:\n            exec:\n              command: {{ .healthcheckCommand | toJson }}\n            initialDelaySeconds: 5\n            periodSeconds: 10\n          readinessProbe:\n            exec:\n              command: {{ .healthcheckCommand | toJson }}\n            initialDelaySeconds: 2\n            periodSeconds: 5\n          {{- end }}\n          {{- if .env }}\n          env:\n            {{- range $key, $value := .env }}\n            - name: {{ $key }}\n              value: "{{ $value }}"\n            {{- end }}\n          {{- end }}\n          {{- if .resources }}\n          resources:\n            {{- toYaml .resources | nindent 12 }}\n          {{- end }}\n        {{- end }}' "${MANAGER_YAML}"
+        fi
+        echo "Added plugin sidecar container support"
     fi
 fi
 

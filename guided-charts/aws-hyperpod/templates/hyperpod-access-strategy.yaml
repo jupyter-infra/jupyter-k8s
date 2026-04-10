@@ -61,12 +61,28 @@ spec:
   {{- end }}
 
   createConnectionHandler: "k8s-native"
-  podEventsHandler: "aws"
+  {{- if .Values.remoteAccess.enabled }}
+  createConnectionHandlerMap:
+    vscode-remote: "aws:createSession"
+  {{- end }}
+  podEventsHandler: "aws:ssm-remote-access"
 
   {{- if .Values.remoteAccess.enabled }}
   createConnectionContext:
-    ssmManagedNodeRole: "{{ .Values.remoteAccess.ssmManagedNodeRole }}"
+    podUid: "extensionapi::PodUid()"
     ssmDocumentName: "{{ .Values.remoteAccess.ssmDocumentName }}"
+    port: "{{ .Values.remoteAccess.remoteAccessServerPort }}"
+  podEventsContext:
+    podUid: "controller::PodUid()"
+    region: "{{ required "aws.region is required when remoteAccess is enabled" .Values.aws.region }}"
+    ssmManagedNodeRole: "{{ .Values.remoteAccess.ssmManagedNodeRole }}"
+    sidecarContainerName: "{{ .Values.remoteAccess.sidecarContainerName }}"
+    workspaceContainerName: "{{ .Values.remoteAccess.workspaceContainerName }}"
+    registrationStateFile: "{{ .Values.remoteAccess.registrationStateFile }}"
+    registrationMarkerFile: "{{ .Values.remoteAccess.registrationMarkerFile }}"
+    registrationScript: "{{ .Values.remoteAccess.registrationScript }}"
+    remoteAccessServerScript: "{{ .Values.remoteAccess.remoteAccessServerScript }}"
+    remoteAccessServerPort: "{{ .Values.remoteAccess.remoteAccessServerPort }}"
   {{- end }}
 
   # Deployment modifications for SSM remote access
@@ -74,7 +90,7 @@ spec:
     podModifications:
       {{- if .Values.remoteAccess.enabled }}
       additionalContainers:
-        - name: "ssm-agent-sidecar"
+        - name: "{{ .Values.remoteAccess.sidecarContainerName }}"
           image: "{{ .Values.remoteAccess.ssmSidecarImage.containerRegistry }}/{{ .Values.remoteAccess.ssmSidecarImage.repository }}:{{ .Values.remoteAccess.ssmSidecarImage.tag }}"
           command:
             - /opt/amazon/sagemaker/workspace/bin/entrypoint-workspace-sidecar-container
@@ -101,7 +117,7 @@ spec:
             failureThreshold: 6
           readinessProbe:
             exec:
-              command: ["test", "-f", "/tmp/ssm-registered"]
+              command: ["test", "-f", "{{ .Values.remoteAccess.registrationMarkerFile }}"]
             initialDelaySeconds: 2
             periodSeconds: 2
       {{- end }}
