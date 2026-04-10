@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/plugin"
+	"github.com/jupyter-infra/jupyter-k8s/internal/pluginclient"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -56,6 +58,11 @@ type WorkspaceControllerOptions struct {
 	// DefaultTemplateNamespace is the default namespace for WorkspaceTemplate resolution
 	// when templateRef.namespace is not specified
 	DefaultTemplateNamespace string
+
+	// PluginEndpoints maps plugin names to their sidecar endpoints
+	// (e.g. {"aws": "http://localhost:8080"}).
+	// When set, remote access operations are delegated to the named plugin.
+	PluginEndpoints map[string]string
 }
 
 // WorkspaceReconciler reconciles a Workspace object
@@ -335,8 +342,14 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	idleChecker := NewWorkspaceIdleChecker(k8sClient)
 	stateMachine := NewStateMachine(resourceManager, statusManager, eventRecorder, idleChecker)
 
+	// Create plugin clients for pod event handling (if configured)
+	pluginClients := map[string]plugin.RemoteAccessPluginApis{}
+	for name, endpoint := range options.PluginEndpoints {
+		pluginClients[name] = pluginclient.NewPluginClient(endpoint, logf.Log.WithName("plugin-"+name))
+	}
+
 	// Create pod event handler
-	podEventHandler := NewPodEventHandler(k8sClient, resourceManager)
+	podEventHandler := NewPodEventHandler(k8sClient, resourceManager, pluginClients)
 
 	// Create reconciler with dependencies
 	reconciler := &WorkspaceReconciler{

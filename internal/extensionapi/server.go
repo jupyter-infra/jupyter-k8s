@@ -11,11 +11,10 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/jupyter-infra/jupyter-k8s/internal/aws"
 	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
+	"github.com/jupyter-infra/jupyter-k8s/internal/pluginclient"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	genericapiserver "k8s.io/apiserver/pkg/server"
@@ -42,13 +41,16 @@ type ExtensionServer struct {
 	sarClient      v1.SubjectAccessReviewInterface
 	signerFactory  jwt.SignerFactory
 	tokenValidator jwt.TokenValidator
+	pluginClients  map[string]*pluginclient.PluginClient
 	logger         *logr.Logger
 	genericServer  *genericapiserver.GenericAPIServer
 	routes         map[string]func(http.ResponseWriter, *http.Request)
 	mux            *mux.PathRecorderMux
 }
 
-// NewExtensionServer creates a new extension API server using GenericAPIServer
+// NewExtensionServer creates a new extension API server using GenericAPIServer.
+// pluginClients maps handler names to shared PluginClient instances used for
+// both JWT signing and remote access.
 func NewExtensionServer(
 	genericServer *genericapiserver.GenericAPIServer,
 	config *ExtensionConfig,
@@ -56,21 +58,21 @@ func NewExtensionServer(
 	k8sClient client.Client,
 	sarClient v1.SubjectAccessReviewInterface,
 	signerFactory jwt.SignerFactory,
-	tokenValidator jwt.TokenValidator) *ExtensionServer {
+	tokenValidator jwt.TokenValidator,
+	pluginClients map[string]*pluginclient.PluginClient) *ExtensionServer {
 
-	server := &ExtensionServer{
+	return &ExtensionServer{
 		config:         config,
 		logger:         logger,
 		k8sClient:      k8sClient,
 		sarClient:      sarClient,
 		signerFactory:  signerFactory,
 		tokenValidator: tokenValidator,
+		pluginClients:  pluginClients,
 		routes:         make(map[string]func(http.ResponseWriter, *http.Request)),
 		genericServer:  genericServer,
 		mux:            genericServer.Handler.NonGoRestfulMux,
 	}
-
-	return server
 }
 
 // loggerMiddleware wraps an http.Handler and adds a logger to the request context
@@ -242,7 +244,17 @@ func createGenericAPIServer(recommendedOptions *genericoptions.RecommendedOption
 	return genericServer, nil
 }
 
-func createJWTCompositeSignerFactory(config *ExtensionConfig) (jwt.SignerFactory, error) {
+// createPluginClients builds one PluginClient per plugin endpoint, to be shared
+// across JWT signing and remote access paths.
+func createPluginClients(endpoints map[string]string, logger logr.Logger) map[string]*pluginclient.PluginClient {
+	clients := make(map[string]*pluginclient.PluginClient, len(endpoints))
+	for name, endpoint := range endpoints {
+		clients[name] = pluginclient.NewPluginClient(endpoint, logger.WithName("plugin-"+name))
+	}
+	return clients
+}
+
+func createJWTCompositeSignerFactory(config *ExtensionConfig) (jwt.SignerFactory, error) { //nolint:unparam
 	factories := map[string]jwt.SignerFactory{}
 	var defaultFactory jwt.SignerFactory
 
@@ -269,31 +281,12 @@ func createJWTCompositeSignerFactory(config *ExtensionConfig) (jwt.SignerFactory
 		defaultFactory = stdFactory
 	}
 
-	if config.KMSKeyID != "" || defaultFactory == nil {
-		ctx := context.Background()
-		kmsClient, err := aws.NewKMSClient(ctx)
-		if err != nil {
-			if defaultFactory != nil {
-				// k8s-native is available; AWS is optional
-				setupLog.Info("AWS KMS not available, using k8s-native signing only", "error", err)
-			} else {
-				return nil, fmt.Errorf("failed to create KMS client: %w", err)
-			}
-		} else {
-			awsFactory := aws.NewAWSSignerFactory(kmsClient, config.KMSKeyID, time.Minute*5)
-			factories["aws"] = awsFactory
-			if defaultFactory == nil {
-				defaultFactory = awsFactory
-			}
-		}
-	}
-
 	return jwt.NewCompositeSignerFactory(factories, defaultFactory), nil
 }
 
 // createExtensionServer creates and configures the extension server
-func createExtensionServer(genericServer *genericapiserver.GenericAPIServer, config *ExtensionConfig, logger *logr.Logger, k8sClient client.Client, sarClient v1.SubjectAccessReviewInterface, jwtSignerFactory jwt.SignerFactory, tokenValidator jwt.TokenValidator) *ExtensionServer {
-	server := NewExtensionServer(genericServer, config, logger, k8sClient, sarClient, jwtSignerFactory, tokenValidator)
+func createExtensionServer(genericServer *genericapiserver.GenericAPIServer, config *ExtensionConfig, logger *logr.Logger, k8sClient client.Client, sarClient v1.SubjectAccessReviewInterface, jwtSignerFactory jwt.SignerFactory, tokenValidator jwt.TokenValidator, pluginClients map[string]*pluginclient.PluginClient) *ExtensionServer {
+	server := NewExtensionServer(genericServer, config, logger, k8sClient, sarClient, jwtSignerFactory, tokenValidator, pluginClients)
 	server.registerAllRoutes()
 	return server
 }
@@ -314,6 +307,9 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	}
 
 	logger := mgr.GetLogger().WithName("extension-api")
+
+	// Create shared plugin clients (one per plugin, reused for JWT signing and remote access)
+	pluginClients := createPluginClients(config.PluginEndpoints, logger)
 
 	// Create JWT signer factory
 	signerFactory, err := createJWTCompositeSignerFactory(config)
@@ -375,7 +371,7 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	}
 
 	// Create and configure extension server
-	server := createExtensionServer(genericServer, config, &logger, mgr.GetClient(), sarClient, signerFactory, tokenValidator)
+	server := createExtensionServer(genericServer, config, &logger, mgr.GetClient(), sarClient, signerFactory, tokenValidator, pluginClients)
 
 	// Add server to manager
 	return addServerToManager(mgr, server)

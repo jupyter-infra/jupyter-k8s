@@ -195,7 +195,7 @@ var _ = Describe("Server", func() {
 				NonGoRestfulMux: mux.NewPathRecorderMux("test"),
 			},
 		}
-		server = NewExtensionServer(genericServer, config, &logger, k8sClient, sarClient, mockSignerFactory, &mockTokenValidator{})
+		server = NewExtensionServer(genericServer, config, &logger, k8sClient, sarClient, mockSignerFactory, &mockTokenValidator{}, nil)
 		server.registerAllRoutes()
 
 		// Create a minimal fake routes server without automatic route registration
@@ -525,7 +525,7 @@ var _ = Describe("Server", func() {
 					NonGoRestfulMux: mux.NewPathRecorderMux("test"),
 				},
 			}
-			server := NewExtensionServer(genericServer, config, &logger, k8sClient, sarClient, mockSignerFactory, &mockTokenValidator{})
+			server := NewExtensionServer(genericServer, config, &logger, k8sClient, sarClient, mockSignerFactory, &mockTokenValidator{}, nil)
 
 			resourceHandlers := map[string]func(http.ResponseWriter, *http.Request){
 				"test": func(w http.ResponseWriter, _ *http.Request) {
@@ -545,13 +545,10 @@ var _ = Describe("Server", func() {
 
 	Context("Helper Functions", func() {
 		Describe("createJWTCompositeSignerFactory", func() {
-			It("Should not fail startup with empty KMS key ID", func() {
-				config := NewConfig(WithKMSKeyID(""))
+			It("Should not fail startup with empty config", func() {
+				config := NewConfig()
 				_, err := createJWTCompositeSignerFactory(config)
-				// Should not fail startup due to empty KMS key ID
-				if err != nil {
-					Skip("Requires AWS KMS setup")
-				}
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("Should create CompositeSignerFactory with k8s-native when JwtSecretName is set", func() {
@@ -599,7 +596,7 @@ var _ = Describe("Server", func() {
 					},
 				}
 
-				server := createExtensionServer(genericServer, config, &logger, k8sClient, sarClient, &mockSignerFactory{signer: &mockSigner{token: "test-token"}}, &mockTokenValidator{})
+				server := createExtensionServer(genericServer, config, &logger, k8sClient, sarClient, &mockSignerFactory{signer: &mockSigner{token: "test-token"}}, &mockTokenValidator{}, nil)
 
 				Expect(server).NotTo(BeNil())
 				Expect(server.config).To(Equal(config))
@@ -617,18 +614,6 @@ var _ = Describe("Server", func() {
 
 				// Expected to fail without proper setup, but we tested the code path
 				Expect(err).To(HaveOccurred())
-			})
-		})
-
-		Describe("createKMSJWTManager", func() {
-			It("Should attempt KMS client creation", func() {
-				config := NewConfig(WithKMSKeyID("test-key"))
-
-				// This may or may not fail depending on environment
-				_, _ = createJWTCompositeSignerFactory(config)
-
-				// We just want to test the code path is executed
-				Expect(true).To(BeTrue())
 			})
 		})
 
@@ -855,13 +840,10 @@ var _ = Describe("ServerWithManager", func() {
 			options := createRecommendedOptions(config)
 			Expect(options.SecureServing.BindPort).To(Equal(9999))
 
-			// Test createJWTCompositeSignerFactory with empty KMS key ID - should not fail startup
-			config = NewConfig(WithKMSKeyID(""))
+			// Test createJWTCompositeSignerFactory with empty config - should not fail startup
+			config = NewConfig()
 			_, err := createJWTCompositeSignerFactory(config)
-			// Should not fail startup due to empty KMS key ID
-			if err != nil {
-				Skip("Requires AWS KMS setup")
-			}
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })

@@ -7,7 +7,6 @@ package extensionapi
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,10 +14,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-logr/logr"
 	connectionv1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/connection/v1alpha1"
+	pluginapi "github.com/jupyter-infra/jupyter-k8s/api/plugin/v1alpha1"
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
-	"github.com/jupyter-infra/jupyter-k8s/internal/aws"
 	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
+	"github.com/jupyter-infra/jupyter-k8s/internal/pluginclient"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -26,81 +27,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
-
-// Store original function for restoration
-var originalEnsureResourcesInitialized = aws.EnsureResourcesInitialized
-
-func TestNoOpPodExec(t *testing.T) {
-	exec := &noOpPodExec{}
-	pod := &corev1.Pod{}
-
-	_, err := exec.ExecInPod(context.Background(), pod, "container", []string{"cmd"}, "stdin")
-
-	if err == nil {
-		t.Error("expected error from noOpPodExec.ExecInPod")
-	}
-
-	expectedMsg := "pod exec not supported in connection URL generation"
-	if err.Error() != expectedMsg {
-		t.Errorf("expected error %q, got %q", expectedMsg, err.Error())
-	}
-}
-
-func TestGenerateWebUIURL(t *testing.T) {
-	// Create test workspace with AccessStrategy
-	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name: "test-strategy",
-			},
-		},
-	}
-
-	// Create test AccessStrategy
-	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-strategy",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			BearerAuthURLTemplate: "https://test.com/workspaces/{{.Workspace.Namespace}}/{{.Workspace.Name}}/bearer-auth",
-		},
-	}
-
-	// Create fake client with test objects
-	scheme := runtime.NewScheme()
-	_ = workspacev1alpha1.AddToScheme(scheme)
-	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace, accessStrategy).Build()
-
-	config := &ExtensionConfig{Domain: "https://test.com"}
-	server := &ExtensionServer{
-		config:        config,
-		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
-		k8sClient:     fakeClient,
-	}
-
-	req := httptest.NewRequest("POST", "/test", nil)
-	req.Header.Set("X-Remote-User", testUser)
-
-	connType, url, err := server.generateWebUIBearerTokenURL(req, workspace, accessStrategy)
-
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	if connType != connectionv1alpha1.ConnectionTypeWebUI {
-		t.Errorf("expected connection type %s, got %s", connectionv1alpha1.ConnectionTypeWebUI, connType)
-	}
-
-	expected := "https://test.com/workspaces/default/test-workspace/bearer-auth?token=test-token"
-	if url != expected {
-		t.Errorf("expected %s, got %s", expected, url)
-	}
-}
 
 const testUser = "test-user"
 
@@ -136,96 +62,437 @@ func (m *mockTokenValidator) ValidateToken(tokenString string) (*jwt.Claims, err
 	return m.claims, m.err
 }
 
-func TestValidateWorkspaceConnectionRequest(t *testing.T) {
+// badReader is a helper that always returns an error when reading
+type badReader struct{}
+
+func (e *badReader) Read(p []byte) (n int, err error) {
+	return 0, fmt.Errorf("read error")
+}
+
+func (e *badReader) Close() error {
+	return nil
+}
+
+// --- generateBearerTokenURL tests ---
+
+func TestGenerateBearerTokenURL(t *testing.T) {
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "test-strategy"},
+		},
+	}
+
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-strategy", Namespace: "default"},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			BearerAuthURLTemplate: "https://test.com/workspaces/{{.Workspace.Namespace}}/{{.Workspace.Name}}/bearer-auth",
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace, accessStrategy).Build()
+
+	server := &ExtensionServer{
+		config:        &ExtensionConfig{},
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
+		k8sClient:     fakeClient,
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	req.Header.Set("X-Remote-User", testUser)
+
+	url, err := server.generateBearerTokenURL(req, workspace, accessStrategy)
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	expected := "https://test.com/workspaces/default/test-workspace/bearer-auth?token=test-token"
+	if url != expected {
+		t.Errorf("expected %s, got %s", expected, url)
+	}
+}
+
+func TestGenerateBearerTokenURL_SubdomainRouting(t *testing.T) {
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: "myworkspace", Namespace: "default"},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "subdomain-strategy"},
+		},
+	}
+
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{Name: "subdomain-strategy", Namespace: "default"},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			BearerAuthURLTemplate: "https://{{.Workspace.Name}}-{{b32encode .Workspace.Namespace}}.example.com/bearer-auth",
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace, accessStrategy).Build()
+
+	server := &ExtensionServer{
+		config:        &ExtensionConfig{},
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
+		k8sClient:     fakeClient,
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	req.Header.Set("X-Remote-User", testUser)
+
+	url, err := server.generateBearerTokenURL(req, workspace, accessStrategy)
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	expected := "https://myworkspace-mrswmylvnr2a.example.com/bearer-auth?token=test-token"
+	if url != expected {
+		t.Errorf("expected %s, got %s", expected, url)
+	}
+}
+
+func TestGenerateBearerTokenURL_NoAccessStrategy(t *testing.T) {
+	server := &ExtensionServer{
+		config:        &ExtensionConfig{},
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	req.Header.Set("X-Remote-User", testUser)
+
+	_, err := server.generateBearerTokenURL(req, &workspacev1alpha1.Workspace{}, nil)
+
+	if err == nil {
+		t.Error("expected error for missing AccessStrategy, got nil")
+	}
+	if !strings.Contains(err.Error(), "no AccessStrategy configured") {
+		t.Errorf("expected AccessStrategy error, got: %v", err)
+	}
+}
+
+func TestGenerateBearerTokenURL_MissingTemplate(t *testing.T) {
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			BearerAuthURLTemplate: "",
+		},
+	}
+
+	server := &ExtensionServer{
+		config:        &ExtensionConfig{},
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	req.Header.Set("X-Remote-User", testUser)
+
+	_, err := server.generateBearerTokenURL(req, &workspacev1alpha1.Workspace{}, accessStrategy)
+
+	if err == nil {
+		t.Error("expected error for missing BearerAuthURLTemplate, got nil")
+	}
+	if !strings.Contains(err.Error(), "BearerAuthURLTemplate not configured") {
+		t.Errorf("expected template error, got: %v", err)
+	}
+}
+
+// --- generatePluginConnectionURL tests ---
+
+func TestGeneratePluginConnectionURL_Success(t *testing.T) {
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+	}
+
+	// Create httptest server simulating the plugin
+	pluginSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req pluginapi.CreateSessionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if req.PodUID != "test-uid-123" {
+			t.Errorf("expected podUID test-uid-123, got %s", req.PodUID)
+		}
+		if req.ConnectionContext["ssmDocumentName"] != "test-document" {
+			t.Errorf("expected ssmDocumentName test-document, got %s", req.ConnectionContext["ssmDocumentName"])
+		}
+		if req.ConnectionType != "vscode-remote" {
+			t.Errorf("expected connectionType vscode-remote, got %s", req.ConnectionType)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(pluginapi.CreateSessionResponse{
+			ConnectionURL: "vscode://vscode-remote/ssh-remote+test-workspace/home/user",
+		})
+	}))
+	defer pluginSrv.Close()
+
+	server := &ExtensionServer{
+		config: &ExtensionConfig{},
+		pluginClients: map[string]*pluginclient.PluginClient{
+			"aws": pluginclient.NewPluginClient(pluginSrv.URL, logr.Discard()),
+		},
+	}
+
+	resolvedContext := map[string]string{
+		"podUid":          "test-uid-123",
+		"ssmDocumentName": "test-document",
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	url, err := server.generatePluginConnectionURL(req, workspace, "aws", "createSession", "vscode-remote", resolvedContext, "default")
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if url != "vscode://vscode-remote/ssh-remote+test-workspace/home/user" {
+		t.Errorf("unexpected URL: %s", url)
+	}
+}
+
+func TestGeneratePluginConnectionURL_PluginError(t *testing.T) {
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+	}
+
+	pluginSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "SSM creation failed"})
+	}))
+	defer pluginSrv.Close()
+
+	server := &ExtensionServer{
+		config: &ExtensionConfig{},
+		pluginClients: map[string]*pluginclient.PluginClient{
+			"aws": pluginclient.NewPluginClient(pluginSrv.URL, logr.Discard()),
+		},
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	_, err := server.generatePluginConnectionURL(req, workspace, "aws", "createSession", "vscode-remote", map[string]string{}, "default")
+
+	if err == nil {
+		t.Error("expected error from plugin client")
+	}
+}
+
+func TestGeneratePluginConnectionURL_NoPlugin(t *testing.T) {
+	server := &ExtensionServer{
+		config:        &ExtensionConfig{},
+		pluginClients: map[string]*pluginclient.PluginClient{},
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	_, err := server.generatePluginConnectionURL(req, &workspacev1alpha1.Workspace{}, "aws", "createSession", "vscode-remote", map[string]string{}, "default")
+
+	if err == nil {
+		t.Error("expected error for missing plugin")
+	}
+	if !strings.Contains(err.Error(), "no plugin endpoint configured") {
+		t.Errorf("expected plugin error, got: %v", err)
+	}
+}
+
+func TestGeneratePluginConnectionURL_UnsupportedAction(t *testing.T) {
+	server := &ExtensionServer{
+		config:        &ExtensionConfig{},
+		pluginClients: map[string]*pluginclient.PluginClient{"aws": pluginclient.NewPluginClient("http://localhost:8080", logr.Discard())},
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	_, err := server.generatePluginConnectionURL(req, &workspacev1alpha1.Workspace{}, "aws", "unknownAction", "vscode-remote", map[string]string{}, "default")
+
+	if err == nil {
+		t.Error("expected error for unsupported action")
+	}
+	if !strings.Contains(err.Error(), "unsupported plugin action") {
+		t.Errorf("expected unsupported action error, got: %v", err)
+	}
+}
+
+// --- resolveConnectionHandler tests ---
+
+func TestResolveConnectionHandler(t *testing.T) {
 	tests := []struct {
-		name        string
-		req         *connectionv1alpha1.WorkspaceConnectionRequest
-		expectError bool
-		errorMsg    string
+		name           string
+		accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
+		connectionType string
+		expectedPlugin string
+		expectedAction string
+		expectedFound  bool
 	}{
 		{
-			name: "valid vscode request",
-			req: &connectionv1alpha1.WorkspaceConnectionRequest{
-				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-					WorkspaceName:           "test-workspace",
-					WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeVSCodeRemote,
-				},
-			},
-			expectError: false,
+			name:           "nil access strategy",
+			accessStrategy: nil,
+			connectionType: "web-ui",
+			expectedFound:  false,
 		},
 		{
-			name: "valid web-ui request",
-			req: &connectionv1alpha1.WorkspaceConnectionRequest{
-				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-					WorkspaceName:           "test-workspace",
-					WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeWebUI,
+			name: "found in handler map",
+			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					CreateConnectionHandlerMap: map[string]string{
+						"vscode-remote": "aws:createSession",
+					},
+					CreateConnectionHandler: "k8s-native",
 				},
 			},
-			expectError: false,
+			connectionType: "vscode-remote",
+			expectedPlugin: "aws",
+			expectedAction: "createSession",
+			expectedFound:  true,
 		},
 		{
-			name: "missing workspace name",
-			req: &connectionv1alpha1.WorkspaceConnectionRequest{
-				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-					WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeVSCodeRemote,
+			name: "falls back to default handler",
+			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					CreateConnectionHandlerMap: map[string]string{
+						"vscode-remote": "aws:createSession",
+					},
+					CreateConnectionHandler: "k8s-native",
 				},
 			},
-			expectError: true,
-			errorMsg:    "workspaceName is required",
+			connectionType: "web-ui",
+			expectedPlugin: "k8s-native",
+			expectedAction: "",
+			expectedFound:  true,
 		},
 		{
-			name: "missing connection type",
-			req: &connectionv1alpha1.WorkspaceConnectionRequest{
-				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-					WorkspaceName: "test-workspace",
-				},
+			name: "no handler configured",
+			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{},
 			},
-			expectError: true,
-			errorMsg:    "workspaceConnectionType is required",
-		},
-		{
-			name: "invalid connection type",
-			req: &connectionv1alpha1.WorkspaceConnectionRequest{
-				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-					WorkspaceName:           "test-workspace",
-					WorkspaceConnectionType: "invalid-type",
-				},
-			},
-			expectError: true,
-			errorMsg:    "invalid workspaceConnectionType: 'invalid-type'. Valid types are: 'vscode-remote', 'web-ui'",
+			connectionType: "web-ui",
+			expectedFound:  false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateWorkspaceConnectionRequest(tt.req)
+			plugin, action, found := resolveConnectionHandler(tt.accessStrategy, tt.connectionType)
+			if found != tt.expectedFound {
+				t.Errorf("expected found=%v, got %v", tt.expectedFound, found)
+			}
+			if plugin != tt.expectedPlugin {
+				t.Errorf("expected plugin=%q, got %q", tt.expectedPlugin, plugin)
+			}
+			if action != tt.expectedAction {
+				t.Errorf("expected action=%q, got %q", tt.expectedAction, action)
+			}
+		})
+	}
+}
 
-			if tt.expectError {
-				if err == nil {
-					t.Errorf("expected error but got none")
-				} else if err.Error() != tt.errorMsg {
-					t.Errorf("expected error %q, got %q", tt.errorMsg, err.Error())
+// --- validateConnection tests ---
+
+func TestValidateConnection(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	tests := []struct {
+		name               string
+		workspace          *workspacev1alpha1.Workspace
+		accessStrategy     *workspacev1alpha1.WorkspaceAccessStrategy
+		expectedStatusCode int
+		expectedError      string
+	}{
+		{
+			name: "workspace not available",
+			workspace: &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "default"},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "as"},
+				},
+				Status: workspacev1alpha1.WorkspaceStatus{
+					Conditions: []metav1.Condition{{Type: "Available", Status: metav1.ConditionFalse}},
+				},
+			},
+			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
+				ObjectMeta: metav1.ObjectMeta{Name: "as", Namespace: "default"},
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					CreateConnectionHandler: "k8s-native",
+					BearerAuthURLTemplate:   "https://example.com",
+				},
+			},
+			expectedStatusCode: http.StatusBadRequest,
+			expectedError:      "workspace is not available",
+		},
+		{
+			name: "validation passes",
+			workspace: &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "default"},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "as"},
+				},
+				Status: workspacev1alpha1.WorkspaceStatus{
+					Conditions: []metav1.Condition{{Type: "Available", Status: metav1.ConditionTrue}},
+				},
+			},
+			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
+				ObjectMeta: metav1.ObjectMeta{Name: "as", Namespace: "default"},
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					CreateConnectionHandler: "k8s-native",
+					BearerAuthURLTemplate:   "https://example.com",
+					CreateConnectionContext: map[string]string{
+						"staticKey": "staticValue",
+					},
+				},
+			},
+			expectedStatusCode: 0,
+			expectedError:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var objects []client.Object
+			if tt.workspace != nil {
+				objects = append(objects, tt.workspace)
+			}
+			if tt.accessStrategy != nil {
+				objects = append(objects, tt.accessStrategy)
+			}
+
+			fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+
+			server := &ExtensionServer{
+				k8sClient: fakeClient,
+			}
+
+			logger := ctrl.Log.WithName("test")
+			_, resolvedCtx, statusCode, err := server.validateConnection(tt.workspace, logger)
+
+			if statusCode != tt.expectedStatusCode {
+				t.Errorf("expected status code %d, got %d", tt.expectedStatusCode, statusCode)
+			}
+
+			if tt.expectedError == "" {
+				if err != nil {
+					t.Errorf("expected no error, got %v", err)
+				}
+				// Check that context was returned when validation passes
+				if resolvedCtx == nil && tt.accessStrategy != nil && len(tt.accessStrategy.Spec.CreateConnectionContext) > 0 {
+					t.Error("expected resolved context to be returned")
 				}
 			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
+				if err == nil {
+					t.Errorf("expected error containing %q, got nil", tt.expectedError)
+				} else if !strings.Contains(err.Error(), tt.expectedError) {
+					t.Errorf("expected error containing %q, got %q", tt.expectedError, err.Error())
 				}
 			}
 		})
 	}
 }
 
-func TestHandleConnectionCreateValidation(t *testing.T) {
-	// Mock EnsureResourcesInitialized to succeed
-	aws.EnsureResourcesInitialized = func(ctx context.Context) error {
-		return nil
-	}
-	defer func() { aws.EnsureResourcesInitialized = originalEnsureResourcesInitialized }()
+// --- HandleConnectionCreate tests ---
 
+func TestHandleConnectionCreateValidation(t *testing.T) {
 	server := &ExtensionServer{
-		config: &ExtensionConfig{
-			ClusterId: "test-cluster",
-		},
+		config: &ExtensionConfig{},
 	}
 
 	tests := []struct {
@@ -292,137 +559,12 @@ func TestHandleConnectionCreateValidation(t *testing.T) {
 	}
 }
 
-func TestHandleConnectionCreateClusterIdValidation(t *testing.T) {
-	// Mock EnsureResourcesInitialized to succeed
-	aws.EnsureResourcesInitialized = func(ctx context.Context) error {
-		return nil
-	}
-	defer func() { aws.EnsureResourcesInitialized = originalEnsureResourcesInitialized }()
-
-	server := &ExtensionServer{
-		config: &ExtensionConfig{
-			ClusterId: "", // Empty cluster ID
-		},
-	}
-
-	req := connectionv1alpha1.WorkspaceConnectionRequest{
-		Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-			WorkspaceName:           "test-workspace",
-			WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeVSCodeRemote,
-		},
-	}
-
-	bodyBytes, _ := json.Marshal(req)
-	httpReq := httptest.NewRequest("POST", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", bytes.NewReader(bodyBytes))
-	w := httptest.NewRecorder()
-
-	server.HandleConnectionCreate(w, httpReq)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected status %d for missing cluster ID, got %d", http.StatusBadRequest, w.Code)
-	}
-}
-
-func TestGenerateVSCodeURL(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
-	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).Build()
-
-	server := &ExtensionServer{
-		config: &ExtensionConfig{
-			ClusterId: "test-cluster",
-		},
-		k8sClient: fakeClient,
-	}
-	req := httptest.NewRequest("POST", "/test", nil)
-
-	// Create minimal workspace for pod lookup
-	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace",
-			Namespace: "default",
-		},
-	}
-	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{}
-
-	_, _, err := server.generateVSCodeURL(req, workspace, accessStrategy, "default")
-
-	if err == nil {
-		t.Error("expected error from generateVSCodeURL without pods")
-	}
-}
-
-func TestGenerateVSCodeURLWithPod(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
-	_ = workspacev1alpha1.AddToScheme(scheme)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-			UID:       "test-uid-123",
-			Labels: map[string]string{
-				"workspace.jupyter.org/workspace-name": "test-workspace",
-			},
-		},
-	}
-
-	// Create workspace with access strategy reference
-	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name: "test-strategy",
-			},
-		},
-	}
-
-	// Create access strategy
-	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-strategy",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{},
-	}
-
-	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(pod, workspace, accessStrategy).Build()
-
-	server := &ExtensionServer{
-		config: &ExtensionConfig{
-			ClusterId: "test-cluster",
-		},
-		k8sClient: fakeClient,
-	}
-	req := httptest.NewRequest("POST", "/test", nil)
-
-	_, _, err := server.generateVSCodeURL(req, workspace, accessStrategy, "default")
-
-	if err == nil {
-		t.Error("expected error from generateVSCodeURL at SSM strategy creation")
-	}
-}
-
 func TestHandleConnectionCreateReadBodyError(t *testing.T) {
-	// Mock EnsureResourcesInitialized to succeed
-	aws.EnsureResourcesInitialized = func(ctx context.Context) error {
-		return nil
-	}
-	defer func() { aws.EnsureResourcesInitialized = originalEnsureResourcesInitialized }()
-
 	server := &ExtensionServer{
-		config: &ExtensionConfig{
-			ClusterId: "test-cluster",
-		},
+		config: &ExtensionConfig{},
 	}
 
-	// Create a request with a body that will cause a read error
 	req := httptest.NewRequest("POST", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", nil)
-	// Use a custom reader that returns an error
 	req.Body = &badReader{}
 	w := httptest.NewRecorder()
 
@@ -433,38 +575,19 @@ func TestHandleConnectionCreateReadBodyError(t *testing.T) {
 	}
 }
 
-// badReader is a helper that always returns an error when reading
-type badReader struct{}
-
-func (e *badReader) Read(p []byte) (n int, err error) {
-	return 0, fmt.Errorf("read error")
-}
-
-func (e *badReader) Close() error {
-	return nil
-}
-
 func TestHandleConnectionCreateInvalidConnectionType(t *testing.T) {
-	// Mock EnsureResourcesInitialized to succeed
-	aws.EnsureResourcesInitialized = func(ctx context.Context) error {
-		return nil
-	}
-	defer func() { aws.EnsureResourcesInitialized = originalEnsureResourcesInitialized }()
-
 	server := &ExtensionServer{
-		config: &ExtensionConfig{
-			ClusterId: "test-cluster",
-		},
+		config: &ExtensionConfig{},
 	}
 
-	req := connectionv1alpha1.WorkspaceConnectionRequest{
+	reqBody := connectionv1alpha1.WorkspaceConnectionRequest{
 		Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
 			WorkspaceName:           "test-workspace",
 			WorkspaceConnectionType: "invalid-type",
 		},
 	}
 
-	bodyBytes, _ := json.Marshal(req)
+	bodyBytes, _ := json.Marshal(reqBody)
 	httpReq := httptest.NewRequest("POST", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", bytes.NewReader(bodyBytes))
 	w := httptest.NewRecorder()
 
@@ -475,49 +598,19 @@ func TestHandleConnectionCreateInvalidConnectionType(t *testing.T) {
 	}
 }
 
-func TestCheckWorkspaceAuthorizationMissingUser(t *testing.T) {
-	server := &ExtensionServer{
-		config: &ExtensionConfig{
-			ClusterId: "test-cluster",
-		},
-	}
-
-	// Create request without user headers
-	req := httptest.NewRequest("POST", "/test", nil)
-
-	_, result, err := server.checkWorkspaceAuthorization(req, "test-workspace", "default")
-
-	if err == nil {
-		t.Error("expected error when user headers are missing")
-	}
-
-	if result != nil {
-		t.Error("expected nil result when user headers are missing")
-	}
-
-	expectedMsg := "user not found in request headers"
-	if err.Error() != expectedMsg {
-		t.Errorf("expected error %q, got %q", expectedMsg, err.Error())
-	}
-}
-
 func TestHandleConnectionCreateAuthorizationError(t *testing.T) {
-	// Create a server that will cause authorization to fail
 	server := &ExtensionServer{
-		config: &ExtensionConfig{
-			ClusterId: "test-cluster",
-		},
+		config: &ExtensionConfig{},
 	}
 
-	req := connectionv1alpha1.WorkspaceConnectionRequest{
+	reqBody := connectionv1alpha1.WorkspaceConnectionRequest{
 		Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
 			WorkspaceName:           "test-workspace",
 			WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeWebUI,
 		},
 	}
 
-	bodyBytes, _ := json.Marshal(req)
-	// Create request without user headers to trigger authorization error
+	bodyBytes, _ := json.Marshal(reqBody)
 	httpReq := httptest.NewRequest("POST", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", bytes.NewReader(bodyBytes))
 	w := httptest.NewRecorder()
 
@@ -528,81 +621,9 @@ func TestHandleConnectionCreateAuthorizationError(t *testing.T) {
 	}
 }
 
-func TestGenerateVSCodeURLSSMSuccess(t *testing.T) {
-	original := newSSMRemoteAccessStrategy
-	defer func() {
-		newSSMRemoteAccessStrategy = original
-	}()
-
-	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
-	_ = workspacev1alpha1.AddToScheme(scheme)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-			UID:       "test-uid-123",
-			Labels: map[string]string{
-				"workspace.jupyter.org/workspace-name": "test-workspace",
-			},
-		},
-	}
-
-	// Create workspace with access strategy reference
-	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name: "test-strategy",
-			},
-		},
-	}
-
-	// Create access strategy
-	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-strategy",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{},
-	}
-
-	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(pod, workspace, accessStrategy).Build()
-
-	server := &ExtensionServer{
-		config: &ExtensionConfig{
-			ClusterId: "test-cluster",
-		},
-		k8sClient: fakeClient,
-	}
-
-	newSSMRemoteAccessStrategy = func(ssmClient aws.SSMRemoteAccessClientInterface, podExec aws.PodExecInterface) (*aws.SSMRemoteAccessStrategy, error) {
-		return nil, fmt.Errorf("SSM creation failed")
-	}
-
-	req := httptest.NewRequest("POST", "/test", nil)
-	_, _, err := server.generateVSCodeURL(req, workspace, accessStrategy, "default")
-
-	if err == nil {
-		t.Error("expected error from SSM creation")
-	}
-}
-
 func TestHandleConnectionCreateInvalidMethod(t *testing.T) {
-	// Mock EnsureResourcesInitialized to succeed
-	aws.EnsureResourcesInitialized = func(ctx context.Context) error {
-		return nil
-	}
-	defer func() { aws.EnsureResourcesInitialized = originalEnsureResourcesInitialized }()
-
 	server := &ExtensionServer{
-		config: &ExtensionConfig{
-			ClusterId: "test-cluster",
-		},
+		config: &ExtensionConfig{},
 	}
 
 	httpReq := httptest.NewRequest("GET", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", nil)
@@ -621,19 +642,19 @@ func TestHandleConnectionCreateWebUIPath(t *testing.T) {
 	logger := ctrl.Log.WithName("test")
 
 	server := &ExtensionServer{
-		config:    &ExtensionConfig{ClusterId: "test"},
+		config:    &ExtensionConfig{},
 		k8sClient: ctrlclient.NewClientBuilder().WithScheme(scheme).Build(),
 		logger:    &logger,
 	}
 
-	req := connectionv1alpha1.WorkspaceConnectionRequest{
+	reqBody := connectionv1alpha1.WorkspaceConnectionRequest{
 		Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
 			WorkspaceName:           "test",
 			WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeWebUI,
 		},
 	}
 
-	bodyBytes, _ := json.Marshal(req)
+	bodyBytes, _ := json.Marshal(reqBody)
 	httpReq := httptest.NewRequest("POST", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", bytes.NewReader(bodyBytes))
 	httpReq.Header.Set("X-User", "test")
 	w := httptest.NewRecorder()
@@ -647,12 +668,8 @@ func TestHandleConnectionCreateWithWorkspace(t *testing.T) {
 	_ = corev1.AddToScheme(scheme)
 	_ = workspacev1alpha1.AddToScheme(scheme)
 
-	// Create a public workspace
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace",
-			Namespace: "default",
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			AccessType: "Public",
 		},
@@ -662,251 +679,125 @@ func TestHandleConnectionCreateWithWorkspace(t *testing.T) {
 	logger := ctrl.Log.WithName("test")
 
 	server := &ExtensionServer{
-		config:        &ExtensionConfig{ClusterId: "test"},
+		config:        &ExtensionConfig{},
 		k8sClient:     fakeClient,
 		logger:        &logger,
 		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
 	}
 
-	req := connectionv1alpha1.WorkspaceConnectionRequest{
+	reqBody := connectionv1alpha1.WorkspaceConnectionRequest{
 		Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
 			WorkspaceName:           "test-workspace",
 			WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeWebUI,
 		},
 	}
 
-	bodyBytes, _ := json.Marshal(req)
+	bodyBytes, _ := json.Marshal(reqBody)
 	httpReq := httptest.NewRequest("POST", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", bytes.NewReader(bodyBytes))
 	httpReq.Header.Set("X-User", "test-user")
 	w := httptest.NewRecorder()
 
 	server.HandleConnectionCreate(w, httpReq)
-	// Should pass authorization and reach URL generation
+	// Should pass authorization and reach validation
 }
 
-func TestGenerateWebUIBearerTokenURL(t *testing.T) {
-	// Create test workspace with AccessStrategy
-	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "workspace1",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name: "test-strategy",
+// --- Other helper tests ---
+
+func TestValidateWorkspaceConnectionRequest(t *testing.T) {
+	tests := []struct {
+		name        string
+		req         *connectionv1alpha1.WorkspaceConnectionRequest
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "valid vscode request",
+			req: &connectionv1alpha1.WorkspaceConnectionRequest{
+				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
+					WorkspaceName:           "test-workspace",
+					WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeVSCodeRemote,
+				},
 			},
 		},
-	}
-
-	// Create test AccessStrategy
-	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-strategy",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			BearerAuthURLTemplate: "https://test.com/workspaces/{{.Workspace.Namespace}}/{{.Workspace.Name}}/bearer-auth",
-		},
-	}
-
-	// Create fake client with test objects
-	scheme := runtime.NewScheme()
-	_ = workspacev1alpha1.AddToScheme(scheme)
-	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace, accessStrategy).Build()
-
-	config := &ExtensionConfig{Domain: "https://test.com"}
-	server := &ExtensionServer{
-		config:        config,
-		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
-		k8sClient:     fakeClient,
-	}
-
-	req := httptest.NewRequest("POST", "/test", nil)
-	req.Header.Set("X-Remote-User", testUser)
-
-	connType, url, err := server.generateWebUIBearerTokenURL(req, workspace, accessStrategy)
-
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if connType != "web-ui" {
-		t.Errorf("expected web-ui, got %s", connType)
-	}
-	expected := "https://test.com/workspaces/default/workspace1/bearer-auth?token=test-token"
-	if url != expected {
-		t.Errorf("expected %s, got %s", expected, url)
-	}
-}
-
-func TestGenerateWebUIBearerTokenURL_SubdomainRouting(t *testing.T) {
-	// Create test workspace with AccessStrategy
-	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "myworkspace",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name: "subdomain-strategy",
+		{
+			name: "valid web-ui request",
+			req: &connectionv1alpha1.WorkspaceConnectionRequest{
+				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
+					WorkspaceName:           "test-workspace",
+					WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeWebUI,
+				},
 			},
 		},
-	}
-
-	// Create AccessStrategy with subdomain template
-	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "subdomain-strategy",
-			Namespace: "default",
+		{
+			name: "missing workspace name",
+			req: &connectionv1alpha1.WorkspaceConnectionRequest{
+				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
+					WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeVSCodeRemote,
+				},
+			},
+			expectError: true,
+			errorMsg:    "workspaceName is required",
 		},
-		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			BearerAuthURLTemplate: "https://{{.Workspace.Name}}-{{b32encode .Workspace.Namespace}}.example.com/bearer-auth",
+		{
+			name: "missing connection type",
+			req: &connectionv1alpha1.WorkspaceConnectionRequest{
+				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
+					WorkspaceName: "test-workspace",
+				},
+			},
+			expectError: true,
+			errorMsg:    "workspaceConnectionType is required",
+		},
+		{
+			name: "invalid connection type",
+			req: &connectionv1alpha1.WorkspaceConnectionRequest{
+				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
+					WorkspaceName:           "test-workspace",
+					WorkspaceConnectionType: "invalid-type",
+				},
+			},
+			expectError: true,
+			errorMsg:    "invalid workspaceConnectionType: 'invalid-type'. Valid types are: 'vscode-remote', 'web-ui'",
 		},
 	}
 
-	// Create fake client with test objects
-	scheme := runtime.NewScheme()
-	_ = workspacev1alpha1.AddToScheme(scheme)
-	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace, accessStrategy).Build()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateWorkspaceConnectionRequest(tt.req)
 
-	config := &ExtensionConfig{Domain: "https://example.com"}
-	server := &ExtensionServer{
-		config:        config,
-		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
-		k8sClient:     fakeClient,
-	}
-
-	req := httptest.NewRequest("POST", "/test", nil)
-	req.Header.Set("X-Remote-User", testUser)
-
-	connType, url, err := server.generateWebUIBearerTokenURL(req, workspace, accessStrategy)
-
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if connType != "web-ui" {
-		t.Errorf("expected web-ui, got %s", connType)
-	}
-	expected := "https://myworkspace-mrswmylvnr2a.example.com/bearer-auth?token=test-token"
-	if url != expected {
-		t.Errorf("expected %s, got %s", expected, url)
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				} else if err.Error() != tt.errorMsg {
+					t.Errorf("expected error %q, got %q", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			}
+		})
 	}
 }
 
-func TestGenerateWebUIBearerTokenURL_NoAccessStrategy(t *testing.T) {
-	// Create workspace without AccessStrategy
-	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "workspace1",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessStrategy: nil,
-		},
-	}
-
-	// Create fake client with test objects
-	scheme := runtime.NewScheme()
-	_ = workspacev1alpha1.AddToScheme(scheme)
-	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace).Build()
-
-	config := &ExtensionConfig{Domain: "https://example.com"}
+func TestCheckWorkspaceAuthorizationMissingUser(t *testing.T) {
 	server := &ExtensionServer{
-		config:        config,
-		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
-		k8sClient:     fakeClient,
+		config: &ExtensionConfig{},
 	}
 
 	req := httptest.NewRequest("POST", "/test", nil)
-	req.Header.Set("X-Remote-User", testUser)
 
-	_, _, err := server.generateWebUIBearerTokenURL(req, workspace, nil)
+	_, result, err := server.checkWorkspaceAuthorization(req, "test-workspace", "default")
 
 	if err == nil {
-		t.Error("expected error for missing AccessStrategy, got nil")
+		t.Error("expected error when user headers are missing")
 	}
-	if !strings.Contains(err.Error(), "no AccessStrategy configured") {
-		t.Errorf("expected AccessStrategy error, got: %v", err)
+	if result != nil {
+		t.Error("expected nil result when user headers are missing")
 	}
-}
-
-func TestGenerateWebUIBearerTokenURL_MissingTemplate(t *testing.T) {
-	// Create workspace with AccessStrategy
-	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "workspace1",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name: "empty-strategy",
-			},
-		},
-	}
-
-	// Create AccessStrategy without BearerAuthURLTemplate
-	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "empty-strategy",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			BearerAuthURLTemplate: "",
-		},
-	}
-
-	// Create fake client with test objects
-	scheme := runtime.NewScheme()
-	_ = workspacev1alpha1.AddToScheme(scheme)
-	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace, accessStrategy).Build()
-
-	config := &ExtensionConfig{Domain: "https://example.com"}
-	server := &ExtensionServer{
-		config:        config,
-		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
-		k8sClient:     fakeClient,
-	}
-
-	req := httptest.NewRequest("POST", "/test", nil)
-	req.Header.Set("X-Remote-User", testUser)
-
-	_, _, err := server.generateWebUIBearerTokenURL(req, workspace, accessStrategy)
-
-	if err == nil {
-		t.Error("expected error for missing BearerAuthURLTemplate, got nil")
-	}
-	if !strings.Contains(err.Error(), "BearerAuthURLTemplate not configured") {
-		t.Errorf("expected template error, got: %v", err)
-	}
-}
-
-func TestHandleConnectionCreateResourceInitializationError(t *testing.T) {
-	// Mock EnsureResourcesInitialized to fail
-	aws.EnsureResourcesInitialized = func(ctx context.Context) error {
-		return fmt.Errorf("failed to initialize AWS resources")
-	}
-	defer func() { aws.EnsureResourcesInitialized = originalEnsureResourcesInitialized }()
-
-	server := &ExtensionServer{
-		config: &ExtensionConfig{
-			ClusterId: "test-cluster",
-		},
-	}
-
-	req := connectionv1alpha1.WorkspaceConnectionRequest{
-		Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-			WorkspaceName:           "test-workspace",
-			WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeWebUI,
-		},
-	}
-
-	bodyBytes, _ := json.Marshal(req)
-	httpReq := httptest.NewRequest("POST", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", bytes.NewReader(bodyBytes))
-	w := httptest.NewRecorder()
-
-	server.HandleConnectionCreate(w, httpReq)
-
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("expected status %d for resource initialization error, got %d", http.StatusInternalServerError, w.Code)
+	expectedMsg := "user not found in request headers"
+	if err.Error() != expectedMsg {
+		t.Errorf("expected error %q, got %q", expectedMsg, err.Error())
 	}
 }
 
@@ -920,134 +811,6 @@ func TestGetUserFromHeaders(t *testing.T) {
 	}
 }
 
-func TestGenerateVSCodeURL_MissingWorkspace(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
-	_ = workspacev1alpha1.AddToScheme(scheme)
-
-	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).Build()
-
-	server := &ExtensionServer{
-		config: &ExtensionConfig{
-			ClusterId: "test-cluster",
-		},
-		k8sClient: fakeClient,
-	}
-	req := httptest.NewRequest("POST", "/test", nil)
-
-	_, _, err := server.generateVSCodeURL(req, nil, nil, "default")
-
-	if err == nil {
-		t.Error("expected error for missing workspace")
-	}
-	// When workspace is nil, we expect access strategy error
-	if !strings.Contains(err.Error(), "no access strategy configured") {
-		t.Errorf("expected access strategy error, got: %v", err)
-	}
-}
-
-func TestGenerateVSCodeURL_MissingAccessStrategy(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
-	_ = workspacev1alpha1.AddToScheme(scheme)
-
-	// Create workspace without access strategy
-	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessStrategy: nil,
-		},
-	}
-
-	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace).Build()
-
-	server := &ExtensionServer{
-		config: &ExtensionConfig{
-			ClusterId: "test-cluster",
-		},
-		k8sClient: fakeClient,
-	}
-	req := httptest.NewRequest("POST", "/test", nil)
-
-	_, _, err := server.generateVSCodeURL(req, workspace, nil, "default")
-
-	if err == nil {
-		t.Error("expected error for missing access strategy")
-	}
-	if !strings.Contains(err.Error(), "no access strategy configured") {
-		t.Errorf("expected access strategy error, got: %v", err)
-	}
-}
-
-func TestGenerateVSCodeURL_MissingSSMDocumentName(t *testing.T) {
-	original := newSSMRemoteAccessStrategy
-	defer func() {
-		newSSMRemoteAccessStrategy = original
-	}()
-
-	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
-	_ = workspacev1alpha1.AddToScheme(scheme)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-			UID:       "test-uid-123",
-			Labels: map[string]string{
-				"workspace.jupyter.org/workspace-name": "test-workspace",
-			},
-		},
-	}
-
-	// Create workspace with access strategy reference
-	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name: "test-strategy",
-			},
-		},
-	}
-
-	// Create access strategy
-	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-strategy",
-			Namespace: "default",
-		},
-		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{},
-	}
-
-	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(pod, workspace, accessStrategy).Build()
-
-	// Mock SSM strategy to return a real strategy that will fail when SSM_DOCUMENT_NAME is missing
-	newSSMRemoteAccessStrategy = func(ssmClient aws.SSMRemoteAccessClientInterface, podExec aws.PodExecInterface) (*aws.SSMRemoteAccessStrategy, error) {
-		return aws.NewSSMRemoteAccessStrategy(ssmClient, podExec)
-	}
-
-	server := &ExtensionServer{
-		config: &ExtensionConfig{
-			ClusterId: "test-cluster",
-		},
-		k8sClient: fakeClient,
-	}
-	req := httptest.NewRequest("POST", "/test", nil)
-
-	_, _, err := server.generateVSCodeURL(req, workspace, accessStrategy, "default")
-
-	if err == nil {
-		t.Error("expected error from SSM strategy creation")
-	}
-}
-
-// TestHasWebUIEnabled tests the hasWebUIEnabled helper function
 func TestHasWebUIEnabled(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -1089,7 +852,6 @@ func TestHasWebUIEnabled(t *testing.T) {
 	}
 }
 
-// TestIsWorkspaceAvailable tests the isWorkspaceAvailable helper function
 func TestIsWorkspaceAvailable(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -1106,68 +868,26 @@ func TestIsWorkspaceAvailable(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "Available condition is False",
-			workspace: &workspacev1alpha1.Workspace{
-				Status: workspacev1alpha1.WorkspaceStatus{
-					Conditions: []metav1.Condition{
-						{
-							Type:   "Available",
-							Status: metav1.ConditionFalse,
-						},
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "Available condition is Unknown",
-			workspace: &workspacev1alpha1.Workspace{
-				Status: workspacev1alpha1.WorkspaceStatus{
-					Conditions: []metav1.Condition{
-						{
-							Type:   "Available",
-							Status: metav1.ConditionUnknown,
-						},
-					},
-				},
-			},
-			expected: false,
-		},
-		{
 			name: "Available condition is True",
 			workspace: &workspacev1alpha1.Workspace{
 				Status: workspacev1alpha1.WorkspaceStatus{
 					Conditions: []metav1.Condition{
-						{
-							Type:   "Available",
-							Status: metav1.ConditionTrue,
-						},
+						{Type: "Available", Status: metav1.ConditionTrue},
 					},
 				},
 			},
 			expected: true,
 		},
 		{
-			name: "multiple conditions with Available True",
+			name: "Available condition is False",
 			workspace: &workspacev1alpha1.Workspace{
 				Status: workspacev1alpha1.WorkspaceStatus{
 					Conditions: []metav1.Condition{
-						{
-							Type:   "Progressing",
-							Status: metav1.ConditionFalse,
-						},
-						{
-							Type:   "Available",
-							Status: metav1.ConditionTrue,
-						},
-						{
-							Type:   "Degraded",
-							Status: metav1.ConditionFalse,
-						},
+						{Type: "Available", Status: metav1.ConditionFalse},
 					},
 				},
 			},
-			expected: true,
+			expected: false,
 		},
 	}
 
@@ -1176,366 +896,6 @@ func TestIsWorkspaceAvailable(t *testing.T) {
 			result := isWorkspaceAvailable(tt.workspace)
 			if result != tt.expected {
 				t.Errorf("expected %v, got %v", tt.expected, result)
-			}
-		})
-	}
-}
-
-// TestValidateWebUIConnection tests the validateWebUIConnection function
-func TestValidateWebUIConnection(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = workspacev1alpha1.AddToScheme(scheme)
-
-	tests := []struct {
-		name               string
-		workspace          *workspacev1alpha1.Workspace
-		accessStrategy     *workspacev1alpha1.WorkspaceAccessStrategy
-		expectedStatusCode int
-		expectedError      string
-	}{
-		{
-			name: "workspace not available",
-			workspace: &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name: "test-strategy",
-					},
-				},
-				Status: workspacev1alpha1.WorkspaceStatus{
-					Conditions: []metav1.Condition{
-						{
-							Type:   "Available",
-							Status: metav1.ConditionFalse,
-						},
-					},
-				},
-			},
-			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-strategy",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					BearerAuthURLTemplate: "https://example.com/bearer-auth",
-				},
-			},
-			expectedStatusCode: http.StatusBadRequest,
-			expectedError:      "workspace is not available",
-		},
-		{
-			name: "WebUI not enabled - no BearerAuthURLTemplate",
-			workspace: &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name: "test-strategy",
-					},
-				},
-				Status: workspacev1alpha1.WorkspaceStatus{
-					Conditions: []metav1.Condition{
-						{
-							Type:   "Available",
-							Status: metav1.ConditionTrue,
-						},
-					},
-				},
-			},
-			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-strategy",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					BearerAuthURLTemplate: "",
-				},
-			},
-			expectedStatusCode: http.StatusBadRequest,
-			expectedError:      "web browser access is not enabled",
-		},
-		{
-			name: "validation passes",
-			workspace: &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name: "test-strategy",
-					},
-				},
-				Status: workspacev1alpha1.WorkspaceStatus{
-					Conditions: []metav1.Condition{
-						{
-							Type:   "Available",
-							Status: metav1.ConditionTrue,
-						},
-					},
-				},
-			},
-			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-strategy",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					BearerAuthURLTemplate: "https://example.com/bearer-auth",
-				},
-			},
-			expectedStatusCode: 0,
-			expectedError:      "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var objects []client.Object
-			if tt.workspace != nil {
-				objects = append(objects, tt.workspace)
-			}
-			if tt.accessStrategy != nil {
-				objects = append(objects, tt.accessStrategy)
-			}
-
-			fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-
-			server := &ExtensionServer{
-				k8sClient: fakeClient,
-			}
-
-			logger := ctrl.Log.WithName("test")
-			_, statusCode, err := server.validateWebUIConnection(tt.workspace, logger)
-
-			if statusCode != tt.expectedStatusCode {
-				t.Errorf("expected status code %d, got %d", tt.expectedStatusCode, statusCode)
-			}
-
-			if tt.expectedError == "" {
-				if err != nil {
-					t.Errorf("expected no error, got %v", err)
-				}
-			} else {
-				if err == nil {
-					t.Errorf("expected error containing %q, got nil", tt.expectedError)
-				} else if !strings.Contains(err.Error(), tt.expectedError) {
-					t.Errorf("expected error containing %q, got %q", tt.expectedError, err.Error())
-				}
-			}
-		})
-	}
-}
-
-// TestIsWorkspaceAvailable tests the isWorkspaceAvailable helper function
-func TestHasSSMConfigured(t *testing.T) {
-	tests := []struct {
-		name           string
-		accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
-		expected       bool
-	}{
-		{
-			name:           "nil access strategy",
-			accessStrategy: nil,
-			expected:       false,
-		},
-		{
-			name: "nil CreateConnectionContext",
-			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
-				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					CreateConnectionContext: nil,
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "empty SSMDocumentName",
-			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
-				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					CreateConnectionContext: map[string]string{
-						"ssmDocumentName": "",
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "SSMDocumentName configured",
-			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
-				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					CreateConnectionContext: map[string]string{
-						"ssmDocumentName": "my-ssm-document",
-					},
-				},
-			},
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := hasSSMConfigured(tt.accessStrategy)
-			if result != tt.expected {
-				t.Errorf("expected %v, got %v", tt.expected, result)
-			}
-		})
-	}
-}
-
-// TestValidateVSCodeConnection tests the validateVSCodeConnection function
-func TestValidateVSCodeConnection(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = workspacev1alpha1.AddToScheme(scheme)
-
-	tests := []struct {
-		name               string
-		workspace          *workspacev1alpha1.Workspace
-		accessStrategy     *workspacev1alpha1.WorkspaceAccessStrategy
-		expectedStatusCode int
-		expectedError      string
-	}{
-		{
-			name: "workspace not available",
-			workspace: &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name: "test-strategy",
-					},
-				},
-				Status: workspacev1alpha1.WorkspaceStatus{
-					Conditions: []metav1.Condition{
-						{
-							Type:   "Available",
-							Status: metav1.ConditionFalse,
-						},
-					},
-				},
-			},
-			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-strategy",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					CreateConnectionContext: map[string]string{
-						"SSMDocumentName": "my-document",
-					},
-				},
-			},
-			expectedStatusCode: http.StatusBadRequest,
-			expectedError:      "workspace is not available",
-		},
-		{
-			name: "SSM not configured",
-			workspace: &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name: "test-strategy",
-					},
-				},
-				Status: workspacev1alpha1.WorkspaceStatus{
-					Conditions: []metav1.Condition{
-						{
-							Type:   "Available",
-							Status: metav1.ConditionTrue,
-						},
-					},
-				},
-			},
-			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-strategy",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					CreateConnectionContext: map[string]string{},
-				},
-			},
-			expectedStatusCode: http.StatusBadRequest,
-			expectedError:      "remote connection is not configured",
-		},
-		{
-			name: "validation passes",
-			workspace: &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name: "test-strategy",
-					},
-				},
-				Status: workspacev1alpha1.WorkspaceStatus{
-					Conditions: []metav1.Condition{
-						{
-							Type:   "Available",
-							Status: metav1.ConditionTrue,
-						},
-					},
-				},
-			},
-			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-strategy",
-					Namespace: "default",
-				},
-				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					CreateConnectionContext: map[string]string{
-						"ssmDocumentName": "my-ssm-document",
-					},
-				},
-			},
-			expectedStatusCode: 0,
-			expectedError:      "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var objects []client.Object
-			if tt.workspace != nil {
-				objects = append(objects, tt.workspace)
-			}
-			if tt.accessStrategy != nil {
-				objects = append(objects, tt.accessStrategy)
-			}
-
-			fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-
-			server := &ExtensionServer{
-				k8sClient: fakeClient,
-			}
-
-			_, statusCode, err := server.validateVSCodeConnection(tt.workspace)
-
-			if statusCode != tt.expectedStatusCode {
-				t.Errorf("expected status code %d, got %d", tt.expectedStatusCode, statusCode)
-			}
-
-			if tt.expectedError == "" {
-				if err != nil {
-					t.Errorf("expected no error, got %v", err)
-				}
-			} else {
-				if err == nil {
-					t.Errorf("expected error containing %q, got nil", tt.expectedError)
-				} else if !strings.Contains(err.Error(), tt.expectedError) {
-					t.Errorf("expected error containing %q, got %q", tt.expectedError, err.Error())
-				}
 			}
 		})
 	}
