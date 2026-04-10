@@ -584,6 +584,10 @@ setup-aws-internal: ## Setup connection to remote cluster
 	aws ecr describe-repositories --repository-names $(ECR_REPOSITORY_ROTATOR) --region $(AWS_REGION) > /dev/null || \
 	aws ecr create-repository --repository-name $(ECR_REPOSITORY_ROTATOR) --region $(AWS_REGION)
 
+	@echo "Creating ECR repository for web-app if it doesn't exist..."
+	aws ecr describe-repositories --repository-names $(ECR_REPOSITORY_WEB_APP) --region $(AWS_REGION) > /dev/null || \
+	aws ecr create-repository --repository-name $(ECR_REPOSITORY_WEB_APP) --region $(AWS_REGION)
+
 	@if ! kubectl get namespace cert-manager > /dev/null 2>&1; then \
 		echo "Installing cert-manager"; \
 		helm repo add jetstack https://charts.jetstack.io; \

@@ -31,6 +31,7 @@ func getTestClient(objects ...client.Object) client.Client {
 	return fakeclient.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 }
 
+
 func TestGenerateKey(t *testing.T) {
 	key, err := GenerateKey()
 	if err != nil {
@@ -66,7 +67,7 @@ func TestRotateSecret_NewSecret(t *testing.T) {
 	k8sClient := getTestClient(secret)
 
 	// Rotate secret
-	err := RotateSecret(ctx, k8sClient, secretName, testNamespace, 3)
+	err := RotateSecret(ctx, k8sClient, testNamespace, DefaultJWTConfig(secretName, 3))
 	if err != nil {
 		t.Fatalf("RotateSecret failed: %v", err)
 	}
@@ -110,7 +111,7 @@ func TestRotateSecret_AddAndPruneKeys(t *testing.T) {
 	// Rotate 4 times (should end up with 3 keys due to pruning)
 	for i := 0; i < 4; i++ {
 		time.Sleep(1 * time.Second) // Ensure different timestamps (unix timestamp precision is 1 second)
-		err := RotateSecret(ctx, k8sClient, secretName, testNamespace, numberOfKeys)
+		err := RotateSecret(ctx, k8sClient, testNamespace, DefaultJWTConfig(secretName, numberOfKeys))
 		if err != nil {
 			t.Fatalf("RotateSecret failed on iteration %d: %v", i, err)
 		}
@@ -146,7 +147,7 @@ func TestRotateSecret_InvalidNumberOfKeys(t *testing.T) {
 	k8sClient := getTestClient()
 	ctx := context.Background()
 
-	err := RotateSecret(ctx, k8sClient, testSecretName, testNamespace, 0)
+	err := RotateSecret(ctx, k8sClient, testNamespace, DefaultJWTConfig(testSecretName, 0))
 	if err == nil {
 		t.Fatal("Expected error for numberOfKeys=0")
 	}
@@ -160,7 +161,7 @@ func TestRotateSecret_SecretNotFound(t *testing.T) {
 	k8sClient := getTestClient()
 	ctx := context.Background()
 
-	err := RotateSecret(ctx, k8sClient, "nonexistent-secret", testNamespace, 3)
+	err := RotateSecret(ctx, k8sClient, testNamespace, DefaultJWTConfig("nonexistent-secret", 3))
 	if err == nil {
 		t.Fatal("Expected error for nonexistent secret")
 	}
@@ -191,7 +192,7 @@ func TestRotateSecret_MalformedKeysSkipped(t *testing.T) {
 	k8sClient := getTestClient(secret)
 
 	// Rotation should succeed and skip malformed keys
-	err := RotateSecret(ctx, k8sClient, secretName, testNamespace, 3)
+	err := RotateSecret(ctx, k8sClient, testNamespace, DefaultJWTConfig(secretName, 3))
 	if err != nil {
 		t.Fatalf("RotateSecret should skip malformed keys, but failed: %v", err)
 	}

@@ -188,7 +188,7 @@ webApp:
     keyPrefix: "session-key-"
     keySizeBytes: 32
     numberOfKeys: 3
-    newKeyUseDelaySecs: 60          # Cooloff before using a newly rotated key
+    newKeyUseDelaySecs: 5           # Cooloff before using a newly rotated key
 
 # Authmiddleware configuration
 authmiddleware:

@@ -29,6 +29,16 @@ type SecretConfig struct {
 	NumberOfKeys int    `json:"numberOfKeys"`
 }
 
+// DefaultJWTConfig returns a SecretConfig with JWT defaults for single-secret mode.
+func DefaultJWTConfig(secretName string, numberOfKeys int) SecretConfig {
+	return SecretConfig{
+		SecretName:   secretName,
+		KeyPrefix:    jwt.KeyPrefix,
+		KeySize:      jwt.KeySizeBytes,
+		NumberOfKeys: numberOfKeys,
+	}
+}
+
 // GenerateKey generates a cryptographically random signing key of the default size.
 func GenerateKey() ([]byte, error) {
 	return GenerateKeyWithSize(jwt.KeySizeBytes)
@@ -53,7 +63,7 @@ func RotateSecrets(ctx context.Context, k8sClient client.Client, namespace strin
 	for _, cfg := range configs {
 		log.Printf("Rotating secret %s (prefix=%s, keySize=%d, numberOfKeys=%d)",
 			cfg.SecretName, cfg.KeyPrefix, cfg.KeySize, cfg.NumberOfKeys)
-		if err := rotateSecretWithConfig(ctx, k8sClient, cfg.SecretName, namespace, cfg.KeyPrefix, cfg.KeySize, cfg.NumberOfKeys); err != nil {
+		if err := RotateSecret(ctx, k8sClient, namespace, cfg); err != nil {
 			return fmt.Errorf("failed to rotate secret %s: %w", cfg.SecretName, err)
 		}
 	}
@@ -67,14 +77,10 @@ type keyEntry struct {
 	value     []byte
 }
 
-// RotateSecret performs key rotation on a Kubernetes secret using the default JWT key prefix and size.
-// Backward compatible — delegates to the generalized rotateSecretWithConfig.
-func RotateSecret(ctx context.Context, k8sClient client.Client, secretName string, namespace string, numberOfKeys int) error {
-	return rotateSecretWithConfig(ctx, k8sClient, secretName, namespace, jwt.KeyPrefix, jwt.KeySizeBytes, numberOfKeys)
-}
+// RotateSecret performs key rotation on a single Kubernetes secret.
+func RotateSecret(ctx context.Context, k8sClient client.Client, namespace string, cfg SecretConfig) error {
+	secretName, keyPrefix, keySize, numberOfKeys := cfg.SecretName, cfg.KeyPrefix, cfg.KeySize, cfg.NumberOfKeys
 
-// rotateSecretWithConfig performs key rotation with configurable prefix and key size.
-func rotateSecretWithConfig(ctx context.Context, k8sClient client.Client, secretName string, namespace string, keyPrefix string, keySize int, numberOfKeys int) error {
 	if numberOfKeys < 1 {
 		return fmt.Errorf("numberOfKeys must be at least 1, got %d", numberOfKeys)
 	}
@@ -99,7 +105,7 @@ func rotateSecretWithConfig(ctx context.Context, k8sClient client.Client, secret
 			continue
 		}
 
-		timestamp, err := parseKeyTimestampWithPrefix(name, keyPrefix)
+		timestamp, err := jwt.ParseKeyTimestampWithPrefix(name, keyPrefix)
 		if err != nil {
 			log.Printf("Warning: skipping malformed key %s: %v\n", name, err)
 			continue
@@ -159,19 +165,6 @@ func rotateSecretWithConfig(ctx context.Context, k8sClient client.Client, secret
 		secret.Namespace, secretName, newKeyName, remainingKeys)
 
 	return nil
-}
-
-// parseKeyTimestampWithPrefix extracts the timestamp from a key name with a given prefix.
-func parseKeyTimestampWithPrefix(keyName string, prefix string) (int64, error) {
-	if !strings.HasPrefix(keyName, prefix) {
-		return 0, fmt.Errorf("key name %s does not have prefix %s", keyName, prefix)
-	}
-	timestampStr := strings.TrimPrefix(keyName, prefix)
-	var timestamp int64
-	if _, err := fmt.Sscanf(timestampStr, "%d", &timestamp); err != nil {
-		return 0, fmt.Errorf("invalid timestamp in key name %s: %w", keyName, err)
-	}
-	return timestamp, nil
 }
 
 // getKeyNames extracts key names from keyEntry slice for logging

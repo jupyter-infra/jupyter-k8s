@@ -87,8 +87,11 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Check for multi-secret mode
+	secretsConfigJSON := os.Getenv(EnvSecretsConfig)
+
 	// Validate secret exists and has valid keys before rotation (single-secret mode only)
-	if os.Getenv(EnvSecretsConfig) == "" {
+	if secretsConfigJSON == "" {
 		log.Printf("Validating secret %s in namespace %s...", secretName, secretNamespace)
 		if err := rotator.ValidateSecret(ctx, k8sClient, secretName, secretNamespace); err != nil {
 			log.Printf("Warning: secret validation failed (this is OK for first run): %v", err)
@@ -96,9 +99,6 @@ func main() {
 			log.Printf("Secret validation passed")
 		}
 	}
-
-	// Check for multi-secret mode
-	secretsConfigJSON := os.Getenv(EnvSecretsConfig)
 
 	if dryRun {
 		if secretsConfigJSON != "" {
@@ -124,8 +124,8 @@ func main() {
 			log.Fatalf("Failed to rotate secrets: %v", err)
 		}
 	} else {
-		// Single-secret mode (backward compatible)
-		if err := rotator.RotateSecret(ctx, k8sClient, secretName, secretNamespace, numberOfKeys); err != nil {
+		// Single-secret mode
+		if err := rotator.RotateSecret(ctx, k8sClient, secretNamespace, rotator.DefaultJWTConfig(secretName, numberOfKeys)); err != nil {
 			log.Fatalf("Failed to rotate keys: %v", err)
 		}
 	}
