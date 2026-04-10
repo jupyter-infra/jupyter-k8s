@@ -466,6 +466,18 @@ if [ -f "${MANAGER_YAML}" ]; then
           ports:\
             - containerPort: {{ .port }}\
               protocol: TCP\
+          {{- if .healthcheckCommand }}\
+          livenessProbe:\
+            exec:\
+              command: {{ .healthcheckCommand | toJson }}\
+            initialDelaySeconds: 5\
+            periodSeconds: 10\
+          readinessProbe:\
+            exec:\
+              command: {{ .healthcheckCommand | toJson }}\
+            initialDelaySeconds: 2\
+            periodSeconds: 5\
+          {{- end }}\
           {{- if .env }}\
           env:\
             {{- range \$key, \$value := .env }}\
@@ -480,7 +492,7 @@ if [ -f "${MANAGER_YAML}" ]; then
         {{- end }}
 ' "${MANAGER_YAML}"
         else
-            sed -i '/^      securityContext:$/i\        {{- range .Values.controller.plugins }}\n        - name: plugin-{{ .name }}\n          image: "{{ .image.repository }}:{{ .image.tag }}"\n          {{- if .imagePullPolicy }}\n          imagePullPolicy: {{ .imagePullPolicy }}\n          {{- end }}\n          ports:\n            - containerPort: {{ .port }}\n              protocol: TCP\n          {{- if .env }}\n          env:\n            {{- range $key, $value := .env }}\n            - name: {{ $key }}\n              value: "{{ $value }}"\n            {{- end }}\n          {{- end }}\n          {{- if .resources }}\n          resources:\n            {{- toYaml .resources | nindent 12 }}\n          {{- end }}\n        {{- end }}' "${MANAGER_YAML}"
+            sed -i '/^      securityContext:$/i\        {{- range .Values.controller.plugins }}\n        - name: plugin-{{ .name }}\n          image: "{{ .image.repository }}:{{ .image.tag }}"\n          {{- if .imagePullPolicy }}\n          imagePullPolicy: {{ .imagePullPolicy }}\n          {{- end }}\n          ports:\n            - containerPort: {{ .port }}\n              protocol: TCP\n          {{- if .healthcheckCommand }}\n          livenessProbe:\n            exec:\n              command: {{ .healthcheckCommand | toJson }}\n            initialDelaySeconds: 5\n            periodSeconds: 10\n          readinessProbe:\n            exec:\n              command: {{ .healthcheckCommand | toJson }}\n            initialDelaySeconds: 2\n            periodSeconds: 5\n          {{- end }}\n          {{- if .env }}\n          env:\n            {{- range $key, $value := .env }}\n            - name: {{ $key }}\n              value: "{{ $value }}"\n            {{- end }}\n          {{- end }}\n          {{- if .resources }}\n          resources:\n            {{- toYaml .resources | nindent 12 }}\n          {{- end }}\n        {{- end }}' "${MANAGER_YAML}"
         fi
         echo "Added plugin sidecar container support"
     fi

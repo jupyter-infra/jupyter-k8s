@@ -169,6 +169,7 @@ controller:
   #         tag: latest
   #       port: 8080
   #       imagePullPolicy: Always
+  #       healthcheckCommand: ["/aws-plugin", "--healthcheck"]
   #       env:
   #         PLUGIN_PORT: "8080"
   #         AWS_REGION: "us-west-2"

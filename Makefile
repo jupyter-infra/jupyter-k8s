@@ -669,6 +669,8 @@ deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remot
 		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].image.tag=latest) \
 		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].port=8080) \
 		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].imagePullPolicy=Always) \
+		$(if $(filter aws,$(PLUGINS)),--set 'controller.plugins[0].healthcheckCommand[0]=/aws-plugin') \
+		$(if $(filter aws,$(PLUGINS)),--set 'controller.plugins[0].healthcheckCommand[1]=--healthcheck') \
 		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].env.PLUGIN_PORT=8080) \
 		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].env.AWS_REGION=$(AWS_REGION)) \
 		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].env.CLUSTER_ID=$(EKS_CONTEXT))
