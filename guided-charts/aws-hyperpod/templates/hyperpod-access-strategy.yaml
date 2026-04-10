@@ -61,12 +61,28 @@ spec:
   {{- end }}
 
   createConnectionHandler: "k8s-native"
-  podEventsHandler: "aws"
+  {{- if .Values.remoteAccess.enabled }}
+  createConnectionHandlerMap:
+    vscode-remote: "aws:createSession"
+  {{- end }}
+  podEventsHandler: "aws:ssm-remote-access"
 
   {{- if .Values.remoteAccess.enabled }}
   createConnectionContext:
-    ssmManagedNodeRole: "{{ .Values.remoteAccess.ssmManagedNodeRole }}"
+    podUid: "extensionapi::PodUid()"
     ssmDocumentName: "{{ .Values.remoteAccess.ssmDocumentName }}"
+    port: "2222"
+  podEventsContext:
+    podUid: "controller::PodUid()"
+    region: "{{ .Values.aws.region }}"
+    ssmManagedNodeRole: "{{ .Values.remoteAccess.ssmManagedNodeRole }}"
+    sidecarContainerName: "ssm-agent-sidecar"
+    workspaceContainerName: "workspace"
+    registrationStateFile: "/opt/amazon/sagemaker/workspace/.ssm-registration-state.json"
+    registrationMarkerFile: "/tmp/ssm-registered"
+    registrationScript: "/usr/local/bin/register-ssm.sh"
+    remoteAccessServerScript: "/opt/amazon/sagemaker/workspace/remote-access/start-remote-access-server.sh"
+    remoteAccessServerPort: "2222"
   {{- end }}
 
   # Deployment modifications for SSM remote access

@@ -3,6 +3,10 @@
 
 namespace: jupyter-k8s-system
 
+# AWS configuration
+aws:
+  region: ""
+
 # [CLUSTER WEB UI]: Web interface configuration
 clusterWebUI:
   enabled: false
