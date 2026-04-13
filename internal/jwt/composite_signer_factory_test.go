@@ -106,7 +106,7 @@ func TestCompositeSignerFactory_ValidateToken_Success(t *testing.T) {
 	}, factory)
 
 	// Generate a token using the signer
-	token, err := factory.Signer().GenerateToken("alice", []string{"team-a"}, "alice-uid", nil, "/workspaces/default/ws", "example.com", TokenTypeBootstrap)
+	token, err := factory.Signer().GenerateToken("alice", []string{"team-a"}, "alice-uid", nil, "/workspaces/default/ws", "example.com", TokenTypeBootstrap, false)
 	require.NoError(t, err)
 
 	// Validate through composite
@@ -146,7 +146,7 @@ func TestCompositeSignerFactory_ValidateToken_MultipleFactories(t *testing.T) {
 		"second": factory2,
 	}, factory1)
 
-	token, err := factory2.Signer().GenerateToken("bob", nil, "bob", nil, "/ws", "test.com", TokenTypeBootstrap)
+	token, err := factory2.Signer().GenerateToken("bob", nil, "bob", nil, "/ws", "test.com", TokenTypeBootstrap, false)
 	require.NoError(t, err)
 
 	claims, err := composite.ValidateToken(token)
@@ -169,7 +169,7 @@ func TestCompositeSignerFactory_ValidateToken_CreateSignerError(t *testing.T) {
 		"good":   goodFactory,
 	}, goodFactory)
 
-	token, err := goodFactory.Signer().GenerateToken("alice", nil, "uid", nil, "/ws", "d.com", TokenTypeBootstrap)
+	token, err := goodFactory.Signer().GenerateToken("alice", nil, "uid", nil, "/ws", "d.com", TokenTypeBootstrap, false)
 	require.NoError(t, err)
 
 	claims, err := composite.ValidateToken(token)

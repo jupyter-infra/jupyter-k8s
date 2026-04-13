@@ -44,7 +44,11 @@ type mockSigner struct {
 	token string
 }
 
-func (m *mockSigner) GenerateToken(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string) (string, error) {
+func (m *mockSigner) GenerateToken(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string, skipRefresh bool) (string, error) {
+	return m.token, nil
+}
+
+func (m *mockSigner) GenerateRefreshToken(claims *jwt.Claims) (string, error) {
 	return m.token, nil
 }
 

@@ -113,7 +113,7 @@ func TestStandardSignerFactory_CreateSigner_GenerateValidateRoundTrip(t *testing
 	signer, err := factory.CreateSigner(accessStrategy)
 	require.NoError(t, err)
 
-	token, err := signer.GenerateToken("testuser", []string{"group1"}, "uid1", nil, "/path", "example.com", TokenTypeBootstrap)
+	token, err := signer.GenerateToken("testuser", []string{"group1"}, "uid1", nil, "/path", "example.com", TokenTypeBootstrap, false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, token)
 

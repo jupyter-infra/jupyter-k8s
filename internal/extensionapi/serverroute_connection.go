@@ -139,8 +139,10 @@ func (s *ExtensionServer) generateBearerTokenURL(r *http.Request, ws *workspacev
 		}
 	}
 
-	// Generate JWT token with domain and path using access strategy-specific signer
-	token, err := signer.GenerateToken(user, []string{}, user, map[string][]string{}, path, domain, jwt.TokenTypeBootstrap)
+	// Generate JWT token with domain and path using access strategy-specific signer.
+	// skipRefresh=true: bootstrap tokens are exchanged immediately for session tokens
+	// via /bearer-auth, so refresh is not applicable.
+	token, err := signer.GenerateToken(user, []string{}, user, map[string][]string{}, path, domain, jwt.TokenTypeBootstrap, true)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate JWT token: %w", err)
 	}
