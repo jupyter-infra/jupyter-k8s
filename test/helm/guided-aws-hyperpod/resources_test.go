@@ -3,7 +3,7 @@ Copyright (c) Amazon Web Services
 Distributed under the terms of the MIT license
 */
 
-package aws_traefik_dex_test
+package aws_hyperpod_test
 
 import (
 	"os"
@@ -19,97 +19,53 @@ import (
 	"github.com/jupyter-infra/jupyter-k8s/test/helm"
 )
 
-// Test suite for verifying Helm chart resources match config resources
-var _ = Describe("AWS Traefik Dex Resources", func() {
-	It("should include all aws-traefik-dex resources in the Helm chart", func() {
-		// Get project root directory
+var _ = Describe("AWS HyperPod Resources", func() {
+	It("should include all aws-hyperpod resources in the Helm chart", func() {
 		rootDir, err := filepath.Abs("../../..")
 		Expect(err).NotTo(HaveOccurred())
 
 		// Parse resources from source directory
-		configDir := filepath.Join(rootDir, "guided-charts", "aws-traefik-dex", "templates")
+		configDir := filepath.Join(rootDir, "guided-charts", "aws-hyperpod", "templates")
 		configResources, configMap, err := helm.ParseYAMLDirectory(configDir)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(configResources).NotTo(BeEmpty(), "No resources found in guided-charts directory")
 
 		// Parse resources from target directory
 		helmDir := filepath.Join(
-			rootDir, "dist", "test-output-guided", "aws-traefik-dex", "jupyter-k8s-aws-traefik-dex", "templates")
+			rootDir, "dist", "test-output-guided", "aws-hyperpod", "jupyter-k8s-aws-hyperpod", "templates")
 		helmResources, helmMap, err := helm.ParseYAMLDirectory(helmDir)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(helmResources).NotTo(BeEmpty(), "No resources found in output directory")
 
-		// Compare resources using our new helper function
+		// Compare resources
 		missingResources, unmatchedResources, _ := helm.CompareResourceMaps(
 			configResources, configMap, helmResources, helmMap)
 
-		// Check that all source resources exist in rendered output
 		Expect(missingResources).To(BeEmpty(), "Resources from source chart missing in output: %v", missingResources)
 
-		// Filter out resources from traefik-crds dependency chart and show them
-		// For Helm charts, it's normal for template files to produce multiple resources
-		// that don't have direct 1:1 matches with source files
-		filteredUnmatched := []string{}
-		for _, res := range unmatchedResources {
-			// Only add non-dependency resources to the filtered list
-			if !strings.Contains(res, "traefik-crd") {
-				filteredUnmatched = append(filteredUnmatched, res)
-			}
-		}
-
-		if len(filteredUnmatched) > 0 {
+		if len(unmatchedResources) > 0 {
 			GinkgoWriter.Println("Note: Multiple resources generated from template files (expected):")
-			for _, res := range filteredUnmatched {
+			for _, res := range unmatchedResources {
 				GinkgoWriter.Printf("  - %s\n", res)
 			}
 		}
-
-		// Instead of requiring filtered list to be empty, just note that they exist
-		// This is expected for Helm templates where one template file can generate multiple resources
-	})
-
-	It("should find values.yaml references in the templates", func() {
-		// Get project root directory
-		rootDir, err := filepath.Abs("../../..")
-		Expect(err).NotTo(HaveOccurred())
-
-		// Check that values references are valid
-		templatesDir := filepath.Join(rootDir, "guided-charts", "aws-traefik-dex", "templates")
-		valuesPath := filepath.Join(rootDir, "guided-charts", "aws-traefik-dex", "values.yaml")
-
-		// Extract references from templates
-		references, err := helm.ExtractTemplateReferences(templatesDir)
-		Expect(err).NotTo(HaveOccurred())
-
-		// Extract values schema
-		schema, err := helm.ExtractValuesSchema(valuesPath)
-		Expect(err).NotTo(HaveOccurred())
-
-		// Find invalid references
-		invalidRefs := helm.FindInvalidReferences(references, schema)
-
-		Expect(invalidRefs).To(BeEmpty(), "Invalid values references found: %v", invalidRefs)
 	})
 
 	It("should generate JWT signing key with 48 bytes (384 bits) for HS384", func() {
-		// Get project root directory
 		rootDir, err := filepath.Abs("../../..")
 		Expect(err).NotTo(HaveOccurred())
 
-		// Read the rendered secret
 		secretPath := filepath.Join(
-			rootDir, "dist", "test-output-guided", "aws-traefik-dex", "jupyter-k8s-aws-traefik-dex",
+			rootDir, "dist", "test-output-guided", "aws-hyperpod", "jupyter-k8s-aws-hyperpod",
 			"templates", "authmiddleware", "secrets.yaml")
 
 		secretBytes, err := os.ReadFile(secretPath)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Parse the secret
 		var secret corev1.Secret
 		err = yaml.Unmarshal(secretBytes, &secret)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Find the JWT signing key (should have format jwt-signing-key-<timestamp>)
 		var keyValue []byte
 		var keyName string
 		for name, value := range secret.Data {
@@ -121,11 +77,6 @@ var _ = Describe("AWS Traefik Dex Resources", func() {
 		}
 
 		Expect(keyName).NotTo(BeEmpty(), "No JWT signing key found in secret")
-
-		// The value in the secret data field is base64-encoded in the YAML file,
-		// but the YAML parser (sigs.k8s.io/yaml) automatically decodes it when
-		// unmarshaling into a corev1.Secret. So keyValue is already the raw bytes.
-		// Verify the key is exactly 48 bytes (384 bits) as required by RFC 7518 for HS384
 		Expect(keyValue).To(HaveLen(48),
 			"JWT signing key %s should be 48 bytes for HS384, but got %d bytes", keyName, len(keyValue))
 	})
@@ -135,13 +86,13 @@ var _ = Describe("AWS Traefik Dex Resources", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		rbacPath := filepath.Join(
-			rootDir, "dist", "test-output-guided", "aws-traefik-dex", "jupyter-k8s-aws-traefik-dex",
+			rootDir, "dist", "test-output-guided", "aws-hyperpod", "jupyter-k8s-aws-hyperpod",
 			"templates", "authmiddleware", "rbac.yaml")
 
 		rbacBytes, err := os.ReadFile(rbacPath)
 		Expect(err).NotTo(HaveOccurred())
 
-		// The file contains multiple YAML documents; find the ClusterRole
+		// Find the ClusterRole among multiple YAML documents
 		docs := strings.Split(string(rbacBytes), "---")
 		var clusterRole rbacv1.ClusterRole
 		found := false
@@ -161,7 +112,6 @@ var _ = Describe("AWS Traefik Dex Resources", func() {
 		}
 		Expect(found).To(BeTrue(), "ClusterRole not found in authmiddleware rbac.yaml")
 
-		// Verify both extension API resources are present
 		resourceNames := []string{}
 		for _, rule := range clusterRole.Rules {
 			resourceNames = append(resourceNames, rule.Resources...)
@@ -170,5 +120,67 @@ var _ = Describe("AWS Traefik Dex Resources", func() {
 			"ClusterRole should grant access to connectionaccessreviews")
 		Expect(resourceNames).To(ContainElement("bearertokenreviews"),
 			"ClusterRole should grant access to bearertokenreviews when enableBearerAuth=true")
+	})
+
+	It("should render access strategy with correct plugin handler references", func() {
+		rootDir, err := filepath.Abs("../../..")
+		Expect(err).NotTo(HaveOccurred())
+
+		accessStrategyPath := filepath.Join(
+			rootDir, "dist", "test-output-guided", "aws-hyperpod", "jupyter-k8s-aws-hyperpod",
+			"templates", "hyperpod-access-strategy.yaml")
+
+		data, err := os.ReadFile(accessStrategyPath)
+		Expect(err).NotTo(HaveOccurred())
+		content := string(data)
+
+		// Verify plugin handler references
+		Expect(content).To(ContainSubstring("podEventsHandler: \"aws:ssm-remote-access\""),
+			"AccessStrategy should have podEventsHandler referencing aws plugin")
+		Expect(content).To(ContainSubstring("vscode-remote: \"aws:createSession\""),
+			"AccessStrategy should have createConnectionHandlerMap entry for vscode-remote")
+
+		// Verify k8s-native is the default connection handler
+		Expect(content).To(ContainSubstring("createConnectionHandler: \"k8s-native\""),
+			"AccessStrategy should have k8s-native as default createConnectionHandler")
+
+		// Verify podEventsContext has required keys
+		Expect(content).To(ContainSubstring("sidecarContainerName:"),
+			"podEventsContext should include sidecarContainerName")
+		Expect(content).To(ContainSubstring("registrationStateFile:"),
+			"podEventsContext should include registrationStateFile")
+		Expect(content).To(ContainSubstring("controller::PodUid()"),
+			"podEventsContext should use dynamic PodUid resolution")
+
+		// Verify createConnectionContext has required keys
+		Expect(content).To(ContainSubstring("extensionapi::PodUid()"),
+			"createConnectionContext should use dynamic PodUid resolution")
+		Expect(content).To(ContainSubstring("ssmDocumentName:"),
+			"createConnectionContext should include ssmDocumentName")
+	})
+
+	It("should render authmiddleware JWT env vars consistent with values", func() {
+		rootDir, err := filepath.Abs("../../..")
+		Expect(err).NotTo(HaveOccurred())
+
+		deploymentPath := filepath.Join(
+			rootDir, "dist", "test-output-guided", "aws-hyperpod", "jupyter-k8s-aws-hyperpod",
+			"templates", "authmiddleware", "deployment.yaml")
+
+		data, err := os.ReadFile(deploymentPath)
+		Expect(err).NotTo(HaveOccurred())
+		content := string(data)
+
+		// Verify JWT settings are rendered
+		Expect(content).To(ContainSubstring(`value: "1h"`),
+			"JWT_EXPIRATION should be 1h")
+		Expect(content).To(ContainSubstring(`value: "15m"`),
+			"JWT_REFRESH_WINDOW should be 15m")
+		Expect(content).To(ContainSubstring(`value: "12h"`),
+			"JWT_REFRESH_HORIZON should be 12h")
+		Expect(content).To(ContainSubstring(`value: "true"`),
+			"JWT_REFRESH_ENABLE should be true")
+		Expect(content).To(ContainSubstring(`value: "5s"`),
+			"NEW_KEY_USE_DELAY should be 5s")
 	})
 })

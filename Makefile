@@ -75,7 +75,7 @@ OAUTH2P_COOKIE_SECRET := $(shell openssl rand -base64 32 | tr -- '+/' '-_')
 all: build
 
 .PHONY: release
-release: helm-generate build lint-fix lint-fix-e2e test helm-lint helm-test helm-test-aws-traefik-dex ## Run all checks required before PR submission (excluding e2e tests)
+release: helm-generate build lint-fix lint-fix-e2e test helm-lint helm-test helm-test-aws-traefik-dex helm-test-aws-hyperpod ## Run all checks required before PR submission (excluding e2e tests)
 
 ##@ General
 
@@ -298,11 +298,11 @@ helm-test: ## Test the Helm chart with helm template
 
 .PHONY: helm-test-aws-traefik-dex
 helm-test-aws-traefik-dex: ## Test the Helm chart with guided mode (aws-traefik-dex)
-	rm -rf dist/test-output-guided
+	rm -rf dist/test-output-guided/aws-traefik-dex
 	rm -rf /tmp/helm-test-chart
 	cp -r guided-charts/aws-traefik-dex /tmp/helm-test-chart
 	cd /tmp/helm-test-chart && helm dependency build
-	helm template jk8s /tmp/helm-test-chart --output-dir dist/test-output-guided \
+	helm template jk8s /tmp/helm-test-chart --output-dir dist/test-output-guided/aws-traefik-dex \
 		--set domain=a.fine.example.com \
 		--set certManager.email=admin@example.com \
 		--set storageClass.efs.parameters.fileSystemId=fs-00001111222233334 \
@@ -318,6 +318,28 @@ helm-test-aws-traefik-dex: ## Test the Helm chart with guided mode (aws-traefik-
 	rm -rf /tmp/helm-test-chart
 	# Run helm tests to verify resources
 	go test ./test/helm/guided-aws-traefik-dex -v
+
+.PHONY: helm-test-aws-hyperpod
+helm-test-aws-hyperpod: ## Test the Helm chart with guided mode (aws-hyperpod)
+	rm -rf dist/test-output-guided/aws-hyperpod
+	rm -rf /tmp/helm-test-chart
+	cp -r guided-charts/aws-hyperpod /tmp/helm-test-chart
+	cd /tmp/helm-test-chart && helm dependency build
+	helm template jk8s /tmp/helm-test-chart --output-dir dist/test-output-guided/aws-hyperpod \
+		--set clusterWebUI.enabled=true \
+		--set clusterWebUI.domain=test.example.com \
+		--set clusterWebUI.awsCertificateArn=arn:aws:acm:us-east-1:123456789:certificate/abc \
+		--set aws.region=us-east-1 \
+		--set remoteAccess.enabled=true \
+		--set remoteAccess.ssmManagedNodeRole=arn:aws:iam::123456789:role/SageMakerRole \
+		--set remoteAccess.ssmSidecarImage.containerRegistry=123456789.dkr.ecr.us-east-1.amazonaws.com \
+		--set remoteAccess.ssmSidecarImage.repository=ssm-sidecar \
+		--set remoteAccess.ssmSidecarImage.tag=latest \
+		--set clusterWebUI.auth.enableBearerAuth=true
+	# Clean up temporary chart directory
+	rm -rf /tmp/helm-test-chart
+	# Run helm tests to verify resources
+	go test ./test/helm/guided-aws-hyperpod -v
 
 
 ##@ Deployment
