@@ -33,6 +33,44 @@
 {{- fail "oauth2Proxy.cookieSecret is required" }}
 {{- end }}
 
+{{/* Validate JWT refresh settings */}}
+{{- $jwtRefreshWindowSeconds := 0 }}
+{{- if hasSuffix "h" .Values.authmiddleware.jwtRefreshWindow }}
+{{- $jwtRefreshWindowSeconds = (trimSuffix "h" .Values.authmiddleware.jwtRefreshWindow | int | mul 3600) }}
+{{- else if hasSuffix "m" .Values.authmiddleware.jwtRefreshWindow }}
+{{- $jwtRefreshWindowSeconds = (trimSuffix "m" .Values.authmiddleware.jwtRefreshWindow | int | mul 60) }}
+{{- else if hasSuffix "s" .Values.authmiddleware.jwtRefreshWindow }}
+{{- $jwtRefreshWindowSeconds = (trimSuffix "s" .Values.authmiddleware.jwtRefreshWindow | int) }}
+{{- else }}
+{{- fail "authmiddleware.jwtRefreshWindow must end with 's', 'm', or 'h'" }}
+{{- end }}
+
+{{- $jwtExpirationSecondsForRefresh := 0 }}
+{{- if hasSuffix "h" .Values.authmiddleware.jwtExpiration }}
+{{- $jwtExpirationSecondsForRefresh = (trimSuffix "h" .Values.authmiddleware.jwtExpiration | int | mul 3600) }}
+{{- else if hasSuffix "m" .Values.authmiddleware.jwtExpiration }}
+{{- $jwtExpirationSecondsForRefresh = (trimSuffix "m" .Values.authmiddleware.jwtExpiration | int | mul 60) }}
+{{- end }}
+
+{{/* Validate: jwtRefreshWindow <= jwtExpiration */}}
+{{- if gt $jwtRefreshWindowSeconds $jwtExpirationSecondsForRefresh }}
+{{- fail (printf "authmiddleware.jwtRefreshWindow (%s) must be less than or equal to jwtExpiration (%s)" .Values.authmiddleware.jwtRefreshWindow .Values.authmiddleware.jwtExpiration) }}
+{{- end }}
+
+{{- $jwtRefreshHorizonSeconds := 0 }}
+{{- if hasSuffix "h" .Values.authmiddleware.jwtRefreshHorizon }}
+{{- $jwtRefreshHorizonSeconds = (trimSuffix "h" .Values.authmiddleware.jwtRefreshHorizon | int | mul 3600) }}
+{{- else if hasSuffix "m" .Values.authmiddleware.jwtRefreshHorizon }}
+{{- $jwtRefreshHorizonSeconds = (trimSuffix "m" .Values.authmiddleware.jwtRefreshHorizon | int | mul 60) }}
+{{- else }}
+{{- fail "authmiddleware.jwtRefreshHorizon must end with 'm' (minutes) or 'h' (hours)" }}
+{{- end }}
+
+{{/* Validate: jwtRefreshHorizon >= jwtExpiration */}}
+{{- if lt $jwtRefreshHorizonSeconds $jwtExpirationSecondsForRefresh }}
+{{- fail (printf "authmiddleware.jwtRefreshHorizon (%s) must be greater than or equal to jwtExpiration (%s)" .Values.authmiddleware.jwtRefreshHorizon .Values.authmiddleware.jwtExpiration) }}
+{{- end }}
+
 {{/* Validate rotator configuration if enabled */}}
 {{- if .Values.rotator.enabled }}
 {{- if not .Values.rotator.rotationInterval }}
