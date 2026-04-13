@@ -23,6 +23,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apiserver/pkg/authentication/user"
+	"k8s.io/apiserver/pkg/endpoints/request"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -42,9 +44,14 @@ func (m *mockSignerFactory) CreateSigner(accessStrategy *workspacev1alpha1.Works
 // mockSigner for testing
 type mockSigner struct {
 	token string
+	// captured args from last GenerateToken call
+	lastGroups []string
+	lastExtra  map[string][]string
 }
 
-func (m *mockSigner) GenerateToken(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string, skipRefresh bool) (string, error) {
+func (m *mockSigner) GenerateToken(username string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string, skipRefresh bool) (string, error) {
+	m.lastGroups = groups
+	m.lastExtra = extra
 	return m.token, nil
 }
 
@@ -155,6 +162,113 @@ func TestGenerateBearerTokenURL_SubdomainRouting(t *testing.T) {
 	expected := "https://myworkspace-mrswmylvnr2a.example.com/bearer-auth?token=test-token"
 	if url != expected {
 		t.Errorf("expected %s, got %s", expected, url)
+	}
+}
+
+func TestGenerateBearerTokenURL_PassesGroupsAndExtra(t *testing.T) {
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "test-strategy"},
+		},
+	}
+
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-strategy", Namespace: "default"},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			BearerAuthURLTemplate: "https://test.com/bearer-auth",
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace, accessStrategy).Build()
+
+	signer := &mockSigner{token: "test-token"}
+	server := &ExtensionServer{
+		config:        &ExtensionConfig{},
+		signerFactory: &mockSignerFactory{signer: signer},
+		k8sClient:     fakeClient,
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	userInfo := &user.DefaultInfo{
+		Name:   testUser,
+		Groups: []string{"cluster-workspace-admin", "system:authenticated"},
+		Extra: map[string][]string{
+			"arn":          {"arn:aws:sts::123456:assumed-role/Admin/session"},
+			"canonicalarn": {"arn:aws:iam::123456:role/Admin"},
+		},
+	}
+	ctx := request.WithUser(req.Context(), userInfo)
+	req = req.WithContext(ctx)
+
+	_, err := server.generateBearerTokenURL(req, workspace, accessStrategy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify groups were passed to the signer
+	if len(signer.lastGroups) != 2 {
+		t.Fatalf("expected 2 groups, got %d: %v", len(signer.lastGroups), signer.lastGroups)
+	}
+	if signer.lastGroups[0] != "cluster-workspace-admin" || signer.lastGroups[1] != "system:authenticated" {
+		t.Errorf("unexpected groups: %v", signer.lastGroups)
+	}
+
+	// Verify extra was passed to the signer
+	if len(signer.lastExtra) != 2 {
+		t.Fatalf("expected 2 extra keys, got %d: %v", len(signer.lastExtra), signer.lastExtra)
+	}
+	if signer.lastExtra["arn"][0] != "arn:aws:sts::123456:assumed-role/Admin/session" {
+		t.Errorf("unexpected extra arn: %v", signer.lastExtra["arn"])
+	}
+	if signer.lastExtra["canonicalarn"][0] != "arn:aws:iam::123456:role/Admin" {
+		t.Errorf("unexpected extra canonicalarn: %v", signer.lastExtra["canonicalarn"])
+	}
+}
+
+func TestGenerateBearerTokenURL_NoContextFallsBackToEmptyGroupsAndExtra(t *testing.T) {
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "test-strategy"},
+		},
+	}
+
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-strategy", Namespace: "default"},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			BearerAuthURLTemplate: "https://test.com/bearer-auth",
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace, accessStrategy).Build()
+
+	signer := &mockSigner{token: "test-token"}
+	server := &ExtensionServer{
+		config:        &ExtensionConfig{},
+		signerFactory: &mockSignerFactory{signer: signer},
+		k8sClient:     fakeClient,
+	}
+
+	// Request with header-based user, no Kubernetes context
+	req := httptest.NewRequest("POST", "/test", nil)
+	req.Header.Set("X-Remote-User", testUser)
+
+	_, err := server.generateBearerTokenURL(req, workspace, accessStrategy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Groups and extra should be nil when no k8s context
+	if signer.lastGroups != nil {
+		t.Errorf("expected nil groups, got %v", signer.lastGroups)
+	}
+	if signer.lastExtra != nil {
+		t.Errorf("expected nil extra, got %v", signer.lastExtra)
 	}
 }
 
@@ -809,9 +923,9 @@ func TestGetUserFromHeaders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("X-Remote-User", testUser)
 
-	user := GetUser(req)
-	if user != testUser {
-		t.Errorf("expected %s, got %s", testUser, user)
+	username := GetUser(req)
+	if username != testUser {
+		t.Errorf("expected %s, got %s", testUser, username)
 	}
 }
 
