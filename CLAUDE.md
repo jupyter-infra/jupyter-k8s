@@ -132,6 +132,10 @@ All AWS make targets read `AWS_REGION` and `EKS_CLUSTER_NAME` from `.env`, comma
 - call `make kubectl-aws` to switch kubectl context
 All subsequent make targets use the `.env` values.
 
+**Detailed testing strategies for guided charts:**
+- HyperPod (plugin sidecar, SSM remote access, web UI): [`guided-charts/aws-hyperpod/AGENT.md`](guided-charts/aws-hyperpod/AGENT.md)
+- Traefik-Dex (OSS routing, GitHub OAuth, bearer auth): [`guided-charts/aws-traefik-dex/AGENT.md`](guided-charts/aws-traefik-dex/AGENT.md)
+
 ### Clean up
 Ask user before running.
 - `make teardown-kind`
