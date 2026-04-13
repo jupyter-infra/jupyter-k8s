@@ -268,6 +268,7 @@ helm-generate: manifests
 helm-package: helm-generate ## Package the Helm chart
 	helm package dist/chart -d dist
 	helm package guided-charts/aws-traefik-dex -d dist
+	helm package guided-charts/aws-hyperpod -d dist
 
 .PHONY: helm-lint
 helm-lint: ## Lint the Helm chart
@@ -283,6 +284,16 @@ helm-lint: ## Lint the Helm chart
 		--set githubRbac.orgs[0].name=some-org \
 		--set githubRbac.orgs[0].teams[0]=ace-devs \
 		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET)
+	helm lint guided-charts/aws-hyperpod \
+		--set clusterWebUI.enabled=true \
+		--set clusterWebUI.domain=test.example.com \
+		--set clusterWebUI.awsCertificateArn=arn:aws:acm:us-east-1:123456789:certificate/abc \
+		--set aws.region=us-east-1 \
+		--set remoteAccess.enabled=true \
+		--set remoteAccess.ssmManagedNodeRole=arn:aws:iam::123456789:role/SageMakerRole \
+		--set remoteAccess.ssmSidecarImage.containerRegistry=123456789.dkr.ecr.us-east-1.amazonaws.com \
+		--set remoteAccess.ssmSidecarImage.repository=ssm-sidecar \
+		--set remoteAccess.ssmSidecarImage.tag=latest
 
 .PHONY: helm-test
 helm-test: ## Test the Helm chart with helm template
