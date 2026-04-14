@@ -154,6 +154,40 @@ var _ = Describe("DeploymentBuilder", func() {
 	})
 
 	Context("Container Configuration", func() {
+		It("should set working directory when specified", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-workingdir",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					WorkingDir: "/home/jovyan/projects",
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := deployment.Spec.Template.Spec.Containers[0]
+			Expect(container.WorkingDir).To(Equal("/home/jovyan/projects"))
+		})
+
+		It("should leave working directory empty when not specified", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-no-workingdir",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := deployment.Spec.Template.Spec.Containers[0]
+			Expect(container.WorkingDir).To(BeEmpty())
+		})
+
 		It("should set custom command and args", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{

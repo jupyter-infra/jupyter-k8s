@@ -134,5 +134,22 @@ var _ = Describe("CoreDefaulter", func() {
 
 			Expect(workspace.Spec.AppType).To(Equal("vscode"))
 		})
+
+		It("should apply working dir defaults", func() {
+			template.Spec.DefaultWorkingDir = "/home/jovyan/projects"
+
+			applyCoreDefaults(workspace, template)
+
+			Expect(workspace.Spec.WorkingDir).To(Equal("/home/jovyan/projects"))
+		})
+
+		It("should not override existing working dir", func() {
+			workspace.Spec.WorkingDir = "/home/jovyan/work"
+			template.Spec.DefaultWorkingDir = "/home/jovyan/projects"
+
+			applyCoreDefaults(workspace, template)
+
+			Expect(workspace.Spec.WorkingDir).To(Equal("/home/jovyan/work"))
+		})
 	})
 })
