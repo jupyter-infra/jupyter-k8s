@@ -34,6 +34,7 @@ var defaultApplicators = []DefaultApplicator{
 	applyCoreDefaults,
 	applyResourceDefaults,
 	applyStorageDefaults,
+	applyVolumeDefaults,
 	applySchedulingDefaults,
 	applyMetadataDefaults,
 	applyAccessStrategyDefaults,
