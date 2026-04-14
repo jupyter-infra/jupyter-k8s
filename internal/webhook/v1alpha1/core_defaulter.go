@@ -35,4 +35,9 @@ func applyCoreDefaults(workspace *workspacev1alpha1.Workspace, template *workspa
 	if workspace.Spec.AppType == "" && template.Spec.AppType != "" {
 		workspace.Spec.AppType = template.Spec.AppType
 	}
+
+	// Apply working directory defaults
+	if workspace.Spec.WorkingDir == "" && template.Spec.DefaultWorkingDir != "" {
+		workspace.Spec.WorkingDir = template.Spec.DefaultWorkingDir
+	}
 }

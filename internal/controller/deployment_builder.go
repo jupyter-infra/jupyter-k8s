@@ -239,6 +239,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 		Args:            args,
 		Lifecycle:       workspace.Spec.Lifecycle,
 		Env:             workspace.Spec.Env,
+		WorkingDir:      workspace.Spec.WorkingDir,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "http",
