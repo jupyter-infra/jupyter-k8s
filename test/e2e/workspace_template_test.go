@@ -907,6 +907,101 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(jupyterLabValue).To(Equal("yes"))
 		})
+
+		It("should inherit default volumes from template", func() {
+			templateFilename := "default-volumes-template"
+			workspaceName := "default-volumes-workspace"
+			workspaceFilename := "default-volumes-workspace"
+
+			By("creating the external PVC that the template references")
+			createPvcForTest("shared-team-data-pvc", groupDir, subgroupDefaults)
+
+			By("creating template with defaultVolumes")
+			createTemplateForTest(templateFilename, groupDir, subgroupDefaults)
+
+			By("creating workspace without volumes")
+			createWorkspaceForTest(workspaceFilename, groupDir, subgroupDefaults)
+
+			By("verifying workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			testTemplateFeaturesInheritance(
+				workspaceName,
+				workspaceNamespace,
+				[]valueTestCaseForTemplateTest{
+					{
+						description: "verifying workspace inherited volume name",
+						jsonPath:    "{.spec.volumes[0].name}",
+						expected:    "team-data",
+					},
+					{
+						description: "verifying workspace inherited volume PVC name",
+						jsonPath:    "{.spec.volumes[0].persistentVolumeClaimName}",
+						expected:    "shared-team-data",
+					},
+					{
+						description: "verifying workspace inherited volume mount path",
+						jsonPath:    "{.spec.volumes[0].mountPath}",
+						expected:    "/data",
+					},
+				},
+			)
+
+			By("verifying volume is mounted in the deployment")
+			VerifyWorkspaceVolumeMount(workspaceName, workspaceNamespace, "team-data", "/data")
+		})
+
+		It("should not override workspace volumes with template default volumes", func() {
+			templateFilename := "default-volumes-template"
+			workspaceName := "default-volumes-override-workspace"
+			workspaceFilename := "default-volumes-override-workspace"
+
+			By("creating the external PVC")
+			createPvcForTest("shared-team-data-pvc", groupDir, subgroupDefaults)
+
+			By("creating template with defaultVolumes")
+			createTemplateForTest(templateFilename, groupDir, subgroupDefaults)
+
+			By("creating workspace with its own volumes")
+			createWorkspaceForTest(workspaceFilename, groupDir, subgroupDefaults)
+
+			By("verifying workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("verifying workspace kept its own volume, not the template default")
+			testTemplateFeaturesInheritance(
+				workspaceName,
+				workspaceNamespace,
+				[]valueTestCaseForTemplateTest{
+					{
+						description: "verifying workspace has its own volume name",
+						jsonPath:    "{.spec.volumes[0].name}",
+						expected:    "my-data",
+					},
+					{
+						description: "verifying workspace has its own mount path",
+						jsonPath:    "{.spec.volumes[0].mountPath}",
+						expected:    "/my-custom-path",
+					},
+				},
+			)
+
+			By("verifying only one volume exists (no template default merged in)")
+			output, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.spec.volumes[1].name}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(BeEmpty(), "workspace should have only its own volume, not template defaults")
+		})
 	})
 })
 
@@ -923,6 +1018,11 @@ func deleteResourcesForTemplateTest() {
 
 	By("cleaning up access strategies")
 	cmd = exec.Command("kubectl", "delete", "workspaceaccessstrategy", "--all", "-n", SharedNamespace,
+		"--ignore-not-found", "--wait=true", "--timeout=30s")
+	_, _ = utils.Run(cmd)
+
+	By("cleaning up standalone PVCs")
+	cmd = exec.Command("kubectl", "delete", "pvc", "--all", "-n", "default",
 		"--ignore-not-found", "--wait=true", "--timeout=30s")
 	_, _ = utils.Run(cmd)
 

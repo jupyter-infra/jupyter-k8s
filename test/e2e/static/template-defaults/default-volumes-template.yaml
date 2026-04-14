@@ -1,0 +1,20 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: default-volumes-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Default Volumes Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultVolumes:
+    - name: team-data
+      persistentVolumeClaimName: shared-team-data
+      mountPath: /data
+  resourceBounds:
+    resources:
+      cpu:
+        min: 100m
+        max: "2"
+      memory:
+        min: 128Mi
+        max: 4Gi
