@@ -998,9 +998,9 @@ var _ = Describe("Workspace Template", Ordered, func() {
 
 			By("verifying only one volume exists (no template default merged in)")
 			output, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.spec.volumes[1].name}")
+				"{range .spec.volumes[*]}{.name}{','}{end}")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(output).To(BeEmpty(), "workspace should have only its own volume, not template defaults")
+			Expect(output).To(Equal("my-data,"), "workspace should have only its own volume, not template defaults")
 		})
 	})
 })
