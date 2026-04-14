@@ -2052,6 +2052,12 @@ spec:
                       type: string
                   type: object
                 type: array
+              defaultWorkingDir:
+                description: |-
+                  DefaultWorkingDir specifies the default working directory for workspaces using this template
+                  Controls where applications like JupyterLab open their file browser by default
+                  Must be an absolute path (e.g., "/home/jovyan/projects")
+                type: string
               description:
                 description: Description provides additional information about this
                   template

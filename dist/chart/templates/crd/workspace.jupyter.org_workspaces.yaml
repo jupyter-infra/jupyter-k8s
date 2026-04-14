@@ -2103,6 +2103,12 @@ spec:
                 x-kubernetes-validations:
                 - message: volume name 'workspace-storage' is reserved
                   rule: '!self.exists(v, v.name == ''workspace-storage'')'
+              workingDir:
+                description: |-
+                  WorkingDir specifies the container's working directory
+                  Controls where applications like JupyterLab open their file browser by default
+                  Must be an absolute path (e.g., "/home/jovyan/projects")
+                type: string
             required:
             - displayName
             type: object

@@ -141,6 +141,12 @@ type WorkspaceTemplateSpec struct {
 	// AppType specifies the application type for workspaces using this template
 	// +optional
 	AppType string `json:"appType,omitempty"`
+
+	// DefaultWorkingDir specifies the default working directory for workspaces using this template
+	// Controls where applications like JupyterLab open their file browser by default
+	// Must be an absolute path (e.g., "/home/jovyan/projects")
+	// +optional
+	DefaultWorkingDir string `json:"defaultWorkingDir,omitempty"`
 }
 
 // TemplateLabel defines a label key-value pair to add to workspaces

@@ -187,6 +187,12 @@ type WorkspaceSpec struct {
 	// Overrides template defaults when specified
 	// +optional
 	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
+
+	// WorkingDir specifies the container's working directory
+	// Controls where applications like JupyterLab open their file browser by default
+	// Must be an absolute path (e.g., "/home/jovyan/projects")
+	// +optional
+	WorkingDir string `json:"workingDir,omitempty"`
 }
 
 // AccessResourceStatus defines the status of a resource created from a template
