@@ -38,7 +38,7 @@ func TestStandardSigner_GenerateValidateRoundtrip(t *testing.T) {
 	signer := createTestSigner("test-signing-key-32-characters-long", "test-issuer", "test-audience", time.Hour)
 
 	// Generate token
-	token, err := signer.GenerateToken(testUser, []string{"group1", "group2"}, "uid123", nil, "/path", "domain.com", TokenTypeSession)
+	token, err := signer.GenerateToken(testUser, []string{"group1", "group2"}, "uid123", nil, "/path", "domain.com", TokenTypeSession, false)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestStandardSigner_ValidateToken_ExpiredToken(t *testing.T) {
 	signer := createTestSigner("test-signing-key-32-characters-long", "test-issuer", "test-audience", -time.Hour) // Negative expiration
 
 	// Generate expired token
-	token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+	token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestStandardSigner_ValidateToken_InvalidSignature(t *testing.T) {
 	signer2 := createTestSigner("key2-32-characters-long-enough", "test-issuer", "test-audience", time.Hour)
 
 	// Generate token with signer1
-	token, err := signer1.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+	token, err := signer1.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestStandardSigner_ValidateToken_WrongIssuer(t *testing.T) {
 	signer2 := createTestSigner("test-signing-key-32-characters-long", "issuer2", "test-audience", time.Hour)
 
 	// Generate token with signer1
-	token, err := signer1.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+	token, err := signer1.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestStandardSigner_ValidateToken_WrongAudience(t *testing.T) {
 	signer2 := createTestSigner("test-signing-key-32-characters-long", "test-issuer", "audience2", time.Hour)
 
 	// Generate token with signer1
-	token, err := signer1.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+	token, err := signer1.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestStandardSigner_MultipleKeys_Validation(t *testing.T) {
 	_ = signer.UpdateKeys(signingKeys, latestKid)
 
 	// Generate token (should use latest key)
-	token, err := signer.GenerateToken(testUser, []string{"group1"}, "uid123", nil, "/path", "domain.com", TokenTypeSession)
+	token, err := signer.GenerateToken(testUser, []string{"group1"}, "uid123", nil, "/path", "domain.com", TokenTypeSession, false)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestStandardSigner_UpdateKeys_HotReload(t *testing.T) {
 	_ = signer.UpdateKeys(initialKeys, "1000")
 
 	// Generate token with initial key
-	token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+	token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestStandardSigner_UpdateKeys_HotReload(t *testing.T) {
 	}
 
 	// New tokens should use the new latest key
-	newToken, err := signer.GenerateToken("newuser", []string{}, "uid2", nil, "", "", "")
+	newToken, err := signer.GenerateToken("newuser", []string{}, "uid2", nil, "", "", "", false)
 	if err != nil {
 		t.Fatalf("Failed to generate new token: %v", err)
 	}
@@ -292,7 +292,7 @@ func TestStandardSigner_UpdateKeys_KeyRemoval(t *testing.T) {
 		map[string][]byte{"1000": []byte("old-key-32-characters-long-here")},
 		"1000",
 	)
-	oldToken, err := oldKeySigner.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+	oldToken, err := oldKeySigner.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 	if err != nil {
 		t.Fatalf("Failed to generate old token: %v", err)
 	}
@@ -373,7 +373,7 @@ func TestStandardSigner_ValidateToken_UnknownKid(t *testing.T) {
 	)
 
 	// Generate token with unknown kid
-	token, err := otherSigner.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+	token, err := otherSigner.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -396,7 +396,7 @@ func TestStandardSigner_HS384Algorithm(t *testing.T) {
 	_ = signer.UpdateKeys(signingKeys, "1000")
 
 	// Generate token
-	token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+	token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -460,7 +460,7 @@ func TestStandardSigner_CoolOffKeySelection(t *testing.T) {
 		signer.mu.Unlock()
 
 		// Should fail to generate token since all keys are within cooloff
-		_, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+		_, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 		if err == nil {
 			t.Error("Expected error when all keys within cooloff, got nil")
 		}
@@ -485,7 +485,7 @@ func TestStandardSigner_CoolOffKeySelection(t *testing.T) {
 		}
 		signer.mu.Unlock()
 
-		token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+		token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 		if err != nil {
 			t.Fatalf("Expected token generation to succeed, got error: %v", err)
 		}
@@ -515,7 +515,7 @@ func TestStandardSigner_CoolOffKeySelection(t *testing.T) {
 		}
 		signer.mu.Unlock()
 
-		token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+		token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 		if err != nil {
 			t.Fatalf("Expected token generation to succeed, got error: %v", err)
 		}
@@ -545,7 +545,7 @@ func TestStandardSigner_CoolOffKeySelection(t *testing.T) {
 		}
 		signer.mu.Unlock()
 
-		token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+		token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 		if err != nil {
 			t.Fatalf("Expected token generation to succeed with zero cooloff, got error: %v", err)
 		}
@@ -575,7 +575,7 @@ func TestStandardSigner_CoolOffKeySelection(t *testing.T) {
 		}
 		signer.mu.Unlock()
 
-		token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+		token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 		if err != nil {
 			t.Fatalf("Expected token generation to succeed, got error: %v", err)
 		}
@@ -603,7 +603,7 @@ func TestStandardSigner_CoolOffKeySelection(t *testing.T) {
 		signer.mu.Unlock()
 
 		// Generate token and validate it can be verified (proving the key was correctly retrieved)
-		token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+		token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 		if err != nil {
 			t.Fatalf("Expected token generation to succeed, got error: %v", err)
 		}
@@ -633,7 +633,7 @@ func TestStandardSigner_NewKeyUseDelay(t *testing.T) {
 	signer.mu.Unlock()
 
 	// Generate token with initial key (should work immediately since key was added at creation)
-	token1, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+	token1, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 	if err != nil {
 		t.Fatalf("Failed to generate token with initial key: %v", err)
 	}
@@ -654,7 +654,7 @@ func TestStandardSigner_NewKeyUseDelay(t *testing.T) {
 	}
 
 	// Immediately try to generate token - should still use old key "1000" due to cooloff
-	token2, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+	token2, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 	if err != nil {
 		t.Fatalf("Failed to generate token immediately after update: %v", err)
 	}
@@ -668,7 +668,7 @@ func TestStandardSigner_NewKeyUseDelay(t *testing.T) {
 	time.Sleep(2100 * time.Millisecond)
 
 	// Now token should use the new key "2000"
-	token3, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+	token3, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 	if err != nil {
 		t.Fatalf("Failed to generate token after cooloff: %v", err)
 	}
@@ -698,7 +698,7 @@ func TestStandardSigner_ConcurrentAccess(t *testing.T) {
 	_ = signer.UpdateKeys(signingKeys, "1000")
 
 	// Generate initial token
-	token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "")
+	token, err := signer.GenerateToken(testUser, []string{}, "uid", nil, "", "", "", false)
 	if err != nil {
 		t.Fatalf("Failed to generate initial token: %v", err)
 	}
@@ -708,7 +708,7 @@ func TestStandardSigner_ConcurrentAccess(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		// Concurrent token generation
 		go func() {
-			_, err := signer.GenerateToken("user", []string{}, "uid", nil, "", "", "")
+			_, err := signer.GenerateToken("user", []string{}, "uid", nil, "", "", "", false)
 			if err != nil {
 				t.Errorf("Concurrent GenerateToken failed: %v", err)
 			}
@@ -769,7 +769,7 @@ func TestStandardSigner_RetrieveInitialSecret_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify keys were loaded — signer should be able to generate and validate tokens
-	token, err := signer.GenerateToken("user", nil, "uid", nil, "/path", "domain", TokenTypeSession)
+	token, err := signer.GenerateToken("user", nil, "uid", nil, "/path", "domain", TokenTypeSession, false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, token)
 
@@ -817,4 +817,60 @@ func TestStandardSigner_RetrieveInitialSecret_NoSigningKeys(t *testing.T) {
 	err := signer.RetrieveInitialSecret(context.Background(), fakeClient, "jwt-secret", "default")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse signing keys")
+}
+
+func TestGenerateToken_WithSkipRefreshTrue(t *testing.T) {
+	signer := createTestSigner("test-signing-key-32-characters-long", "test-issuer", "test-audience", time.Hour)
+	token, err := signer.GenerateToken(testUser, []string{"group1"}, "uid123", nil, "/path", "domain.com", TokenTypeSession, true)
+	require.NoError(t, err)
+
+	claims, err := signer.ValidateToken(token)
+	require.NoError(t, err)
+	assert.True(t, claims.SkipRefresh, "Expected SkipRefresh to be true")
+}
+
+func TestGenerateToken_WithSkipRefreshFalse(t *testing.T) {
+	signer := createTestSigner("test-signing-key-32-characters-long", "test-issuer", "test-audience", time.Hour)
+	token, err := signer.GenerateToken(testUser, []string{"group1"}, "uid123", nil, "/path", "domain.com", TokenTypeSession, false)
+	require.NoError(t, err)
+
+	claims, err := signer.ValidateToken(token)
+	require.NoError(t, err)
+	assert.False(t, claims.SkipRefresh, "Expected SkipRefresh to be false")
+}
+
+func TestGenerateRefreshToken_PreservesIssuedAt(t *testing.T) {
+	signer := createTestSigner("test-signing-key-32-characters-long", "test-issuer", "test-audience", time.Hour)
+
+	// Generate original token
+	originalToken, err := signer.GenerateToken(testUser, []string{"group1"}, "uid123", nil, "/path", "domain.com", TokenTypeSession, false)
+	require.NoError(t, err)
+	originalClaims, err := signer.ValidateToken(originalToken)
+	require.NoError(t, err)
+
+	// Generate refresh token
+	refreshedToken, err := signer.GenerateRefreshToken(originalClaims)
+	require.NoError(t, err)
+	refreshedClaims, err := signer.ValidateToken(refreshedToken)
+	require.NoError(t, err)
+
+	// IssuedAt should be preserved
+	assert.Equal(t, originalClaims.IssuedAt.Unix(), refreshedClaims.IssuedAt.Unix(),
+		"IssuedAt should be preserved from original token")
+	// ExpiresAt should be at least as recent (both use now+expiration, may land in same second)
+	assert.False(t, refreshedClaims.ExpiresAt.Before(originalClaims.ExpiresAt.Time),
+		"ExpiresAt should not be earlier than original")
+	// SkipRefresh should be false
+	assert.False(t, refreshedClaims.SkipRefresh, "SkipRefresh should be false on refreshed token")
+	// User should be preserved
+	assert.Equal(t, originalClaims.User, refreshedClaims.User)
+	assert.Equal(t, originalClaims.Path, refreshedClaims.Path)
+	assert.Equal(t, originalClaims.Domain, refreshedClaims.Domain)
+}
+
+func TestGenerateRefreshToken_NilClaims(t *testing.T) {
+	signer := createTestSigner("test-signing-key-32-characters-long", "test-issuer", "test-audience", time.Hour)
+	_, err := signer.GenerateRefreshToken(nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "claims cannot be nil")
 }

@@ -60,7 +60,7 @@ clusterWebUI:
         memory: 256Mi
     jwtIssuer: "jupyter-k8s-auth"
     jwtAudience: "workspace-users"
-    jwtExpiration: "3h"
+    jwtExpiration: "1h"
     jwtRefreshEnable: "true"
     jwtRefreshWindow: "15m"
     jwtRefreshHorizon: "12h"
@@ -96,8 +96,8 @@ clusterWebUI:
     rotationInterval: "15m"
     # Number of keys to keep (older keys are pruned after rotation)
     # Must satisfy: numberOfKeys * rotationInterval >= jwtExpiration + buffer
-    # 14 keys * 15m rotation = 3.5h retention >= 3h expiration
-    numberOfKeys: 14
+    # 6 keys * 15m rotation = 90m retention >= 1h expiration + 30m buffer
+    numberOfKeys: 6
     resources:
       limits:
         cpu: 100m

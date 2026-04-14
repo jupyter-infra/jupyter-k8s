@@ -79,7 +79,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 
 		// UNHAPPY CASE 1: we can't check authZ for some reason, stop attempting to refresh
 		if accessErr != nil {
-			s.logger.Warn("Failed to retrieve the accessReview for cookie refresh", "error", err)
+			s.logger.Warn("Failed to retrieve the accessReview for cookie refresh", "error", accessErr)
 			newToken, err := s.jwtManager.UpdateSkipRefreshToken(claims)
 			if err != nil {
 				s.logger.Warn("Failed to update token to skip", "error", err)

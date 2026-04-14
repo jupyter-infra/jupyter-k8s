@@ -67,3 +67,31 @@ func GetUser(r *http.Request) string {
 
 	return ""
 }
+
+// GetGroups extracts the user's groups from the Kubernetes request context
+func GetGroups(r *http.Request) []string {
+	if userInfo, ok := request.UserFrom(r.Context()); ok {
+		if userInfo != nil {
+			return userInfo.GetGroups()
+		}
+	}
+	return nil
+}
+
+// GetExtra extracts the user's extra info from the Kubernetes request context
+func GetExtra(r *http.Request) map[string][]string {
+	if userInfo, ok := request.UserFrom(r.Context()); ok {
+		if userInfo != nil {
+			kubeExtra := userInfo.GetExtra()
+			if len(kubeExtra) == 0 {
+				return nil
+			}
+			extra := make(map[string][]string, len(kubeExtra))
+			for k, v := range kubeExtra {
+				extra[k] = v
+			}
+			return extra
+		}
+	}
+	return nil
+}

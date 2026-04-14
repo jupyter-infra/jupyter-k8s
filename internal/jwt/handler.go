@@ -8,6 +8,7 @@ package jwt
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -48,7 +49,7 @@ func (m *Manager) GenerateToken(
 	domain string,
 	tokenType string,
 ) (string, error) {
-	return m.signer.GenerateToken(user, groups, uid, extra, path, domain, tokenType)
+	return m.signer.GenerateToken(user, groups, uid, extra, path, domain, tokenType, false)
 }
 
 // ValidateToken delegates to the signer
@@ -56,42 +57,42 @@ func (m *Manager) ValidateToken(tokenString string) (*Claims, error) {
 	return m.signer.ValidateToken(tokenString)
 }
 
-// RefreshToken creates a new token with the same claims
+// RefreshToken creates a new token preserving the original IssuedAt for horizon tracking.
+// Returns an error if the token is beyond the refresh horizon, forcing re-authentication.
 func (m *Manager) RefreshToken(claims *Claims) (string, error) {
 	if claims == nil {
 		return "", errors.New("claims cannot be nil")
 	}
 
-	return m.signer.GenerateToken(
-		claims.User,
-		claims.Groups,
-		claims.UID,
-		claims.Extra,
-		claims.Path,
-		claims.Domain,
-		claims.TokenType,
-	)
+	now := time.Now().UTC()
+	timeSinceOriginalIssuance := now.Sub(claims.IssuedAt.Time)
+
+	if timeSinceOriginalIssuance >= m.refreshHorizon {
+		return "", fmt.Errorf("token beyond refresh horizon (%v since issuance, limit %v)", timeSinceOriginalIssuance, m.refreshHorizon)
+	}
+
+	// Within horizon: refresh preserving the original IssuedAt
+	return m.signer.GenerateRefreshToken(claims)
 }
 
-// UpdateSkipRefreshToken creates a new token with skipRefresh=true
+// UpdateSkipRefreshToken creates a new token with skipRefresh=true.
+// Used when the access review fails during refresh — stops further refresh attempts.
 func (m *Manager) UpdateSkipRefreshToken(claims *Claims) (string, error) {
 	if claims == nil {
 		return "", errors.New("claims cannot be nil")
 	}
 
-	claims.SkipRefresh = true
 	return m.signer.GenerateToken(
-		claims.User,
-		claims.Groups,
-		claims.UID,
-		claims.Extra,
-		claims.Path,
-		claims.Domain,
-		claims.TokenType,
+		claims.User, claims.Groups, claims.UID, claims.Extra,
+		claims.Path, claims.Domain, claims.TokenType, true,
 	)
 }
 
-// ShouldRefreshToken determines if a token should be refreshed
+// ShouldRefreshToken determines if a token should be refreshed.
+// Returns true when the token is within the refresh window (approaching expiry)
+// and not already marked as skip-refresh.
+// The refresh horizon is enforced by RefreshToken, not here — so tokens beyond the
+// horizon still get one final refresh with SkipRefresh=true.
 func (m *Manager) ShouldRefreshToken(claims *Claims) bool {
 	if !m.enableRefresh {
 		return false
@@ -105,16 +106,5 @@ func (m *Manager) ShouldRefreshToken(claims *Claims) bool {
 	expiryTime := claims.ExpiresAt.Time
 	remainingTime := expiryTime.Sub(now)
 
-	if remainingTime <= 0 {
-		return false
-	}
-
-	if remainingTime > m.refreshWindow {
-		return false
-	}
-
-	originalIssueTime := claims.IssuedAt.Time
-	timeSinceOriginalIssuance := now.Sub(originalIssueTime)
-
-	return timeSinceOriginalIssuance < m.refreshHorizon
+	return remainingTime > 0 && remainingTime <= m.refreshWindow
 }

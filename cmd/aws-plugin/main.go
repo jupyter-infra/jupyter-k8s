@@ -24,9 +24,13 @@ import (
 )
 
 func main() {
-	// Health check mode: used by Kubernetes exec probes to check the server is alive.
-	// The plugin binds to 127.0.0.1 (not reachable by kubelet HTTP probes),
-	// so we use an exec probe that runs the same binary with --healthcheck.
+	// Health check mode for Kubernetes exec probes.
+	// The plugin server binds to 127.0.0.1 so that only the co-located manager
+	// container can reach it. This means kubelet HTTP/TCP probes cannot reach it
+	// (they connect from the node network). Instead, the helm chart configures an
+	// exec probe: kubelet runs ["/aws-plugin", "--healthcheck"] inside this container,
+	// which creates an HTTP client that hits the server's /healthz endpoint on
+	// localhost — this works because the probe process shares the pod's network.
 	if len(os.Args) > 1 && os.Args[1] == "--healthcheck" {
 		port := os.Getenv("PLUGIN_PORT")
 		if port == "" {

@@ -46,7 +46,8 @@ var _ = Describe("OIDC Configuration Consistency", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Path to rendered test output
-		testOutputDir = filepath.Join(rootDir, "dist/test-output-guided/jupyter-k8s-aws-traefik-dex/templates")
+		testOutputDir = filepath.Join(
+			rootDir, "dist/test-output-guided/aws-traefik-dex/jupyter-k8s-aws-traefik-dex/templates")
 
 		// Read the necessary files
 		dexConfigmapPath := filepath.Join(testOutputDir, "dex/configmap.yaml")

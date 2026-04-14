@@ -1,0 +1,18 @@
+/*
+Copyright (c) Amazon Web Services
+Distributed under the terms of the MIT license
+*/
+
+package aws_hyperpod_test
+
+import (
+	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+)
+
+func TestAwsHyperpod(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "AWS HyperPod Suite")
+}

@@ -82,7 +82,40 @@ func (s *StandardSigner) GenerateToken(
 	extra map[string][]string,
 	path string,
 	domain string,
-	tokenType string) (string, error) {
+	tokenType string,
+	skipRefresh bool) (string, error) {
+	now := time.Now().UTC()
+	return s.generateTokenWithIssuedAt(username, groups, uid, extra, path, domain, tokenType, skipRefresh, now)
+}
+
+// GenerateRefreshToken creates a new JWT token preserving the original IssuedAt
+// from the provided claims. This allows the refresh horizon check to work correctly
+// across multiple refresh cycles.
+func (s *StandardSigner) GenerateRefreshToken(claims *Claims) (string, error) {
+	if claims == nil {
+		return "", fmt.Errorf("claims cannot be nil")
+	}
+	if claims.IssuedAt == nil {
+		return "", fmt.Errorf("claims.IssuedAt cannot be nil")
+	}
+	return s.generateTokenWithIssuedAt(
+		claims.User, claims.Groups, claims.UID, claims.Extra,
+		claims.Path, claims.Domain, claims.TokenType, false, claims.IssuedAt.Time,
+	)
+}
+
+// generateTokenWithIssuedAt is the internal token generation method that accepts
+// both skipRefresh and issuedAt parameters.
+func (s *StandardSigner) generateTokenWithIssuedAt(
+	username string,
+	groups []string,
+	uid string,
+	extra map[string][]string,
+	path string,
+	domain string,
+	tokenType string,
+	skipRefresh bool,
+	issuedAt time.Time) (string, error) {
 	usableKid, signingKey := s.getLatestKidAndKeyWithCoolOff()
 	if usableKid == "" || signingKey == nil {
 		return "", fmt.Errorf("no signing key available beyond cooloff period (%v)", s.newKeyUseDelay)
@@ -92,7 +125,7 @@ func (s *StandardSigner) GenerateToken(
 	claims := &Claims{
 		RegisteredClaims: jwt5.RegisteredClaims{
 			ExpiresAt: jwt5.NewNumericDate(now.Add(s.expiration)),
-			IssuedAt:  jwt5.NewNumericDate(now),
+			IssuedAt:  jwt5.NewNumericDate(issuedAt),
 			NotBefore: jwt5.NewNumericDate(now),
 			Issuer:    s.issuer,
 			Audience:  []string{s.audience},
@@ -105,7 +138,7 @@ func (s *StandardSigner) GenerateToken(
 		Path:        path,
 		Domain:      domain,
 		TokenType:   tokenType,
-		SkipRefresh: false,
+		SkipRefresh: skipRefresh,
 	}
 
 	// Use HS384 and add kid to header

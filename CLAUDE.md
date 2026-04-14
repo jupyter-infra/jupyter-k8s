@@ -62,6 +62,29 @@ The auth middleware component provides authentication and authorization for work
 
 - `/health`: System health check endpoint for monitoring
 
+### Plugin Architecture
+**Code:** `internal/plugin`, `internal/pluginclient`, `internal/pluginserver`, `internal/pluginadapters`, `internal/awsadapter`, `internal/awsplugin`
+
+Cloud-provider operations are decoupled from the core operator via an HTTP sidecar plugin pattern.
+The controller is the HTTP client; the plugin runs as a sidecar on `localhost` in the same pod.
+
+- **`internal/plugin/`**: Shared interfaces (`RemoteAccessPluginApis`, `JwtPluginApis`) and utilities (`ParseHandlerRef`) used by both client and server sides
+- **`internal/pluginclient/`**: `PluginClient` — HTTP client that implements the plugin interfaces by calling sidecar endpoints
+- **`internal/pluginserver/`**: HTTP server framework that routes requests to handler implementations
+- **`internal/pluginadapters/`**: Controller-side adapter interfaces (`PodEventPluginAdapter`) for pod lifecycle orchestration (pod exec, state files, restart detection)
+- **`internal/awsadapter/`**: AWS-specific adapter (`AwsSsmPodEventAdapter`) — orchestrates SSM registration using `pluginclient` for SDK calls and pod exec for k8s operations
+- **`internal/awsplugin/`**: AWS SDK handler implementations (SSM client, remote access routes), compiled into `cmd/aws-plugin/`
+
+Plugin routing is driven by `AccessStrategy` fields: `PodEventsHandler` (e.g. `"aws:ssm-remote-access"`) and `CreateConnectionHandlerMap` (e.g. `vscode-remote: "aws:createSession"`).
+The controller parses the `plugin:action` format and dispatches to the matching `PluginClient`.
+
+### JWT Key Rotator
+**Code:** `internal/rotator/`
+
+Deployed as a CronJob to rotate the HMAC signing keys stored in a Kubernetes secret.
+- Used by both `extensionapi` and `authmiddleware`.
+- Each has its own CronJob and Kubernetes secret; deployed by different charts and may live in different namespaces.
+
 ### Deployment Modes
 
 1. **Guided Mode**: Helm chart creates all required resources:
@@ -108,6 +131,10 @@ All AWS make targets read `AWS_REGION` and `EKS_CLUSTER_NAME` from `.env`, comma
 - set `AWS_REGION` and `EKS_CLUSTER_NAME` in `.env`
 - call `make kubectl-aws` to switch kubectl context
 All subsequent make targets use the `.env` values.
+
+**Detailed testing strategies for guided charts:**
+- HyperPod (plugin sidecar, SSM remote access, web UI): [`guided-charts/aws-hyperpod/AGENT.md`](guided-charts/aws-hyperpod/AGENT.md)
+- Traefik-Dex (OSS routing, GitHub OAuth, bearer auth): [`guided-charts/aws-traefik-dex/AGENT.md`](guided-charts/aws-traefik-dex/AGENT.md)
 
 ### Clean up
 Ask user before running.
