@@ -167,6 +167,62 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 				"workspace-storage", "/home/jovyan/data")
 		})
 
+		It("should set container workingDir when specified", func() {
+			workspaceName := "workspace-custom-workingdir"
+			workspaceFilename := "workspace-custom-workingdir"
+
+			By("creating a workspace with custom working dir")
+			createWorkspaceForTest(workspaceFilename, group, baseSubgroup)
+
+			By("waiting for the workspace to become Available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("retrieving deployment name from workspace status")
+			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.status.deploymentName}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deploymentName).NotTo(BeEmpty())
+
+			By("verifying container workingDir is set correctly")
+			workingDir, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
+				"{.spec.template.spec.containers[0].workingDir}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workingDir).To(Equal("/home/jovyan/projects"))
+		})
+
+		It("should set container workingDir without storage", func() {
+			workspaceName := "workspace-workingdir-no-storage"
+			workspaceFilename := "workspace-workingdir-no-storage"
+
+			By("creating a workspace with working dir but no storage")
+			createWorkspaceForTest(workspaceFilename, group, baseSubgroup)
+
+			By("waiting for the workspace to become Available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("retrieving deployment name from workspace status")
+			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.status.deploymentName}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deploymentName).NotTo(BeEmpty())
+
+			By("verifying container workingDir is set correctly")
+			workingDir, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
+				"{.spec.template.spec.containers[0].workingDir}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workingDir).To(Equal("/tmp/work"))
+		})
+
 		It("should delete pvc when workspace is deleted", func() {
 			workspaceFilename := baseWorkspaceName
 			workspaceName := baseWorkspaceName

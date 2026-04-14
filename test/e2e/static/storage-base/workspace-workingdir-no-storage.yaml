@@ -1,0 +1,13 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-workingdir-no-storage
+spec:
+  displayName: "Workspace with Working Dir No Storage"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  workingDir: /tmp/work
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
