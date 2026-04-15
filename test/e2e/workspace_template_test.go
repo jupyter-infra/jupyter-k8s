@@ -1002,6 +1002,52 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(Equal("my-data,"), "workspace should have only its own volume, not template defaults")
 		})
+
+		It("should allow two workspaces to share a default volume from template", func() {
+			templateFilename := "default-volumes-template"
+			workspace1Name := "default-volumes-workspace"
+			workspace1Filename := "default-volumes-workspace"
+			workspace2Name := "default-volumes-workspace-2"
+			workspace2Filename := "default-volumes-workspace-2"
+
+			By("creating the shared PVC")
+			createPvcForTest("shared-team-data-pvc", groupDir, subgroupDefaults)
+
+			By("creating template with defaultVolumes")
+			createTemplateForTest(templateFilename, groupDir, subgroupDefaults)
+
+			By("creating first workspace without volumes")
+			createWorkspaceForTest(workspace1Filename, groupDir, subgroupDefaults)
+
+			By("creating second workspace without volumes")
+			createWorkspaceForTest(workspace2Filename, groupDir, subgroupDefaults)
+
+			By("verifying first workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspace1Name,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("verifying second workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspace2Name,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("verifying both workspaces have the volume mounted")
+			VerifyWorkspaceVolumeMount(workspace1Name, workspaceNamespace, "team-data", "/data")
+			VerifyWorkspaceVolumeMount(workspace2Name, workspaceNamespace, "team-data", "/data")
+
+			By("verifying first workspace can access the shared volume")
+			VerifyPodCanAccessExternalVolumes(workspace1Name, workspaceNamespace, "shared-team-data", "/data")
+
+			By("verifying second workspace can access the shared volume")
+			VerifyPodCanAccessExternalVolumes(workspace2Name, workspaceNamespace, "shared-team-data", "/data")
+		})
 	})
 })
 

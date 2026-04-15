@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: default-volumes-workspace-2
+spec:
+  displayName: "Default Volumes Shared Access Test"
+  templateRef:
+    name: default-volumes-template
+    namespace: jupyter-k8s-shared
