@@ -1024,31 +1024,40 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			By("creating second workspace without volumes")
 			createWorkspaceForTest(workspace2Filename, groupDir, subgroupDefaults)
 
-			By("verifying first workspace becomes available")
-			WaitForWorkspaceToReachCondition(
+			By("verifying both workspaces inherited the same volume from template")
+			testTemplateFeaturesInheritance(
 				workspace1Name,
 				workspaceNamespace,
-				controller.ConditionTypeAvailable,
-				ConditionTrue,
+				[]valueTestCaseForTemplateTest{
+					{
+						description: "verifying first workspace inherited volume name",
+						jsonPath:    "{.spec.volumes[0].name}",
+						expected:    "team-data",
+					},
+					{
+						description: "verifying first workspace inherited volume PVC",
+						jsonPath:    "{.spec.volumes[0].persistentVolumeClaimName}",
+						expected:    "shared-team-data",
+					},
+				},
 			)
 
-			By("verifying second workspace becomes available")
-			WaitForWorkspaceToReachCondition(
+			testTemplateFeaturesInheritance(
 				workspace2Name,
 				workspaceNamespace,
-				controller.ConditionTypeAvailable,
-				ConditionTrue,
+				[]valueTestCaseForTemplateTest{
+					{
+						description: "verifying second workspace inherited volume name",
+						jsonPath:    "{.spec.volumes[0].name}",
+						expected:    "team-data",
+					},
+					{
+						description: "verifying second workspace inherited volume PVC",
+						jsonPath:    "{.spec.volumes[0].persistentVolumeClaimName}",
+						expected:    "shared-team-data",
+					},
+				},
 			)
-
-			By("verifying both workspaces have the volume mounted")
-			VerifyWorkspaceVolumeMount(workspace1Name, workspaceNamespace, "team-data", "/data")
-			VerifyWorkspaceVolumeMount(workspace2Name, workspaceNamespace, "team-data", "/data")
-
-			By("verifying first workspace can access the shared volume")
-			VerifyPodCanAccessExternalVolumes(workspace1Name, workspaceNamespace, "shared-team-data", "/data")
-
-			By("verifying second workspace can access the shared volume")
-			VerifyPodCanAccessExternalVolumes(workspace2Name, workspaceNamespace, "shared-team-data", "/data")
 		})
 	})
 })
