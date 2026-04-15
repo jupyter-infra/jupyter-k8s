@@ -42,6 +42,8 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		envRequirementsTemplate = "env-requirements-template"
 		validEnvWorkspace       = "valid-env-workspace"
 		envTemplateFilename     = "env-template"
+		defaultVolumesTemplate  = "default-volumes-template"
+		defaultVolumesWorkspace = "default-volumes-workspace"
 	)
 
 	AfterEach(func() {
@@ -909,9 +911,9 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 
 		It("should inherit default volumes from template", func() {
-			templateFilename := "default-volumes-template"
-			workspaceName := "default-volumes-workspace"
-			workspaceFilename := "default-volumes-workspace"
+			templateFilename := defaultVolumesTemplate
+			workspaceName := defaultVolumesWorkspace
+			workspaceFilename := defaultVolumesWorkspace
 
 			By("creating the external PVC that the template references")
 			createPvcForTest("shared-team-data-pvc", groupDir, subgroupDefaults)
@@ -957,7 +959,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 
 		It("should not override workspace volumes with template default volumes", func() {
-			templateFilename := "default-volumes-template"
+			templateFilename := defaultVolumesTemplate
 			workspaceName := "default-volumes-override-workspace"
 			workspaceFilename := "default-volumes-override-workspace"
 
@@ -1004,9 +1006,9 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 
 		It("should allow two workspaces to share a default volume from template", func() {
-			templateFilename := "default-volumes-template"
-			workspace1Name := "default-volumes-workspace"
-			workspace1Filename := "default-volumes-workspace"
+			templateFilename := defaultVolumesTemplate
+			workspace1Name := defaultVolumesWorkspace
+			workspace1Filename := defaultVolumesWorkspace
 			workspace2Name := "default-volumes-workspace-2"
 			workspace2Filename := "default-volumes-workspace-2"
 
