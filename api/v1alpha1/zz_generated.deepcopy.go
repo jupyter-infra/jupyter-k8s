@@ -838,6 +838,11 @@ func (in *WorkspaceTemplateSpec) DeepCopyInto(out *WorkspaceTemplateSpec) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.DefaultVolumes != nil {
+		in, out := &in.DefaultVolumes, &out.DefaultVolumes
+		*out = make([]VolumeSpec, len(*in))
+		copy(*out, *in)
+	}
 	if in.DefaultNodeSelector != nil {
 		in, out := &in.DefaultNodeSelector, &out.DefaultNodeSelector
 		*out = make(map[string]string, len(*in))
