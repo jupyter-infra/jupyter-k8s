@@ -1,0 +1,13 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: default-volumes-override-workspace
+spec:
+  displayName: "Default Volumes Override Test"
+  templateRef:
+    name: default-volumes-template
+    namespace: jupyter-k8s-shared
+  volumes:
+    - name: my-data
+      persistentVolumeClaimName: shared-team-data
+      mountPath: /my-custom-path
