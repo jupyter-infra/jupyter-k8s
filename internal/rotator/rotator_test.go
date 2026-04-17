@@ -31,7 +31,6 @@ func getTestClient(objects ...client.Object) client.Client {
 	return fakeclient.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 }
 
-
 func TestGenerateKey(t *testing.T) {
 	key, err := GenerateKey()
 	if err != nil {
