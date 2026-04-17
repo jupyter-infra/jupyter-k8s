@@ -156,6 +156,83 @@ func TestRotateSecret_InvalidNumberOfKeys(t *testing.T) {
 	}
 }
 
+func TestRotateSecrets_MultipleSecrets(t *testing.T) {
+	ctx := context.Background()
+
+	secret1 := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "jwt-secret",
+			Namespace: testNamespace,
+		},
+	}
+	secret2 := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "session-secret",
+			Namespace: testNamespace,
+		},
+	}
+	k8sClient := getTestClient(secret1, secret2)
+
+	configs := []SecretConfig{
+		{SecretName: "jwt-secret", KeyPrefix: "jwt-signing-key-", KeySize: 64, NumberOfKeys: 3},
+		{SecretName: "session-secret", KeyPrefix: "session-key-", KeySize: 32, NumberOfKeys: 2},
+	}
+
+	err := RotateSecrets(ctx, k8sClient, testNamespace, configs)
+	if err != nil {
+		t.Fatalf("RotateSecrets failed: %v", err)
+	}
+
+	// Verify both secrets were rotated
+	for _, cfg := range configs {
+		updated := &corev1.Secret{}
+		err := k8sClient.Get(ctx, types.NamespacedName{Name: cfg.SecretName, Namespace: testNamespace}, updated)
+		if err != nil {
+			t.Fatalf("Failed to get secret %s: %v", cfg.SecretName, err)
+		}
+
+		keyCount := 0
+		for name, value := range updated.Data {
+			if hasPrefix(name, cfg.KeyPrefix) {
+				keyCount++
+				if len(value) != cfg.KeySize {
+					t.Errorf("Secret %s: key %s has size %d, expected %d", cfg.SecretName, name, len(value), cfg.KeySize)
+				}
+			}
+		}
+		if keyCount != 1 {
+			t.Errorf("Secret %s: expected 1 key after first rotation, got %d", cfg.SecretName, keyCount)
+		}
+	}
+}
+
+func TestRotateSecrets_StopsOnError(t *testing.T) {
+	ctx := context.Background()
+
+	// Only create the first secret — second will fail with "not found"
+	secret1 := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "good-secret",
+			Namespace: testNamespace,
+		},
+	}
+	k8sClient := getTestClient(secret1)
+
+	configs := []SecretConfig{
+		{SecretName: "good-secret", KeyPrefix: "jwt-signing-key-", KeySize: 64, NumberOfKeys: 3},
+		{SecretName: "missing-secret", KeyPrefix: "session-key-", KeySize: 32, NumberOfKeys: 2},
+	}
+
+	err := RotateSecrets(ctx, k8sClient, testNamespace, configs)
+	if err == nil {
+		t.Fatal("Expected error when second secret is missing")
+	}
+
+	if !contains(err.Error(), "missing-secret") {
+		t.Errorf("Expected error to mention missing-secret, got: %v", err)
+	}
+}
+
 func TestRotateSecret_SecretNotFound(t *testing.T) {
 	k8sClient := getTestClient()
 	ctx := context.Background()
