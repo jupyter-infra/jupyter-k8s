@@ -125,7 +125,8 @@ func main() {
 		}
 	} else {
 		// Single-secret mode
-		if err := rotator.RotateSecret(ctx, k8sClient, secretNamespace, rotator.DefaultJWTConfig(secretName, numberOfKeys)); err != nil {
+		cfg := rotator.DefaultJWTConfig(secretName, numberOfKeys)
+		if err := rotator.RotateSecret(ctx, k8sClient, secretNamespace, cfg); err != nil {
 			log.Fatalf("Failed to rotate keys: %v", err)
 		}
 	}

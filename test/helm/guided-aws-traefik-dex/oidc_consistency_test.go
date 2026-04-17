@@ -73,7 +73,7 @@ var _ = Describe("OIDC Configuration Consistency", func() {
 		By(fmt.Sprintf("Extracted dex issuer URL: %s", dexIssuerURL))
 
 		// Extract redirectURI
-		matches = regexp.MustCompile(`(?m)redirectURIs:\s*\n\s*-\s*(.+)`).FindStringSubmatch(dexConfigmapContent)
+		matches = regexp.MustCompile(`(?m)redirectURIs:\s*\n(?:\s*#.*\n)*\s*-\s*(.+)`).FindStringSubmatch(dexConfigmapContent)
 		Expect(matches).To(HaveLen(2), "Could not find redirectURI in dex configmap")
 		dexRedirectURI = matches[1]
 		Expect(dexRedirectURI).NotTo(BeEmpty(), "RedirectURI in dex configmap is empty")
@@ -87,7 +87,7 @@ var _ = Describe("OIDC Configuration Consistency", func() {
 		By(fmt.Sprintf("Extracted oauth2-proxy client ID from dex: %s", dexOAuth2ClientID))
 
 		// Extract oauth2-proxy client secret
-		oauth2ProxySecretRegex := `(?m)^\s*name:\s*'OAuth2 Proxy'\s*\n\s*secret:\s*(\S+)`
+		oauth2ProxySecretRegex := `(?m)^\s*name:\s*'OAuth2 Proxy'\s*\n(?:\s*#.*\n)*\s*secret:\s*(\S+)`
 		matches = regexp.MustCompile(oauth2ProxySecretRegex).FindStringSubmatch(dexConfigmapContent)
 		Expect(matches).To(HaveLen(2), "Could not find oauth2-proxy secret in dex configmap")
 		dexOAuth2Secret = matches[1]

@@ -21,7 +21,7 @@ data:
       {{- range .Values.dex.kubernetesClientRedirectPorts }}
       - http://localhost:{{ . }}
       {{- end }}
-      name: 'Kubernetes Cluster'
+      name: 'OAuth2 Proxy'
       # Use the OAuth2 Proxy secret for web authentication
       secret: {{ include "defaulter.oauth2ProxyClientSecret" . }}
     connectors:
