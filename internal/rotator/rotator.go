@@ -85,6 +85,7 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, namespace string
 		return fmt.Errorf("numberOfKeys must be at least 1, got %d", numberOfKeys)
 	}
 
+	// Get current secret
 	secret := &corev1.Secret{}
 	err := k8sClient.Get(ctx, types.NamespacedName{
 		Name:      secretName,
@@ -107,6 +108,7 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, namespace string
 
 		timestamp, err := jwt.ParseKeyTimestampWithPrefix(name, keyPrefix)
 		if err != nil {
+			// Log warning but continue - don't fail rotation due to malformed key
 			log.Printf("Warning: skipping malformed key %s: %v\n", name, err)
 			continue
 		}
@@ -118,10 +120,12 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, namespace string
 		})
 	}
 
+	// Sort keys by timestamp (oldest first)
 	sort.Slice(keys, func(i, j int) bool {
 		return keys[i].timestamp < keys[j].timestamp
 	})
 
+	// Generate new key
 	newKey, err := GenerateKeyWithSize(keySize)
 	if err != nil {
 		return fmt.Errorf("failed to generate new key: %w", err)
@@ -130,12 +134,14 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, namespace string
 	now := time.Now().UTC().Unix()
 	newKeyName := jwt.BuildKeyName(now, keyPrefix)
 
+	// Check if key with this timestamp already exists (clock skew or very fast rotation)
 	for _, k := range keys {
 		if k.name == newKeyName {
 			return fmt.Errorf("key with timestamp %d already exists, refusing to overwrite", now)
 		}
 	}
 
+	// Add new key
 	secret.Data[newKeyName] = newKey
 	keys = append(keys, keyEntry{
 		name:      newKeyName,
@@ -143,10 +149,12 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, namespace string
 		value:     newKey,
 	})
 
+	// Re-sort after adding new key
 	sort.Slice(keys, func(i, j int) bool {
 		return keys[i].timestamp < keys[j].timestamp
 	})
 
+	// Keep only the latest numberOfKeys keys
 	if len(keys) > numberOfKeys {
 		keysToRemove := keys[:len(keys)-numberOfKeys]
 		for _, k := range keysToRemove {
@@ -155,6 +163,7 @@ func RotateSecret(ctx context.Context, k8sClient client.Client, namespace string
 		log.Printf("Pruned %d old keys: %v\n", len(keysToRemove), getKeyNames(keysToRemove))
 	}
 
+	// Update secret
 	err = k8sClient.Update(ctx, secret)
 	if err != nil {
 		return fmt.Errorf("failed to update secret %s: %w", secretName, err)

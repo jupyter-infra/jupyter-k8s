@@ -161,8 +161,8 @@ oauth2Proxy:
 # Set 'enabled: false' if you only want kubectl-based workspace management
 # ============================================================================
 webApp:
-  # Enable or disable the web UI (default: true)
-  enabled: true
+  # Enable or disable the web UI (default: false)
+  enabled: false
   replicas: 2
   imagePullPolicy: Always
   repository: docker.io
