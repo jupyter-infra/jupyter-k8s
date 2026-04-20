@@ -15,11 +15,11 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
+	pluginapi "github.com/jupyter-infra/jupyter-k8s-plugin/api"
+	"github.com/jupyter-infra/jupyter-k8s-plugin/pluginclient"
 	connectionv1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/connection/v1alpha1"
-	pluginapi "github.com/jupyter-infra/jupyter-k8s/api/plugin/v1alpha1"
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
-	"github.com/jupyter-infra/jupyter-k8s/internal/pluginclient"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
