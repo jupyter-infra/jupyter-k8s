@@ -743,6 +743,45 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(newDeployment.Spec.Template.Annotations["initial-annotation"]).To(Equal("updated-value"))
 		})
 	})
+
+	Context("Init Containers", func() {
+		It("should set init containers when specified in workspace", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-init",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					DisplayName: "Test",
+					InitContainers: []corev1.Container{
+						{Name: "setup", Image: "busybox:latest", Command: []string{"sh", "-c", "echo hello"}},
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(deployment.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(deployment.Spec.Template.Spec.InitContainers[0].Name).To(Equal("setup"))
+			Expect(deployment.Spec.Template.Spec.InitContainers[0].Image).To(Equal("busybox:latest"))
+		})
+
+		It("should not set init containers when none specified", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-no-init",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{DisplayName: "Test"},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(deployment.Spec.Template.Spec.InitContainers).To(BeEmpty())
+		})
+	})
 })
 
 func boolPtr(b bool) *bool {
