@@ -22,11 +22,9 @@ var _ = Describe("CRD-Only Helm Resources", func() {
 
 	// Directories to exclude from scanning
 	var excludeDirs = map[string]bool{
-		"samples":          true,
-		"default":          true,
-		"samples_routing":  true,
-		"samples_hyperpod": true,
-		"jwt-rotator":      true, // opt-in via extensionApi.jwtSecret.enable
+		"samples":     true,
+		"default":     true,
+		"jwt-rotator": true, // opt-in via extensionApi.jwtSecret.enable
 	}
 
 	It("should include all CRD-only resources in the Helm chart", func() {
