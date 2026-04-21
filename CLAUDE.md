@@ -63,17 +63,17 @@ The auth middleware component provides authentication and authorization for work
 - `/health`: System health check endpoint for monitoring
 
 ### Plugin Architecture
-**Code:** `internal/plugin`, `internal/pluginclient`, `internal/pluginserver`, `internal/pluginadapters`, `internal/awsadapter`, `internal/awsplugin`
+**Shared SDK:** [`github.com/jupyter-infra/jupyter-k8s-plugin`](https://github.com/jupyter-infra/jupyter-k8s-plugin) — plugin interfaces, HTTP client, HTTP server framework
+**Controller-side code:** `internal/pluginadapters`, `internal/awsadapter`
+**AWS plugin sidecar + guided charts:** [`github.com/jupyter-infra/jupyter-k8s-aws`](https://github.com/jupyter-infra/jupyter-k8s-aws)
 
 Cloud-provider operations are decoupled from the core operator via an HTTP sidecar plugin pattern.
 The controller is the HTTP client; the plugin runs as a sidecar on `localhost` in the same pod.
 
-- **`internal/plugin/`**: Shared interfaces (`RemoteAccessPluginApis`, `JwtPluginApis`) and utilities (`ParseHandlerRef`) used by both client and server sides
-- **`internal/pluginclient/`**: `PluginClient` — HTTP client that implements the plugin interfaces by calling sidecar endpoints
-- **`internal/pluginserver/`**: HTTP server framework that routes requests to handler implementations
+- **`jupyter-k8s-plugin/plugin`**: Shared interfaces (`RemoteAccessPluginApis`, `JwtPluginApis`) and utilities (`ParseHandlerRef`)
+- **`jupyter-k8s-plugin/pluginclient`**: `PluginClient` — HTTP client that implements the plugin interfaces
 - **`internal/pluginadapters/`**: Controller-side adapter interfaces (`PodEventPluginAdapter`) for pod lifecycle orchestration (pod exec, state files, restart detection)
 - **`internal/awsadapter/`**: AWS-specific adapter (`AwsSsmPodEventAdapter`) — orchestrates SSM registration using `pluginclient` for SDK calls and pod exec for k8s operations
-- **`internal/awsplugin/`**: AWS SDK handler implementations (SSM client, remote access routes), compiled into `cmd/aws-plugin/`
 
 Plugin routing is driven by `AccessStrategy` fields: `PodEventsHandler` (e.g. `"aws:ssm-remote-access"`) and `CreateConnectionHandlerMap` (e.g. `vscode-remote: "aws:createSession"`).
 The controller parses the `plugin:action` format and dispatches to the matching `PluginClient`.
@@ -87,14 +87,8 @@ Deployed as a CronJob to rotate the HMAC signing keys stored in a Kubernetes sec
 
 ### Deployment Modes
 
-1. **Guided Mode**: Helm chart creates all required resources:
-   - Reverse proxy
-   - Auth middlewares
-   - Identity provider with OAuth
-   - Namespaces, RBAC, Service Accounts, limits and quotas
-   - Basic images and templates for IDEs and sidecars
-
-2. **Customized Mode**: Admins create their own configuration and reference them in custom resources
+1. **Operator-only chart** (`dist/chart`): deploys CRDs, controller, webhooks, RBAC. Admins create their own configuration and reference them in custom resources.
+2. **Guided charts** (in [`jupyter-k8s-aws`](https://github.com/jupyter-infra/jupyter-k8s-aws)): opinionated charts for AWS environments (HyperPod, Traefik+Dex) that bundle reverse proxy, auth middlewares, identity provider, RBAC, and IDE templates.
 
 ## Common Development Tasks
 
@@ -117,24 +111,15 @@ Deployed as a CronJob to rotate the HMAC signing keys stored in a Kubernetes sec
 - deploy chart to local cluster: `make deploy-kind`
 - interact: `make port-forward`
 
-### End to end testing against remote cluster (aws)
+### Pushing images to AWS ECR (dev workflow)
 
 All AWS make targets read `AWS_REGION` and `EKS_CLUSTER_NAME` from `.env`, command line, or defaults in `Makefile`.
 
 - setup: `make setup-aws EKS_CLUSTER_NAME=<cluster> AWS_REGION=<region>`
-- deploy (CRDs+controller): `make deploy-aws`
-- interact: `make port-forward`
-- deploy oidc chart: `make deploy-aws-traefik-dex`
-- deploy sagemaker chart: `make deploy-aws-hyperpod`
+- push operator/auth/rotator images to ECR: `make load-images-aws`
+- switch kubectl context: `make kubectl-aws`
 
-**Switching clusters:**
-- set `AWS_REGION` and `EKS_CLUSTER_NAME` in `.env`
-- call `make kubectl-aws` to switch kubectl context
-All subsequent make targets use the `.env` values.
-
-**Detailed testing strategies for guided charts:**
-- HyperPod (plugin sidecar, SSM remote access, web UI): [`guided-charts/aws-hyperpod/AGENT.md`](guided-charts/aws-hyperpod/AGENT.md)
-- Traefik-Dex (OSS routing, GitHub OAuth, bearer auth): [`guided-charts/aws-traefik-dex/AGENT.md`](guided-charts/aws-traefik-dex/AGENT.md)
+Guided chart deployment and testing is in [`jupyter-k8s-aws`](https://github.com/jupyter-infra/jupyter-k8s-aws).
 
 ### Clean up
 Ask user before running.

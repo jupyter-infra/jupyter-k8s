@@ -162,7 +162,7 @@ make undeploy
 make teardown-kind
 ```
 
-### Remote Cluster Testing on AWS
+### Pushing Images to AWS ECR (dev workflow)
 
 **Setup**
 ```sh
@@ -171,19 +171,14 @@ make setup-aws
 
 **NOTE:** the setup assumes that there exists an EKS cluster in your AWS account in region `us-west-2`
 whose name is `jupyter-k8s-cluster`. You can pass AWS_REGION or EKS_CLUSTER_NAME to all methods
-below to use a different config, e.g. `make setup AWS_REGION=us-east-1 EKS_CLUSTER_NAME=my-cluster`
+below to use a different config, e.g. `make setup-aws AWS_REGION=us-east-1 EKS_CLUSTER_NAME=my-cluster`
 
-**Install on remote cluster**
+**Push images to ECR**
 ```sh
-make deploy-aws
+make load-images-aws
 ```
 
-**Testing**
-```sh
-kubectl apply -k config/samples/
-make port-forward
-kubectl delete -k config/samples/
-```
+For full cluster deployment with guided charts, see [jupyter-k8s-aws](https://github.com/jupyter-infra/jupyter-k8s-aws).
 
 
 ## Project Distribution

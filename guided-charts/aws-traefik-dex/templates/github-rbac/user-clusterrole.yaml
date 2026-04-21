@@ -1,4 +1,0 @@
-{{- if .Values.githubRbac.create }}
-# This ClusterRole is now defined in group-clusterrole.yaml to avoid duplicate resource error
-# user-clusterrolebinding.yaml will reference the ClusterRole defined there
-{{- end }}

@@ -1,12 +1,12 @@
 ## Append samples of your project ##
 resources:
 - workspace_v1alpha1_workspace.yaml
-- workspace_v1alpha1_workspace_stopped.yaml
-- workspace_v1alpha1_workspace_with_storage.yaml
-- workspace_v1alpha1_workspace_with_template.yaml
-- workspace_v1alpha1_workspacetemplate_production.yaml
-- workspace_with_additional_volumes.yaml
-- workspace_with_container_config.yaml
-- workspace_with_lifecycle.yaml
-- workspace_with_node_selector.yaml
+# - workspace_v1alpha1_workspace_stopped.yaml
+# - workspace_v1alpha1_workspace_with_storage.yaml
+# - workspace_v1alpha1_workspace_with_template.yaml
+# - workspace_v1alpha1_workspacetemplate_production.yaml
+# - workspace_with_additional_volumes.yaml
+# - workspace_with_container_config.yaml
+# - workspace_with_lifecycle.yaml
+# - workspace_with_node_selector.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

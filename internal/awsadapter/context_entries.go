@@ -7,7 +7,7 @@ Distributed under the terms of the MIT license
 // It reads all configuration from the podEventsContext map defined in the AccessStrategy.
 package awsadapter
 
-import "github.com/jupyter-infra/jupyter-k8s/internal/plugin"
+import "github.com/jupyter-infra/jupyter-k8s-plugin/plugin"
 
 // Pod event context keys resolved from the AccessStrategy's podEventsContext map.
 // These keys have no defaults — values must be provided in the AccessStrategy.

@@ -59,7 +59,6 @@ ifeq ($(CLOUD_PROVIDER),aws)
 	ECR_REPOSITORY := jupyter-k8s
 	ECR_REPOSITORY_AUTH := jupyter-k8s-auth
 	ECR_REPOSITORY_ROTATOR := jupyter-k8s-rotator
-	ECR_REPOSITORY_AWS_PLUGIN := jupyter-k8s-aws-plugin
 	EKS_CONTEXT := arn:aws:eks:$(AWS_REGION):$(AWS_ACCOUNT_ID):cluster/$(EKS_CLUSTER_NAME)
 endif
 
@@ -68,14 +67,11 @@ endif
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
-# Guided deployment
-OAUTH2P_COOKIE_SECRET := $(shell openssl rand -base64 32 | tr -- '+/' '-_')
-
 .PHONY: all
 all: build
 
 .PHONY: release
-release: helm-generate build lint-fix lint-fix-e2e test helm-lint helm-test helm-test-aws-traefik-dex helm-test-aws-hyperpod ## Run all checks required before PR submission (excluding e2e tests)
+release: helm-generate build lint-fix lint-fix-e2e test helm-lint helm-test ## Run all checks required before PR submission (excluding e2e tests)
 
 ##@ General
 
@@ -267,33 +263,10 @@ helm-generate: manifests
 .PHONY: helm-package
 helm-package: helm-generate ## Package the Helm chart
 	helm package dist/chart -d dist
-	helm package guided-charts/aws-traefik-dex -d dist
-	helm package guided-charts/aws-hyperpod -d dist
 
 .PHONY: helm-lint
 helm-lint: ## Lint the Helm chart
 	helm lint dist/chart
-	helm lint guided-charts/aws-traefik-dex \
-		--set domain=a.fine.example.com \
-		--set certManager.email=admin@example.com \
-		--set storageClass.efs.parameters.fileSystemId=fs-00001111222233334 \
-		--set github.clientId=some-client-id \
-		--set github.clientSecret=some-github-secret \
-		--set github.orgs[0].name=some-org \
-		--set github.orgs[0].teams[0]=ace-devs \
-		--set githubRbac.orgs[0].name=some-org \
-		--set githubRbac.orgs[0].teams[0]=ace-devs \
-		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET)
-	helm lint guided-charts/aws-hyperpod \
-		--set clusterWebUI.enabled=true \
-		--set clusterWebUI.domain=test.example.com \
-		--set clusterWebUI.awsCertificateArn=arn:aws:acm:us-east-1:123456789:certificate/abc \
-		--set aws.region=us-east-1 \
-		--set remoteAccess.enabled=true \
-		--set remoteAccess.ssmManagedNodeRole=arn:aws:iam::123456789:role/SageMakerRole \
-		--set remoteAccess.ssmSidecarImage.containerRegistry=123456789.dkr.ecr.us-east-1.amazonaws.com \
-		--set remoteAccess.ssmSidecarImage.repository=ssm-sidecar \
-		--set remoteAccess.ssmSidecarImage.tag=latest
 
 .PHONY: helm-test
 helm-test: ## Test the Helm chart with helm template
@@ -306,51 +279,6 @@ helm-test: ## Test the Helm chart with helm template
 		--set extensionApi.enable=true
 	rm -rf /tmp/helm-test-chart
 	go test ./test/helm/crd-only -v
-
-.PHONY: helm-test-aws-traefik-dex
-helm-test-aws-traefik-dex: ## Test the Helm chart with guided mode (aws-traefik-dex)
-	rm -rf dist/test-output-guided/aws-traefik-dex
-	rm -rf /tmp/helm-test-chart
-	cp -r guided-charts/aws-traefik-dex /tmp/helm-test-chart
-	cd /tmp/helm-test-chart && helm dependency build
-	helm template jk8s /tmp/helm-test-chart --output-dir dist/test-output-guided/aws-traefik-dex \
-		--set domain=a.fine.example.com \
-		--set certManager.email=admin@example.com \
-		--set storageClass.efs.parameters.fileSystemId=fs-00001111222233334 \
-		--set github.clientId=some-client-id \
-		--set github.clientSecret=some-github-secret \
-		--set github.orgs[0].name=some-org \
-		--set github.orgs[0].teams[0]=ace-devs \
-		--set githubRbac.orgs[0].name=some-org \
-		--set githubRbac.orgs[0].teams[0]=ace-devs \
-		--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
-		--set authmiddleware.enableBearerAuth=true
-	# Clean up temporary chart directory
-	rm -rf /tmp/helm-test-chart
-	# Run helm tests to verify resources
-	go test ./test/helm/guided-aws-traefik-dex -v
-
-.PHONY: helm-test-aws-hyperpod
-helm-test-aws-hyperpod: ## Test the Helm chart with guided mode (aws-hyperpod)
-	rm -rf dist/test-output-guided/aws-hyperpod
-	rm -rf /tmp/helm-test-chart
-	cp -r guided-charts/aws-hyperpod /tmp/helm-test-chart
-	cd /tmp/helm-test-chart && helm dependency build
-	helm template jk8s /tmp/helm-test-chart --output-dir dist/test-output-guided/aws-hyperpod \
-		--set clusterWebUI.enabled=true \
-		--set clusterWebUI.domain=test.example.com \
-		--set clusterWebUI.awsCertificateArn=arn:aws:acm:us-east-1:123456789:certificate/abc \
-		--set aws.region=us-east-1 \
-		--set remoteAccess.enabled=true \
-		--set remoteAccess.ssmManagedNodeRole=arn:aws:iam::123456789:role/SageMakerRole \
-		--set remoteAccess.ssmSidecarImage.containerRegistry=123456789.dkr.ecr.us-east-1.amazonaws.com \
-		--set remoteAccess.ssmSidecarImage.repository=ssm-sidecar \
-		--set remoteAccess.ssmSidecarImage.tag=latest \
-		--set clusterWebUI.auth.enableBearerAuth=true
-	# Clean up temporary chart directory
-	rm -rf /tmp/helm-test-chart
-	# Run helm tests to verify resources
-	go test ./test/helm/guided-aws-hyperpod -v
 
 
 ##@ Deployment
@@ -515,16 +443,19 @@ redeploy-kind: kubectl-kind ## Rebuild and redeploy controller to the kind clust
 	$(KUBECTL) delete deployment jupyter-k8s-controller-manager -n jupyter-k8s-system --ignore-not-found
 	$(MAKE) deploy-kind
 
+.PHONY: apply-samples
+apply-samples: ## Create sample workspaces in the kind cluster
+	$(KUBECTL) apply -k config/samples
+
+.PHONY: delete-samples
+delete-samples: ## Delete sample workspaces from the kind cluster
+	$(KUBECTL) delete -k config/samples --ignore-not-found
+
 ##@ Local Auth Middleware & Rotator
 .PHONY: build-authmiddleware
 build-authmiddleware: ## Build authmiddleware image for local testing
 	@echo "Building authmiddleware image..."
 	$(CONTAINER_TOOL) build $(BUILD_OPTS) -t docker.io/library/authmiddleware:local -f images/authmiddleware/Dockerfile .
-
-.PHONY: build-aws-plugin
-build-aws-plugin: ## Build aws-plugin sidecar image for local testing
-	@echo "Building aws-plugin image..."
-	$(CONTAINER_TOOL) build $(BUILD_OPTS) -t docker.io/library/aws-plugin:local -f images/aws-plugin/Dockerfile .
 
 .PHONY: build-rotator
 build-rotator: ## Build rotator image for local testing
@@ -643,8 +574,6 @@ load-images-aws-internal: manifests generate fmt vet ## Build and push container
 		aws ecr create-repository --repository-name $(ECR_REPOSITORY_AUTH) --region $(AWS_REGION)
 	@aws ecr describe-repositories --repository-names $(ECR_REPOSITORY_ROTATOR) --region $(AWS_REGION) > /dev/null 2>&1 || \
 		aws ecr create-repository --repository-name $(ECR_REPOSITORY_ROTATOR) --region $(AWS_REGION)
-	@aws ecr describe-repositories --repository-names $(ECR_REPOSITORY_AWS_PLUGIN) --region $(AWS_REGION) > /dev/null 2>&1 || \
-		aws ecr create-repository --repository-name $(ECR_REPOSITORY_AWS_PLUGIN) --region $(AWS_REGION)
 
 	@echo "Building controller image..."
 	$(CONTAINER_TOOL) build $(BUILD_OPTS) --platform=linux/amd64 -t $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest .
@@ -661,11 +590,6 @@ load-images-aws-internal: manifests generate fmt vet ## Build and push container
 	$(CONTAINER_TOOL) push $(ECR_REGISTRY)/$(ECR_REPOSITORY_ROTATOR):latest
 	@echo "Rotator image built and pushed successfully to $(ECR_REGISTRY)/$(ECR_REPOSITORY_ROTATOR):latest"
 
-	@echo "Building aws-plugin image..."
-	$(CONTAINER_TOOL) build $(BUILD_OPTS) --platform=linux/amd64 -t $(ECR_REGISTRY)/$(ECR_REPOSITORY_AWS_PLUGIN):latest -f images/aws-plugin/Dockerfile .
-	$(CONTAINER_TOOL) push $(ECR_REGISTRY)/$(ECR_REPOSITORY_AWS_PLUGIN):latest
-	@echo "AWS plugin image built and pushed successfully to $(ECR_REGISTRY)/$(ECR_REPOSITORY_AWS_PLUGIN):latest"
-
 	@echo "Building application images..."
 	$(MAKE) -C images push-all-aws CLOUD_PROVIDER=aws CONTAINER_TOOL=$(CONTAINER_TOOL)
 	@echo "All images built and pushed successfully to $(ECR_REGISTRY)"
@@ -673,215 +597,6 @@ load-images-aws-internal: manifests generate fmt vet ## Build and push container
 .PHONY: load-images-aws
 load-images-aws:
 	$(MAKE) load-images-aws-internal CLOUD_PROVIDER=aws
-
-# Optional deploy parameters
-ENABLE_TRAEFIK_ACCESS_RESOURCES ?= true
-PLUGINS ?=
-
-deploy-aws-internal: helm-generate load-images-aws ## Deploy helm chart to remote cluster
-	@echo "Deploying jupyter-k8s CRD and controller with Helm chart to remote AWS cluster..."
-	rm -rf /tmp/jk8s-helm-crd-only
-	cp -r dist/chart /tmp/jk8s-helm-crd-only
-	cd /tmp/jk8s-helm-crd-only
-	helm upgrade --install jk8s /tmp/jk8s-helm-crd-only \
-		--namespace jupyter-k8s-system --create-namespace \
-		--set controllerManager.container.imagePullPolicy=Always \
-		--set controllerManager.container.image.repository=$(ECR_REGISTRY)/$(ECR_REPOSITORY) \
-		--set controllerManager.container.image.tag=latest \
-		--set application.imagesPullPolicy=Always \
-		--set application.imagesRegistry=$(ECR_REGISTRY) \
-		$(if $(filter true,$(ENABLE_TRAEFIK_ACCESS_RESOURCES)),--set accessResources.traefik.enable=true) \
-		--set workspacePodWatching.enable=true \
-		--set extensionApi.enable=true \
-		--set extensionApi.jwtSecret.enable=true \
-		--set extensionApi.jwtSecret.rotator.repository=$(ECR_REGISTRY) \
-		--set extensionApi.jwtSecret.rotator.imageName=$(ECR_REPOSITORY_ROTATOR) \
-		--set workspaceTemplates.defaultNamespace=jupyter-k8s-system \
-		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].name=aws) \
-		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].image.repository=$(ECR_REGISTRY)/$(ECR_REPOSITORY_AWS_PLUGIN)) \
-		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].image.tag=latest) \
-		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].port=8080) \
-		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].imagePullPolicy=Always) \
-		$(if $(filter aws,$(PLUGINS)),--set 'controller.plugins[0].healthcheckCommand[0]=/aws-plugin') \
-		$(if $(filter aws,$(PLUGINS)),--set 'controller.plugins[0].healthcheckCommand[1]=--healthcheck') \
-		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].env.PLUGIN_PORT=8080) \
-		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].env.AWS_REGION=$(AWS_REGION)) \
-		$(if $(filter aws,$(PLUGINS)),--set controller.plugins[0].env.CLUSTER_ID=$(EKS_CONTEXT))
-	@echo "Helm chart jupyter-k8s deployed successfully to remote AWS cluster"
-	@echo "Restarting deployments to use new images..."
-	kubectl rollout restart deployment -n jupyter-k8s-system jupyter-k8s-controller-manager
-	rm -rf /tmp/jk8s-helm-crd-only
-
-.PHONY: deploy-aws
-deploy-aws:
-	$(MAKE) deploy-aws-internal CLOUD_PROVIDER=aws
-
-.PHONY: deploy-aws-with-traefik
-deploy-aws-with-traefik:
-	$(MAKE) deploy-aws-internal CLOUD_PROVIDER=aws ENABLE_TRAEFIK_ACCESS_RESOURCES=true
-
-.PHONY: deploy-aws-with-plugin
-deploy-aws-with-plugin: ## Deploy controller with AWS plugin sidecar
-	$(MAKE) deploy-aws-internal CLOUD_PROVIDER=aws PLUGINS=aws
-
-# Load environment variables from .env file for guided deployment
-deploy-aws-traefik-dex-internal:
-	@if [ ! -f .env ]; then \
-		echo "❌ .env file not found. Copy the `.env.example` file to `.env` and edit the values."; \
-		echo "Required variables: TRAEFIK_DEX_DOMAIN, LETSENCRYPT_EMAIL, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_ORG_NAME"; \
-		echo "Optional variables: DEX_OAUTH2_SECRET (defaults to auto-generated), DEX_K8S_SECRET (can be empty for public clients)"; \
-		exit 1; \
-	fi
-	@echo "Loading configuration from .env file and deploying..."
-	@( \
-		set -e; \
-		. ./.env; \
-		rm -rf /tmp/jk8s-aws-traefik-dex; \
-		mkdir /tmp/jk8s-aws-traefik-dex; \
-		cp -r guided-charts/aws-traefik-dex/ /tmp/jk8s-aws-traefik-dex/; \
-		echo 'Deploying AWS traefik dex helm chart'; \
-		HELM_ARGS="--set domain=$$TRAEFIK_DEX_DOMAIN \
-			--set certManager.email=$$LETSENCRYPT_EMAIL \
-			--set storageClass.efs.parameters.fileSystemId=$$EFS_ID \
-			--set github.clientId=$$GITHUB_CLIENT_ID \
-			--set github.clientSecret=$$GITHUB_CLIENT_SECRET \
-			--set github.orgs[0].name=$$GITHUB_ORG_NAME \
-			--set github.orgs[0].teams[0]=$$GITHUB_TEAM \
-			--set githubRbac.orgs[0].name=$$GITHUB_ORG_NAME \
-			--set githubRbac.orgs[0].teams[0]=$$GITHUB_TEAM \
-			--set oauth2Proxy.cookieSecret=$(OAUTH2P_COOKIE_SECRET) \
-			--set authmiddleware.repository=$(ECR_REGISTRY) \
-			--set authmiddleware.imageName=$(ECR_REPOSITORY_AUTH) \
-			--set authmiddleware.enableBearerAuth=true \
-			--set rotator.repository=$(ECR_REGISTRY) \
-			--set rotator.imageName=$(ECR_REPOSITORY_ROTATOR)"; \
-		if [ ! -z "$$DEX_OAUTH2_SECRET" ]; then \
-			HELM_ARGS="$$HELM_ARGS --set dex.oauth2ProxyClientSecret=$$DEX_OAUTH2_SECRET"; \
-		fi; \
-		\
-		if [ ! -z "$$DEX_K8S_SECRET" ]; then \
-			HELM_ARGS="$$HELM_ARGS --set dex.kubernetesClientSecret=$$DEX_K8S_SECRET"; \
-		fi; \
-		\
-		# Default redirect ports are set in values.yaml (8000, 18000, 9800) \
-		# But allow overriding with env vars \
-		if [ ! -z "$$KUBECTL_REDIRECT_PORTS" ]; then \
-			IFS=',' read -ra PORTS <<< "$$KUBECTL_REDIRECT_PORTS"; \
-			PORT_INDEX=0; \
-			for PORT in "$${PORTS[@]}"; do \
-				HELM_ARGS="$$HELM_ARGS --set dex.kubernetesClientRedirectPorts[$${PORT_INDEX}]=$${PORT}"; \
-				PORT_INDEX=$$((PORT_INDEX + 1)); \
-			done; \
-		fi; \
-		\
-		helm upgrade --install jk8-aws-traefik-dex /tmp/jk8s-aws-traefik-dex/aws-traefik-dex \
-			-n jupyter-k8s-router \
-			--create-namespace \
-			--force \
-			$$HELM_ARGS; \
-		\
-		$(SHELL) scripts/aws-traefik-dex/generate-client.sh \
-			$(EKS_CLUSTER_NAME) \
-			https://$$TRAEFIK_DEX_DOMAIN/dex \
-			$(AWS_REGION) \
-			9800 \
-			dist/users-scripts/set-kubeconfig.sh \
-			"$$(kubectl get configmap dex-config -n jupyter-k8s-router -o jsonpath='{.data.config\.yaml}' | awk '/id: kubectl-oidc/{found=1} found && /secret:/{print $$2; exit}')"; \
-	)
-	@echo "Restarting deployments to use new images..."
-	kubectl rollout restart deployment -n jupyter-k8s-router \
-		traefik oauth2-proxy dex authmiddleware
-	@echo "All deployments to use new images..."
-	# Clean up temporary chart directory
-	rm -rf /tmp/jk8s-aws-traefik-dex
-	@echo "Bash script for end-users to set their kubeconfig available at: dist/users-scripts"
-
-
-.PHONY: deploy-aws-traefik-dex
-deploy-aws-traefik-dex:
-	$(MAKE) deploy-aws-traefik-dex-internal CLOUD_PROVIDER=aws
-
-deploy-aws-hyperpod-internal:
-	@if [ ! -f .env ]; then \
-		echo "❌ .env file not found. Copy the `.env.example` file to `.env` and edit the values."; \
-		echo "Required variables: HYPERPOD_DOMAIN, ACM_CERT_ARN"; \
-		exit 1; \
-	fi
-	@echo "Loading configuration from .env file and deploying aws-hyperpod..."
-	@( \
-		set -e; \
-		. ./.env; \
-		HP_DOMAIN=$$HYPERPOD_DOMAIN; \
-		if [ -z "$$HP_DOMAIN" ]; then \
-			echo "❌ HYPERPOD_DOMAIN must be set in .env"; \
-			exit 1; \
-		fi; \
-		echo "Deploying AWS HyperPod helm chart (domain=$$HP_DOMAIN)"; \
-		HELM_ARGS="--set aws.region=$(AWS_REGION) \
-			--set clusterWebUI.enabled=true \
-			--set clusterWebUI.domain=$$HP_DOMAIN \
-			--set clusterWebUI.auth.repository=$(ECR_REGISTRY) \
-			--set clusterWebUI.auth.imageName=$(ECR_REPOSITORY_AUTH) \
-			--set clusterWebUI.rotator.repository=$(ECR_REGISTRY) \
-			--set clusterWebUI.rotator.imageName=$(ECR_REPOSITORY_ROTATOR)"; \
-		if [ -n "$$ACM_CERT_ARN" ]; then \
-			HELM_ARGS="$$HELM_ARGS --set clusterWebUI.awsCertificateArn=$$ACM_CERT_ARN"; \
-		fi; \
-		if [ -n "$$SSM_SIDECAR_REGISTRY" ] && [ -n "$$SSM_SIDECAR_REPO" ] && [ -n "$$SSM_SIDECAR_TAG" ]; then \
-			HELM_ARGS="$$HELM_ARGS --set remoteAccess.enabled=true \
-				--set remoteAccess.ssmSidecarImage.containerRegistry=$$SSM_SIDECAR_REGISTRY \
-				--set remoteAccess.ssmSidecarImage.repository=$$SSM_SIDECAR_REPO \
-				--set remoteAccess.ssmSidecarImage.tag=$$SSM_SIDECAR_TAG"; \
-			if [ -n "$$SSM_MANAGED_NODE_ROLE" ]; then \
-				HELM_ARGS="$$HELM_ARGS --set remoteAccess.ssmManagedNodeRole=$$SSM_MANAGED_NODE_ROLE"; \
-			fi; \
-		fi; \
-		helm upgrade --install aws-hyperpod ./guided-charts/aws-hyperpod \
-			--create-namespace --namespace jupyter-k8s-system \
-			$$HELM_ARGS; \
-	)
-	@echo "Restarting authmiddleware deployment to use new images..."
-	-kubectl rollout restart deployment -n jupyter-k8s-system workspace-auth-middleware 2>/dev/null || true
-
-.PHONY: deploy-aws-hyperpod
-deploy-aws-hyperpod: ## Deploy aws-hyperpod guided chart
-	$(MAKE) deploy-aws-hyperpod-internal CLOUD_PROVIDER=aws
-
-.PHONY: deploy-aws-hyperpod-all
-deploy-aws-hyperpod-all: ## Deploy all guided charts (aws-traefik-dex and aws-hyperpod)
-	$(MAKE) deploy-aws-traefik-dex CLOUD_PROVIDER=aws
-	$(MAKE) deploy-aws-hyperpod CLOUD_PROVIDER=aws
-
-WS_USER ?=
-.PHONY: apply-sample-hyperpod
-apply-sample-hyperpod: ## Create sample hyperpod workspaces. Usage: make apply-sample-hyperpod WS_USER=alice
-	@if [ -z "$(WS_USER)" ]; then echo "❌ WS_USER is required. Usage: make apply-sample-hyperpod WS_USER=alice"; exit 1; fi
-	@echo "Creating sample hyperpod workspaces for '$(WS_USER)'..."
-	export WS_USER=$(WS_USER); \
-	kubectl apply -k config/samples_hyperpod --dry-run=client -o yaml | envsubst | kubectl apply -f -
-
-.PHONY: delete-sample-hyperpod
-delete-sample-hyperpod: ## Delete sample hyperpod workspaces. Usage: make delete-sample-hyperpod WS_USER=alice
-	@if [ -z "$(WS_USER)" ]; then echo "❌ WS_USER is required. Usage: make delete-sample-hyperpod WS_USER=alice"; exit 1; fi
-	@echo "Deleting sample hyperpod workspaces for '$(WS_USER)'..."
-	export WS_USER=$(WS_USER); \
-	kubectl apply -k config/samples_hyperpod --dry-run=client -o yaml | envsubst | kubectl delete -f -
-
-.PHONY: undeploy-aws-hyperpod
-undeploy-aws-hyperpod: ## Remove aws-hyperpod guided chart
-	helm uninstall aws-hyperpod --namespace jupyter-k8s-system
-
-.PHONY: apply-sample-routing
-apply-sample-routing:
-	@echo "Loading configuration from .env file and deploying..."
-	@( \
-		set -e; \
-		. ./.env; \
-		export DOMAIN=$${TRAEFIK_DEX_DOMAIN:-$$HYPERPOD_DOMAIN}; \
-		kubectl apply -f config/samples_routing/workspace_access_strategy.yaml --dry-run=client -o yaml | envsubst | kubectl apply -f -; \
-		kubectl apply -f config/samples_routing/workspace_access_strategy_bearer.yaml --dry-run=client -o yaml | envsubst | kubectl apply -f -; \
-		kubectl apply -k config/samples_routing --dry-run=client -o yaml | envsubst | kubectl apply -f -; \
-	)
 
 WS_NAMESPACE ?= default
 .PHONY: bearer-token
@@ -904,20 +619,6 @@ vscode-token: ## Create a VS Code remote connection for a workspace. Usage: make
 		{ echo "$$RESULT"; exit 1; } \
 	'
 
-.PHONY: delete-sample-routing
-delete-sample-routing:
-	kubectl delete -k config/samples_routing
-	kubectl delete -f config/samples_routing/workspace_access_strategy.yaml
-	kubectl delete -f config/samples_routing/workspace_access_strategy_bearer.yaml
-
-.PHONY: undeploy-aws
-undeploy-aws: ## Uninstall the Helm chart from remote cluster
-	@echo "Undeploying Helm chart from remote AWS cluster..."
-	# Not specifying namespace to allow Helm to clean up resources across all namespaces
-	helm uninstall jk8s -n jupyter-k8s-system --ignore-not-found
-	helm uninstall jk8-aws-traefik-dex -n jupyter-k8s-router --ignore-not-found
-	helm uninstall traefik-crd --ignore-not-found
-	# CRDs with resource-policy: keep are not deleted by Helm, but we can find them by release name
 
 # Port forward to a specific Jupyter server
 .PHONY: port-forward

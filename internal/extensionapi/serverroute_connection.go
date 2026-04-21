@@ -16,11 +16,11 @@ import (
 	"text/template"
 
 	"github.com/go-logr/logr"
+	pluginapi "github.com/jupyter-infra/jupyter-k8s-plugin/api"
+	"github.com/jupyter-infra/jupyter-k8s-plugin/plugin"
 	connectionv1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/connection/v1alpha1"
-	pluginapi "github.com/jupyter-infra/jupyter-k8s/api/plugin/v1alpha1"
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
-	"github.com/jupyter-infra/jupyter-k8s/internal/plugin"
 	"github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
