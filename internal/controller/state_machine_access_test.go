@@ -23,8 +23,9 @@ const staleUpdateValue = "force-stale-update"
 
 // mockAccessStartupProber is a mock prober for testing
 type mockAccessStartupProber struct {
-	ready bool
-	err   error
+	ready      bool
+	err        error
+	probeCount int
 }
 
 func (m *mockAccessStartupProber) Probe(
@@ -33,6 +34,7 @@ func (m *mockAccessStartupProber) Probe(
 	_ *workspacev1alpha1.WorkspaceAccessStrategy,
 	_ *corev1.Service,
 ) (bool, error) {
+	m.probeCount++
 	return m.ready, m.err
 }
 
@@ -83,20 +85,22 @@ var _ = Describe("ProbeAccessStartup", func() {
 		}
 	})
 
-	It("should return nil when no probe is configured", func() {
+	It("should return ProbeNotDefined when no probe is configured", func() {
 		accessStrategy.Spec.AccessStartupProbe = nil
 
 		result, err := sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result).To(BeNil())
+		Expect(result).NotTo(BeNil())
+		Expect(result.Status).To(Equal(ProbeNotDefined))
 	})
 
-	It("should succeed immediately when probe returns ready", func() {
+	It("should return ProbeSucceeded when probe returns ready", func() {
 		mockProber.ready = true
 
 		result, err := sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result).To(BeNil())
+		Expect(result).NotTo(BeNil())
+		Expect(result.Status).To(Equal(ProbeSucceeded))
 		Expect(workspace.Status.AccessStartupProbeFailures).To(BeNil())
 	})
 
@@ -118,7 +122,8 @@ var _ = Describe("ProbeAccessStartup", func() {
 
 		result, err := sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result).To(BeNil())
+		Expect(result).NotTo(BeNil())
+		Expect(result.Status).To(Equal(ProbeSucceeded))
 	})
 
 	It("should increment failures and requeue on probe failure", func() {
@@ -134,16 +139,27 @@ var _ = Describe("ProbeAccessStartup", func() {
 		Expect(*workspace.Status.AccessStartupProbeFailures).To(Equal(int32(1)))
 	})
 
-	It("should clear failures and return nil on success after previous failures", func() {
+	It("should clear failures and return ProbeSucceeded on success after previous failures", func() {
 		mockProber.ready = true
 		failures := int32(2)
 		workspace.Status.AccessStartupProbeFailures = &failures
 
 		result, err := sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result).To(BeNil())
+		Expect(result).NotTo(BeNil())
+		Expect(result.Status).To(Equal(ProbeSucceeded))
 		Expect(workspace.Status.AccessStartupProbeFailures).To(BeNil())
 		Expect(workspace.Status.LastAccessStartupProbeTime).To(BeNil())
+	})
+
+	It("should return ProbeAlreadySucceeded when access resources are already ready", func() {
+		workspace.Status.AccessStartupProbeSucceeded = true
+
+		result, err := sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).NotTo(BeNil())
+		Expect(result.Status).To(Equal(ProbeAlreadySucceeded))
+		Expect(mockProber.probeCount).To(Equal(0))
 	})
 
 	It("should return ProbeFailureThresholdExceeded when failureThreshold is exceeded", func() {

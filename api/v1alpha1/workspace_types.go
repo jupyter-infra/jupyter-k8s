@@ -234,6 +234,12 @@ type WorkspaceStatus struct {
 	// +optional
 	AccessResources []AccessResourceStatus `json:"accessResources,omitempty"`
 
+	// AccessStartupProbeSucceeded indicates whether the access startup probe
+	// has passed. Set to true when the probe succeeds; reset to false when
+	// the workspace stops or the access strategy changes.
+	// +optional
+	AccessStartupProbeSucceeded bool `json:"accessStartupProbeSucceeded,omitempty"`
+
 	// AccessStartupProbeFailures tracks the number of consecutive failed access
 	// startup probe attempts. Set by the controller during the probing phase;
 	// cleared (nil) on success, when the workspace stops, or when a new probe

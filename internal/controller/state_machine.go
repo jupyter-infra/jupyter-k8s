@@ -271,13 +271,14 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 			return ctrl.Result{}, probeErr
 		}
 
-		switch {
-		case probeResult == nil:
-			// No probe configured — access is ready by virtue of etcd write
+		switch probeResult.Status {
+		case ProbeNotDefined:
 			accessResourcesReady = true
-		case probeResult.Status == ProbeSucceeded:
+		case ProbeSucceeded:
 			accessResourcesReady = true
-		case probeResult.Status == ProbeFailureThresholdExceeded:
+		case ProbeAlreadySucceeded:
+			accessResourcesReady = true
+		case ProbeFailureThresholdExceeded:
 			if statusErr := sm.statusManager.UpdateErrorStatus(
 				ctx, workspace, ReasonAccessProbeThresholdExceeded,
 				"Access startup probe failed: threshold exceeded",
@@ -285,9 +286,9 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 				return ctrl.Result{}, statusErr
 			}
 			return ctrl.Result{}, nil
-		case probeResult.Status == ProbeRetrying:
+		case ProbeRetrying:
 			requeueDelay = probeResult.RequeueAfter
-		case probeResult.Status == ProbePendingRetry:
+		case ProbePendingRetry:
 			requeueDelay = probeResult.RequeueAfter
 		}
 	}

@@ -297,6 +297,30 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(*workspace.Status.AccessStartupProbeFailures).To(Equal(int32(1)))
 		})
 
+		It("should mark Available when access resources are already ready", func() {
+			workspace := newWorkspaceWithAccessStrategy()
+			dep := createReadyDeployment(workspace)
+			svc := createService(workspace)
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			workspace.Status.AccessStartupProbeSucceeded = true
+			Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+
+			sm := buildStateMachine()
+			result, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).NotTo(Equal(PollRequeueDelay))
+
+			available := getCondition(workspace, ConditionTypeAvailable)
+			Expect(available).NotTo(BeNil())
+			Expect(available.Status).To(Equal(metav1.ConditionTrue))
+
+			Expect(mockProber.probeCount).To(Equal(0))
+		})
+
 		It("should mark Degraded when failure threshold is exceeded", func() {
 			mockProber.ready = false
 			workspace := newWorkspaceWithAccessStrategy()

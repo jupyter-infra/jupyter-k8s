@@ -50,6 +50,7 @@ func (sm *StateMachine) ReconcileAccessForDesiredRunningStatus(
 	// CASE 2: there is no AccessStrategy (it may have been removed by an update)
 	workspace.Status.AccessURL = ""
 	workspace.Status.AccessResourceSelector = ""
+	workspace.Status.AccessStartupProbeSucceeded = false
 	clearProbeState(workspace)
 
 	err := sm.resourceManager.EnsureAccessResourcesDeleted(ctx, workspace)
@@ -66,6 +67,7 @@ func (sm *StateMachine) ReconcileAccessForDesiredStoppedStatus(ctx context.Conte
 
 	workspace.Status.AccessURL = ""
 	workspace.Status.AccessResourceSelector = ""
+	workspace.Status.AccessStartupProbeSucceeded = false
 	clearProbeState(workspace)
 
 	err := sm.resourceManager.EnsureAccessResourcesDeleted(ctx, workspace)
@@ -81,10 +83,12 @@ type ProbeStatus int
 
 // ProbeStatus values returned by ProbeAccessStartup.
 const (
-	ProbeSucceeded ProbeStatus = iota
+	ProbeNotDefined ProbeStatus = iota
+	ProbeSucceeded
 	ProbeRetrying
 	ProbePendingRetry
 	ProbeFailureThresholdExceeded
+	ProbeAlreadySucceeded
 )
 
 // ProbeResult carries the outcome and requeue delay from an access startup probe cycle.
@@ -96,10 +100,6 @@ type ProbeResult struct {
 // ProbeAccessStartup performs the access startup probe cycle.
 // It mutates workspace.Status.AccessStartupProbeFailures in memory; the caller
 // is responsible for persisting status and updating conditions.
-//
-// Returns (nil, nil) when no probe is configured or the probe succeeded.
-// Returns (*ProbeResult, nil) when the probe is still in progress or threshold exceeded.
-// Returns (nil, error) on internal errors.
 func (sm *StateMachine) ProbeAccessStartup(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
@@ -107,7 +107,11 @@ func (sm *StateMachine) ProbeAccessStartup(
 	service *corev1.Service,
 ) (*ProbeResult, error) {
 	if accessStrategy == nil || accessStrategy.Spec.AccessStartupProbe == nil {
-		return nil, nil
+		return &ProbeResult{Status: ProbeNotDefined}, nil
+	}
+
+	if workspace.Status.AccessStartupProbeSucceeded {
+		return &ProbeResult{Status: ProbeAlreadySucceeded}, nil
 	}
 
 	logger := logf.FromContext(ctx)
@@ -160,8 +164,9 @@ func (sm *StateMachine) ProbeAccessStartup(
 
 	if ready {
 		logger.Info("Access startup probe succeeded")
+		workspace.Status.AccessStartupProbeSucceeded = true
 		clearProbeState(workspace)
-		return nil, nil
+		return &ProbeResult{Status: ProbeSucceeded}, nil
 	}
 
 	// Probe failed — increment counter

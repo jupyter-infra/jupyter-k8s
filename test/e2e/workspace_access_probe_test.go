@@ -66,6 +66,18 @@ var _ = Describe("Workspace Access Startup Probe", Ordered, func() {
 				controller.ConditionTypeStopped:     ConditionFalse,
 			})
 
+			// Verify the workspace stays Available and doesn't oscillate.
+			// A previous bug caused probe success → status write → watch event →
+			// re-reconcile → fresh probe cycle → Progressing, looping forever.
+			By("verifying workspace remains Available for 1 minute (no oscillation)")
+			Consistently(func() string {
+				output, _ := kubectlGet("workspace", workspaceName, workspaceNamespace,
+					fmt.Sprintf("{.status.conditions[?(@.type==\"%s\")].status}",
+						controller.ConditionTypeAvailable))
+				return output
+			}, "1m", "5s").Should(Equal(ConditionTrue),
+				"workspace should remain Available without oscillating")
+
 			By("verifying accessStartupProbeFailures is cleared after success")
 			probeFailures, _ := kubectlGet("workspace", workspaceName, workspaceNamespace,
 				"{.status.accessStartupProbeFailures}")

@@ -2149,6 +2149,12 @@ spec:
                   cycle begins.
                 format: int32
                 type: integer
+              accessStartupProbeSucceeded:
+                description: |-
+                  AccessStartupProbeSucceeded indicates whether the access startup probe
+                  has passed. Set to true when the probe succeeds; reset to false when
+                  the workspace stops or the access strategy changes.
+                type: boolean
               accessURL:
                 description: AccessURL is the URL at which the workspace can be accessed
                 type: string
