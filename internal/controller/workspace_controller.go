@@ -340,7 +340,8 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	// Create state machine
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
 	idleChecker := NewWorkspaceIdleChecker(k8sClient)
-	stateMachine := NewStateMachine(resourceManager, statusManager, eventRecorder, idleChecker)
+	accessStartupProber := NewAccessStartupProber(NewAccessResourcesBuilder())
+	stateMachine := NewStateMachine(resourceManager, statusManager, eventRecorder, idleChecker, accessStartupProber)
 
 	// Create plugin clients for pod event handling (if configured)
 	pluginClients := map[string]plugin.RemoteAccessPluginApis{}
