@@ -74,6 +74,58 @@ spec:
                   - template
                   type: object
                 type: array
+              accessStartupProbe:
+                description: |-
+                  AccessStartupProbe defines how the controller verifies that access resources are
+                  serving traffic. If not set, access resources are considered ready as soon as they
+                  exist in the API server.
+                properties:
+                  failureThreshold:
+                    description: |-
+                      Minimum consecutive failures before giving up and marking the workspace as Degraded.
+                      A subsequent reconciliation (e.g., from a Workspace or AccessStrategy update) restarts
+                      the probe from scratch. Default: 30. Minimum: 1.
+                    format: int32
+                    type: integer
+                  httpGet:
+                    description: HTTPGet specifies an HTTP GET to perform against
+                      the access path.
+                    properties:
+                      additionalSuccessStatusCodes:
+                        description: |-
+                          AdditionalSuccessStatusCodes extends the default success range (200–399)
+                          with extra HTTP status codes that indicate the route is live.
+                          Example: [401] for bearer-token auth flows where the auth middleware
+                          returns 401 on unauthenticated requests.
+                        items:
+                          type: integer
+                        type: array
+                      urlTemplate:
+                        description: |-
+                          URLTemplate is a Go text/template resolving to the URL to probe.
+                          Available variables: .Workspace, .AccessStrategy, .Service
+                          (same as accessURLTemplate and accessResourceTemplates).
+                        type: string
+                    required:
+                    - urlTemplate
+                    type: object
+                  initialDelaySeconds:
+                    description: |-
+                      Number of seconds after access resources are created before probes are initiated.
+                      Default: 0.
+                    format: int32
+                    type: integer
+                  periodSeconds:
+                    description: 'How often (in seconds) to perform the probe. Default:
+                      2. Minimum: 1.'
+                    format: int32
+                    type: integer
+                  timeoutSeconds:
+                    description: 'Number of seconds after which the probe times out.
+                      Default: 5. Minimum: 1.'
+                    format: int32
+                    type: integer
+                type: object
               accessURLTemplate:
                 description: |-
                   AccessURLTemplate is a template string for constructing the workspace access URL
