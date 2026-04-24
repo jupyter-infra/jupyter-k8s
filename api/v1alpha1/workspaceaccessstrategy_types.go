@@ -99,8 +99,8 @@ type AccessStartupProbe struct {
 	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
 
 	// Minimum consecutive failures before giving up and marking the workspace as Degraded.
-	// A subsequent reconciliation (e.g., from a Workspace or AccessStrategy update) restarts
-	// the probe from scratch. Default: 30. Minimum: 1.
+	// Once degraded, the workspace must be stopped and restarted to retry the probe.
+	// Default: 30. Minimum: 1.
 	// +optional
 	FailureThreshold int32 `json:"failureThreshold,omitempty"`
 }
