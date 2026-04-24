@@ -346,9 +346,12 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(degraded.Reason).To(Equal(ReasonAccessProbeThresholdExceeded))
 
 			available := getCondition(workspace, ConditionTypeAvailable)
-			if available != nil {
-				Expect(available.Status).NotTo(Equal(metav1.ConditionTrue))
-			}
+			Expect(available).NotTo(BeNil())
+			Expect(available.Status).To(Equal(metav1.ConditionFalse))
+
+			progressing := getCondition(workspace, ConditionTypeProgressing)
+			Expect(progressing).NotTo(BeNil())
+			Expect(progressing.Status).To(Equal(metav1.ConditionFalse))
 		})
 
 		It("should propagate probe error", func() {

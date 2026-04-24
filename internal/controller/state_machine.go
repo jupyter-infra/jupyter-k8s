@@ -279,12 +279,13 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		case ProbeAlreadySucceeded:
 			accessResourcesReady = true
 		case ProbeFailureThresholdExceeded:
-			if statusErr := sm.statusManager.UpdateErrorStatus(
-				ctx, workspace, ReasonAccessProbeThresholdExceeded,
+			if statusErr := sm.statusManager.UpdatePermanentDegradedRunningStatus(
+				ctx, workspace, ReasonAccessProbeThresholdExceeded, ReasonAccessNotReady,
 				"Access startup probe failed: threshold exceeded",
 				snapshotStatus); statusErr != nil {
 				return ctrl.Result{}, statusErr
 			}
+			// After status update, exit and stop requeuing
 			return ctrl.Result{}, nil
 		case ProbeRetrying:
 			requeueDelay = probeResult.RequeueAfter

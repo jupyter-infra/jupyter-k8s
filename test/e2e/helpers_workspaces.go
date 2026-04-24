@@ -82,6 +82,40 @@ func VerifyWorkspaceConditions(
 	}
 }
 
+// VerifyConsistentWorkspaceConditions polls workspace conditions for the given duration
+// and asserts they remain stable (no oscillation).
+func VerifyConsistentWorkspaceConditions(
+	workspaceName string,
+	namespace string,
+	expectedConditions map[string]string,
+	duration string,
+	interval string,
+) {
+	ginkgo.GinkgoHelper()
+
+	jsonPath := "{range .status.conditions[*]}{.type}{\"=\"}{.status}{\" \"}{end}"
+	matchers := make([]gomega.OmegaMatcher, 0, len(expectedConditions))
+	for condType, status := range expectedConditions {
+		matchers = append(matchers, gomega.HaveKeyWithValue(condType, status))
+	}
+
+	gomega.Consistently(func() map[string]string {
+		output, err := kubectlGet("workspace", workspaceName, namespace, jsonPath)
+		if err != nil {
+			return nil
+		}
+		conditions := make(map[string]string)
+		for _, pair := range strings.Fields(output) {
+			parts := strings.Split(pair, "=")
+			if len(parts) == 2 {
+				conditions[parts[0]] = parts[1]
+			}
+		}
+		return conditions
+	}, duration, interval).Should(gomega.SatisfyAll(matchers...),
+		"workspace conditions should remain stable without oscillating")
+}
+
 // VerifyCreateWorkspaceRejectedByWebhook verifies that a workspace creation is rejected by the admission webhook
 //
 //nolint:unparam

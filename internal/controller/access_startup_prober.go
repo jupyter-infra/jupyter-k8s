@@ -36,6 +36,12 @@ type AccessStartupProber struct {
 // NewAccessStartupProber creates a new AccessStartupProber with a shared http.Client.
 // http.Client is safe for concurrent use and expensive to create (TLS handshake state,
 // connection pool), so we allocate one per prober and set timeouts per-request instead.
+//
+// TLS behavior: the default http.Transport verifies server certificates against the
+// system root CA pool (see https://pkg.go.dev/crypto/tls#Config — RootCAs defaults
+// to the host's root CA set). This means HTTPS probe URLs work with publicly-trusted
+// certs but will fail against self-signed or private-CA certs. If private CA support
+// is needed, configure crypto/tls.Config.RootCAs or set InsecureSkipVerify.
 func NewAccessStartupProber(builder *AccessResourcesBuilder) *AccessStartupProber {
 	return &AccessStartupProber{
 		builder: builder,
@@ -78,6 +84,9 @@ func (p *AccessStartupProber) Probe(
 
 	resp, err := p.client.Do(req)
 	if err != nil {
+		// Connection failures (refused, timeout, DNS) are expected while the
+		// route propagates — return (false, nil) so the caller treats this as
+		// a normal probe failure and retries, not as a reconciliation error.
 		logger.V(1).Info("Access startup probe connection failed", "url", url, "error", err)
 		return false, nil
 	}

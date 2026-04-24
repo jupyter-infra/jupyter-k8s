@@ -162,6 +162,32 @@ func (sm *StatusManager) UpdateErrorStatus(
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
+// UpdatePermanentDegradedRunningStatus sets Degraded=True, Available=False, Progressing=False, Stopped=False.
+// Use when the controller has given up on a workspace whose desired state is Running
+// and will not retry without external intervention (e.g. access startup probe threshold exceeded).
+func (sm *StatusManager) UpdatePermanentDegradedRunningStatus(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	degradedReason string,
+	availableReason string,
+	message string,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) error {
+
+	conditions := []metav1.Condition{
+		NewCondition(ConditionTypeAvailable, metav1.ConditionFalse, availableReason, message),
+		NewCondition(ConditionTypeProgressing, metav1.ConditionFalse, degradedReason, message),
+		NewCondition(ConditionTypeDegraded, metav1.ConditionTrue, degradedReason, message),
+		NewCondition(ConditionTypeStopped, metav1.ConditionFalse, ReasonDesiredStateRunning, "Workspace desired state is Running"),
+	}
+
+	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
+}
+
+// If a Stopped-path equivalent is needed, add UpdatePermanentDegradedStoppedStatus
+// mirroring this method: use ReasonDesiredStateStopped on Available, degradedReason
+// on Progressing, and stoppedReason on Stopped.
+
 // UpdateRunningStatus sets the Available condition to true and Progressing to false
 func (sm *StatusManager) UpdateRunningStatus(
 	ctx context.Context,

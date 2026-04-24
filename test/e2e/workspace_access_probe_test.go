@@ -70,13 +70,12 @@ var _ = Describe("Workspace Access Startup Probe", Ordered, func() {
 			// A previous bug caused probe success → status write → watch event →
 			// re-reconcile → fresh probe cycle → Progressing, looping forever.
 			By("verifying workspace remains Available for 1 minute (no oscillation)")
-			Consistently(func() string {
-				output, _ := kubectlGet("workspace", workspaceName, workspaceNamespace,
-					fmt.Sprintf("{.status.conditions[?(@.type==\"%s\")].status}",
-						controller.ConditionTypeAvailable))
-				return output
-			}, "1m", "5s").Should(Equal(ConditionTrue),
-				"workspace should remain Available without oscillating")
+			VerifyConsistentWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
+				controller.ConditionTypeAvailable:   ConditionTrue,
+				controller.ConditionTypeProgressing: ConditionFalse,
+				controller.ConditionTypeDegraded:    ConditionFalse,
+				controller.ConditionTypeStopped:     ConditionFalse,
+			}, "1m", "5s")
 
 			By("verifying accessStartupProbeFailures is cleared after success")
 			probeFailures, _ := kubectlGet("workspace", workspaceName, workspaceNamespace,
@@ -117,13 +116,13 @@ var _ = Describe("Workspace Access Startup Probe", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reason).To(Equal(controller.ReasonAccessProbeThresholdExceeded))
 
-			By("verifying Degraded=True and Available=False")
-			VerifyWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
+			By("verifying workspace remains Degraded for 30 seconds (no oscillation)")
+			VerifyConsistentWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
 				controller.ConditionTypeDegraded:    ConditionTrue,
 				controller.ConditionTypeAvailable:   ConditionFalse,
-				controller.ConditionTypeProgressing: ConditionTrue,
+				controller.ConditionTypeProgressing: ConditionFalse,
 				controller.ConditionTypeStopped:     ConditionFalse,
-			})
+			}, "30s", "5s")
 
 			By("verifying accessStartupProbeFailures is retained at threshold")
 			probeFailures, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
