@@ -104,6 +104,14 @@ var _ = Describe("reconcileDesiredStoppedStatus access resources", func() {
 			Expect(stopped).NotTo(BeNil())
 			Expect(stopped.Status).To(Equal(metav1.ConditionTrue))
 			Expect(stopped.Reason).To(Equal(ReasonResourcesStopped))
+
+			available := getCondition(workspace, ConditionTypeAvailable)
+			Expect(available).NotTo(BeNil())
+			Expect(available.Status).To(Equal(metav1.ConditionFalse))
+
+			progressing := getCondition(workspace, ConditionTypeProgressing)
+			Expect(progressing).NotTo(BeNil())
+			Expect(progressing.Status).To(Equal(metav1.ConditionFalse))
 		})
 	})
 

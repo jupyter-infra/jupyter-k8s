@@ -206,6 +206,10 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			available := getCondition(workspace, ConditionTypeAvailable)
 			Expect(available).NotTo(BeNil())
 			Expect(available.Status).To(Equal(metav1.ConditionTrue))
+
+			progressing := getCondition(workspace, ConditionTypeProgressing)
+			Expect(progressing).NotTo(BeNil())
+			Expect(progressing.Status).To(Equal(metav1.ConditionFalse))
 		})
 
 		It("should mark Available when probe succeeds after previous failures", func() {
@@ -230,6 +234,14 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			available := getCondition(workspace, ConditionTypeAvailable)
 			Expect(available).NotTo(BeNil())
 			Expect(available.Status).To(Equal(metav1.ConditionTrue))
+
+			progressing := getCondition(workspace, ConditionTypeProgressing)
+			Expect(progressing).NotTo(BeNil())
+			Expect(progressing.Status).To(Equal(metav1.ConditionFalse))
+
+			degraded := getCondition(workspace, ConditionTypeDegraded)
+			Expect(degraded).NotTo(BeNil())
+			Expect(degraded.Status).To(Equal(metav1.ConditionFalse))
 		})
 
 		It("should report AccessNotReady and requeue when probe is retrying", func() {
@@ -259,6 +271,10 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			available := getCondition(workspace, ConditionTypeAvailable)
 			Expect(available).NotTo(BeNil())
 			Expect(available.Status).To(Equal(metav1.ConditionFalse))
+
+			degraded := getCondition(workspace, ConditionTypeDegraded)
+			Expect(degraded).NotTo(BeNil())
+			Expect(degraded.Status).To(Equal(metav1.ConditionFalse))
 		})
 
 		It("should report AccessNotReady and requeue when probe is pending retry", func() {
@@ -318,6 +334,10 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(available).NotTo(BeNil())
 			Expect(available.Status).To(Equal(metav1.ConditionTrue))
 
+			progressing := getCondition(workspace, ConditionTypeProgressing)
+			Expect(progressing).NotTo(BeNil())
+			Expect(progressing.Status).To(Equal(metav1.ConditionFalse))
+
 			Expect(mockProber.probeCount).To(Equal(0))
 		})
 
@@ -348,10 +368,17 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			available := getCondition(workspace, ConditionTypeAvailable)
 			Expect(available).NotTo(BeNil())
 			Expect(available.Status).To(Equal(metav1.ConditionFalse))
+			Expect(available.Reason).To(Equal(ReasonAccessNotReady))
 
 			progressing := getCondition(workspace, ConditionTypeProgressing)
 			Expect(progressing).NotTo(BeNil())
 			Expect(progressing.Status).To(Equal(metav1.ConditionFalse))
+			Expect(progressing.Reason).To(Equal(ReasonAccessProbeThresholdExceeded))
+
+			stopped := getCondition(workspace, ConditionTypeStopped)
+			Expect(stopped).NotTo(BeNil())
+			Expect(stopped.Status).To(Equal(metav1.ConditionFalse))
+			Expect(stopped.Reason).To(Equal(ReasonDesiredStateRunning))
 		})
 
 		It("should propagate probe error", func() {
@@ -438,7 +465,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(err.Error()).To(ContainSubstring("failed to parse URL template"))
 		})
 
-		It("should propagate UpdateErrorStatus failure on threshold exceeded", func() {
+		It("should propagate UpdatePermanentDegradedRunningStatus failure on threshold exceeded", func() {
 			mockProber.ready = false
 			workspace := newWorkspaceWithAccessStrategy()
 			dep := createReadyDeployment(workspace)
