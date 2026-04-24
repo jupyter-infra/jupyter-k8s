@@ -2141,6 +2141,19 @@ spec:
                   - namespace
                   type: object
                 type: array
+              accessStartupProbeFailures:
+                description: |-
+                  AccessStartupProbeFailures tracks the number of consecutive failed access
+                  startup probe attempts. Set by the controller during the probing phase;
+                  cleared (nil) on success or when the workspace stops.
+                format: int32
+                type: integer
+              accessStartupProbeSucceeded:
+                description: |-
+                  AccessStartupProbeSucceeded indicates whether the access startup probe
+                  has passed. Set to true when the probe succeeds; reset to false when
+                  the workspace stops.
+                type: boolean
               accessURL:
                 description: AccessURL is the URL at which the workspace can be accessed
                 type: string
@@ -2217,6 +2230,13 @@ spec:
               deploymentName:
                 description: DeploymentName is the name of the deployment managing
                   the Workspace pods
+                type: string
+              lastAccessStartupProbeTime:
+                description: |-
+                  LastAccessStartupProbeTime records when the last access startup probe
+                  was executed. Used to enforce minimum spacing (periodSeconds) between
+                  probes across reconcile cycles.
+                format: date-time
                 type: string
               serviceName:
                 description: ServiceName is the name of the service exposing the Workspace

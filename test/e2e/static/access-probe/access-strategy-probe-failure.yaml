@@ -1,0 +1,15 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: access-strategy-probe-failure
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: Probe Failure Strategy
+  accessResourceTemplates: []
+  accessURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
+  accessStartupProbe:
+    httpGet:
+      urlTemplate: "http://does-not-exist.default.svc.cluster.local:9999/"
+    periodSeconds: 1
+    timeoutSeconds: 1
+    failureThreshold: 3

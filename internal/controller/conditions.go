@@ -46,9 +46,10 @@ const (
 	ReasonDesiredStateRunning = "DesiredStateRunning"
 
 	// ConditionTypeDegraded reasons
-	ReasonDeploymentError = "ComputeError"
-	ReasonServiceError    = "ServiceError"
-	ReasonNoError         = "NoError"
+	ReasonDeploymentError              = "ComputeError"
+	ReasonServiceError                 = "ServiceError"
+	ReasonAccessProbeThresholdExceeded = "AccessProbeThresholdExceeded"
+	ReasonNoError                      = "NoError"
 
 	// ConditionTypeAvailable reasons (special cases)
 	ReasonPreempted = "Preempted"

@@ -81,6 +81,13 @@ const (
 	// DefaultDesiredStatus is the default desired status for workspaces
 	DefaultDesiredStatus = "Running"
 
+	// DefaultAccessStartupProbePeriodSeconds is the default probe interval in seconds
+	DefaultAccessStartupProbePeriodSeconds = 2
+	// DefaultAccessStartupProbeTimeoutSeconds is the default probe timeout in seconds
+	DefaultAccessStartupProbeTimeoutSeconds = 5
+	// DefaultAccessStartupProbeFailureThreshold is the default max consecutive failures
+	DefaultAccessStartupProbeFailureThreshold = 30
+
 	// MinimalRequeueDelay is the delay for near-immediate requeue
 	MinimalRequeueDelay = 10 * time.Millisecond
 	// PollRequeueDelay is the delay for polling reconciliation

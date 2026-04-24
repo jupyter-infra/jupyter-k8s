@@ -234,6 +234,24 @@ type WorkspaceStatus struct {
 	// +optional
 	AccessResources []AccessResourceStatus `json:"accessResources,omitempty"`
 
+	// AccessStartupProbeSucceeded indicates whether the access startup probe
+	// has passed. Set to true when the probe succeeds; reset to false when
+	// the workspace stops.
+	// +optional
+	AccessStartupProbeSucceeded bool `json:"accessStartupProbeSucceeded,omitempty"`
+
+	// AccessStartupProbeFailures tracks the number of consecutive failed access
+	// startup probe attempts. Set by the controller during the probing phase;
+	// cleared (nil) on success or when the workspace stops.
+	// +optional
+	AccessStartupProbeFailures *int32 `json:"accessStartupProbeFailures,omitempty"`
+
+	// LastAccessStartupProbeTime records when the last access startup probe
+	// was executed. Used to enforce minimum spacing (periodSeconds) between
+	// probes across reconcile cycles.
+	// +optional
+	LastAccessStartupProbeTime *metav1.Time `json:"lastAccessStartupProbeTime,omitempty"`
+
 	// Conditions represent the current state of the Workspace resource.
 	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
 	//
