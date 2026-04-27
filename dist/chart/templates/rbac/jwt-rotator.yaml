@@ -1,0 +1,10 @@
+{{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app: extensionapi-jwt-rotator
+    component: security
+  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "jwt-rotator" "context" $) }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}
