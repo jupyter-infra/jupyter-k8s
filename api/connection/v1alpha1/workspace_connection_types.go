@@ -17,6 +17,10 @@ const (
 
 	// ConnectionTypeVSCodeRemote represents VSCode remote connection type
 	ConnectionTypeVSCodeRemote = "vscode-remote"
+	// ConnectionTypeKiroRemote represents Kiro remote connection type
+	ConnectionTypeKiroRemote = "kiro-remote"
+	// ConnectionTypeCursorRemote represents Cursor remote connection type
+	ConnectionTypeCursorRemote = "cursor-remote"
 	// ConnectionTypeWebUI represents web UI connection type
 	ConnectionTypeWebUI = "web-ui"
 )

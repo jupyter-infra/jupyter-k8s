@@ -847,6 +847,33 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 			},
 		},
 		{
+			name: "valid kiro-remote request",
+			req: &connectionv1alpha1.WorkspaceConnectionRequest{
+				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
+					WorkspaceName:           "test-workspace",
+					WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeKiroRemote,
+				},
+			},
+		},
+		{
+			name: "valid cursor-remote request",
+			req: &connectionv1alpha1.WorkspaceConnectionRequest{
+				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
+					WorkspaceName:           "test-workspace",
+					WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeCursorRemote,
+				},
+			},
+		},
+		{
+			name: "valid unknown *-remote request",
+			req: &connectionv1alpha1.WorkspaceConnectionRequest{
+				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
+					WorkspaceName:           "test-workspace",
+					WorkspaceConnectionType: "windsurf-remote",
+				},
+			},
+		},
+		{
 			name: "missing workspace name",
 			req: &connectionv1alpha1.WorkspaceConnectionRequest{
 				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
@@ -867,7 +894,7 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 			errorMsg:    "workspaceConnectionType is required",
 		},
 		{
-			name: "invalid connection type",
+			name: "invalid connection type - no -remote suffix",
 			req: &connectionv1alpha1.WorkspaceConnectionRequest{
 				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
 					WorkspaceName:           "test-workspace",
@@ -875,7 +902,18 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "invalid workspaceConnectionType: 'invalid-type'. Valid types are: 'vscode-remote', 'web-ui'",
+			errorMsg:    "invalid workspaceConnectionType: 'invalid-type'. Must be 'web-ui' or match the '*-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')",
+		},
+		{
+			name: "invalid connection type - bare remote",
+			req: &connectionv1alpha1.WorkspaceConnectionRequest{
+				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
+					WorkspaceName:           "test-workspace",
+					WorkspaceConnectionType: "-remote",
+				},
+			},
+			expectError: true,
+			errorMsg:    "invalid workspaceConnectionType: '-remote'. Must be 'web-ui' or match the '*-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')",
 		},
 	}
 
@@ -1014,6 +1052,54 @@ func TestIsWorkspaceAvailable(t *testing.T) {
 			result := isWorkspaceAvailable(tt.workspace)
 			if result != tt.expected {
 				t.Errorf("expected %v, got %v", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestIsRemoteConnectionType(t *testing.T) {
+	tests := []struct {
+		connectionType string
+		expected       bool
+	}{
+		{"vscode-remote", true},
+		{"kiro-remote", true},
+		{"cursor-remote", true},
+		{"windsurf-remote", true},
+		{"web-ui", false},
+		{"invalid-type", false},
+		{"-remote", false},
+		{"remote", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.connectionType, func(t *testing.T) {
+			result := isRemoteConnectionType(tt.connectionType)
+			if result != tt.expected {
+				t.Errorf("isRemoteConnectionType(%q) = %v, want %v", tt.connectionType, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsKnownRemoteType(t *testing.T) {
+	tests := []struct {
+		connectionType string
+		expected       bool
+	}{
+		{"vscode-remote", true},
+		{"kiro-remote", true},
+		{"cursor-remote", true},
+		{"windsurf-remote", false},
+		{"web-ui", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.connectionType, func(t *testing.T) {
+			result := isKnownRemoteType(tt.connectionType)
+			if result != tt.expected {
+				t.Errorf("isKnownRemoteType(%q) = %v, want %v", tt.connectionType, result, tt.expected)
 			}
 		})
 	}
