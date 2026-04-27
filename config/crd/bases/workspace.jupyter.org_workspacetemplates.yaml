@@ -58,11 +58,11 @@ spec:
                   AllowCustomImages allows workspaces to use any container image, bypassing the AllowedImages restriction
                   When true, workspaces can specify any image regardless of the AllowedImages list
                 type: boolean
-              allowInitContainers:
-                default: true
+              allowCustomInitContainers:
+                default: false
                 description: |-
-                  AllowInitContainers controls whether workspaces using this template
-                  can specify custom init containers
+                  AllowCustomInitContainers controls whether workspaces using this template
+                  can specify custom init containers beyond the template defaults
                 type: boolean
               allowSecondaryStorages:
                 default: true
@@ -1488,7 +1488,7 @@ spec:
               defaultInitContainers:
                 description: |-
                   DefaultInitContainers specifies default init containers for workspaces using this template
-                  Applied during defaulting only if the workspace does not specify any init containers
+                  Applied during defaulting if the workspace does not specify any init containers
                 items:
                   description: A single application container that you want to run
                     within a pod.
