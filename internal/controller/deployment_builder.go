@@ -215,6 +215,11 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 		podSpec.SecurityContext = workspace.Spec.PodSecurityContext
 	}
 
+	// Set init containers from workspace spec
+	if len(workspace.Spec.InitContainers) > 0 {
+		podSpec.InitContainers = workspace.Spec.InitContainers
+	}
+
 	return podSpec
 }
 

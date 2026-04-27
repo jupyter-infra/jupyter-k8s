@@ -38,4 +38,5 @@ const (
 	ViolationTypeLabelRegexMismatch             = "LabelRegexMismatch"
 	ViolationTypeEnvRequired                    = "EnvRequired"
 	ViolationTypeEnvRegexMismatch               = "EnvRegexMismatch"
+	ViolationTypeInitContainersNotAllowed       = "InitContainersNotAllowed"
 )
