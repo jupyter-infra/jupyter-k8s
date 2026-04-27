@@ -17,6 +17,16 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - namespaces
+  - pods
+  - serviceaccounts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - persistentvolumeclaims
   - services
   verbs:
@@ -30,18 +40,20 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - pods
-  - serviceaccounts
+  - pods/exec
+  verbs:
+  - create
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingadmissionpolicies
+  - validatingadmissionpolicybindings
+  - validatingwebhookconfigurations
   verbs:
   - get
   - list
   - watch
-- apiGroups:
-  - ""
-  resources:
-  - pods/exec
-  verbs:
-  - create
 - apiGroups:
   - apps
   resources:
