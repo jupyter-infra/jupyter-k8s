@@ -925,8 +925,8 @@ func (in *WorkspaceTemplateSpec) DeepCopyInto(out *WorkspaceTemplateSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	if in.AllowInitContainers != nil {
-		in, out := &in.AllowInitContainers, &out.AllowInitContainers
+	if in.AllowCustomInitContainers != nil {
+		in, out := &in.AllowCustomInitContainers, &out.AllowCustomInitContainers
 		*out = new(bool)
 		**out = **in
 	}
