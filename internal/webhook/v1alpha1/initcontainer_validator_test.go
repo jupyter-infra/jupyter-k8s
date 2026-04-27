@@ -25,9 +25,9 @@ var _ = Describe("InitContainerValidator", func() {
 	})
 
 	Context("validateInitContainers", func() {
-		It("should allow init containers when AllowInitContainers is true", func() {
+		It("should allow init containers when AllowCustomInitContainers is true", func() {
 			allow := true
-			template.Spec.AllowInitContainers = &allow
+			template.Spec.AllowCustomInitContainers = &allow
 			initContainers := []corev1.Container{
 				{Name: "setup", Image: "busybox:latest"},
 			}
@@ -35,31 +35,44 @@ var _ = Describe("InitContainerValidator", func() {
 			Expect(violation).To(BeNil())
 		})
 
-		It("should allow init containers when AllowInitContainers is nil (default true)", func() {
-			template.Spec.AllowInitContainers = nil
-			initContainers := []corev1.Container{
-				{Name: "setup", Image: "busybox:latest"},
-			}
-			violation := validateInitContainers(initContainers, template)
-			Expect(violation).To(BeNil())
-		})
-
-		It("should reject init containers when AllowInitContainers is false", func() {
-			allow := false
-			template.Spec.AllowInitContainers = &allow
+		It("should reject init containers when AllowCustomInitContainers is nil (default false)", func() {
+			template.Spec.AllowCustomInitContainers = nil
 			initContainers := []corev1.Container{
 				{Name: "setup", Image: "busybox:latest"},
 			}
 			violation := validateInitContainers(initContainers, template)
 			Expect(violation).NotTo(BeNil())
 			Expect(violation.Type).To(Equal(ViolationTypeInitContainersNotAllowed))
-			Expect(violation.Field).To(Equal("spec.initContainers"))
 		})
 
-		It("should allow empty init containers when AllowInitContainers is false", func() {
+		It("should reject init containers when AllowCustomInitContainers is false", func() {
 			allow := false
-			template.Spec.AllowInitContainers = &allow
+			template.Spec.AllowCustomInitContainers = &allow
+			initContainers := []corev1.Container{
+				{Name: "setup", Image: "busybox:latest"},
+			}
+			violation := validateInitContainers(initContainers, template)
+			Expect(violation).NotTo(BeNil())
+			Expect(violation.Type).To(Equal(ViolationTypeInitContainersNotAllowed))
+		})
+
+		It("should allow empty init containers regardless of setting", func() {
+			allow := false
+			template.Spec.AllowCustomInitContainers = &allow
 			violation := validateInitContainers(nil, template)
+			Expect(violation).To(BeNil())
+		})
+
+		It("should allow template default init containers even when custom not allowed", func() {
+			template.Spec.DefaultInitContainers = []corev1.Container{
+				{Name: "template-init", Image: "busybox:latest"},
+			}
+			template.Spec.AllowCustomInitContainers = nil
+			// Workspace has the same init containers as template defaults (set by defaulter)
+			initContainers := []corev1.Container{
+				{Name: "template-init", Image: "busybox:latest"},
+			}
+			violation := validateInitContainers(initContainers, template)
 			Expect(violation).To(BeNil())
 		})
 	})

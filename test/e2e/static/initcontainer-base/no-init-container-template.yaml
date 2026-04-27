@@ -13,4 +13,4 @@ spec:
     limits:
       cpu: 500m
       memory: 512Mi
-  allowInitContainers: false
+  allowCustomInitContainers: false
