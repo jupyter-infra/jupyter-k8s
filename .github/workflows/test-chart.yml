@@ -32,7 +32,7 @@ jobs:
       - name: Prepare jupyter-k8s
         run: |
           go mod tidy
-          make docker-build IMG=controller:latest
+          make docker-build IMG=controller:latest CONTAINER_TOOL=docker
           kind load docker-image controller:latest
 
       - name: Install Helm
@@ -63,7 +63,7 @@ jobs:
 
       - name: Deploy manager via Helm
         run: |
-          make helm-deploy IMG=jupyter-k8s:v0.1.0
+          make helm-deploy IMG=controller:latest CONTAINER_TOOL=docker
 
       - name: Check Helm release status
         run: |
