@@ -1,3 +1,8 @@
+
+# [NETWORK POLICIES]: To enable NetworkPolicies set true
+networkPolicy:
+  enable: false
+
 # [APPLICATION]: Application images configuration
 application:
   # Image pull policy for Workspaces deployments (Always, IfNotPresent, or Never)
@@ -15,10 +20,9 @@ workspacePodWatching:
   # Whether to enable workspace pod event watching
   # When true, controller watches pod events for workspace lifecycle management
   # When false, pod watching is disabled
-  enable: false  # Default: false (disabled by default)
+  enable: false
 
 # [ACCESS RESOURCES]: Configure resources to watch for access strategy
-# Additional access resources that the controller should watch
 accessResources:
   # Guided mode using traefik proxy
   traefik:
@@ -39,12 +43,12 @@ extensionApi:
   # instead of AWS KMS. The secret is rotated by a CronJob.
   jwtSecret:
     enable: false
-    secretName: "extensionapi-secrets"
+    secretName: "jupyter-k8s-extensionapi-secrets"
     tokenTTL: "5m"
     newKeyUseDelay: "5s"
     rotationInterval: "15m"
     rotator:
-      repository: "docker.io"
+      repository: "docker.io/library"
       imageName: "jupyter-k8s-rotator"
       imageTag: "latest"
       imagePullPolicy: "IfNotPresent"
