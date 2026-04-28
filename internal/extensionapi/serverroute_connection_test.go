@@ -902,7 +902,7 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "invalid workspaceConnectionType: 'invalid-type'. Must be 'web-ui' or follow the '{ide}-remote' pattern (e.g. 'vscode-remote')",
+			errorMsg:    "invalid workspaceConnectionType: 'invalid-type'. Must be 'web-ui' or follow the '{ide}-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')",
 		},
 		{
 			name: "invalid connection type - bare remote",
@@ -913,7 +913,7 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "invalid workspaceConnectionType: '-remote'. Must be 'web-ui' or follow the '{ide}-remote' pattern (e.g. 'vscode-remote')",
+			errorMsg:    "invalid workspaceConnectionType: '-remote'. Must be 'web-ui' or follow the '{ide}-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')",
 		},
 	}
 
@@ -1066,11 +1066,17 @@ func TestIsRemoteConnectionType(t *testing.T) {
 		{"kiro-remote", true},
 		{"cursor-remote", true},
 		{"windsurf-remote", true},
+		{"my-vscode-remote", true},
 		{"web-ui", false},
 		{"invalid-type", false},
 		{"-remote", false},
 		{"remote", false},
 		{"", false},
+		{"my--vscode-remote", false},
+		{"vscode-remote-ssh", false},
+		{"-vscode-remote", false},
+		{"vscode remote", false},
+		{"vscode_remote", false},
 	}
 
 	for _, tt := range tests {
