@@ -200,6 +200,19 @@ var _ = Describe("AccessStartupProber", func() {
 			Expect(ready).To(BeFalse())
 		})
 
+		It("should return false for unresolvable hostname", func() {
+			accessStrategy.Spec.AccessStartupProbe = &workspacev1alpha1.AccessStartupProbe{
+				HTTPGet: &workspacev1alpha1.AccessHTTPGetProbe{
+					URLTemplate: "http://this-host-does-not-exist.invalid:8080/",
+				},
+				TimeoutSeconds: 5,
+			}
+
+			ready, err := prober.Probe(context.Background(), workspace, accessStrategy, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ready).To(BeFalse())
+		})
+
 		It("should not follow redirects", func() {
 			redirectCount := 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

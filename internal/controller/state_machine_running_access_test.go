@@ -261,7 +261,9 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			sm := buildStateMachine()
 			result, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(2 * time.Second))
+			// failureThreshold=3 < ProbeBackoffThreshold, so backoff is active
+			// from the start: first failure → periodSeconds*2 = 4s
+			Expect(result.RequeueAfter).To(Equal(4 * time.Second))
 
 			progressing := getCondition(workspace, ConditionTypeProgressing)
 			Expect(progressing).NotTo(BeNil())
@@ -286,9 +288,9 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
 
 			one := int32(1)
-			now := metav1.Now()
+			future := metav1.NewTime(time.Now().Add(2 * time.Second))
 			workspace.Status.AccessStartupProbeFailures = &one
-			workspace.Status.LastAccessStartupProbeTime = &now
+			workspace.Status.EarliestNextProbeTime = &future
 			Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 

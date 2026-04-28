@@ -765,8 +765,8 @@ func (in *WorkspaceStatus) DeepCopyInto(out *WorkspaceStatus) {
 		*out = new(int32)
 		**out = **in
 	}
-	if in.LastAccessStartupProbeTime != nil {
-		in, out := &in.LastAccessStartupProbeTime, &out.LastAccessStartupProbeTime
+	if in.EarliestNextProbeTime != nil {
+		in, out := &in.EarliestNextProbeTime, &out.EarliestNextProbeTime
 		*out = (*in).DeepCopy()
 	}
 	if in.Conditions != nil {
