@@ -8,9 +8,6 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     control-plane: controller-manager
     workspace.jupyter.org/component: controller
-        {{- with .Values.manager.pod.labels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
   name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "controller-manager" "context" $) }}
   namespace: {{ .Release.Namespace }}
 spec:
@@ -138,9 +135,16 @@ spec:
           name: webhook-certs
           readOnly: true
         {{- end }}
+        {{- if and .Values.metrics.enable .Values.certManager.enable }}
+        - mountPath: /tmp/k8s-metrics-server/metrics-certs
+          name: metrics-certs
+          readOnly: true
+        {{- end }}
+        {{- if .Values.extensionApi.enable }}
         - mountPath: /tmp/extension-server/serving-certs
           name: extension-server-cert
           readOnly: true
+        {{- end }}
       {{- range .Values.controller.plugins }}
       - name: plugin-{{ .name }}
         image: "{{ .image.repository }}:{{ .image.tag }}"
@@ -184,6 +188,9 @@ spec:
         {}
         {{- end }}
       serviceAccountName: {{ include "jupyter-k8s.resourceName" (dict "suffix" "controller-manager" "context" $) }}
+      {{- with .Values.manager.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
       terminationGracePeriodSeconds: 10
       {{- with .Values.manager.tolerations }}
       tolerations: {{ toYaml . | nindent 10 }}
@@ -197,6 +204,13 @@ spec:
         secret:
           secretName: webhook-server-cert
       {{- end }}
+      {{- if and .Values.metrics.enable .Values.certManager.enable }}
+      - name: metrics-certs
+        secret:
+          secretName: metrics-server-cert
+      {{- end }}
+      {{- if .Values.extensionApi.enable }}
       - name: extension-server-cert
         secret:
           secretName: extension-server-cert
+      {{- end }}
