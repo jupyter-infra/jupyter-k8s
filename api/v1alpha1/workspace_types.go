@@ -44,12 +44,10 @@ type StorageSpec struct {
 	// Size specifies the size of the persistent volume
 	// Supports standard Kubernetes resource quantities (e.g., "10Gi", "500Mi", "1Ti")
 	// Integer values without units are interpreted as bytes
-	// +kubebuilder:default="10Gi"
 	Size resource.Quantity `json:"size,omitempty"`
 
 	// MountPath specifies where to mount the persistent volume in the container
 	// Default is /home/jovyan (jovyan is the standard user in Jupyter images)
-	// +kubebuilder:default="/home/jovyan"
 	MountPath string `json:"mountPath,omitempty"`
 }
 
