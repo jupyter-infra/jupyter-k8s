@@ -32,6 +32,8 @@ manager:
       valueFrom:
         fieldRef:
           fieldPath: spec.serviceAccountName
+    - name: CLUSTER_ADMIN_GROUP
+      value: "cluster-workspace-admin"
 
   ## Env overrides (--set manager.envOverrides.VAR=value)
   ## Same name in env above: this value takes precedence.
@@ -153,10 +155,6 @@ webhook:
 prometheus:
   enable: false
 
-
-# [NETWORK POLICIES]: To enable NetworkPolicies set true
-networkPolicy:
-  enable: false
 
 # [APPLICATION]: Application images configuration
 application:

@@ -65,8 +65,10 @@ fi
 # --- manager.yaml: add pod labels support ---
 if ! grep -q "manager.pod.labels" "${MANAGER_YAML}"; then
     echo "Adding pod labels support..."
-    # Add custom pod labels after the last label in the template metadata
-    sed -i '/workspace.jupyter.org\/component: controller$/a\        {{- with .Values.manager.pod.labels }}\n        {{- toYaml . | nindent 8 }}\n        {{- end }}' "${MANAGER_YAML}"
+    # The label 'workspace.jupyter.org/component: controller' appears twice:
+    # once in Deployment metadata, once in pod template metadata.
+    # We only want custom labels in the pod template (second occurrence).
+    awk '/workspace\.jupyter\.org\/component: controller/ { count++; print; if (count == 2) { print "        {{- with .Values.manager.pod.labels }}"; print "        {{- toYaml . | nindent 8 }}"; print "        {{- end }}" }; next } { print }' "${MANAGER_YAML}" > "${MANAGER_YAML}.tmp" && mv "${MANAGER_YAML}.tmp" "${MANAGER_YAML}"
 fi
 
 # --- manager.yaml: add topologySpreadConstraints support ---
@@ -83,17 +85,37 @@ if ! grep -q "plugin-{{ .name }}" "${MANAGER_YAML}"; then
     sed -i '/{{- with .Values.manager.nodeSelector }}/i\      {{- range .Values.controller.plugins }}\n      - name: plugin-{{ .name }}\n        image: "{{ .image.repository }}:{{ .image.tag }}"\n        {{- if .imagePullPolicy }}\n        imagePullPolicy: {{ .imagePullPolicy }}\n        {{- end }}\n        ports:\n          - containerPort: {{ .port }}\n            protocol: TCP\n        {{- if .healthcheckCommand }}\n        livenessProbe:\n          exec:\n            command: {{ .healthcheckCommand | toJson }}\n          initialDelaySeconds: 5\n          periodSeconds: 10\n        readinessProbe:\n          exec:\n            command: {{ .healthcheckCommand | toJson }}\n          initialDelaySeconds: 2\n          periodSeconds: 5\n        {{- end }}\n        {{- if .env }}\n        env:\n          {{- range $key, $value := .env }}\n          - name: {{ $key }}\n            value: "{{ $value }}"\n          {{- end }}\n        {{- end }}\n        {{- if .resources }}\n        resources:\n          {{- toYaml .resources | nindent 10 }}\n        {{- end }}\n      {{- end }}' "${MANAGER_YAML}"
 fi
 
-# --- manager.yaml: make extension-server-cert volume conditional ---
-# The v2-alpha chart unconditionally mounts extension-server-cert.
-# Make it conditional on extensionApi.enable
-if ! grep -q "extensionApi.enable" "${MANAGER_YAML}"; then
-    echo "Making extension-server-cert volume conditional..."
-    sed -i 's|        - mountPath: /tmp/extension-server/serving-certs|        {{- if .Values.extensionApi.enable }}\n        - mountPath: /tmp/extension-server/serving-certs|' "${MANAGER_YAML}"
-    sed -i '/name: extension-server-cert$/a\        {{- end }}' "${MANAGER_YAML}"
-    # Also make the volume definition conditional
-    sed -i 's|      - name: extension-server-cert|      {{- if .Values.extensionApi.enable }}\n      - name: extension-server-cert|' "${MANAGER_YAML}"
-    sed -i '/secretName: extension-server-cert$/a\      {{- end }}' "${MANAGER_YAML}"
-fi
+# --- manager.yaml: rewrite volumeMounts and volumes sections ---
+# The v2-alpha chart has unconditional extension-server-cert and no metrics-certs.
+# Replace both sections with properly conditional versions.
+echo "Rewriting volumeMounts and volumes sections..."
+
+# Replace the volumeMounts block (from 'volumeMounts:' to just before the plugin range)
+sed -i '/^        volumeMounts:$/,/^      {{- range .Values.controller.plugins }}$/{
+    /^      {{- range .Values.controller.plugins }}$/!d
+}' "${MANAGER_YAML}"
+sed -i '/^      {{- range .Values.controller.plugins }}$/i\        volumeMounts:\n        {{- if .Values.certManager.enable }}\n        - mountPath: /tmp/k8s-webhook-server/serving-certs\n          name: webhook-certs\n          readOnly: true\n        {{- end }}\n        {{- if and .Values.metrics.enable .Values.certManager.enable }}\n        - mountPath: /tmp/k8s-metrics-server/metrics-certs\n          name: metrics-certs\n          readOnly: true\n        {{- end }}\n        {{- if .Values.extensionApi.enable }}\n        - mountPath: /tmp/extension-server/serving-certs\n          name: extension-server-cert\n          readOnly: true\n        {{- end }}' "${MANAGER_YAML}"
+
+# Replace the volumes block (from 'volumes:' to end of file)
+sed -i '/^      volumes:$/,$d' "${MANAGER_YAML}"
+cat >> "${MANAGER_YAML}" << 'VOLEOF'
+      volumes:
+      {{- if .Values.certManager.enable }}
+      - name: webhook-certs
+        secret:
+          secretName: webhook-server-cert
+      {{- end }}
+      {{- if and .Values.metrics.enable .Values.certManager.enable }}
+      - name: metrics-certs
+        secret:
+          secretName: metrics-server-cert
+      {{- end }}
+      {{- if .Values.extensionApi.enable }}
+      - name: extension-server-cert
+        secret:
+          secretName: extension-server-cert
+      {{- end }}
+VOLEOF
 
 # --- Controller ServiceAccount ---
 # v2-alpha doesn't generate a ServiceAccount resource; add one explicitly.
@@ -249,7 +271,7 @@ echo "Templating secret name references in JWT RBAC..."
 for f in jwt-rotator-secrets-manager.yaml jwt-secrets-reader.yaml; do
     target="${CHART_DIR}/templates/rbac/${f}"
     if [ -f "${target}" ]; then
-        sed -i 's/- jupyter-k8s-extensionapi-secrets/- {{ .Values.extensionApi.jwtSecret.secretName }}/' "${target}"
+        sed -i 's/- jupyter-k8s-extensionapi-secrets/- {{ .Values.extensionApi.jwtSecret.secretName | quote }}/' "${target}"
     fi
 done
 
@@ -322,6 +344,20 @@ find "${CHART_DIR}/templates/crd/" -name "connection*" -delete 2>/dev/null || tr
 # v2-alpha adds --webhook-cert-path conditionally, which is good.
 # But we need to also handle the case where webhook is disabled but extensionApi is enabled
 # (extensionApi needs cert volumes too). Already handled by our conditional above.
+
+# --- values.yaml: add CLUSTER_ADMIN_GROUP to manager.env ---
+# The webhook reads this via os.Getenv to bypass workspace validation for cluster admins.
+if ! grep -q "CLUSTER_ADMIN_GROUP" "${CHART_DIR}/values.yaml"; then
+    echo "Adding CLUSTER_ADMIN_GROUP env var..."
+    sed -i '/fieldPath: spec.serviceAccountName$/a\    - name: CLUSTER_ADMIN_GROUP\n      value: "cluster-workspace-admin"' "${CHART_DIR}/values.yaml"
+fi
+
+# --- manager.yaml: add imagePullSecrets support ---
+if ! grep -q "imagePullSecrets" "${MANAGER_YAML}"; then
+    echo "Adding imagePullSecrets support..."
+    sed -i '/serviceAccountName:.*controller-manager/a\      {{- with .Values.manager.imagePullSecrets }}\n      imagePullSecrets: {{- toYaml . | nindent 8 }}\n      {{- end }}' "${MANAGER_YAML}"
+fi
+
 
 # --- Set fullnameOverride so resource names are jupyter-k8s-* regardless of release name ---
 sed -i 's/^# fullnameOverride: ""/fullnameOverride: "jupyter-k8s"/' "${CHART_DIR}/values.yaml"

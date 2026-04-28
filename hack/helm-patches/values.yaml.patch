@@ -1,8 +1,4 @@
 
-# [NETWORK POLICIES]: To enable NetworkPolicies set true
-networkPolicy:
-  enable: false
-
 # [APPLICATION]: Application images configuration
 application:
   # Image pull policy for Workspaces deployments (Always, IfNotPresent, or Never)
