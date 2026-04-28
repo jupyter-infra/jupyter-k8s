@@ -9,9 +9,11 @@ Distributed under the terms of the MIT license
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -224,6 +226,28 @@ var _ = BeforeSuite(func() {
 		}
 	}).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(Succeed())
 
+	By("verifying that the controller manager is serving the metrics server")
+	Eventually(func(g Gomega) {
+		cmd := exec.Command("kubectl", "logs",
+			"-l", "control-plane=controller-manager",
+			"-n", OperatorNamespace)
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(output).To(ContainSubstring("Serving metrics server"),
+			"Metrics server not yet started")
+	}).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(Succeed())
+
+	By("verifying that the controller has acquired leader lease")
+	Eventually(func(g Gomega) {
+		cmd := exec.Command("kubectl", "logs",
+			"-l", "control-plane=controller-manager",
+			"-n", OperatorNamespace)
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(output).To(ContainSubstring("successfully acquired lease"),
+			"Controller has not yet acquired leader lease")
+	}).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(Succeed())
+
 	By("waiting for webhook certificate to be ready")
 	Eventually(func(g Gomega) {
 		cmd := exec.Command("kubectl", "get", "certificate", WebhookCertificateName,
@@ -280,7 +304,81 @@ var _ = BeforeSuite(func() {
 			"Extension APIService not available")
 	}).WithTimeout(3 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 
-	_, _ = fmt.Fprintf(GinkgoWriter, "✓ Controller, webhooks, and extension API are ready for testing\n")
+	By("validating that cert-manager provisioned the webhook secret")
+	Eventually(func(g Gomega) {
+		cmd := exec.Command("kubectl", "get", "secrets", "webhook-server-cert", "-n", OperatorNamespace)
+		_, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+	}).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(Succeed())
+
+	By("verifying metrics endpoint is serving")
+	cmd = exec.Command("kubectl", "delete", "clusterrolebinding", MetricsRoleBindingName, "--ignore-not-found")
+	_, _ = utils.Run(cmd)
+	cmd = exec.Command("kubectl", "create", "clusterrolebinding", MetricsRoleBindingName,
+		"--clusterrole=jupyter-k8s-metrics-reader",
+		fmt.Sprintf("--serviceaccount=%s:%s", OperatorNamespace, ServiceAccountName),
+	)
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to create metrics ClusterRoleBinding")
+
+	cmd = exec.Command("kubectl", "get", "service", MetricsServiceName, "-n", OperatorNamespace)
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Metrics service should exist")
+
+	Eventually(func(g Gomega) {
+		cmd := exec.Command("kubectl", "get", "endpoints", MetricsServiceName, "-n", OperatorNamespace)
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(output).To(ContainSubstring("8443"), "Metrics endpoint is not ready")
+	}).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(Succeed())
+
+	token, err := serviceAccountToken()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(token).NotTo(BeEmpty())
+
+	cmd = exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
+		"-n", OperatorNamespace,
+		"--image=curlimages/curl:latest",
+		"--overrides",
+		fmt.Sprintf(`{
+			"spec": {
+				"containers": [{
+					"name": "curl",
+					"image": "curlimages/curl:latest",
+					"command": ["/bin/sh", "-c"],
+					"args": ["curl -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics"],
+					"securityContext": {
+						"readOnlyRootFilesystem": true,
+						"allowPrivilegeEscalation": false,
+						"capabilities": {
+							"drop": ["ALL"]
+						},
+						"runAsNonRoot": true,
+						"runAsUser": 1000,
+						"seccompProfile": {
+							"type": "RuntimeDefault"
+						}
+					}
+				}],
+				"serviceAccountName": "%s"
+			}
+		}`, token, MetricsServiceName, OperatorNamespace, ServiceAccountName))
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to create curl-metrics pod")
+
+	Eventually(func(g Gomega) {
+		cmd := exec.Command("kubectl", "get", "pods", "curl-metrics",
+			"-o", "jsonpath={.status.phase}",
+			"-n", OperatorNamespace)
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(output).To(Equal("Succeeded"), "curl-metrics pod in wrong status")
+	}).WithTimeout(5 * time.Minute).WithPolling(2 * time.Second).Should(Succeed())
+
+	metricsOutput := getMetricsOutput()
+	Expect(metricsOutput).To(ContainSubstring("controller_runtime_reconcile_total"))
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "✓ Controller, webhooks, extension API, and metrics are ready for testing\n")
 })
 
 func dumpSetupDiagnostics() {
@@ -334,6 +432,56 @@ func dumpSetupDiagnostics() {
 	if mwh, _ := utils.Run(cmd); len(mwh) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nMutatingWebhookConfiguration:\n%s\n", mwh)
 	}
+}
+
+func serviceAccountToken() (string, error) {
+	const tokenRequestRawString = `{
+		"apiVersion": "authentication.k8s.io/v1",
+		"kind": "TokenRequest"
+	}`
+
+	secretName := fmt.Sprintf("%s-token-request", ServiceAccountName)
+	tokenRequestFile := filepath.Join("/tmp", secretName)
+	err := os.WriteFile(tokenRequestFile, []byte(tokenRequestRawString), os.FileMode(0o644))
+	if err != nil {
+		return "", err
+	}
+
+	var out string
+	verifyTokenCreation := func(g Gomega) {
+		cmd := exec.Command("kubectl", "create", "--raw", fmt.Sprintf(
+			"/api/v1/namespaces/%s/serviceaccounts/%s/token",
+			OperatorNamespace,
+			ServiceAccountName,
+		), "-f", tokenRequestFile)
+
+		output, err := cmd.CombinedOutput()
+		g.Expect(err).NotTo(HaveOccurred())
+
+		var token tokenRequest
+		err = json.Unmarshal(output, &token)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		out = token.Status.Token
+	}
+	Eventually(verifyTokenCreation).Should(Succeed())
+
+	return out, err
+}
+
+func getMetricsOutput() string {
+	By("getting the curl-metrics logs")
+	cmd := exec.Command("kubectl", "logs", "curl-metrics", "-n", OperatorNamespace)
+	metricsOutput, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
+	Expect(metricsOutput).To(ContainSubstring("< HTTP/1.1 200 OK"))
+	return metricsOutput
+}
+
+type tokenRequest struct {
+	Status struct {
+		Token string `json:"token"`
+	} `json:"status"`
 }
 
 var _ = AfterSuite(func() {
