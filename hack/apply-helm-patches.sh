@@ -340,4 +340,10 @@ sed -i '/--application-images-pull-policy/d' "${CHART_DIR}/values.yaml"
 sed -i '/--application-images-registry/d' "${CHART_DIR}/values.yaml"
 sed -i '/--default-template-namespace/d' "${CHART_DIR}/values.yaml"
 
+# --- Restore CI workflow files that kubebuilder overwrites with local values ---
+# kubebuilder edit substitutes CONTAINER_TOOL and IMG with local defaults
+# (e.g. finch instead of docker), breaking the CI workflow.
+echo "Restoring CI workflow files..."
+git checkout -- "${SCRIPT_DIR}/../.github/workflows/test-chart.yml" 2>/dev/null || true
+
 echo "Helm chart patches applied successfully"
