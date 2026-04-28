@@ -1,0 +1,58 @@
+{{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    app: extensionapi-jwt-rotator
+    component: security
+  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "jwt-rotator" "context" $) }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            app: extensionapi-jwt-rotator
+            component: security
+        spec:
+          containers:
+          - env:
+            - name: SECRET_NAME
+              value: {{ .Values.extensionApi.jwtSecret.secretName }}
+            - name: SECRET_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: TOKEN_TTL
+              value: {{ .Values.extensionApi.jwtSecret.tokenTTL | quote }}
+            - name: ROTATION_INTERVAL
+              value: {{ .Values.extensionApi.jwtSecret.rotationInterval | quote }}
+            - name: DRY_RUN
+              value: "false"
+            image: "{{ .Values.extensionApi.jwtSecret.rotator.repository }}/{{ .Values.extensionApi.jwtSecret.rotator.imageName }}:{{ .Values.extensionApi.jwtSecret.rotator.imageTag }}"
+            imagePullPolicy: {{ .Values.extensionApi.jwtSecret.rotator.imagePullPolicy }}
+            name: rotator
+            resources:
+              {{- toYaml .Values.extensionApi.jwtSecret.rotator.resources | nindent 14 }}
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+              readOnlyRootFilesystem: true
+          restartPolicy: OnFailure
+          securityContext:
+            fsGroup: 65532
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          serviceAccountName: {{ include "jupyter-k8s.resourceName" (dict "suffix" "jwt-rotator" "context" $) }}
+  schedule: '*/15 * * * *'
+  successfulJobsHistoryLimit: 3
+{{- end }}

@@ -2,144 +2,305 @@
 set -e
 
 # Script to apply custom patches to helm chart files after generation
-# Contains patches for:
-# 1. extension_issuer - Adds jupyter-k8s-selfsigned-issuer for extension API
-# Run this after 'kubebuilder edit --plugins=helm/v1-alpha --force'
+# Run this after 'kubebuilder edit --plugins=helm/v2-alpha --force'
+#
+# The v2-alpha plugin generates a solid base chart from kustomize output.
+# This script adds features the plugin doesn't know about:
+#   - Conditional flags in manager args (extensionApi JWT, traefik, pod watching, plugins)
+#   - Plugin sidecar containers
+#   - PodDisruptionBudget
+#   - Pod annotations
+#   - Templated JWT rotator (image, env vars)
+#   - Conditional resource wrapping (extensionApi.enable, jwtSecret.enable)
+#   - Extension API auth RoleBinding in kube-system
+#   - Additional values sections
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "${SCRIPT_DIR}/../dist/chart" && pwd)"
 PATCHES_DIR="${SCRIPT_DIR}/helm-patches"
 
-# Check if chart directory exists
 if [ ! -d "${CHART_DIR}" ]; then
     echo "Error: Chart directory not found at ${CHART_DIR}"
-    echo "Run 'kubebuilder edit --plugins=helm/v1-alpha' first"
+    echo "Run 'kubebuilder edit --plugins=helm/v2-alpha' first"
     exit 1
 fi
 
 echo "Applying custom patches to Helm chart files..."
-echo "Using patches from ${PATCHES_DIR}"
 
-# Copy manager resources (including PodDisruptionBudget)
-if [ -d "${SCRIPT_DIR}/../config/manager" ]; then
-    echo "Copying additional manager resources..."
-    
-    # Copy PodDisruptionBudget if it exists
-    if [ -f "${SCRIPT_DIR}/../config/manager/poddisruptionbudget.yaml" ]; then
-        echo "Copying PodDisruptionBudget template..."
-        cp "${SCRIPT_DIR}/../config/manager/poddisruptionbudget.yaml" "${CHART_DIR}/templates/manager/"
-    fi
-fi
-if [ -d "${SCRIPT_DIR}/../config/apiservice" ]; then
-    echo "Copying apiservice resources..."
-    mkdir -p "${CHART_DIR}/templates/apiservice"
+# --- values.yaml: add custom sections ---
+echo "Appending custom values sections..."
+cat "${PATCHES_DIR}/values.yaml.patch" >> "${CHART_DIR}/values.yaml"
 
-    # Copy each YAML file and wrap with conditional
-    # This adds {{- if .Values.extensionApi.enable }} around each file
-    # so the API service resources are only created when extension API is enabled
-    for file in "${SCRIPT_DIR}/../config/apiservice"/*.yaml; do
-        if [ -f "$file" ]; then
-            filename=$(basename "$file")
-            target="${CHART_DIR}/templates/apiservice/${filename}"
-
-            # Add conditional wrapper
-            echo "{{- if .Values.extensionApi.enable }}" > "$target"
-
-            # Apply specific modifications based on file name
-            if [[ "$filename" == "apiservice.yaml" ]]; then
-                # Replace hardcoded namespace with {{ .Release.Namespace }}
-                # Also replace hardcoded cert reference with {{ .Release.Namespace }}
-                cat "$file" | \
-                    sed 's/cert-manager.io\/inject-ca-from: jupyter-k8s-system\/extension-server-cert/cert-manager.io\/inject-ca-from: {{ .Release.Namespace }}\/extension-server-cert/' | \
-                    sed 's/namespace: jupyter-k8s-system/namespace: {{ .Release.Namespace }}/' >> "$target"
-            elif [[ "$filename" == "certificate.yaml" ]]; then
-                # Replace hardcoded namespace with {{ .Release.Namespace }}
-                # Also replace hardcoded DNS names with templated values
-                cat "$file" | \
-                    sed 's/namespace: jupyter-k8s-system/namespace: {{ .Release.Namespace }}/' | \
-                    sed 's/- extension-server.jupyter-k8s-system.svc/- extension-server.{{ .Release.Namespace }}.svc/' | \
-                    sed 's/- extension-server.jupyter-k8s-system.svc.cluster.local/- extension-server.{{ .Release.Namespace }}.svc.cluster.local/' >> "$target"
-            elif [[ "$filename" == "service.yaml" ]]; then
-                # Replace hardcoded namespace with {{ .Release.Namespace }}
-                cat "$file" | \
-                    sed 's/namespace: jupyter-k8s-system/namespace: {{ .Release.Namespace }}/' >> "$target"
-            else
-                cat "$file" >> "$target"
-            fi
-
-            echo "{{- end }}" >> "$target"
-
-            echo "  Added conditional to ${filename}"
-        fi
-    done
-
-    # Remove kustomization.yaml as it's not a Kubernetes resource
-    rm -f "${CHART_DIR}/templates/apiservice/kustomization.yaml"
+# --- values.yaml: add PDB config under manager ---
+if ! grep -q "podDisruptionBudget:" "${CHART_DIR}/values.yaml"; then
+    echo "Adding PDB and pod metadata config to manager section..."
+    # Insert after tolerations: []
+    sed -i '/^  tolerations: \[\]/a\\n  ## PodDisruptionBudget configuration\n  ##\n  podDisruptionBudget:\n    enabled: false\n    minAvailable: null\n    maxUnavailable: null\n\n  ## Pod metadata\n  ##\n  pod:\n    labels: {}\n    annotations: {}' "${CHART_DIR}/values.yaml"
 fi
 
-# Copy jwt-rotator resources (same pattern as apiservice above)
-if [ -d "${SCRIPT_DIR}/../config/jwt-rotator" ]; then
-    echo "Copying jwt-rotator resources..."
-    mkdir -p "${CHART_DIR}/templates/jwt-rotator"
+# --- values.yaml: add topologySpreadConstraints if missing ---
+if ! grep -q "topologySpreadConstraints:" "${CHART_DIR}/values.yaml"; then
+    sed -i '/^  tolerations: \[\]/a\\n  ## Topology spread constraints\n  ##\n  topologySpreadConstraints: []' "${CHART_DIR}/values.yaml"
+fi
 
-    JWT_COND='{{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}'
+# --- manager.yaml: add conditional args ---
+MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
+echo "Patching manager.yaml args..."
 
-    for file in "${SCRIPT_DIR}/../config/jwt-rotator"/*.yaml; do
-        if [ -f "$file" ]; then
-            filename=$(basename "$file")
-            target="${CHART_DIR}/templates/jwt-rotator/${filename}"
+# The v2-alpha chart renders manager.args as a simple range loop.
+# We add value-driven args after the range block so they're controlled
+# by dedicated values sections rather than baked into the args list.
+if ! grep -q "extensionApi" "${MANAGER_YAML}"; then
+    sed -i '/{{- range .Values.manager.args }}/,/{{- end }}/ {
+        /{{- end }}/a\        - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n        - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n        - "--default-template-namespace={{ .Values.workspaceTemplates.defaultNamespace }}"\n        {{- if .Values.accessResources.traefik.enable }}\n        - --watch-traefik\n        {{- end }}\n        {{- if .Values.extensionApi.enable }}\n        - --enable-extension-api\n        {{- if .Values.extensionApi.jwtIssuer }}\n        - --jwt-issuer={{ .Values.extensionApi.jwtIssuer }}\n        {{- end }}\n        {{- if .Values.extensionApi.jwtAudience }}\n        - --jwt-audience={{ .Values.extensionApi.jwtAudience }}\n        {{- end }}\n        {{- end }}\n        {{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}\n        - --jwt-secret-name={{ .Values.extensionApi.jwtSecret.secretName }}\n        {{- if .Values.extensionApi.jwtSecret.tokenTTL }}\n        - --jwt-ttl={{ .Values.extensionApi.jwtSecret.tokenTTL }}\n        {{- end }}\n        {{- if .Values.extensionApi.jwtSecret.newKeyUseDelay }}\n        - --new-key-use-delay={{ .Values.extensionApi.jwtSecret.newKeyUseDelay }}\n        {{- end }}\n        {{- end }}\n        {{- if .Values.workspacePodWatching.enable }}\n        - --enable-workspace-pod-watching\n        {{- end }}\n        {{- if .Values.controller.plugins }}\n        - "--plugin-endpoints={{ range $i, $p := .Values.controller.plugins }}{{ if $i }},{{ end }}{{ $p.name }}=http://localhost:{{ $p.port }}{{ end }}"\n        {{- end }}
+    }' "${MANAGER_YAML}"
+fi
 
-            echo "$JWT_COND" > "$target"
+# --- manager.yaml: add pod annotations support ---
+if ! grep -q "manager.pod.annotations" "${MANAGER_YAML}"; then
+    echo "Adding pod annotations support..."
+    sed -i '/kubectl.kubernetes.io\/default-container: manager$/a\        {{- with .Values.manager.pod.annotations }}\n        {{- toYaml . | nindent 8 }}\n        {{- end }}' "${MANAGER_YAML}"
+fi
 
-            if [[ "$filename" == "cronjob.yaml" ]]; then
-                cat "$file" | \
-                    sed 's#image: docker.io/library/rotator:local#image: "{{ .Values.extensionApi.jwtSecret.rotator.repository }}/{{ .Values.extensionApi.jwtSecret.rotator.imageName }}:{{ .Values.extensionApi.jwtSecret.rotator.imageTag }}"#' | \
-                    sed 's#imagePullPolicy: Never#imagePullPolicy: {{ .Values.extensionApi.jwtSecret.rotator.imagePullPolicy }}#' | \
-                    sed 's#value: "jupyter-k8s-extensionapi-secrets"#value: {{ .Values.extensionApi.jwtSecret.secretName | quote }}#' | \
-                    sed '/name: TOKEN_TTL$/{n; s#value: "5m"#value: {{ .Values.extensionApi.jwtSecret.tokenTTL | quote }}#;}' | \
-                    sed '/name: ROTATION_INTERVAL$/{n; s#value: "15m"#value: {{ .Values.extensionApi.jwtSecret.rotationInterval | quote }}#;}' >> "$target"
-            elif [[ "$filename" == "rbac.yaml" ]]; then
-                cat "$file" | \
-                    sed 's#\["jupyter-k8s-extensionapi-secrets"\]#[{{ .Values.extensionApi.jwtSecret.secretName | quote }}]#g' | \
-                    sed 's#name: controller-manager$#name: jupyter-k8s-controller-manager#' >> "$target"
-            elif [[ "$filename" == "secret.yaml" ]]; then
-                # Secret needs a full rewrite: generate random key instead of hardcoded
-                cat >> "$target" << 'SECRETEOF'
+# --- manager.yaml: add pod labels support ---
+if ! grep -q "manager.pod.labels" "${MANAGER_YAML}"; then
+    echo "Adding pod labels support..."
+    # Add custom pod labels after the last label in the template metadata
+    sed -i '/workspace.jupyter.org\/component: controller$/a\        {{- with .Values.manager.pod.labels }}\n        {{- toYaml . | nindent 8 }}\n        {{- end }}' "${MANAGER_YAML}"
+fi
+
+# --- manager.yaml: add topologySpreadConstraints support ---
+if grep -q "topologySpreadConstraints: \[\]" "${MANAGER_YAML}"; then
+    echo "Templating topologySpreadConstraints..."
+    sed -i 's/      topologySpreadConstraints: \[\]/      {{- with .Values.manager.topologySpreadConstraints }}\n      topologySpreadConstraints: {{ toYaml . | nindent 10 }}\n      {{- end }}/' "${MANAGER_YAML}"
+fi
+
+# --- manager.yaml: add plugin sidecar containers ---
+if ! grep -q "plugin-{{ .name }}" "${MANAGER_YAML}"; then
+    echo "Adding plugin sidecar container support..."
+    # Insert before nodeSelector (pod-level field after the containers list).
+    # Plugins are additional containers at the same level as the manager container.
+    sed -i '/{{- with .Values.manager.nodeSelector }}/i\      {{- range .Values.controller.plugins }}\n      - name: plugin-{{ .name }}\n        image: "{{ .image.repository }}:{{ .image.tag }}"\n        {{- if .imagePullPolicy }}\n        imagePullPolicy: {{ .imagePullPolicy }}\n        {{- end }}\n        ports:\n          - containerPort: {{ .port }}\n            protocol: TCP\n        {{- if .healthcheckCommand }}\n        livenessProbe:\n          exec:\n            command: {{ .healthcheckCommand | toJson }}\n          initialDelaySeconds: 5\n          periodSeconds: 10\n        readinessProbe:\n          exec:\n            command: {{ .healthcheckCommand | toJson }}\n          initialDelaySeconds: 2\n          periodSeconds: 5\n        {{- end }}\n        {{- if .env }}\n        env:\n          {{- range $key, $value := .env }}\n          - name: {{ $key }}\n            value: "{{ $value }}"\n          {{- end }}\n        {{- end }}\n        {{- if .resources }}\n        resources:\n          {{- toYaml .resources | nindent 10 }}\n        {{- end }}\n      {{- end }}' "${MANAGER_YAML}"
+fi
+
+# --- manager.yaml: make extension-server-cert volume conditional ---
+# The v2-alpha chart unconditionally mounts extension-server-cert.
+# Make it conditional on extensionApi.enable
+if ! grep -q "extensionApi.enable" "${MANAGER_YAML}"; then
+    echo "Making extension-server-cert volume conditional..."
+    sed -i 's|        - mountPath: /tmp/extension-server/serving-certs|        {{- if .Values.extensionApi.enable }}\n        - mountPath: /tmp/extension-server/serving-certs|' "${MANAGER_YAML}"
+    sed -i '/name: extension-server-cert$/a\        {{- end }}' "${MANAGER_YAML}"
+    # Also make the volume definition conditional
+    sed -i 's|      - name: extension-server-cert|      {{- if .Values.extensionApi.enable }}\n      - name: extension-server-cert|' "${MANAGER_YAML}"
+    sed -i '/secretName: extension-server-cert$/a\      {{- end }}' "${MANAGER_YAML}"
+fi
+
+# --- Controller ServiceAccount ---
+# v2-alpha doesn't generate a ServiceAccount resource; add one explicitly.
+echo "Creating controller ServiceAccount template..."
+cat > "${CHART_DIR}/templates/rbac/service-account.yaml" << 'SAEOF'
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "jupyter-k8s.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "controller-manager" "context" $) }}
+  namespace: {{ .Release.Namespace }}
+SAEOF
+
+# --- PodDisruptionBudget template ---
+echo "Creating PodDisruptionBudget template..."
+cat > "${CHART_DIR}/templates/manager/poddisruptionbudget.yaml" << 'PDBEOF'
+{{- if .Values.manager.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "controller-manager" "context" $) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "jupyter-k8s.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    control-plane: controller-manager
+    workspace.jupyter.org/component: controller
+spec:
+  {{- if .Values.manager.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.manager.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.manager.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.manager.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "jupyter-k8s.name" . }}
+      control-plane: controller-manager
+{{- end }}
+PDBEOF
+
+# --- Wrap extras/jwt-rotator.yaml with conditional + template values ---
+echo "Templating JWT rotator CronJob..."
+ROTATOR_YAML="${CHART_DIR}/templates/extras/jwt-rotator.yaml"
+cat > "${ROTATOR_YAML}" << 'ROTATOREOF'
+{{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    app: extensionapi-jwt-rotator
+    component: security
+  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "jwt-rotator" "context" $) }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            app: extensionapi-jwt-rotator
+            component: security
+        spec:
+          containers:
+          - env:
+            - name: SECRET_NAME
+              value: {{ .Values.extensionApi.jwtSecret.secretName }}
+            - name: SECRET_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: TOKEN_TTL
+              value: {{ .Values.extensionApi.jwtSecret.tokenTTL | quote }}
+            - name: ROTATION_INTERVAL
+              value: {{ .Values.extensionApi.jwtSecret.rotationInterval | quote }}
+            - name: DRY_RUN
+              value: "false"
+            image: "{{ .Values.extensionApi.jwtSecret.rotator.repository }}/{{ .Values.extensionApi.jwtSecret.rotator.imageName }}:{{ .Values.extensionApi.jwtSecret.rotator.imageTag }}"
+            imagePullPolicy: {{ .Values.extensionApi.jwtSecret.rotator.imagePullPolicy }}
+            name: rotator
+            resources:
+              {{- toYaml .Values.extensionApi.jwtSecret.rotator.resources | nindent 14 }}
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+              readOnlyRootFilesystem: true
+          restartPolicy: OnFailure
+          securityContext:
+            fsGroup: 65532
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          serviceAccountName: {{ include "jupyter-k8s.resourceName" (dict "suffix" "jwt-rotator" "context" $) }}
+  schedule: '*/15 * * * *'
+  successfulJobsHistoryLimit: 3
+{{- end }}
+ROTATOREOF
+
+# --- Wrap extras/extensionapi-secrets.yaml with conditional + random key ---
+echo "Templating extensionapi secrets..."
+SECRETS_YAML="${CHART_DIR}/templates/extras/extensionapi-secrets.yaml"
+cat > "${SECRETS_YAML}" << 'SECRETSEOF'
+{{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}
 apiVersion: v1
 kind: Secret
 metadata:
   name: {{ .Values.extensionApi.jwtSecret.secretName }}
+  namespace: {{ .Release.Namespace }}
   labels:
     app: extensionapi-jwt-rotator
     component: security
 type: Opaque
 data:
   jwt-signing-key-{{ now | unixEpoch }}: {{ randBytes 48 | b64enc | quote }}
-SECRETEOF
-            else
-                cat "$file" >> "$target"
-            fi
+{{- end }}
+SECRETSEOF
 
-            echo '{{- end }}' >> "$target"
-            echo "  Patched ${filename}"
-        fi
-    done
+# --- Wrap JWT rotator RBAC with conditionals ---
+echo "Wrapping JWT rotator RBAC with conditionals..."
+for f in jwt-rotator.yaml jwt-rotator-secrets-manager.yaml jwt-rotator-secrets-manager-binding.yaml; do
+    target="${CHART_DIR}/templates/rbac/${f}"
+    if [ -f "${target}" ] && ! grep -q "extensionApi" "${target}"; then
+        sed -i '1i {{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}' "${target}"
+        echo '{{- end }}' >> "${target}"
+    fi
+done
 
-    rm -f "${CHART_DIR}/templates/jwt-rotator/kustomization.yaml"
+# The jwt-secrets-reader role/binding is needed by the controller to read JWT keys.
+# Conditional on extensionApi.jwtSecret.enable
+for f in jwt-secrets-reader.yaml jwt-secrets-reader-binding.yaml; do
+    target="${CHART_DIR}/templates/rbac/${f}"
+    if [ -f "${target}" ] && ! grep -q "extensionApi" "${target}"; then
+        sed -i '1i {{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}' "${target}"
+        echo '{{- end }}' >> "${target}"
+    fi
+done
+
+# --- Template secret name in JWT RBAC ---
+echo "Templating secret name references in JWT RBAC..."
+for f in jwt-rotator-secrets-manager.yaml jwt-secrets-reader.yaml; do
+    target="${CHART_DIR}/templates/rbac/${f}"
+    if [ -f "${target}" ]; then
+        sed -i 's/- jupyter-k8s-extensionapi-secrets/- {{ .Values.extensionApi.jwtSecret.secretName }}/' "${target}"
+    fi
+done
+
+# --- Wrap extension API resources with conditional ---
+echo "Wrapping extension API resources with conditionals..."
+for f in extension-server.yaml v1alpha1.connection.workspace.jupyter.org.yaml; do
+    target="${CHART_DIR}/templates/extras/${f}"
+    if [ -f "${target}" ] && ! grep -q "extensionApi" "${target}"; then
+        sed -i '1i {{- if .Values.extensionApi.enable }}' "${target}"
+        echo '{{- end }}' >> "${target}"
+    fi
+done
+
+# Also wrap extension-server-cert
+target="${CHART_DIR}/templates/cert-manager/extension-server-cert.yaml"
+if [ -f "${target}" ] && ! grep -q "extensionApi" "${target}"; then
+    # Insert extensionApi check inside the existing certManager.enable check
+    sed -i 's/{{- if .Values.certManager.enable }}/{{- if and .Values.certManager.enable .Values.extensionApi.enable }}/' "${target}"
 fi
 
-# Create extension API auth RoleBinding in kube-system
-# This RoleBinding is excluded from the kustomize pipeline because kustomize's global
-# namespace transform would override kube-system. We create it directly in the helm chart.
+# --- Fix cert-manager certificate DNS names ---
+# v2-alpha hardcodes the service names in cert dnsNames but the actual service names
+# use the fullname helper (release-chart-suffix). Fix to use the resource name helper.
+echo "Fixing cert-manager certificate DNS names..."
+SERVING_CERT="${CHART_DIR}/templates/cert-manager/serving-cert.yaml"
+if [ -f "${SERVING_CERT}" ]; then
+    sed -i 's|jupyter-k8s-controller-manager\.{{ .Release.Namespace }}|{{ include "jupyter-k8s.resourceName" (dict "suffix" "controller-manager" "context" $) }}.{{ .Release.Namespace }}|g' "${SERVING_CERT}"
+fi
+EXT_CERT="${CHART_DIR}/templates/cert-manager/extension-server-cert.yaml"
+if [ -f "${EXT_CERT}" ]; then
+    sed -i 's|jupyter-k8s-extension-server\.{{ .Release.Namespace }}|{{ include "jupyter-k8s.resourceName" (dict "suffix" "extension-server" "context" $) }}.{{ .Release.Namespace }}|g' "${EXT_CERT}"
+fi
+
+# Fix hardcoded cert name in APIService annotation
+APISERVICE_YAML="${CHART_DIR}/templates/extras/v1alpha1.connection.workspace.jupyter.org.yaml"
+if [ -f "${APISERVICE_YAML}" ]; then
+    sed -i 's|{{ .Release.Namespace }}/jupyter-k8s-extension-server-cert|{{ .Release.Namespace }}/{{ include "jupyter-k8s.resourceName" (dict "suffix" "extension-server-cert" "context" $) }}|' "${APISERVICE_YAML}"
+fi
+
+# --- Create extension API auth RoleBinding in kube-system ---
 echo "Creating extension API auth RoleBinding template..."
-EXTENSION_AUTH_BINDING="${CHART_DIR}/templates/rbac/extension_api_auth_binding.yaml"
-cat > "${EXTENSION_AUTH_BINDING}" << 'AUTHEOF'
-{{- if .Values.rbac.enable }}
+cat > "${CHART_DIR}/templates/rbac/extension-api-auth-binding.yaml" << 'AUTHEOF'
+{{- if .Values.extensionApi.enable }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   labels:
-    {{- include "chart.labels" . | nindent 4 }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "jupyter-k8s.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
   name: jupyter-k8s-extension-api-auth
   namespace: kube-system
 roleRef:
@@ -148,448 +309,35 @@ roleRef:
   name: extension-apiserver-authentication-reader
 subjects:
 - kind: ServiceAccount
-  name: jupyter-k8s-controller-manager
+  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "controller-manager" "context" $) }}
   namespace: {{ .Release.Namespace }}
-{{- end -}}
+{{- end }}
 AUTHEOF
-echo "Created extension API auth RoleBinding template"
 
-# Remove connection CRDs as they're meant to be subresources, not standalone CRDs
-echo "Removing connection CRDs from Helm chart..."
-find "${CHART_DIR}/templates/crd/" -name "connection.workspace.jupyter.org_*.yaml" -delete
+# --- Remove connection CRDs if present ---
+echo "Removing connection CRDs from chart..."
+find "${CHART_DIR}/templates/crd/" -name "connection*" -delete 2>/dev/null || true
 
-# Function to apply patches
-apply_patch() {
-    local file=$1
-    local patch=$2
-    local target="${CHART_DIR}/${file}"
+# --- Remove webhook port override from manager args ---
+# v2-alpha adds --webhook-cert-path conditionally, which is good.
+# But we need to also handle the case where webhook is disabled but extensionApi is enabled
+# (extensionApi needs cert volumes too). Already handled by our conditional above.
 
-    if [ -f "${target}" ]; then
-        echo "Patching ${file}..."
-        # For simple patches, we'll use grep and sed
-        # For more complex patches, consider using 'patch' command
+# --- Set fullnameOverride so resource names are jupyter-k8s-* regardless of release name ---
+sed -i 's/^# fullnameOverride: ""/fullnameOverride: "jupyter-k8s"/' "${CHART_DIR}/values.yaml"
 
-        # Read the patch file line by line
-        while IFS= read -r line; do
-            # Extract the match pattern (everything before the first occurrence of ' = ')
-            # and the replacement text
-            if [[ "$line" == *"="* ]]; then
-                pattern=$(echo "$line" | sed -E 's/^([^=]+)=.*/\1/')
-                # Check if the pattern exists in the file
-                if grep -q "$pattern" "$target"; then
-                    # Replace existing line
-                    sed -i "s#$pattern.*#$line#" "$target"
-                else
-                    # Pattern not found, add new line
-                    echo "$line" >> "$target"
-                fi
-            else
-                # For lines without '=', just look for the line and add if not present
-                if ! grep -q "$line" "$target"; then
-                    echo "$line" >> "$target"
-                fi
-            fi
-        done < "${PATCHES_DIR}/${patch}"
-    else
-        echo "Warning: Target file ${file} not found, skipping patch"
-    fi
-}
+# --- Ensure rbacHelpers defaults to true ---
+# Our chart has always shipped these roles; v2-alpha defaults to false
+sed -i 's/rbacHelpers:/rbacHelpers:/' "${CHART_DIR}/values.yaml"
+sed -i 's/  # Install convenience admin\/editor\/viewer roles for CRDs/  # Install convenience admin\/editor\/viewer roles for CRDs/' "${CHART_DIR}/values.yaml"
+sed -i '/^  # Install convenience admin\/editor\/viewer roles for CRDs/{n;s/enable: false/enable: true/}' "${CHART_DIR}/values.yaml"
 
-# Process values.yaml patch
-if [ -f "${PATCHES_DIR}/values.yaml.patch" ]; then
-    # For values.yaml, we need more careful handling due to YAML structure
-    echo "Applying patches to values.yaml..."
-    echo "Found patch file: ${PATCHES_DIR}/values.yaml.patch"
-
-    # Add env section to controllerManager.container if it doesn't exist
-    if ! grep -q "env:" "${CHART_DIR}/values.yaml"; then
-        # Add env section right after container: (macOS compatible)
-        sed -i.bak '/container:/a\
-    env:\
-      CLUSTER_ADMIN_GROUP: "cluster-workspace-admin"
-' "${CHART_DIR}/values.yaml" && rm "${CHART_DIR}/values.yaml.bak"
-    fi
-
-    # Override controller manager resource limits/requests
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' '/controllerManager:/,/serviceAccountName:/{
-            s/cpu: 500m/cpu: 1000m/
-            s/memory: 128Mi/memory: 256Mi/
-            s/cpu: 10m/cpu: 20m/
-            s/memory: 64Mi/memory: 128Mi/
-        }' "${CHART_DIR}/values.yaml"
-    else
-        sed -i '/controllerManager:/,/serviceAccountName:/{
-            s/cpu: 500m/cpu: 1000m/
-            s/memory: 128Mi/memory: 256Mi/
-            s/cpu: 10m/cpu: 20m/
-            s/memory: 64Mi/memory: 128Mi/
-        }' "${CHART_DIR}/values.yaml"
-    fi
-
-    # Check if the application section already exists
-    if grep -q "^# \[APPLICATION\]" "${CHART_DIR}/values.yaml"; then
-        echo "Removing existing APPLICATION section from values.yaml"
-        # Remove existing application section - from [APPLICATION] heading to the next section heading or end of file
-        sed -i '/^# \[APPLICATION\]/,/^# \[/{ /^# \[APPLICATION\]/d; /^# \[/!d; }' "${CHART_DIR}/values.yaml"
-    fi
-
-    # Check if the access resources section already exists
-    if grep -q "^# \[ACCESS RESOURCES\]" "${CHART_DIR}/values.yaml"; then
-        echo "Removing existing ACCESS RESOURCES section from values.yaml"
-        # Remove existing section - from [ACCESS RESOURCES] heading to the next section heading or end of file
-        sed -i '/^# \[ACCESS RESOURCES\]/,/^# \[/{ /^# \[ACCESS RESOURCES\]/d; /^# \[/!d; }' "${CHART_DIR}/values.yaml"
-    fi
-
-    # Check if the workspace pod watching section already exists
-    if grep -q "^# \[WORKSPACE POD WATCHING\]" "${CHART_DIR}/values.yaml"; then
-        echo "Removing existing WORKSPACE POD WATCHING section from values.yaml"
-        # Remove existing section - from [WORKSPACE POD WATCHING] heading to the next section heading or end of file
-        sed -i '/^# \[WORKSPACE POD WATCHING\]/,/^# \[/{ /^# \[WORKSPACE POD WATCHING\]/d; /^# \[/!d; }' "${CHART_DIR}/values.yaml"
-    fi
-
-    # Add scheduling configuration to existing controllerManager section
-    if ! grep -q "topologySpreadConstraints:" "${CHART_DIR}/values.yaml"; then
-        echo "Adding scheduling configuration to existing controllerManager section"
-        # Add scheduling fields after serviceAccountName line
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            # macOS sed requires different syntax for append command
-            sed -i '' '/serviceAccountName:/a\
-\
-  # Controller pod scheduling configuration\
-  nodeSelector: {}\
-  tolerations: []\
-  affinity: {}\
-  topologySpreadConstraints: []\
-  # PodDisruptionBudget configuration\
-  podDisruptionBudget:\
-    enabled: false\
-    minAvailable: null\
-    maxUnavailable: null\
-  # Pod metadata configuration (kubebuilder convention)\
-  pod:\
-    labels: {}\
-    annotations: {}
-' "${CHART_DIR}/values.yaml"
-        else
-            # Linux sed
-            sed -i '/serviceAccountName:/a\\n  # Controller pod scheduling configuration\n  nodeSelector: {}\n  tolerations: []\n  affinity: {}\n  topologySpreadConstraints: []\n  # PodDisruptionBudget configuration\n  podDisruptionBudget:\n    enabled: false\n    minAvailable: null\n    maxUnavailable: null\n  # Pod metadata configuration (kubebuilder convention)\n  pod:\n    labels: {}\n    annotations: {}' "${CHART_DIR}/values.yaml"
-        fi
-    fi
-
-    # Append the entire patch file content to values.yaml
-    echo "Appending patch content to values.yaml"
-    cat "${PATCHES_DIR}/values.yaml.patch" >> "${CHART_DIR}/values.yaml"
-    echo "Successfully applied values.yaml.patch"
-fi
-
-
-# Handle manager.yaml patch to add registry arguments and watch-traefik flag
-if [ -f "${PATCHES_DIR}/manager.yaml.patch" ]; then
-    MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
-    if [ -f "${MANAGER_YAML}" ]; then
-        echo "Applying patch to manager.yaml..."
-        # Find the line with args: followed by the line with range
-        if grep -q "args:" "${MANAGER_YAML}" && grep -q "{{- range .Values.controllerManager.container.args }}" "${MANAGER_YAML}"; then
-            # Check if the patch is already applied
-            if ! grep -q "application-images-registry" "${MANAGER_YAML}"; then
-                echo "Replacing args section with content from manager.yaml.patch"
-
-                # Create a temporary file with the patch content
-                TMP_PATCH="/tmp/manager_patch_content"
-                cat "${PATCHES_DIR}/manager.yaml.patch" > "${TMP_PATCH}"
-
-                # Replace the whole args block with our patched version from the patch file
-                if [[ "$OSTYPE" == "darwin"* ]]; then
-                    # macOS sed requires empty string after -i
-                    sed -i '' '/args:/,/command:/ {
-                        /command:/!d
-                        i\
-          args:\
-            {{- range .Values.controllerManager.container.args }}\
-            - {{ . }}\
-            {{- end }}\
-            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\
-            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\
-            - "--default-template-namespace={{ .Values.workspaceTemplates.defaultNamespace }}"\
-            {{- if .Values.accessResources.traefik.enable }}\
-            - "--watch-traefik"\
-            {{- end}}\
-            {{- if .Values.extensionApi.enable }}\
-            - "--enable-extension-api"\
-            {{- if .Values.extensionApi.jwtIssuer }}\
-            - "--jwt-issuer={{ .Values.extensionApi.jwtIssuer }}"\
-            {{- end}}\
-            {{- if .Values.extensionApi.jwtAudience }}\
-            - "--jwt-audience={{ .Values.extensionApi.jwtAudience }}"\
-            {{- end}}\
-            {{- end}}\
-            {{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}\
-            - "--jwt-secret-name={{ .Values.extensionApi.jwtSecret.secretName }}"\
-            {{- if .Values.extensionApi.jwtSecret.tokenTTL }}\
-            - "--jwt-ttl={{ .Values.extensionApi.jwtSecret.tokenTTL }}"\
-            {{- end}}\
-            {{- if .Values.extensionApi.jwtSecret.newKeyUseDelay }}\
-            - "--new-key-use-delay={{ .Values.extensionApi.jwtSecret.newKeyUseDelay }}"\
-            {{- end}}\
-            {{- end}}\
-            {{- if .Values.workspacePodWatching.enable }}\
-            - "--enable-workspace-pod-watching"\
-            {{- end}}\
-            {{- if .Values.controller.plugins }}\
-            - "--plugin-endpoints={{ range \$i, \$p := .Values.controller.plugins }}{{ if \$i }},{{ end }}{{ \$p.name }}=http://localhost:{{ \$p.port }}{{ end }}"\
-            {{- end}}
-                    }' "${MANAGER_YAML}"
-                else
-                    # Linux sed
-                    sed -i '/args:/,/command:/ {
-                    /command:/!d
-                    i\          args:\n            {{- range .Values.controllerManager.container.args }}\n            - {{ . }}\n            {{- end }}\n            - "--application-images-pull-policy={{ .Values.application.imagesPullPolicy }}"\n            - "--application-images-registry={{ .Values.application.imagesRegistry }}"\n            - "--default-template-namespace={{ .Values.workspaceTemplates.defaultNamespace }}"\n            {{- if .Values.accessResources.traefik.enable }}\n            - "--watch-traefik"\n            {{- end}}\n            {{- if .Values.extensionApi.enable }}\n            - "--enable-extension-api"\n            {{- if .Values.extensionApi.jwtIssuer }}\n            - "--jwt-issuer={{ .Values.extensionApi.jwtIssuer }}"\n            {{- end}}\n            {{- if .Values.extensionApi.jwtAudience }}\n            - "--jwt-audience={{ .Values.extensionApi.jwtAudience }}"\n            {{- end}}\n            {{- end}}\n            {{- if and .Values.extensionApi.enable .Values.extensionApi.jwtSecret.enable }}\n            - "--jwt-secret-name={{ .Values.extensionApi.jwtSecret.secretName }}"\n            {{- if .Values.extensionApi.jwtSecret.tokenTTL }}\n            - "--jwt-ttl={{ .Values.extensionApi.jwtSecret.tokenTTL }}"\n            {{- end}}\n            {{- if .Values.extensionApi.jwtSecret.newKeyUseDelay }}\n            - "--new-key-use-delay={{ .Values.extensionApi.jwtSecret.newKeyUseDelay }}"\n            {{- end}}\n            {{- end}}\n            {{- if .Values.workspacePodWatching.enable }}\n            - "--enable-workspace-pod-watching"\n            {{- end}}\n            {{- if .Values.controller.plugins }}\n            - "--plugin-endpoints={{ range $i, $p := .Values.controller.plugins }}{{ if $i }},{{ end }}{{ $p.name }}=http://localhost:{{ $p.port }}{{ end }}"\n            {{- end}}
-                }' "${MANAGER_YAML}"
-                fi
-                # Also add extension API volume mount if not already present
-                if ! grep -q "extension-server-cert" "${MANAGER_YAML}"; then
-                    # Add volume mount for extension API server certificates
-                    if [[ "$OSTYPE" == "darwin"* ]]; then
-                        sed -i '' '/volumeMounts:/a\
-            {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\
-            - name: extension-server-cert\
-              mountPath: /tmp/extension-server/serving-certs\
-              readOnly: true\
-            {{- end }}
-' "${MANAGER_YAML}"
-                    else
-                        sed -i '/volumeMounts:/a\            {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\n            - name: extension-server-cert\n              mountPath: /tmp/extension-server/serving-certs\n              readOnly: true\n            {{- end }}' "${MANAGER_YAML}"
-                    fi
-
-                    # Add volume for extension API server certificates
-                    if [[ "$OSTYPE" == "darwin"* ]]; then
-                        sed -i '' '/volumes:/a\
-        {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\
-        - name: extension-server-cert\
-          secret:\
-            secretName: extension-server-cert\
-        {{- end }}
-' "${MANAGER_YAML}"
-                    else
-                        sed -i '/volumes:/a\        {{- if and .Values.extensionApi.enable .Values.certmanager.enable }}\n        - name: extension-server-cert\n          secret:\n            secretName: extension-server-cert\n        {{- end }}' "${MANAGER_YAML}"
-                    fi
-
-                    # Update the conditional wrapping for volumeMounts and volumes
-                    if [[ "$OSTYPE" == "darwin"* ]]; then
-                        sed -i '' 's/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable) }}/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable .Values.extensionApi.enable) }}/g' "${MANAGER_YAML}"
-                    else
-                        sed -i 's/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable) }}/{{- if and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable .Values.extensionApi.enable) }}/g' "${MANAGER_YAML}"
-                    fi
-                fi
-
-                # Clean up temp file
-                rm -f "${TMP_PATCH}"
-            else
-                echo "Args section already has application-images-registry, skipping patch"
-            fi
-        else
-            echo "Warning: Could not find proper args section in manager.yaml"
-        fi
-        
-        # Add dynamic environment variables for namespace and service account
-        echo "Adding dynamic environment variables to manager.yaml..."
-        if ! grep -q "CONTROLLER_POD_NAMESPACE" "${MANAGER_YAML}"; then
-            # Find where to insert env vars - after imagePullPolicy or after the existing env section
-            if grep -q "{{- if .Values.controllerManager.container.env }}" "${MANAGER_YAML}"; then
-                # Env section exists, add our dynamic vars after the closing {{- end }}
-                if [[ "$OSTYPE" == "darwin"* ]]; then
-                    # macOS sed
-                    sed -i '' '/{{- if .Values.controllerManager.container.env }}/,/{{- end }}/ {
-                        /{{- end }}/a\
-            - name: CONTROLLER_POD_NAMESPACE\
-              valueFrom:\
-                fieldRef:\
-                  fieldPath: metadata.namespace\
-            - name: CONTROLLER_POD_SERVICE_ACCOUNT\
-              valueFrom:\
-                fieldRef:\
-                  fieldPath: spec.serviceAccountName
-                    }' "${MANAGER_YAML}"
-                else
-                    # Linux sed
-                    sed -i '/{{- if .Values.controllerManager.container.env }}/,/{{- end }}/ {
-                        /{{- end }}/a\            - name: CONTROLLER_POD_NAMESPACE\n              valueFrom:\n                fieldRef:\n                  fieldPath: metadata.namespace\n            - name: CONTROLLER_POD_SERVICE_ACCOUNT\n              valueFrom:\n                fieldRef:\n                  fieldPath: spec.serviceAccountName
-                    }' "${MANAGER_YAML}"
-                fi
-            else
-                # No env section exists, create one after imagePullPolicy
-                if [[ "$OSTYPE" == "darwin"* ]]; then
-                    sed -i '' '/imagePullPolicy:/a\
-          env:\
-          - name: CONTROLLER_POD_NAMESPACE\
-            valueFrom:\
-              fieldRef:\
-                fieldPath: metadata.namespace\
-          - name: CONTROLLER_POD_SERVICE_ACCOUNT\
-            valueFrom:\
-              fieldRef:\
-                fieldPath: spec.serviceAccountName
-' "${MANAGER_YAML}"
-                else
-                    sed -i '/imagePullPolicy:/a\          env:\n          - name: CONTROLLER_POD_NAMESPACE\n            valueFrom:\n              fieldRef:\n                fieldPath: metadata.namespace\n          - name: CONTROLLER_POD_SERVICE_ACCOUNT\n            valueFrom:\n              fieldRef:\n                fieldPath: spec.serviceAccountName
-' "${MANAGER_YAML}"
-                fi
-            fi
-            echo "Added CONTROLLER_POD_NAMESPACE and CONTROLLER_POD_SERVICE_ACCOUNT environment variables"
-        else
-            echo "CONTROLLER_POD_NAMESPACE already exists, skipping env var injection"
-        fi
-
-        # JWT params are now passed as flags (--jwt-secret-name, --jwt-ttl, --new-key-use-delay)
-        # in the args block above, so no env var injection needed here.
-    else
-        echo "Warning: manager.yaml not found at ${MANAGER_YAML}"
-    fi
-fi
-
-# Add plugin sidecar containers to manager.yaml
-MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
-if [ -f "${MANAGER_YAML}" ]; then
-    if ! grep -q "plugin-{{ .name }}" "${MANAGER_YAML}"; then
-        echo "Adding plugin sidecar container support to manager.yaml..."
-        # Insert plugin sidecar containers block before securityContext (pod-level)
-        # We target the pod-level securityContext that comes after the manager container's closing volumeMounts
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            sed -i '' '/^      securityContext:$/i\
-        {{- range .Values.controller.plugins }}\
-        - name: plugin-{{ .name }}\
-          image: "{{ .image.repository }}:{{ .image.tag }}"\
-          {{- if .imagePullPolicy }}\
-          imagePullPolicy: {{ .imagePullPolicy }}\
-          {{- end }}\
-          ports:\
-            - containerPort: {{ .port }}\
-              protocol: TCP\
-          {{- if .healthcheckCommand }}\
-          livenessProbe:\
-            exec:\
-              command: {{ .healthcheckCommand | toJson }}\
-            initialDelaySeconds: 5\
-            periodSeconds: 10\
-          readinessProbe:\
-            exec:\
-              command: {{ .healthcheckCommand | toJson }}\
-            initialDelaySeconds: 2\
-            periodSeconds: 5\
-          {{- end }}\
-          {{- if .env }}\
-          env:\
-            {{- range \$key, \$value := .env }}\
-            - name: {{ \$key }}\
-              value: "{{ \$value }}"\
-            {{- end }}\
-          {{- end }}\
-          {{- if .resources }}\
-          resources:\
-            {{- toYaml .resources | nindent 12 }}\
-          {{- end }}\
-        {{- end }}
-' "${MANAGER_YAML}"
-        else
-            sed -i '/^      securityContext:$/i\        {{- range .Values.controller.plugins }}\n        - name: plugin-{{ .name }}\n          image: "{{ .image.repository }}:{{ .image.tag }}"\n          {{- if .imagePullPolicy }}\n          imagePullPolicy: {{ .imagePullPolicy }}\n          {{- end }}\n          ports:\n            - containerPort: {{ .port }}\n              protocol: TCP\n          {{- if .healthcheckCommand }}\n          livenessProbe:\n            exec:\n              command: {{ .healthcheckCommand | toJson }}\n            initialDelaySeconds: 5\n            periodSeconds: 10\n          readinessProbe:\n            exec:\n              command: {{ .healthcheckCommand | toJson }}\n            initialDelaySeconds: 2\n            periodSeconds: 5\n          {{- end }}\n          {{- if .env }}\n          env:\n            {{- range $key, $value := .env }}\n            - name: {{ $key }}\n              value: "{{ $value }}"\n            {{- end }}\n          {{- end }}\n          {{- if .resources }}\n          resources:\n            {{- toYaml .resources | nindent 12 }}\n          {{- end }}\n        {{- end }}' "${MANAGER_YAML}"
-        fi
-        echo "Added plugin sidecar container support"
-    fi
-fi
-
-# Handle manager annotations patch - add podAnnotations support
-if [ -f "${PATCHES_DIR}/manager-annotations.yaml.patch" ]; then
-    MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
-    if [ -f "${MANAGER_YAML}" ]; then
-        echo "Adding podAnnotations support to manager.yaml..."
-        
-        # Check if annotations patch is already applied
-        if ! grep -q "controllerManager.pod.annotations" "${MANAGER_YAML}"; then
-            echo "Adding pod annotations templating"
-            
-            # Insert patch content after the default-container annotation
-            if [[ "$OSTYPE" == "darwin"* ]]; then
-                sed -i '' '/kubectl.kubernetes.io\/default-container: manager$/r '"${PATCHES_DIR}/manager-annotations.yaml.patch" "${MANAGER_YAML}"
-            else
-                sed -i '/kubectl.kubernetes.io\/default-container: manager$/r '"${PATCHES_DIR}/manager-annotations.yaml.patch" "${MANAGER_YAML}"
-            fi
-            echo "Successfully added podAnnotations support"
-        fi
-    fi
-fi
-
-# Handle manager scheduling patch
-if [ -f "${PATCHES_DIR}/manager-scheduling.yaml.patch" ]; then
-    MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
-    if [ -f "${MANAGER_YAML}" ]; then
-        echo "Applying scheduling patch to manager.yaml..."
-        
-        # Check if scheduling patch is already applied
-        if ! grep -q "{{- with .Values.controllerManager.nodeSelector }}" "${MANAGER_YAML}"; then
-            echo "Adding scheduling configuration to manager.yaml"
-            
-            # Insert the patch content after serviceAccountName line
-            if [[ "$OSTYPE" == "darwin"* ]]; then
-                # macOS sed - insert patch content after serviceAccountName
-                sed -i '' '/serviceAccountName:/r '"${PATCHES_DIR}/manager-scheduling.yaml.patch" "${MANAGER_YAML}"
-            else
-                # Linux sed - insert patch content after serviceAccountName
-                sed -i '/serviceAccountName:/r '"${PATCHES_DIR}/manager-scheduling.yaml.patch" "${MANAGER_YAML}"
-            fi
-            echo "Successfully applied scheduling patch"
-        else
-            echo "Scheduling patch already applied, skipping"
-        fi
-    else
-        echo "Warning: manager.yaml not found at ${MANAGER_YAML}"
-    fi
-fi
-
-# Patch the issuer name and add extension certificate in certmanager/certificate.yaml
-echo "Patching certmanager/certificate.yaml..."
-CERT_YAML="${CHART_DIR}/templates/certmanager/certificate.yaml"
-if [ -f "${CERT_YAML}" ]; then
-    # Update all issuer references to use jupyter-k8s-selfsigned-issuer
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' 's/name: selfsigned-issuer/name: jupyter-k8s-selfsigned-issuer/g' "${CERT_YAML}"
-    else
-        sed -i 's/name: selfsigned-issuer/name: jupyter-k8s-selfsigned-issuer/g' "${CERT_YAML}"
-    fi
-    echo "Updated issuer name to jupyter-k8s-selfsigned-issuer"
-fi
-
-# Handle manager labels patch
-if [ -f "${PATCHES_DIR}/manager-labels.yaml.patch" ]; then
-    MANAGER_YAML="${CHART_DIR}/templates/manager/manager.yaml"
-    if [ -f "${MANAGER_YAML}" ]; then
-        echo "Applying labels patch to manager.yaml..."
-        
-        # Check if labels patch is already applied
-        if ! grep -q "workspace.jupyter.org/component: controller" "${MANAGER_YAML}"; then
-            echo "Adding custom labels to manager.yaml"
-            
-            # Add custom label to deployment metadata labels (after the first control-plane: controller-manager)
-            sed -i '0,/control-plane: controller-manager$/s//&\n    workspace.jupyter.org\/component: controller/' "${MANAGER_YAML}"
-            
-            # Add custom label to pod template labels (skip selector, target template section)
-            sed -i '/template:/,/spec:/ { /control-plane: controller-manager$/s//&\n        workspace.jupyter.org\/component: controller/ }' "${MANAGER_YAML}"
-            
-            echo "Successfully applied labels patch"
-        else
-            echo "Labels patch already applied, skipping"
-        fi
-    else
-        echo "Warning: manager.yaml not found at ${MANAGER_YAML}"
-    fi
-fi
-
-# Process any additional patch files
-for patch_file in "${PATCHES_DIR}"/*.patch; do
-    if [ -f "$patch_file" ] && [ "$(basename "$patch_file")" != "values.yaml.patch" ] && [ "$(basename "$patch_file")" != "manager.yaml.patch" ] && [ "$(basename "$patch_file")" != "manager-labels.yaml.patch" ]; then
-        file_name=$(basename "$patch_file" .patch)
-        apply_patch "$file_name" "$(basename "$patch_file")"
-    fi
-done
+# --- Remove args that are now injected by the template from values ---
+# These are controlled by dedicated values sections, not the args list
+sed -i '/--watch-traefik/d' "${CHART_DIR}/values.yaml"
+sed -i '/--enable-extension-api/d' "${CHART_DIR}/values.yaml"
+sed -i '/--application-images-pull-policy/d' "${CHART_DIR}/values.yaml"
+sed -i '/--application-images-registry/d' "${CHART_DIR}/values.yaml"
+sed -i '/--default-template-namespace/d' "${CHART_DIR}/values.yaml"
 
 echo "Helm chart patches applied successfully"

@@ -4,6 +4,9 @@ Distributed under the terms of the MIT license
 */
 
 // Package extensionapi provides extension API server functionality.
+//
+// +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations;mutatingwebhookconfigurations;validatingadmissionpolicies;validatingadmissionpolicybindings,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 package extensionapi
 
 import (
