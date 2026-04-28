@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -265,14 +266,15 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 		responseURL, err = s.generateBearerTokenURL(r, ws, accessStrategy)
 		responseType = connectionv1alpha1.ConnectionTypeWebUI
 
-	case connectionv1alpha1.ConnectionTypeVSCodeRemote:
+	default:
+		// All *-remote types go through the plugin handler map
 		pluginName, action, found := resolveConnectionHandler(accessStrategy, connectionType)
 		if !found {
 			WriteKubernetesError(w, http.StatusBadRequest, fmt.Sprintf("connection type %q is not configured for this workspace", connectionType))
 			return
 		}
 		if pluginName == handlerK8sNative {
-			WriteKubernetesError(w, http.StatusBadRequest, "k8s-native handler is not supported for vscode-remote connections")
+			WriteKubernetesError(w, http.StatusBadRequest, fmt.Sprintf("k8s-native handler is not supported for remote connections (requested %q)", connectionType))
 			return
 		}
 		if _, ok := s.pluginClients[pluginName]; !ok {
@@ -280,11 +282,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 			return
 		}
 		responseURL, err = s.generatePluginConnectionURL(r, ws, pluginName, action, connectionType, resolvedContext, namespace)
-		responseType = connectionv1alpha1.ConnectionTypeVSCodeRemote
-
-	default:
-		WriteKubernetesError(w, http.StatusBadRequest, fmt.Sprintf("unsupported connection type: %q", connectionType))
-		return
+		responseType = connectionType
 	}
 
 	if err != nil {
@@ -314,6 +312,14 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	}
 }
 
+// remoteConnectionTypeRegex validates the {ide}-remote pattern: alphanumeric segments separated by single hyphens.
+var remoteConnectionTypeRegex = regexp.MustCompile(`^[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*-remote$`)
+
+// isRemoteConnectionType checks if the connection type matches the {ide}-remote pattern.
+func isRemoteConnectionType(connectionType string) bool {
+	return remoteConnectionTypeRegex.MatchString(connectionType)
+}
+
 // validateWorkspaceConnectionRequest validates the workspace connection request
 func validateWorkspaceConnectionRequest(req *connectionv1alpha1.WorkspaceConnectionRequest) error {
 	if req.Spec.WorkspaceName == "" {
@@ -324,12 +330,16 @@ func validateWorkspaceConnectionRequest(req *connectionv1alpha1.WorkspaceConnect
 		return fmt.Errorf("workspaceConnectionType is required")
 	}
 
-	// Validate connection type against enum
-	switch req.Spec.WorkspaceConnectionType {
-	case connectionv1alpha1.ConnectionTypeVSCodeRemote, connectionv1alpha1.ConnectionTypeWebUI:
-		// Valid types
+	connectionType := req.Spec.WorkspaceConnectionType
+
+	// Accept web-ui, known remote types, and any *-remote pattern
+	switch {
+	case connectionType == connectionv1alpha1.ConnectionTypeWebUI:
+		// valid
+	case isRemoteConnectionType(connectionType):
+		// valid — known or unknown remote types are accepted
 	default:
-		return fmt.Errorf("invalid workspaceConnectionType: '%s'. Valid types are: 'vscode-remote', 'web-ui'", req.Spec.WorkspaceConnectionType)
+		return fmt.Errorf("invalid workspaceConnectionType: '%s'. Must be 'web-ui' or follow the '{ide}-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')", connectionType)
 	}
 
 	return nil
