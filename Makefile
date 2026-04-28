@@ -162,8 +162,8 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 	fi
 
 .PHONY: test-e2e
-test-e2e: setup-test-e2e manifests generate fmt vet load-images-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -timeout 60m -ginkgo.v -ginkgo.timeout 60m
+test-e2e: setup-test-e2e manifests generate fmt vet helm-generate load-images-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
+	KIND_CLUSTER=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL) go test -tags=e2e ./test/e2e/ -v -timeout 60m -ginkgo.v -ginkgo.timeout 60m
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: cleanup-test-e2e
@@ -257,7 +257,7 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 .PHONY: helm-generate
 helm-generate: manifests
 	rm -rf dist/chart
-	kubebuilder edit --plugins=helm/v1-alpha --force
+	kubebuilder edit --plugins=helm/v2-alpha --force
 	./hack/apply-helm-patches.sh
 
 .PHONY: helm-package
@@ -274,7 +274,7 @@ helm-test: ## Test the Helm chart with helm template
 	rm -rf /tmp/helm-test-chart
 	cp -r dist/chart /tmp/helm-test-chart
 	cd /tmp/helm-test-chart && helm dependency build
-	helm template jk8s /tmp/helm-test-chart --output-dir dist/test-output-crd-only \
+	helm template $(HELM_RELEASE) /tmp/helm-test-chart --output-dir dist/test-output-crd-only \
 		--set accessResources.traefik.enable=true \
 		--set extensionApi.enable=true
 	rm -rf /tmp/helm-test-chart
@@ -354,12 +354,12 @@ setup-kind: ## Set up a Kind cluster for development if it does not exist
 	fi
 
 .PHONY: test-e2e-focus
-test-e2e-focus: setup-test-e2e manifests generate fmt vet load-images-e2e ## Run specific e2e tests using FOCUS parameter. Usage: make test-e2e-focus FOCUS="Primary Storage"
+test-e2e-focus: setup-test-e2e manifests generate fmt vet helm-generate load-images-e2e ## Run specific e2e tests using FOCUS parameter. Usage: make test-e2e-focus FOCUS="Primary Storage"
 	@if [ -z "$(FOCUS)" ]; then \
 		echo "Error: FOCUS parameter is required. Usage: make test-e2e-focus FOCUS=\"Primary Storage\""; \
 		exit 1; \
 	fi
-	KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -timeout 60m -ginkgo.v -ginkgo.focus="$(FOCUS)" -ginkgo.timeout 60m
+	KIND_CLUSTER=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL) go test -tags=e2e ./test/e2e/ -v -timeout 60m -ginkgo.v -ginkgo.focus="$(FOCUS)" -ginkgo.timeout 60m
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: teardown-kind
@@ -424,9 +424,9 @@ kubectl-kind: ## Configure kubectl to use kind cluster
 .PHONY: deploy-kind
 deploy-kind: docker-build build-rotator helm-generate kubectl-kind ## Build, load, and deploy controller to a kind cluster.
 	$(MAKE) load-images
-	helm upgrade --install jk8s dist/chart \
+	helm upgrade --install $(HELM_RELEASE) dist/chart \
 		--namespace jupyter-k8s-system --create-namespace \
-		--set controllerManager.container.imagePullPolicy=Never \
+		--set manager.image.pullPolicy=Never \
 		--set application.imagesPullPolicy=Never \
 		--set application.imagesRegistry='docker.io/library' \
 		--set extensionApi.enable=true \
@@ -723,3 +723,50 @@ mv $(1) $(1)-$(3) ;\
 } ;\
 ln -sf $$(realpath $(1)-$(3)) $(1)
 endef
+
+##@ Helm Deployment
+
+## Helm binary to use for deploying the chart
+HELM ?= helm
+## Namespace to deploy the Helm release
+HELM_NAMESPACE ?= jupyter-k8s-system
+## Name of the Helm release
+HELM_RELEASE ?= jupyter-k8s
+## Path to the Helm chart directory
+HELM_CHART_DIR ?= dist/chart
+## Additional arguments to pass to helm commands
+HELM_EXTRA_ARGS ?=
+
+.PHONY: install-helm
+install-helm: ## Install the latest version of Helm.
+	@command -v $(HELM) >/dev/null 2>&1 || { \
+		echo "Installing Helm..." && \
+		curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-4 | bash; \
+	}
+
+.PHONY: helm-deploy
+helm-deploy: install-helm ## Deploy manager to the K8s cluster via Helm. Specify an image with IMG.
+	$(HELM) upgrade --install $(HELM_RELEASE) $(HELM_CHART_DIR) \
+		--namespace $(HELM_NAMESPACE) \
+		--create-namespace \
+		--set manager.image.repository=$${IMG%:*} \
+		--set manager.image.tag=$${IMG##*:} \
+		--wait \
+		--timeout 5m \
+		$(HELM_EXTRA_ARGS)
+
+.PHONY: helm-uninstall
+helm-uninstall: ## Uninstall the Helm release from the K8s cluster.
+	$(HELM) uninstall $(HELM_RELEASE) --namespace $(HELM_NAMESPACE)
+
+.PHONY: helm-status
+helm-status: ## Show Helm release status.
+	$(HELM) status $(HELM_RELEASE) --namespace $(HELM_NAMESPACE)
+
+.PHONY: helm-history
+helm-history: ## Show Helm release history.
+	$(HELM) history $(HELM_RELEASE) --namespace $(HELM_NAMESPACE)
+
+.PHONY: helm-rollback
+helm-rollback: ## Rollback to previous Helm release.
+	$(HELM) rollback $(HELM_RELEASE) --namespace $(HELM_NAMESPACE)

@@ -28,63 +28,46 @@ var _ = Describe("CRD-Only Helm Resources", func() {
 	}
 
 	It("should include all CRD-only resources in the Helm chart", func() {
-		// Get project root directory
 		rootDir, err := filepath.Abs("../../..")
 		Expect(err).NotTo(HaveOccurred())
 
-		// Get all subdirectories in config except excludeDir
+		// Collect resources from config/ subdirectories (except excluded ones)
 		configRoot := filepath.Join(rootDir, "config")
-		entries, err := os.ReadDir(configRoot)
+		configEntries, err := os.ReadDir(configRoot)
 		Expect(err).NotTo(HaveOccurred(), "Failed to read config directory")
 
-		// Collect all directory names except the excluded ones
-		srcDirs := []string{}
-		for _, entry := range entries {
-			if entry.IsDir() && !excludeDirs[entry.Name()] {
-				srcDirs = append(srcDirs, entry.Name())
-			}
-		}
-		Expect(srcDirs).NotTo(BeEmpty(), "No directories found in config")
-
-		// Create a map to store all resources from all source directories
 		allConfigResources := make(map[helm.ResourceIdentifier]bool)
-		allHelmResources := make(map[helm.ResourceIdentifier]bool)
-
-		// Process each source directory
-		for _, dirName := range srcDirs {
-			configDir := filepath.Join(rootDir, "config", dirName)
-
-			// Parse resources from config directory
-			configResources, _, err := helm.ParseYAMLDirectory(configDir)
-			if err != nil {
-				// Skip directories that don't have readable YAML files
+		for _, entry := range configEntries {
+			if !entry.IsDir() || excludeDirs[entry.Name()] {
 				continue
 			}
-
-			// Add resources to the combined map
+			configResources, _, err := helm.ParseYAMLDirectory(filepath.Join(configRoot, entry.Name()))
+			if err != nil {
+				continue
+			}
 			for res := range configResources {
 				allConfigResources[res] = true
 			}
+		}
 
-			// Target directory name in the Helm templates is the same as the source directory
-			targetDir := dirName
-
-			// Parse resources from helm template output
-			helmDir := filepath.Join(rootDir, "dist", "test-output-crd-only", "jupyter-k8s", "templates", targetDir)
-			if _, err := os.Stat(helmDir); os.IsNotExist(err) {
+		// Collect resources from ALL helm template subdirectories
+		helmRoot := filepath.Join(rootDir, "dist", "test-output-crd-only", "jupyter-k8s", "templates")
+		allHelmResources := make(map[helm.ResourceIdentifier]bool)
+		helmEntries, err := os.ReadDir(helmRoot)
+		Expect(err).NotTo(HaveOccurred(), "Failed to read helm templates directory")
+		for _, entry := range helmEntries {
+			if !entry.IsDir() {
 				continue
 			}
-
-			helmResources, _, err := helm.ParseYAMLDirectory(helmDir)
-			if err == nil {
-				// Add resources to the combined map
-				for res := range helmResources {
-					allHelmResources[res] = true
-				}
+			helmResources, _, err := helm.ParseYAMLDirectory(filepath.Join(helmRoot, entry.Name()))
+			if err != nil {
+				continue
+			}
+			for res := range helmResources {
+				allHelmResources[res] = true
 			}
 		}
 
-		// Verify we found resources in both places
 		Expect(allConfigResources).NotTo(BeEmpty(), "No resources found in config directories")
 		Expect(allHelmResources).NotTo(BeEmpty(), "No resources found in Helm templates")
 
@@ -100,11 +83,8 @@ var _ = Describe("CRD-Only Helm Resources", func() {
 			allHelmKeys[key] = true
 		}
 
-		// Check that all config resources exist in Helm resources
-		// We create a list of missing resources for better error reporting
 		missingResources := []string{}
 
-		// keepMe: helpful for debug when test fail
 		println("Helm keys -----")
 		for key := range allHelmKeys {
 			println(key)
@@ -112,23 +92,23 @@ var _ = Describe("CRD-Only Helm Resources", func() {
 		println("-----")
 
 		for key := range allConfigKeys {
-			// first: lookup exact resource name (will match CRDs)
-			if _, exists := allHelmKeys[key]; !exists {
-				parts := strings.Split(key, ":")
+			if _, exists := allHelmKeys[key]; exists {
+				continue
+			}
 
-				// second: if not found, lookup with 'jupyter-k8s-' prefix
-				prefixedKey := fmt.Sprintf("%s:jupyter-k8s-%s", parts[0], parts[1])
-				if _, prefixedExists := allHelmKeys[prefixedKey]; !prefixedExists {
+			parts := strings.Split(key, ":")
 
-					// third: if still not found, check resources that are not translated
-					if !shouldSkipResourceCheck(parts[0], parts[1]) {
-						missingResources = append(missingResources, key)
-					}
-				}
+			// Helm chart prefixes resource names with fullnameOverride ("jupyter-k8s").
+			prefixedKey := fmt.Sprintf("%s:jupyter-k8s-%s", parts[0], parts[1])
+			if _, prefixedExists := allHelmKeys[prefixedKey]; prefixedExists {
+				continue
+			}
+
+			if !shouldSkipResourceCheck(parts[0], parts[1]) {
+				missingResources = append(missingResources, key)
 			}
 		}
 
-		// Output more helpful error messages by grouping by kind
 		Expect(missingResources).To(BeEmpty(), "Resources from config directory missing in Helm chart: %v", missingResources)
 	})
 })
