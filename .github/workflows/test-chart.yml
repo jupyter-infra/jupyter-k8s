@@ -6,7 +6,7 @@ on:
 
 jobs:
   test-e2e:
-    name: Run on Ubuntu
+    name: Chart (Operator-Only)
     runs-on: ubuntu-latest
     steps:
       - name: Clone the code
@@ -54,12 +54,6 @@ jobs:
             --wait \
             --timeout 300s
 
-# TODO: Uncomment if Prometheus is enabled
-#      - name: Install Prometheus Operator CRDs
-#        run: |
-#          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-#          helm repo update
-#          helm install prometheus-crds prometheus-community/prometheus-operator-crds
 
       - name: Deploy manager via Helm
         run: |

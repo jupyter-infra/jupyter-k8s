@@ -162,8 +162,8 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 	fi
 
 .PHONY: test-e2e
-test-e2e: setup-test-e2e manifests generate fmt vet load-images-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -timeout 60m -ginkgo.v -ginkgo.timeout 60m
+test-e2e: setup-test-e2e manifests generate fmt vet helm-generate load-images-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
+	KIND_CLUSTER=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL) go test -tags=e2e ./test/e2e/ -v -timeout 60m -ginkgo.v -ginkgo.timeout 60m
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: cleanup-test-e2e
@@ -354,12 +354,12 @@ setup-kind: ## Set up a Kind cluster for development if it does not exist
 	fi
 
 .PHONY: test-e2e-focus
-test-e2e-focus: setup-test-e2e manifests generate fmt vet load-images-e2e ## Run specific e2e tests using FOCUS parameter. Usage: make test-e2e-focus FOCUS="Primary Storage"
+test-e2e-focus: setup-test-e2e manifests generate fmt vet helm-generate load-images-e2e ## Run specific e2e tests using FOCUS parameter. Usage: make test-e2e-focus FOCUS="Primary Storage"
 	@if [ -z "$(FOCUS)" ]; then \
 		echo "Error: FOCUS parameter is required. Usage: make test-e2e-focus FOCUS=\"Primary Storage\""; \
 		exit 1; \
 	fi
-	KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -timeout 60m -ginkgo.v -ginkgo.focus="$(FOCUS)" -ginkgo.timeout 60m
+	KIND_CLUSTER=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL) go test -tags=e2e ./test/e2e/ -v -timeout 60m -ginkgo.v -ginkgo.focus="$(FOCUS)" -ginkgo.timeout 60m
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: teardown-kind
