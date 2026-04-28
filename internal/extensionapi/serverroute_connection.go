@@ -282,12 +282,6 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 		}
 		responseURL, err = s.generatePluginConnectionURL(r, ws, pluginName, action, connectionType, resolvedContext, namespace)
 		responseType = connectionType
-
-		// Warn for unknown *-remote types
-		if !isKnownRemoteType(connectionType) {
-			w.Header().Set("Warning", fmt.Sprintf(`299 - "connection type %q is not officially supported and may not work as expected"`, connectionType))
-			logger.Info("Unknown remote connection type requested", "connectionType", connectionType)
-		}
 	}
 
 	if err != nil {
@@ -317,21 +311,9 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	}
 }
 
-// knownRemoteTypes is the set of officially supported remote connection types.
-var knownRemoteTypes = map[string]bool{
-	connectionv1alpha1.ConnectionTypeVSCodeRemote: true,
-	connectionv1alpha1.ConnectionTypeKiroRemote:   true,
-	connectionv1alpha1.ConnectionTypeCursorRemote: true,
-}
-
 // isRemoteConnectionType checks if the connection type follows the *-remote pattern.
 func isRemoteConnectionType(connectionType string) bool {
 	return strings.HasSuffix(connectionType, "-remote") && len(connectionType) > len("-remote")
-}
-
-// isKnownRemoteType checks if the connection type is an officially supported remote type.
-func isKnownRemoteType(connectionType string) bool {
-	return knownRemoteTypes[connectionType]
 }
 
 // validateWorkspaceConnectionRequest validates the workspace connection request
@@ -353,7 +335,7 @@ func validateWorkspaceConnectionRequest(req *connectionv1alpha1.WorkspaceConnect
 	case isRemoteConnectionType(connectionType):
 		// valid — known or unknown remote types are accepted
 	default:
-		return fmt.Errorf("invalid workspaceConnectionType: '%s'. Must be 'web-ui' or match the '*-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')", connectionType)
+		return fmt.Errorf("invalid workspaceConnectionType: '%s'. Must be 'web-ui' or follow the '{ide}-remote' pattern (e.g. 'vscode-remote')", connectionType)
 	}
 
 	return nil
