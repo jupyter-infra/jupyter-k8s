@@ -273,7 +273,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 			return
 		}
 		if pluginName == handlerK8sNative {
-			WriteKubernetesError(w, http.StatusBadRequest, fmt.Sprintf("k8s-native handler is not supported for %q connections", connectionType))
+			WriteKubernetesError(w, http.StatusBadRequest, fmt.Sprintf("k8s-native handler is not supported for remote connections (requested %q)", connectionType))
 			return
 		}
 		if _, ok := s.pluginClients[pluginName]; !ok {
