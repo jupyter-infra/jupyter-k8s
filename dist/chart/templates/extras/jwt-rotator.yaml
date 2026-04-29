@@ -33,7 +33,7 @@ spec:
               value: {{ .Values.extensionApi.jwtSecret.rotationInterval | quote }}
             - name: DRY_RUN
               value: "false"
-            image: "{{ .Values.extensionApi.jwtSecret.rotator.repository }}/{{ .Values.extensionApi.jwtSecret.rotator.imageName }}:{{ .Values.extensionApi.jwtSecret.rotator.imageTag }}"
+            image: "{{ .Values.extensionApi.jwtSecret.rotator.repository }}/{{ .Values.extensionApi.jwtSecret.rotator.imageName }}:{{ .Values.extensionApi.jwtSecret.rotator.imageTag | default .Chart.AppVersion }}"
             imagePullPolicy: {{ .Values.extensionApi.jwtSecret.rotator.imagePullPolicy }}
             name: rotator
             resources:

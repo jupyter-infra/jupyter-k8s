@@ -362,6 +362,39 @@ test-e2e-focus: setup-test-e2e manifests generate fmt vet helm-generate load-ima
 	KIND_CLUSTER=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL) go test -tags=e2e ./test/e2e/ -v -timeout 60m -ginkgo.v -ginkgo.focus="$(FOCUS)" -ginkgo.timeout 60m
 	$(MAKE) cleanup-test-e2e
 
+STAGING_REGISTRY ?= ghcr.io/jupyter-infra/staging
+STAGING_TAG ?=
+STAGING_CHART_VERSION ?=
+
+.PHONY: test-e2e-staging
+test-e2e-staging: setup-test-e2e ## Run e2e tests against staging GHCR images and chart. Set STAGING_TAG and STAGING_CHART_VERSION.
+	@if [ -z "$(STAGING_TAG)" ] || [ -z "$(STAGING_CHART_VERSION)" ]; then \
+		echo "Error: STAGING_TAG and STAGING_CHART_VERSION are required."; \
+		echo "Usage: make test-e2e-staging STAGING_TAG=v0.1.0-rc.1 STAGING_CHART_VERSION=0.1.0-rc.1"; \
+		exit 1; \
+	fi
+	@echo "Pulling staging images..."
+	$(CONTAINER_TOOL) pull $(STAGING_REGISTRY)/jupyter-k8s-controller:$(STAGING_TAG)
+	$(CONTAINER_TOOL) pull $(STAGING_REGISTRY)/jupyter-k8s-rotator:$(STAGING_TAG)
+	@echo "Loading staging images into e2e cluster $(KIND_CLUSTER)..."
+	@mkdir -p /tmp/kind-images
+	$(CONTAINER_TOOL) save $(STAGING_REGISTRY)/jupyter-k8s-controller:$(STAGING_TAG) -o /tmp/kind-images/staging-controller.tar
+	$(KIND) load image-archive /tmp/kind-images/staging-controller.tar --name $(KIND_CLUSTER)
+	rm -f /tmp/kind-images/staging-controller.tar
+	$(CONTAINER_TOOL) save $(STAGING_REGISTRY)/jupyter-k8s-rotator:$(STAGING_TAG) -o /tmp/kind-images/staging-rotator.tar
+	$(KIND) load image-archive /tmp/kind-images/staging-rotator.tar --name $(KIND_CLUSTER)
+	rm -f /tmp/kind-images/staging-rotator.tar
+	@echo "Loading application images into e2e cluster $(KIND_CLUSTER)..."
+	$(MAKE) -C images push-all-kind CLUSTER_NAME=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL)
+	@echo "Running e2e tests against staging artifacts..."
+	KIND_CLUSTER=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL) \
+		E2E_MANAGER_IMAGE=$(STAGING_REGISTRY)/jupyter-k8s-controller:$(STAGING_TAG) \
+		E2E_ROTATOR_IMAGE=$(STAGING_REGISTRY)/jupyter-k8s-rotator:$(STAGING_TAG) \
+		E2E_CHART_SOURCE=oci://$(STAGING_REGISTRY)/charts/jupyter-k8s \
+		E2E_CHART_VERSION=$(STAGING_CHART_VERSION) \
+		go test -tags=e2e ./test/e2e/ -v -timeout 60m -ginkgo.v -ginkgo.timeout 60m
+	$(MAKE) cleanup-test-e2e
+
 .PHONY: teardown-kind
 teardown-kind: ## Tear down the Kind cluster, registry, and clean up images
 	# Delete the Kind cluster
@@ -426,6 +459,8 @@ deploy-kind: docker-build build-rotator helm-generate kubectl-kind ## Build, loa
 	$(MAKE) load-images
 	helm upgrade --install $(HELM_RELEASE) dist/chart \
 		--namespace jupyter-k8s-system --create-namespace \
+		--set manager.image.repository=$${IMG%:*} \
+		--set manager.image.tag=$${IMG##*:} \
 		--set manager.image.pullPolicy=Never \
 		--set application.imagesPullPolicy=Never \
 		--set application.imagesRegistry='docker.io/library' \

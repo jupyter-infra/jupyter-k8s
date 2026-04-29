@@ -44,9 +44,9 @@ extensionApi:
     newKeyUseDelay: "5s"
     rotationInterval: "15m"
     rotator:
-      repository: "docker.io/library"
+      repository: "ghcr.io/jupyter-infra"
       imageName: "jupyter-k8s-rotator"
-      imageTag: "latest"
+      imageTag: ""
       imagePullPolicy: "IfNotPresent"
       resources:
         requests:

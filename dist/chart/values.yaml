@@ -12,8 +12,8 @@ manager:
   replicas: 1
 
   image:
-    repository: controller
-    tag: latest
+    repository: ghcr.io/jupyter-infra/jupyter-k8s-controller
+    tag: ""
     pullPolicy: IfNotPresent
 
   ## Arguments
@@ -201,9 +201,9 @@ extensionApi:
     newKeyUseDelay: "5s"
     rotationInterval: "15m"
     rotator:
-      repository: "docker.io/library"
+      repository: "ghcr.io/jupyter-infra"
       imageName: "jupyter-k8s-rotator"
-      imageTag: "latest"
+      imageTag: ""
       imagePullPolicy: "IfNotPresent"
       resources:
         requests:

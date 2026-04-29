@@ -202,7 +202,7 @@ spec:
               value: {{ .Values.extensionApi.jwtSecret.rotationInterval | quote }}
             - name: DRY_RUN
               value: "false"
-            image: "{{ .Values.extensionApi.jwtSecret.rotator.repository }}/{{ .Values.extensionApi.jwtSecret.rotator.imageName }}:{{ .Values.extensionApi.jwtSecret.rotator.imageTag }}"
+            image: "{{ .Values.extensionApi.jwtSecret.rotator.repository }}/{{ .Values.extensionApi.jwtSecret.rotator.imageName }}:{{ .Values.extensionApi.jwtSecret.rotator.imageTag | default .Chart.AppVersion }}"
             imagePullPolicy: {{ .Values.extensionApi.jwtSecret.rotator.imagePullPolicy }}
             name: rotator
             resources:
@@ -361,6 +361,18 @@ fi
 
 # --- Set fullnameOverride so resource names are jupyter-k8s-* regardless of release name ---
 sed -i 's/^# fullnameOverride: ""/fullnameOverride: "jupyter-k8s"/' "${CHART_DIR}/values.yaml"
+
+# --- Set GHCR image defaults ---
+# Manager image: use GHCR path with empty tag (falls back to .Chart.AppVersion)
+echo "Setting GHCR image defaults..."
+sed -i '/^  image:$/,/^  ##/{
+    s|repository: .*|repository: ghcr.io/jupyter-infra/jupyter-k8s-controller|
+    s|tag: .*|tag: ""|
+}' "${CHART_DIR}/values.yaml"
+
+# --- Manager image tag: use appVersion fallback ---
+echo "Setting appVersion fallback for image tags..."
+sed -i 's#image: "{{ .Values.manager.image.repository }}:{{ .Values.manager.image.tag }}"#image: "{{ .Values.manager.image.repository }}:{{ .Values.manager.image.tag | default .Chart.AppVersion }}"#' "${MANAGER_YAML}"
 
 # --- Ensure rbacHelpers defaults to true ---
 # Our chart has always shipped these roles; v2-alpha defaults to false

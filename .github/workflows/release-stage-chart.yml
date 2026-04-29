@@ -1,0 +1,70 @@
+name: "Release: Stage Chart"
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      chart_version:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'App version / image tag (e.g. v0.2.0)'
+        required: true
+      chart_version:
+        description: 'Chart version without v prefix (e.g. 0.2.0)'
+        required: true
+
+env:
+  STAGING_REGISTRY: ghcr.io/jupyter-infra/staging
+  CHART_NAME: jupyter-k8s
+
+jobs:
+  package-and-push:
+    name: Package and push chart
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install kubebuilder
+        run: |
+          curl -L -o kubebuilder "https://go.kubebuilder.io/dl/latest/$(go env GOOS)/$(go env GOARCH)"
+          chmod +x kubebuilder
+          sudo mv kubebuilder /usr/local/bin/
+
+      - name: Install Helm
+        run: make install-helm
+
+      - name: Generate chart
+        run: make helm-generate
+
+      - name: Patch chart version
+        run: |
+          sed -i "s/^version: .*/version: ${{ inputs.chart_version }}/" dist/chart/Chart.yaml
+          sed -i "s/^appVersion: .*/appVersion: \"${{ inputs.version }}\"/" dist/chart/Chart.yaml
+          echo "## Chart.yaml" >> "$GITHUB_STEP_SUMMARY"
+          cat dist/chart/Chart.yaml >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Lint chart
+        run: helm lint dist/chart
+
+      - name: Package chart
+        run: helm package dist/chart -d dist/
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Push chart to staging
+        run: helm push dist/${{ env.CHART_NAME }}-${{ inputs.chart_version }}.tgz oci://${{ env.STAGING_REGISTRY }}/charts/
