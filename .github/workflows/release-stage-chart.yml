@@ -68,9 +68,3 @@ jobs:
 
       - name: Push chart to staging
         run: helm push dist/${{ env.CHART_NAME }}-${{ inputs.chart_version }}.tgz oci://${{ env.STAGING_REGISTRY }}/charts/
-
-      - name: Upload chart artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: helm-chart
-          path: dist/${{ env.CHART_NAME }}-${{ inputs.chart_version }}.tgz

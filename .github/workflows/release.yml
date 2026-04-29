@@ -11,9 +11,6 @@ on:
         type: boolean
         default: false
 
-env:
-  CHART_NAME: jupyter-k8s
-
 jobs:
   validate:
     name: Validate
@@ -130,15 +127,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Download chart artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: helm-chart
 
       - name: Create tag
         run: |
@@ -150,4 +141,3 @@ jobs:
         with:
           tag_name: ${{ needs.validate.outputs.version }}
           generate_release_notes: true
-          files: ${{ env.CHART_NAME }}-${{ needs.validate.outputs.chart_version }}.tgz
