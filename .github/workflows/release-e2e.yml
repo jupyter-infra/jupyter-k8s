@@ -1,0 +1,71 @@
+name: "Release: E2E"
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      chart_version:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Staging image tag (e.g. v0.2.0)'
+        required: true
+      chart_version:
+        description: 'Staging chart version without v prefix (e.g. 0.2.0)'
+        required: true
+
+env:
+  STAGING_REGISTRY: ghcr.io/jupyter-infra/staging
+
+jobs:
+  e2e:
+    name: E2E against staging
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install Kind
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Install kubebuilder
+        run: |
+          curl -L -o kubebuilder "https://go.kubebuilder.io/dl/latest/$(go env GOOS)/$(go env GOARCH)"
+          chmod +x kubebuilder
+          sudo mv kubebuilder /usr/local/bin/
+
+      - name: Install Helm
+        run: make install-helm
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login Helm to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Run e2e against staging
+        run: |
+          make test-e2e-staging \
+            STAGING_REGISTRY=${{ env.STAGING_REGISTRY }} \
+            STAGING_TAG=${{ inputs.version }} \
+            STAGING_CHART_VERSION=${{ inputs.chart_version }} \
+            CONTAINER_TOOL=docker
