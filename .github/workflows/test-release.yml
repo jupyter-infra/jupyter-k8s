@@ -6,29 +6,68 @@ on:
     branches: [chore/ci-release]
 
 jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    outputs:
+      version: v0.1.0-rc.2
+      chart_version: 0.1.0-rc.2
+      short_sha: ${{ steps.sha.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: sha
+        run: echo "short_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+  stage-images:
+    name: Stage images
+    needs: validate
+    uses: ./.github/workflows/release-stage-images.yml
+    with:
+      version: ${{ needs.validate.outputs.version }}
+      short_sha: ${{ needs.validate.outputs.short_sha }}
+    permissions:
+      contents: read
+      packages: write
+
+  stage-chart:
+    name: Stage chart
+    needs: [validate, stage-images]
+    uses: ./.github/workflows/release-stage-chart.yml
+    with:
+      version: ${{ needs.validate.outputs.version }}
+      chart_version: ${{ needs.validate.outputs.chart_version }}
+    permissions:
+      contents: read
+      packages: write
+
+  e2e:
+    name: E2E
+    needs: [validate, stage-images, stage-chart]
+    uses: ./.github/workflows/release-e2e.yml
+    with:
+      version: ${{ needs.validate.outputs.version }}
+      chart_version: ${{ needs.validate.outputs.chart_version }}
+    permissions:
+      contents: read
+      packages: read
+
   promote-images:
+    name: Promote images
+    needs: [validate, e2e]
     uses: ./.github/workflows/release-promote-images.yml
     with:
-      version: v0.1.0-rc.1
-      short_sha: e7726f2
+      version: ${{ needs.validate.outputs.version }}
+      short_sha: ${{ needs.validate.outputs.short_sha }}
     permissions:
       contents: read
       packages: write
 
   promote-chart:
+    name: Promote chart
+    needs: [validate, e2e]
     uses: ./.github/workflows/release-promote-chart.yml
     with:
-      chart_version: 0.1.0-rc.1
+      chart_version: ${{ needs.validate.outputs.chart_version }}
     permissions:
       contents: read
       packages: write
-
-  # e2e:
-  #   needs: [stage-images, stage-chart]
-  #   uses: ./.github/workflows/release-e2e.yml
-  #   with:
-  #     version: v0.1.0-rc.1
-  #     chart_version: 0.1.0-rc.1
-  #   permissions:
-  #     contents: read
-  #     packages: read
