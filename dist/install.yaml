@@ -7556,11 +7556,11 @@ spec:
                 description: DeploymentName is the name of the deployment managing
                   the Workspace pods
                 type: string
-              lastAccessStartupProbeTime:
+              earliestNextProbeTime:
                 description: |-
-                  LastAccessStartupProbeTime records when the last access startup probe
-                  was executed. Used to enforce minimum spacing (periodSeconds) between
-                  probes across reconcile cycles.
+                  EarliestNextProbeTime is the earliest wall-clock time at which the next
+                  access startup probe may fire. Set by the controller after each probe
+                  attempt to enforce spacing; survives watch-triggered re-reconciliations.
                 format: date-time
                 type: string
               serviceName:

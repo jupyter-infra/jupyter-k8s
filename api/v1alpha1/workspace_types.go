@@ -244,11 +244,11 @@ type WorkspaceStatus struct {
 	// +optional
 	AccessStartupProbeFailures *int32 `json:"accessStartupProbeFailures,omitempty"`
 
-	// LastAccessStartupProbeTime records when the last access startup probe
-	// was executed. Used to enforce minimum spacing (periodSeconds) between
-	// probes across reconcile cycles.
+	// EarliestNextProbeTime is the earliest wall-clock time at which the next
+	// access startup probe may fire. Set by the controller after each probe
+	// attempt to enforce spacing; survives watch-triggered re-reconciliations.
 	// +optional
-	LastAccessStartupProbeTime *metav1.Time `json:"lastAccessStartupProbeTime,omitempty"`
+	EarliestNextProbeTime *metav1.Time `json:"earliestNextProbeTime,omitempty"`
 
 	// Conditions represent the current state of the Workspace resource.
 	// Each condition has a unique type and reflects the status of a specific aspect of the resource.

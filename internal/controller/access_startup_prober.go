@@ -7,7 +7,9 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -84,9 +86,14 @@ func (p *AccessStartupProber) Probe(
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		// Connection failures (refused, timeout, DNS) are expected while the
-		// route propagates — return (false, nil) so the caller treats this as
-		// a normal probe failure and retries, not as a reconciliation error.
+		var dnsErr *net.DNSError
+		if errors.As(err, &dnsErr) {
+			logger.Info("Access startup probe: DNS not yet resolved",
+				"url", url, "dnsError", dnsErr)
+			return false, nil
+		}
+		// Connection failures (refused, timeout) are expected while the
+		// route propagates — return not-ready so the caller retries.
 		logger.V(1).Info("Access startup probe connection failed", "url", url, "error", err)
 		return false, nil
 	}

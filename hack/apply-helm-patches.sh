@@ -376,18 +376,10 @@ sed -i '/--application-images-pull-policy/d' "${CHART_DIR}/values.yaml"
 sed -i '/--application-images-registry/d' "${CHART_DIR}/values.yaml"
 sed -i '/--default-template-namespace/d' "${CHART_DIR}/values.yaml"
 
-# --- Fix test-chart.yml overwritten by kubebuilder edit ---
-# kubebuilder edit re-scaffolds .github/workflows/test-chart.yml with defaults
-# that use finch (not available in CI) and stale image refs.
-WORKFLOW="${SCRIPT_DIR}/../.github/workflows/test-chart.yml"
-if [ -f "${WORKFLOW}" ]; then
-    echo "Patching test-chart.yml for CI compatibility..."
-    sed -i 's/make docker-build IMG=controller:latest$/make docker-build IMG=controller:latest CONTAINER_TOOL=docker/' "${WORKFLOW}"
-    sed -i 's/make helm-deploy IMG=jupyter-k8s:v0.1.0/make helm-deploy IMG=controller:latest CONTAINER_TOOL=docker/' "${WORKFLOW}"
-    # Remove commented-out Prometheus blocks
-    sed -i '/^# TODO: Uncomment if Prometheus/,/prometheus-operator-crds$/d' "${WORKFLOW}"
-    # Restore meaningful job name
-    sed -i 's/name: Run on Ubuntu/name: Chart (Operator-Only)/' "${WORKFLOW}"
-fi
+# --- Restore CI workflow files that kubebuilder overwrites with local values ---
+# kubebuilder edit substitutes CONTAINER_TOOL and IMG with local defaults
+# (e.g. finch instead of docker), breaking the CI workflow.
+echo "Restoring CI workflow files..."
+git checkout -- "${SCRIPT_DIR}/../.github/workflows/test-chart.yml" 2>/dev/null || true
 
 echo "Helm chart patches applied successfully"

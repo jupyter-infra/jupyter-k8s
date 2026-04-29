@@ -86,7 +86,16 @@ const (
 	// DefaultAccessStartupProbeTimeoutSeconds is the default probe timeout in seconds
 	DefaultAccessStartupProbeTimeoutSeconds = 5
 	// DefaultAccessStartupProbeFailureThreshold is the default max consecutive failures
-	DefaultAccessStartupProbeFailureThreshold = 30
+	DefaultAccessStartupProbeFailureThreshold = 20
+
+	// ProbeBackoffThreshold is the number of retries (counting from the end)
+	// that use exponential backoff. The first max(0, failureThreshold - this)
+	// retries use the configured periodSeconds; the last 10 use backoff.
+	ProbeBackoffThreshold = 10
+	// ProbeBackoffMaxRetrySeconds caps the exponential backoff interval.
+	// 302s comfortably exceeds any standard CoreDNS negative cache TTL
+	// (default 30s, SOA-driven up to 300s).
+	ProbeBackoffMaxRetrySeconds = 302
 
 	// MinimalRequeueDelay is the delay for near-immediate requeue
 	MinimalRequeueDelay = 10 * time.Millisecond

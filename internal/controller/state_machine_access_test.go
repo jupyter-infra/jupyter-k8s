@@ -114,7 +114,7 @@ var _ = Describe("ProbeAccessStartup", func() {
 		Expect(result.RequeueAfter).To(Equal(5 * time.Second))
 		Expect(workspace.Status.AccessStartupProbeFailures).NotTo(BeNil())
 		Expect(*workspace.Status.AccessStartupProbeFailures).To(Equal(int32(0)))
-		Expect(workspace.Status.LastAccessStartupProbeTime).NotTo(BeNil())
+		Expect(workspace.Status.EarliestNextProbeTime).NotTo(BeNil())
 	})
 
 	It("should probe immediately on first attempt without initialDelaySeconds", func() {
@@ -135,7 +135,9 @@ var _ = Describe("ProbeAccessStartup", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).NotTo(BeNil())
 		Expect(result.Status).To(Equal(ProbeRetrying))
-		Expect(result.RequeueAfter).To(Equal(1 * time.Second))
+		// failureThreshold=3 < ProbeBackoffThreshold, so backoff is active
+		// from the start: first failure → periodSeconds*2 = 2s
+		Expect(result.RequeueAfter).To(Equal(2 * time.Second))
 		Expect(*workspace.Status.AccessStartupProbeFailures).To(Equal(int32(1)))
 	})
 
@@ -149,7 +151,7 @@ var _ = Describe("ProbeAccessStartup", func() {
 		Expect(result).NotTo(BeNil())
 		Expect(result.Status).To(Equal(ProbeSucceeded))
 		Expect(workspace.Status.AccessStartupProbeFailures).To(BeNil())
-		Expect(workspace.Status.LastAccessStartupProbeTime).To(BeNil())
+		Expect(workspace.Status.EarliestNextProbeTime).To(BeNil())
 	})
 
 	It("should return ProbeAlreadySucceeded when access resources are already ready", func() {
@@ -185,12 +187,12 @@ var _ = Describe("ProbeAccessStartup", func() {
 		Expect(err.Error()).To(ContainSubstring("template resolution failed"))
 	})
 
-	It("should skip probe and requeue when less than periodSeconds has elapsed", func() {
+	It("should skip probe and requeue when deadline has not passed", func() {
 		mockProber.ready = false
 		zero := int32(0)
 		workspace.Status.AccessStartupProbeFailures = &zero
-		recent := metav1.Now()
-		workspace.Status.LastAccessStartupProbeTime = &recent
+		future := metav1.NewTime(time.Now().Add(1 * time.Second))
+		workspace.Status.EarliestNextProbeTime = &future
 
 		result, err := sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
 		Expect(err).NotTo(HaveOccurred())
@@ -226,20 +228,78 @@ var _ = Describe("ProbeAccessStartup", func() {
 		Expect(workspace.Status.AccessStartupProbeFailures).NotTo(BeNil())
 		Expect(*workspace.Status.AccessStartupProbeFailures).To(Equal(int32(DefaultAccessStartupProbeFailureThreshold)))
 	})
+
+	It("should use normal periodSeconds in the fast phase", func() {
+		mockProber.ready = false
+		// threshold=20, backoff starts at failure 11
+		// failure 9 is still in the fast phase
+		accessStrategy.Spec.AccessStartupProbe.FailureThreshold = 20
+		failures := int32(8)
+		workspace.Status.AccessStartupProbeFailures = &failures
+
+		result, err := sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Status).To(Equal(ProbeRetrying))
+		Expect(result.RequeueAfter).To(Equal(1 * time.Second))
+	})
+
+	It("should start exponential backoff in the last 10 retries", func() {
+		mockProber.ready = false
+		// threshold=20, backoff starts at failure 11
+		accessStrategy.Spec.AccessStartupProbe.FailureThreshold = 20
+
+		failures := int32(10)
+		workspace.Status.AccessStartupProbeFailures = &failures
+
+		// Failure 11 (1st in backoff phase) → 1*2=2s
+		result, err := sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Status).To(Equal(ProbeRetrying))
+		Expect(result.RequeueAfter).To(Equal(2 * time.Second))
+
+		workspace.Status.EarliestNextProbeTime = nil
+
+		// Failure 12 → 1*4=4s
+		result, err = sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Status).To(Equal(ProbeRetrying))
+		Expect(result.RequeueAfter).To(Equal(4 * time.Second))
+
+		workspace.Status.EarliestNextProbeTime = nil
+
+		// Failure 13 → 1*8=8s
+		result, err = sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Status).To(Equal(ProbeRetrying))
+		Expect(result.RequeueAfter).To(Equal(8 * time.Second))
+	})
+
+	It("should use all backoff when failureThreshold <= ProbeBackoffThreshold", func() {
+		mockProber.ready = false
+		accessStrategy.Spec.AccessStartupProbe.FailureThreshold = 5
+		zero := int32(0)
+		workspace.Status.AccessStartupProbeFailures = &zero
+
+		// threshold=5 < ProbeBackoffThreshold=10, so backoff from failure 1
+		result, err := sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Status).To(Equal(ProbeRetrying))
+		Expect(result.RequeueAfter).To(Equal(2 * time.Second))
+	})
 })
 
 var _ = Describe("clearProbeState", func() {
-	It("should clear both failures and last probe time", func() {
+	It("should clear both failures and earliest next probe time", func() {
 		failures := int32(5)
-		now := metav1.Now()
+		future := metav1.NewTime(time.Now().Add(5 * time.Second))
 		workspace := &workspacev1alpha1.Workspace{}
 		workspace.Status.AccessStartupProbeFailures = &failures
-		workspace.Status.LastAccessStartupProbeTime = &now
+		workspace.Status.EarliestNextProbeTime = &future
 
 		clearProbeState(workspace)
 
 		Expect(workspace.Status.AccessStartupProbeFailures).To(BeNil())
-		Expect(workspace.Status.LastAccessStartupProbeTime).To(BeNil())
+		Expect(workspace.Status.EarliestNextProbeTime).To(BeNil())
 	})
 
 	It("should be a no-op when both fields are already nil", func() {
@@ -248,40 +308,68 @@ var _ = Describe("clearProbeState", func() {
 		clearProbeState(workspace)
 
 		Expect(workspace.Status.AccessStartupProbeFailures).To(BeNil())
-		Expect(workspace.Status.LastAccessStartupProbeTime).To(BeNil())
+		Expect(workspace.Status.EarliestNextProbeTime).To(BeNil())
 	})
 })
 
-var _ = Describe("timeUntilNextProbe", func() {
-	It("should return 0 when LastAccessStartupProbeTime is nil", func() {
+var _ = Describe("timeUntilProbeDeadline", func() {
+	It("should return 0 when EarliestNextProbeTime is nil", func() {
 		workspace := &workspacev1alpha1.Workspace{}
 
-		Expect(timeUntilNextProbe(workspace, 2)).To(Equal(time.Duration(0)))
+		Expect(timeUntilProbeDeadline(workspace)).To(Equal(time.Duration(0)))
 	})
 
-	It("should return remaining duration when within period", func() {
+	It("should return remaining duration when deadline is in the future", func() {
 		workspace := &workspacev1alpha1.Workspace{}
-		recent := metav1.NewTime(time.Now().Add(-500 * time.Millisecond))
-		workspace.Status.LastAccessStartupProbeTime = &recent
+		future := metav1.NewTime(time.Now().Add(1500 * time.Millisecond))
+		workspace.Status.EarliestNextProbeTime = &future
 
-		remaining := timeUntilNextProbe(workspace, 2)
+		remaining := timeUntilProbeDeadline(workspace)
 		Expect(remaining).To(BeNumerically(">", 0))
-		Expect(remaining).To(BeNumerically("<=", 2*time.Second))
+		Expect(remaining).To(BeNumerically("<=", 1500*time.Millisecond))
 	})
 
-	It("should return 0 when period has fully elapsed", func() {
+	It("should return 0 when deadline has passed", func() {
 		workspace := &workspacev1alpha1.Workspace{}
-		old := metav1.NewTime(time.Now().Add(-5 * time.Second))
-		workspace.Status.LastAccessStartupProbeTime = &old
+		past := metav1.NewTime(time.Now().Add(-5 * time.Second))
+		workspace.Status.EarliestNextProbeTime = &past
 
-		Expect(timeUntilNextProbe(workspace, 2)).To(Equal(time.Duration(0)))
+		Expect(timeUntilProbeDeadline(workspace)).To(Equal(time.Duration(0)))
 	})
 
-	It("should return 0 when exactly at period boundary", func() {
+	It("should return 0 when deadline is exactly now", func() {
 		workspace := &workspacev1alpha1.Workspace{}
-		exact := metav1.NewTime(time.Now().Add(-2 * time.Second))
-		workspace.Status.LastAccessStartupProbeTime = &exact
+		now := metav1.NewTime(time.Now())
+		workspace.Status.EarliestNextProbeTime = &now
 
-		Expect(timeUntilNextProbe(workspace, 2)).To(Equal(time.Duration(0)))
+		Expect(timeUntilProbeDeadline(workspace)).To(Equal(time.Duration(0)))
+	})
+})
+
+var _ = Describe("probeRetrySeconds", func() {
+	It("should return periodSeconds in the fast phase", func() {
+		// failureThreshold=20, backoffStart=10
+		Expect(probeRetrySeconds(2, 0, 20)).To(Equal(int32(2)))
+		Expect(probeRetrySeconds(2, 5, 20)).To(Equal(int32(2)))
+		Expect(probeRetrySeconds(2, 10, 20)).To(Equal(int32(2)))
+	})
+
+	It("should double on each failure in the backoff phase", func() {
+		// failureThreshold=20, backoffStart=10: failure 11→4, 12→8, 13→16
+		Expect(probeRetrySeconds(2, 11, 20)).To(Equal(int32(4)))
+		Expect(probeRetrySeconds(2, 12, 20)).To(Equal(int32(8)))
+		Expect(probeRetrySeconds(2, 13, 20)).To(Equal(int32(16)))
+	})
+
+	It("should cap at ProbeBackoffMaxRetrySeconds", func() {
+		Expect(probeRetrySeconds(2, 100, 20)).To(Equal(int32(ProbeBackoffMaxRetrySeconds)))
+		Expect(probeRetrySeconds(10, 100, 20)).To(Equal(int32(ProbeBackoffMaxRetrySeconds)))
+	})
+
+	It("should use all backoff when failureThreshold <= ProbeBackoffThreshold", func() {
+		// failureThreshold=5, backoffStart=max(5-10,0)=0
+		Expect(probeRetrySeconds(2, 1, 5)).To(Equal(int32(4)))
+		Expect(probeRetrySeconds(2, 2, 5)).To(Equal(int32(8)))
+		Expect(probeRetrySeconds(2, 3, 5)).To(Equal(int32(16)))
 	})
 })

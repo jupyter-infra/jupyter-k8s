@@ -136,27 +136,26 @@ func (sm *StateMachine) ProbeAccessStartup(
 		if probe.InitialDelaySeconds > 0 {
 			logger.Info("Access startup probe: waiting for initial delay",
 				"initialDelaySeconds", probe.InitialDelaySeconds)
-			now := metav1.Now()
-			workspace.Status.LastAccessStartupProbeTime = &now
+			delay := time.Duration(probe.InitialDelaySeconds) * time.Second
+			deadline := metav1.NewTime(time.Now().Add(delay))
+			workspace.Status.EarliestNextProbeTime = &deadline
 			return &ProbeResult{
 				Status:       ProbeRetrying,
-				RequeueAfter: time.Duration(probe.InitialDelaySeconds) * time.Second,
+				RequeueAfter: delay,
 			}, nil
 		}
 	}
 
 	// Enforce minimum spacing between probes. Status updates trigger
 	// watch events that re-reconcile faster than RequeueAfter; skip
-	// the actual HTTP probe until enough time has elapsed.
-	if remaining := timeUntilNextProbe(workspace, periodSeconds); remaining > 0 {
+	// the actual HTTP probe until the deadline has passed.
+	if remaining := timeUntilProbeDeadline(workspace); remaining > 0 {
 		return &ProbeResult{
 			Status:       ProbePendingRetry,
 			RequeueAfter: remaining,
 		}, nil
 	}
 
-	now := metav1.Now()
-	workspace.Status.LastAccessStartupProbeTime = &now
 	ready, err := sm.accessStartupProber.Probe(ctx, workspace, accessStrategy, service)
 	if err != nil {
 		return nil, fmt.Errorf("access startup probe error: %w", err)
@@ -176,32 +175,52 @@ func (sm *StateMachine) ProbeAccessStartup(
 	if failures >= failureThreshold {
 		logger.Info("Access startup probe failed: threshold exceeded",
 			"failures", failures, "failureThreshold", failureThreshold)
-		workspace.Status.LastAccessStartupProbeTime = nil
+		workspace.Status.EarliestNextProbeTime = nil
 		return &ProbeResult{Status: ProbeFailureThresholdExceeded}, nil
 	}
 
+	retrySeconds := probeRetrySeconds(periodSeconds, failures, failureThreshold)
+
+	delay := time.Duration(retrySeconds) * time.Second
+	deadline := metav1.NewTime(time.Now().Add(delay))
+	workspace.Status.EarliestNextProbeTime = &deadline
+
 	logger.Info("Access startup probe failed, retrying",
 		"failures", failures, "failureThreshold", failureThreshold,
-		"retryAfterSeconds", periodSeconds)
+		"retryAfterSeconds", retrySeconds)
 	return &ProbeResult{
 		Status:       ProbeRetrying,
-		RequeueAfter: time.Duration(periodSeconds) * time.Second,
+		RequeueAfter: delay,
 	}, nil
 }
 
 func clearProbeState(workspace *workspacev1alpha1.Workspace) {
 	workspace.Status.AccessStartupProbeFailures = nil
-	workspace.Status.LastAccessStartupProbeTime = nil
+	workspace.Status.EarliestNextProbeTime = nil
 }
 
-func timeUntilNextProbe(workspace *workspacev1alpha1.Workspace, periodSeconds int32) time.Duration {
-	if workspace.Status.LastAccessStartupProbeTime == nil {
+func probeRetrySeconds(periodSeconds int32, failures int32, failureThreshold int32) int32 {
+	backoffStart := max(failureThreshold-ProbeBackoffThreshold, 0)
+	if failures <= backoffStart {
+		return periodSeconds
+	}
+	backoff := periodSeconds
+	for i := int32(0); i < failures-backoffStart; i++ {
+		backoff *= 2
+		if backoff >= ProbeBackoffMaxRetrySeconds {
+			return ProbeBackoffMaxRetrySeconds
+		}
+	}
+	return backoff
+}
+
+func timeUntilProbeDeadline(workspace *workspacev1alpha1.Workspace) time.Duration {
+	if workspace.Status.EarliestNextProbeTime == nil {
 		return 0
 	}
-	elapsed := time.Since(workspace.Status.LastAccessStartupProbeTime.Time)
-	period := time.Duration(periodSeconds) * time.Second
-	if elapsed < period {
-		return period - elapsed
+	remaining := time.Until(workspace.Status.EarliestNextProbeTime.Time)
+	if remaining > 0 {
+		return remaining
 	}
 	return 0
 }
