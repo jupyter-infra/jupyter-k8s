@@ -25,18 +25,50 @@ import (
 var (
 	// Optional Environment Variables:
 	// - CERT_MANAGER_INSTALL_SKIP=true: Skips CertManager installation during test setup.
-	// These variables are useful if CertManager is already installed, avoiding
-	// re-installation and conflicts.
+	// - E2E_MANAGER_IMAGE: Override manager image (default: jupyter.org/jupyter-k8s:v0.0.1)
+	// - E2E_ROTATOR_IMAGE: Override rotator image (default: docker.io/library/rotator:local)
+	// - E2E_CHART_SOURCE: Override chart source — local path or oci:// URL (default: dist/chart)
+	// - E2E_CHART_VERSION: Chart version for OCI source (required when E2E_CHART_SOURCE is oci://)
 	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
 
-	// projectImage is the name of the image which will be build and loaded
-	// with the code source changes to be tested.
-	projectImage = "jupyter.org/jupyter-k8s:v0.0.1"
-
+	projectImage    = envOrDefault("E2E_MANAGER_IMAGE", "jupyter.org/jupyter-k8s:v0.0.1")
+	rotatorImage    = envOrDefault("E2E_ROTATOR_IMAGE", "docker.io/library/rotator:local")
+	chartSource     = envOrDefault("E2E_CHART_SOURCE", "dist/chart")
+	chartVersion    = os.Getenv("E2E_CHART_VERSION")
 	helmReleaseName = "jupyter-k8s"
 )
+
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// splitImageRepo splits "ghcr.io/jupyter-infra/jupyter-k8s-rotator:tag" into
+// ("ghcr.io/jupyter-infra", "jupyter-k8s-rotator:tag").
+func splitImageRepo(image string) (string, string) {
+	// Remove tag for path parsing
+	path := image
+	if idx := strings.LastIndex(image, ":"); idx > 0 {
+		path = image[:idx]
+	}
+	lastSlash := strings.LastIndex(path, "/")
+	if lastSlash < 0 {
+		return "", image
+	}
+	return image[:lastSlash], image[lastSlash+1:]
+}
+
+// splitImageNameTag splits "jupyter-k8s-rotator:tag" into ("jupyter-k8s-rotator", "tag").
+func splitImageNameTag(nameTag string) (string, string) {
+	if idx := strings.LastIndex(nameTag, ":"); idx > 0 {
+		return nameTag[:idx], nameTag[idx+1:]
+	}
+	return nameTag, "latest"
+}
 
 // TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
 // temporary environment to validate project changes with the purpose of being used in CI jobs.
@@ -70,25 +102,34 @@ var _ = BeforeSuite(func() {
 	// Check if operator is already installed and clean up the cluster if needed
 	checkAndCleanCluster()
 
-	// Check if image exists to skip unnecessary rebuild
-	By("checking if manager image exists")
 	containerTool := os.Getenv("CONTAINER_TOOL")
 	if containerTool == "" {
 		containerTool = "docker"
 	}
-	cmd := exec.Command(containerTool, "image", "inspect", projectImage)
-	if _, err := cmd.CombinedOutput(); err != nil {
-		By("building the manager(Operator) image")
-		cmd = exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
-		_, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to build manager image")
+
+	// Build the manager image only when using the default local image.
+	// When E2E_MANAGER_IMAGE is set, assume the image is already available locally
+	// (e.g., pulled from GHCR and loaded into Kind by the caller).
+	if os.Getenv("E2E_MANAGER_IMAGE") == "" {
+		By("checking if manager image exists")
+		inspectCmd := exec.Command(containerTool, "image", "inspect", projectImage)
+		if _, err := inspectCmd.CombinedOutput(); err != nil {
+			By("building the manager(Operator) image")
+			buildCmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
+			_, err := utils.Run(buildCmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to build manager image")
+		} else {
+			_, _ = fmt.Fprintf(GinkgoWriter, "Manager image already exists, skipping build\n")
+		}
+
+		By("loading the manager(Operator) image on Kind")
+		Expect(utils.LoadImageToKindClusterWithName(projectImage)).To(Succeed(), "Failed to load image to Kind cluster")
 	} else {
-		_, _ = fmt.Fprintf(GinkgoWriter, "Manager image already exists, skipping build\n")
+		_, _ = fmt.Fprintf(GinkgoWriter, "Using pre-built manager image: %s\n", projectImage)
 	}
 
-	By("loading the manager(Operator) image on Kind")
-	err := utils.LoadImageToKindClusterWithName(projectImage)
-	Expect(err).NotTo(HaveOccurred(), "Failed to load image to Kind cluster")
+	var cmd *exec.Cmd
+	var err error
 
 	// The tests-e2e are intended to run on a temporary cluster that is created and destroyed for testing.
 	// To prevent errors when tests run in environments with CertManager already installed,
@@ -150,9 +191,13 @@ var _ = BeforeSuite(func() {
 
 	// Deploy operator via helm chart — this installs CRDs, RBAC, webhooks, extension API,
 	// and the controller in a single step, matching what users actually consume.
-	By("deploying operator via helm chart")
+	By(fmt.Sprintf("deploying operator via helm chart (source: %s)", chartSource))
+
+	rotatorRepo, rotatorNameTag := splitImageRepo(rotatorImage)
+	rotatorName, rotatorTag := splitImageNameTag(rotatorNameTag)
+
 	helmArgs := []string{
-		"upgrade", "--install", helmReleaseName, "dist/chart",
+		"upgrade", "--install", helmReleaseName, chartSource,
 		"--namespace", OperatorNamespace, "--create-namespace",
 		"--set", fmt.Sprintf("manager.image.repository=%s", strings.Split(projectImage, ":")[0]),
 		"--set", fmt.Sprintf("manager.image.tag=%s", strings.Split(projectImage, ":")[1]),
@@ -161,14 +206,17 @@ var _ = BeforeSuite(func() {
 		"--set", "application.imagesRegistry=docker.io/library",
 		"--set", "extensionApi.enable=true",
 		"--set", "extensionApi.jwtSecret.enable=true",
-		"--set", "extensionApi.jwtSecret.rotator.repository=docker.io/library",
-		"--set", "extensionApi.jwtSecret.rotator.imageName=rotator",
-		"--set", "extensionApi.jwtSecret.rotator.imageTag=local",
+		"--set", fmt.Sprintf("extensionApi.jwtSecret.rotator.repository=%s", rotatorRepo),
+		"--set", fmt.Sprintf("extensionApi.jwtSecret.rotator.imageName=%s", rotatorName),
+		"--set", fmt.Sprintf("extensionApi.jwtSecret.rotator.imageTag=%s", rotatorTag),
 		"--set", "extensionApi.jwtSecret.rotator.imagePullPolicy=Never",
 		"--set", "workspacePodWatching.enable=true",
 		"--set", "accessResources.traefik.enable=true",
 		"--wait",
 		"--timeout", "5m",
+	}
+	if strings.HasPrefix(chartSource, "oci://") && chartVersion != "" {
+		helmArgs = append(helmArgs, "--version", chartVersion)
 	}
 	cmd = exec.Command("helm", helmArgs...)
 	_, err = utils.Run(cmd)
