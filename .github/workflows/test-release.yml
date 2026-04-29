@@ -6,14 +6,14 @@ on:
     branches: [chore/ci-release]
 
 jobs:
-  stage-chart:
-    uses: ./.github/workflows/release-stage-chart.yml
+  e2e:
+    uses: ./.github/workflows/release-e2e.yml
     with:
       version: v0.1.0-rc.1
       chart_version: 0.1.0-rc.1
     permissions:
       contents: read
-      packages: write
+      packages: read
 
   # e2e:
   #   needs: [stage-images, stage-chart]
