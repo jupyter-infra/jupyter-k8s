@@ -6,14 +6,22 @@ on:
     branches: [chore/ci-release]
 
 jobs:
-  e2e:
-    uses: ./.github/workflows/release-e2e.yml
+  promote-images:
+    uses: ./.github/workflows/release-promote-images.yml
     with:
       version: v0.1.0-rc.1
+      short_sha: e7726f2
+    permissions:
+      contents: read
+      packages: write
+
+  promote-chart:
+    uses: ./.github/workflows/release-promote-chart.yml
+    with:
       chart_version: 0.1.0-rc.1
     permissions:
       contents: read
-      packages: read
+      packages: write
 
   # e2e:
   #   needs: [stage-images, stage-chart]
