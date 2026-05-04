@@ -22,8 +22,10 @@ import (
 
 var _ = Describe("Workspace Access Startup Probe", Ordered, func() {
 	const (
-		workspaceNamespace = "default"
-		groupDir           = "access-probe"
+		workspaceNamespace    = "default"
+		groupDir              = "access-probe"
+		workspaceProbeSuccess = "workspace-probe-success"
+		workspaceProbeFailure = "workspace-probe-failure"
 	)
 
 	AfterEach(func() {
@@ -42,7 +44,7 @@ var _ = Describe("Workspace Access Startup Probe", Ordered, func() {
 
 	Context("Access startup probe succeeds", func() {
 		It("should become Available after probe succeeds via ClusterIP service", func() {
-			workspaceName := "workspace-probe-success"
+			workspaceName := workspaceProbeSuccess
 
 			By("creating an access strategy with probe targeting the ClusterIP service")
 			createAccessStrategyForTest("access-strategy-probe-success", groupDir, "")
@@ -93,7 +95,7 @@ var _ = Describe("Workspace Access Startup Probe", Ordered, func() {
 
 	Context("Access startup probe failure threshold exceeded", func() {
 		It("should become Degraded after probe exceeds failureThreshold", func() {
-			workspaceName := "workspace-probe-failure"
+			workspaceName := workspaceProbeFailure
 
 			By("creating an access strategy with probe targeting unreachable URL (failureThreshold=3)")
 			createAccessStrategyForTest("access-strategy-probe-failure", groupDir, "")
@@ -129,6 +131,129 @@ var _ = Describe("Workspace Access Startup Probe", Ordered, func() {
 				"{.status.accessStartupProbeFailures}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(probeFailures).To(Equal("3"))
+		})
+	})
+
+	Context("Probe reset on AccessStrategy update", func() {
+		It("should self-heal from Degraded when AccessStrategy probe URL is fixed", func() {
+			workspaceName := workspaceProbeFailure
+
+			By("creating an access strategy with unreachable probe URL (failureThreshold=3)")
+			createAccessStrategyForTest("access-strategy-probe-failure", groupDir, "")
+
+			By("creating a workspace referencing the access strategy")
+			createWorkspaceForTest(workspaceName, groupDir, "")
+
+			By("waiting for the workspace to become Degraded")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeDegraded,
+				ConditionTrue,
+			)
+
+			By("patching access strategy to point probe at the reachable ClusterIP service")
+			patchAccessStrategy("access", "probe", "patch-probe-url-to-reachable", "access-strategy-probe-failure")
+
+			By("waiting for the workspace to become Available after probe reset")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("verifying all conditions after self-heal")
+			VerifyWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
+				controller.ConditionTypeProgressing: ConditionFalse,
+				controller.ConditionTypeDegraded:    ConditionFalse,
+				controller.ConditionTypeAvailable:   ConditionTrue,
+				controller.ConditionTypeStopped:     ConditionFalse,
+			})
+
+			By("verifying accessStartupProbeFailures is cleared after success")
+			probeFailures, _ := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.status.accessStartupProbeFailures}")
+			Expect(probeFailures).To(BeEmpty())
+		})
+
+		It("should re-probe and become Degraded when a Running workspace's strategy changes to unreachable", func() {
+			workspaceName := workspaceProbeSuccess
+
+			By("creating an access strategy with reachable probe")
+			createAccessStrategyForTest("access-strategy-probe-success", groupDir, "")
+
+			By("creating a workspace referencing the access strategy")
+			createWorkspaceForTest(workspaceName, groupDir, "")
+
+			By("waiting for the workspace to become Available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("patching access strategy to point probe at an unreachable URL (failureThreshold=3)")
+			patchAccessStrategy("access", "probe", "patch-probe-url-to-unreachable", "access-strategy-probe-success")
+
+			By("waiting for the workspace to become Degraded after probe reset")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeDegraded,
+				ConditionTrue,
+			)
+
+			By("verifying Degraded condition reason")
+			reason, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				fmt.Sprintf("{.status.conditions[?(@.type==\"%s\")].reason}",
+					controller.ConditionTypeDegraded))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reason).To(Equal(controller.ReasonAccessProbeThresholdExceeded))
+		})
+	})
+
+	Context("Probe reset on accessStrategyRef switch", func() {
+		It("should re-probe when workspace switches to a different AccessStrategy", func() {
+			workspaceName := workspaceProbeSuccess
+
+			By("creating both access strategies")
+			createAccessStrategyForTest("access-strategy-probe-success", groupDir, "")
+			createAccessStrategyForTest("access-strategy-probe-failure", groupDir, "")
+
+			By("creating a workspace referencing the reachable access strategy")
+			createWorkspaceForTest(workspaceName, groupDir, "")
+
+			By("waiting for the workspace to become Available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("patching workspace to switch accessStrategyRef to unreachable strategy")
+			cmd := exec.Command("kubectl", "patch", "workspace", workspaceName,
+				"-n", workspaceNamespace, "--type=merge", "--patch-file",
+				"test/e2e/static/access-probe/patch-workspace-switch-to-failure-strategy.json")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for the workspace to become Degraded after probe reset")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeDegraded,
+				ConditionTrue,
+			)
+
+			By("verifying Degraded condition reason")
+			reason, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				fmt.Sprintf("{.status.conditions[?(@.type==\"%s\")].reason}",
+					controller.ConditionTypeDegraded))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reason).To(Equal(controller.ReasonAccessProbeThresholdExceeded))
 		})
 	})
 })
