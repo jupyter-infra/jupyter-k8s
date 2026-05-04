@@ -232,6 +232,12 @@ type WorkspaceStatus struct {
 	// +optional
 	AccessResources []AccessResourceStatus `json:"accessResources,omitempty"`
 
+	// ObservedAccessStrategyVersion is a token capturing the identity and
+	// version of the AccessStrategy last evaluated during workspace
+	// reconciliation. The controller resets probe state when this value changes.
+	// +optional
+	ObservedAccessStrategyVersion string `json:"observedAccessStrategyVersion,omitempty"`
+
 	// AccessStartupProbeSucceeded indicates whether the access startup probe
 	// has passed. Set to true when the probe succeeds; reset to false when
 	// the workspace stops.

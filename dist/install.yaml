@@ -7563,6 +7563,12 @@ spec:
                   attempt to enforce spacing; survives watch-triggered re-reconciliations.
                 format: date-time
                 type: string
+              observedAccessStrategyVersion:
+                description: |-
+                  ObservedAccessStrategyVersion is a token capturing the identity and
+                  version of the AccessStrategy last evaluated during workspace
+                  reconciliation. The controller resets probe state when this value changes.
+                type: string
               serviceName:
                 description: ServiceName is the name of the service exposing the Workspace
                 type: string
