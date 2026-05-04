@@ -102,32 +102,6 @@ var _ = BeforeSuite(func() {
 	// Check if operator is already installed and clean up the cluster if needed
 	checkAndCleanCluster()
 
-	containerTool := os.Getenv("CONTAINER_TOOL")
-	if containerTool == "" {
-		containerTool = "docker"
-	}
-
-	// Build the manager image only when using the default local image.
-	// When E2E_MANAGER_IMAGE is set, assume the image is already available locally
-	// (e.g., pulled from GHCR and loaded into Kind by the caller).
-	if os.Getenv("E2E_MANAGER_IMAGE") == "" {
-		By("checking if manager image exists")
-		inspectCmd := exec.Command(containerTool, "image", "inspect", projectImage)
-		if _, err := inspectCmd.CombinedOutput(); err != nil {
-			By("building the manager(Operator) image")
-			buildCmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
-			_, err := utils.Run(buildCmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to build manager image")
-		} else {
-			_, _ = fmt.Fprintf(GinkgoWriter, "Manager image already exists, skipping build\n")
-		}
-
-		By("loading the manager(Operator) image on Kind")
-		Expect(utils.LoadImageToKindClusterWithName(projectImage)).To(Succeed(), "Failed to load image to Kind cluster")
-	} else {
-		_, _ = fmt.Fprintf(GinkgoWriter, "Using pre-built manager image: %s\n", projectImage)
-	}
-
 	var cmd *exec.Cmd
 	var err error
 
