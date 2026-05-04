@@ -135,18 +135,18 @@ DEV_KIND_CLUSTER ?= jupyter-k8s-dev
 USE_KIND ?= false
 
 .PHONY: setup-test-e2e
-setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
+setup-test-e2e: ## Set up a fresh Kind cluster for e2e tests (deletes existing cluster first)
 	@command -v $(KIND) >/dev/null 2>&1 || { \
 		echo "Kind is not installed. Please install Kind manually."; \
 		exit 1; \
 	}
 	@case "$$($(KIND) get clusters)" in \
 		*"$(KIND_CLUSTER)"*) \
-			echo "Kind cluster '$(KIND_CLUSTER)' already exists. Skipping creation." ;; \
-		*) \
-			echo "Creating Kind cluster '$(KIND_CLUSTER)'..."; \
-			$(KIND) create cluster --name $(KIND_CLUSTER) ;; \
+			echo "Deleting existing Kind cluster '$(KIND_CLUSTER)' for a fresh start..."; \
+			$(KIND) delete cluster --name $(KIND_CLUSTER) ;; \
 	esac
+	@echo "Creating Kind cluster '$(KIND_CLUSTER)'..."
+	@$(KIND) create cluster --name $(KIND_CLUSTER)
 	@if ! kubectl get namespace cert-manager > /dev/null 2>&1; then \
 		echo "Installing cert-manager"; \
 		helm repo add jetstack https://charts.jetstack.io; \
@@ -428,8 +428,10 @@ load-images: docker-build build-rotator ## Build and load images into the Kind c
 
 .PHONY: load-images-e2e
 load-images-e2e: build-rotator ## Build and load application images into the e2e test Kind cluster
+	@echo "Removing stale images to force rebuild..."
+	@$(CONTAINER_TOOL) rmi jupyter.org/jupyter-k8s:v0.0.1 2>/dev/null || true
+	@$(CONTAINER_TOOL) rmi docker.io/library/rotator:local 2>/dev/null || true
 	@echo "Loading application images into e2e test cluster ${KIND_CLUSTER}..."
-	@echo "Note: Controller image is built and loaded by the e2e test suite itself"
 	@echo "Loading rotator image into e2e test cluster ${KIND_CLUSTER}..."
 	@mkdir -p /tmp/kind-images
 	$(CONTAINER_TOOL) save docker.io/library/rotator:local -o /tmp/kind-images/rotator.tar
