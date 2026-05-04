@@ -15,6 +15,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
@@ -172,8 +173,10 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 		BeforeEach(func() {
 			accessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-strategy",
-					Namespace: "default",
+					Name:       "test-strategy",
+					Namespace:  "default",
+					UID:        types.UID("test-uid"),
+					Generation: 1,
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 					DisplayName:             "Test Strategy",
@@ -223,6 +226,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 
 			failures := int32(2)
 			workspace.Status.AccessStartupProbeFailures = &failures
+			workspace.Status.ObservedAccessStrategyVersion = fmt.Sprintf("%s.%d", accessStrategy.UID, accessStrategy.Generation)
 			Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
@@ -255,6 +259,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 
 			zero := int32(0)
 			workspace.Status.AccessStartupProbeFailures = &zero
+			workspace.Status.ObservedAccessStrategyVersion = fmt.Sprintf("%s.%d", accessStrategy.UID, accessStrategy.Generation)
 			Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
@@ -291,6 +296,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			future := metav1.NewTime(time.Now().Add(2 * time.Second))
 			workspace.Status.AccessStartupProbeFailures = &one
 			workspace.Status.EarliestNextProbeTime = &future
+			workspace.Status.ObservedAccessStrategyVersion = fmt.Sprintf("%s.%d", accessStrategy.UID, accessStrategy.Generation)
 			Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
@@ -324,6 +330,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
 
 			workspace.Status.AccessStartupProbeSucceeded = true
+			workspace.Status.ObservedAccessStrategyVersion = fmt.Sprintf("%s.%d", accessStrategy.UID, accessStrategy.Generation)
 			Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
@@ -343,6 +350,41 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(mockProber.probeCount).To(Equal(0))
 		})
 
+		It("should re-probe when AccessStrategy generation changes on an Available workspace", func() {
+			mockProber.ready = true
+			workspace := newWorkspaceWithAccessStrategy()
+			dep := createReadyDeployment(workspace)
+			svc := createService(workspace)
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			workspace.Status.AccessStartupProbeSucceeded = true
+			workspace.Status.ObservedAccessStrategyVersion = fmt.Sprintf("%s.%d", accessStrategy.UID, accessStrategy.Generation)
+			Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+
+			// Simulate AccessStrategy spec update
+			accessStrategy.Generation = 2
+			mockProber.ready = false
+
+			sm := buildStateMachine()
+			result, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+			progressing := getCondition(workspace, ConditionTypeProgressing)
+			Expect(progressing).NotTo(BeNil())
+			Expect(progressing.Status).To(Equal(metav1.ConditionTrue))
+			Expect(progressing.Reason).To(Equal(ReasonAccessNotReady))
+
+			available := getCondition(workspace, ConditionTypeAvailable)
+			Expect(available).NotTo(BeNil())
+			Expect(available.Status).To(Equal(metav1.ConditionFalse))
+
+			Expect(mockProber.probeCount).To(Equal(1))
+		})
+
 		It("should mark Degraded when failure threshold is exceeded", func() {
 			mockProber.ready = false
 			workspace := newWorkspaceWithAccessStrategy()
@@ -354,6 +396,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 
 			failures := int32(2) // next failure (3) >= threshold (3)
 			workspace.Status.AccessStartupProbeFailures = &failures
+			workspace.Status.ObservedAccessStrategyVersion = fmt.Sprintf("%s.%d", accessStrategy.UID, accessStrategy.Generation)
 			Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
@@ -394,6 +437,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 
 			zero := int32(0)
 			workspace.Status.AccessStartupProbeFailures = &zero
+			workspace.Status.ObservedAccessStrategyVersion = fmt.Sprintf("%s.%d", accessStrategy.UID, accessStrategy.Generation)
 			Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
@@ -435,8 +479,10 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 		BeforeEach(func() {
 			accessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-strategy",
-					Namespace: "default",
+					Name:       "test-strategy",
+					Namespace:  "default",
+					UID:        types.UID("test-uid"),
+					Generation: 1,
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 					DisplayName:             "Test Strategy",
@@ -478,6 +524,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 
 			failures := int32(2)
 			workspace.Status.AccessStartupProbeFailures = &failures
+			workspace.Status.ObservedAccessStrategyVersion = fmt.Sprintf("%s.%d", accessStrategy.UID, accessStrategy.Generation)
 			Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
@@ -517,6 +564,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 
 			zero := int32(0)
 			workspace.Status.AccessStartupProbeFailures = &zero
+			workspace.Status.ObservedAccessStrategyVersion = fmt.Sprintf("%s.%d", accessStrategy.UID, accessStrategy.Generation)
 			Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 

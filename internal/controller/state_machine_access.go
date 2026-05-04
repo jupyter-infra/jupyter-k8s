@@ -51,6 +51,7 @@ func (sm *StateMachine) ReconcileAccessForDesiredRunningStatus(
 	workspace.Status.AccessURL = ""
 	workspace.Status.AccessResourceSelector = ""
 	workspace.Status.AccessStartupProbeSucceeded = false
+	workspace.Status.ObservedAccessStrategyVersion = ""
 	clearProbeState(workspace)
 
 	err := sm.resourceManager.EnsureAccessResourcesDeleted(ctx, workspace)
@@ -68,6 +69,7 @@ func (sm *StateMachine) ReconcileAccessForDesiredStoppedStatus(ctx context.Conte
 	workspace.Status.AccessURL = ""
 	workspace.Status.AccessResourceSelector = ""
 	workspace.Status.AccessStartupProbeSucceeded = false
+	workspace.Status.ObservedAccessStrategyVersion = ""
 	clearProbeState(workspace)
 
 	err := sm.resourceManager.EnsureAccessResourcesDeleted(ctx, workspace)
@@ -108,6 +110,17 @@ func (sm *StateMachine) ProbeAccessStartup(
 ) (*ProbeResult, error) {
 	if accessStrategy == nil || accessStrategy.Spec.AccessStartupProbe == nil {
 		return &ProbeResult{Status: ProbeNotDefined}, nil
+	}
+
+	// Reset probe state when the AccessStrategy identity or spec changes.
+	// Without this, degraded workspaces cannot self-heal after an
+	// AccessStrategy fix, and already-succeeded probes are never
+	// re-evaluated after a strategy or ref change. (issue #368)
+	currentVersionedId := versionedAccessStrategyID(accessStrategy)
+	if workspace.Status.ObservedAccessStrategyVersion != currentVersionedId {
+		clearProbeState(workspace)
+		workspace.Status.AccessStartupProbeSucceeded = false
+		workspace.Status.ObservedAccessStrategyVersion = currentVersionedId
 	}
 
 	if workspace.Status.AccessStartupProbeSucceeded {
@@ -197,6 +210,10 @@ func (sm *StateMachine) ProbeAccessStartup(
 func clearProbeState(workspace *workspacev1alpha1.Workspace) {
 	workspace.Status.AccessStartupProbeFailures = nil
 	workspace.Status.EarliestNextProbeTime = nil
+}
+
+func versionedAccessStrategyID(as *workspacev1alpha1.WorkspaceAccessStrategy) string {
+	return fmt.Sprintf("%s.%d", as.UID, as.Generation)
 }
 
 func probeRetrySeconds(periodSeconds int32, failures int32, failureThreshold int32) int32 {

@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
@@ -63,8 +64,10 @@ var _ = Describe("ProbeAccessStartup", func() {
 
 		accessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-strategy",
-				Namespace: "default",
+				Name:       "test-strategy",
+				Namespace:  "default",
+				UID:        types.UID("test-uid"),
+				Generation: 1,
 			},
 			Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 				DisplayName:             "Test Strategy",
@@ -78,6 +81,9 @@ var _ = Describe("ProbeAccessStartup", func() {
 				},
 			},
 		}
+
+		workspace.Status.ObservedAccessStrategyVersion = fmt.Sprintf("%s.%d",
+			accessStrategy.UID, accessStrategy.Generation)
 
 		sm = &StateMachine{
 			accessStartupProber: mockProber,
@@ -286,20 +292,89 @@ var _ = Describe("ProbeAccessStartup", func() {
 		Expect(result.Status).To(Equal(ProbeRetrying))
 		Expect(result.RequeueAfter).To(Equal(2 * time.Second))
 	})
+
+	It("should reset probe when AccessStrategy generation changes (degraded self-heal)", func() {
+		mockProber.ready = false
+		failures := int32(3) // already at threshold
+		workspace.Status.AccessStartupProbeFailures = &failures
+
+		result, err := sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Status).To(Equal(ProbeFailureThresholdExceeded))
+
+		// Simulate AccessStrategy spec update (generation bump)
+		accessStrategy.Generation = 2
+		mockProber.ready = true
+
+		result, err = sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Status).To(Equal(ProbeSucceeded))
+		Expect(workspace.Status.AccessStartupProbeSucceeded).To(BeTrue())
+		Expect(workspace.Status.ObservedAccessStrategyVersion).To(Equal(
+			fmt.Sprintf("%s.%d", accessStrategy.UID, accessStrategy.Generation)))
+	})
+
+	It("should reset probe when AccessStrategy generation changes (already succeeded)", func() {
+		workspace.Status.AccessStartupProbeSucceeded = true
+
+		result, err := sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Status).To(Equal(ProbeAlreadySucceeded))
+
+		// Simulate AccessStrategy spec update (generation bump)
+		accessStrategy.Generation = 2
+		mockProber.ready = false
+
+		result, err = sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Status).To(Equal(ProbeRetrying))
+		Expect(workspace.Status.AccessStartupProbeSucceeded).To(BeFalse())
+	})
+
+	It("should reset probe when AccessStrategy UID changes (ref switch)", func() {
+		workspace.Status.AccessStartupProbeSucceeded = true
+
+		result, err := sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Status).To(Equal(ProbeAlreadySucceeded))
+
+		// Simulate switching to a different AccessStrategy (different UID, same generation)
+		accessStrategy.UID = types.UID("different-uid")
+		accessStrategy.Generation = 1
+		mockProber.ready = true
+
+		result, err = sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Status).To(Equal(ProbeSucceeded))
+		Expect(workspace.Status.ObservedAccessStrategyVersion).To(Equal("different-uid.1"))
+	})
+
+	It("should not reset probe when AccessStrategy version has not changed", func() {
+		mockProber.ready = false
+		failures := int32(1)
+		workspace.Status.AccessStartupProbeFailures = &failures
+
+		result, err := sm.ProbeAccessStartup(ctx, workspace, accessStrategy, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Status).To(Equal(ProbeRetrying))
+		Expect(*workspace.Status.AccessStartupProbeFailures).To(Equal(int32(2)))
+	})
 })
 
 var _ = Describe("clearProbeState", func() {
-	It("should clear both failures and earliest next probe time", func() {
+	It("should clear failures and earliest next probe time but not version", func() {
 		failures := int32(5)
 		future := metav1.NewTime(time.Now().Add(5 * time.Second))
 		workspace := &workspacev1alpha1.Workspace{}
 		workspace.Status.AccessStartupProbeFailures = &failures
 		workspace.Status.EarliestNextProbeTime = &future
+		workspace.Status.ObservedAccessStrategyVersion = "some-uid.1"
 
 		clearProbeState(workspace)
 
 		Expect(workspace.Status.AccessStartupProbeFailures).To(BeNil())
 		Expect(workspace.Status.EarliestNextProbeTime).To(BeNil())
+		Expect(workspace.Status.ObservedAccessStrategyVersion).To(Equal("some-uid.1"))
 	})
 
 	It("should be a no-op when both fields are already nil", func() {
