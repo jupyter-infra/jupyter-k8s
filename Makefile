@@ -809,3 +809,21 @@ helm-history: ## Show Helm release history.
 .PHONY: helm-rollback
 helm-rollback: ## Rollback to previous Helm release.
 	$(HELM) rollback $(HELM_RELEASE) --namespace $(HELM_NAMESPACE)
+
+##@ Documentation
+
+.PHONY: docs
+docs: ## Build documentation HTML.
+	$(MAKE) -C docs html
+
+.PHONY: docs-serve
+docs-serve: ## Serve documentation with live reload.
+	sphinx-autobuild docs/source docs/build/html --port 8080
+
+.PHONY: docs-diagrams
+docs-diagrams: ## Render d2 diagrams to SVG.
+	@mkdir -p docs/source/_static/img/diagrams
+	@for f in diagrams/*.d2; do \
+		[ -f "$$f" ] || continue; \
+		d2 "$$f" "docs/source/_static/img/diagrams/$$(basename "$${f%.d2}.svg")"; \
+	done

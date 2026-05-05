@@ -133,6 +133,14 @@ Ask user before running.
 - Run end-to-end tests (creates a separate kind cluster): `make test-e2e`
 - Run focused e2e tests: `make test-e2e-focus FOCUS="<selector name>"` (e.g., `FOCUS="Workspace Access Strategy"`)
 
+## Documentation
+
+Refer to [`docs/AGENT.md`](docs/AGENT.md)
+
+## Updating architecture diagrams
+
+Refer to [`diagrams/AGENT.md`](diagrams/AGENT.md)
+
 ## CI & Release
 
 See [`.github/AGENT.md`](.github/AGENT.md) for workflow details, release flow, and how to
