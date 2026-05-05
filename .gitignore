@@ -38,3 +38,7 @@ guided-charts/**/*.lock
 
 # env files with sensitive data
 .env
+
+# docs
+docs/build/
+docs/source/_static/img/diagrams/
