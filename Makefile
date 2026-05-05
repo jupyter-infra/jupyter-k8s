@@ -820,6 +820,11 @@ docs: ## Build documentation HTML.
 docs-serve: ## Serve documentation with live reload.
 	sphinx-autobuild docs/source docs/build/html --port 8080
 
+.PHONY: docs-serve-host
+docs-serve-host: docs ## Serve documentation on all interfaces (for remote access).
+	@echo "Serving at http://$$(hostname):8080"
+	python3 -m http.server 8080 --bind 0.0.0.0 --directory docs/build/html
+
 .PHONY: docs-diagrams
 docs-diagrams: ## Render d2 diagrams to SVG.
 	@mkdir -p docs/source/_static/img/diagrams
