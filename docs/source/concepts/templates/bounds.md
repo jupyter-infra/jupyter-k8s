@@ -4,7 +4,13 @@ Templates can enforce constraints that prevent workspace users from creating or 
 
 Note that these bounds only apply to a workspace that references the template.
 
-To prevent workspace users from creating arbitrary workspaces, cluster administrators can setup [ValidationAdmissionPolicy](https://kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/) to prevent workspace users from creating or updating a workspace that does not reference a template. 
+To prevent workspace users from creating arbitrary workspaces, cluster administrators can combine two mechanisms:
+
+1. **Shared namespace with a default template** — configure a [default template](shared-namespace) in the shared namespace. The mutating webhook automatically assigns it to any workspace created without an explicit `templateRef`. This is the recommended approach for most clusters.
+
+2. **ValidationAdmissionPolicy** — for stricter enforcement, write a [ValidatingAdmissionPolicy](https://kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/) that rejects any workspace without a `templateRef`. This is a more DIY approach that gives administrators full control over the validation logic using CEL expressions.
+
+The two approaches can be combined: the default template covers the common case, while the admission policy acts as a safety net rejecting workspaces that somehow bypass the mutating webhook.
 
 ## Resource bounds
 

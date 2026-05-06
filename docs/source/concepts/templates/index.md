@@ -23,7 +23,7 @@ The workspace user does not need to worry about all these details.
 
 Templates are namespaced resources, and a `workspace.spec.templateRef` may only reference a template in its own namespace.
 
-There is an exception to this rule: **Jupyter K8s** allows workspaces of _any_ namespace to reference templates in the shared namespace - a special namespace identified at the **Jupyter K8s** operator level.
+There is an exception to this rule: **Jupyter K8s** allows workspaces of _any_ namespace to reference templates in the [shared namespace](shared-namespace) - a special namespace identified at the **Jupyter K8s** operator level.
 
 ## Setup
 
@@ -64,4 +64,5 @@ In this case, any workspace that references this template will inherit the acces
 
 defaults
 bounds
+shared-namespace
 ```

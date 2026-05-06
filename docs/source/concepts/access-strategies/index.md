@@ -27,7 +27,7 @@ The workspace user does not need to worry, or even know anything, about all thes
 
 Access strategies are namespaced resources, and a `workspace.spec.accessStrategy` may only reference an access strategy in its own namespace.
 
-There is an exception to this rule: **Jupyter K8s** allows workspaces of _any_ namespace to reference access strategies in the shared namespace - a special namespace identified at the **Jupyter K8s** operator level.
+There is an exception to this rule: **Jupyter K8s** allows workspaces of _any_ namespace to reference access strategies in the [shared namespace](../templates/shared-namespace) - a special namespace identified at the **Jupyter K8s** operator level.
 
 
 ```{toctree}
