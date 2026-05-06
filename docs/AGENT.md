@@ -39,7 +39,7 @@ markdown headings (`#`, `##`, `###`, etc.).
 ### Naming and ordering consistency
 
 Directory names, page titles, and `nav_links` entries must match each other
-(e.g. `core-concepts/` dir, "Core Concepts" title).
+(e.g. `concepts/` dir, "Concepts" title).
 The order of `nav_links` in `conf.py` must match the `{toctree}` order in `index.md`.
 
 ## Diagrams

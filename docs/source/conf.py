@@ -33,8 +33,8 @@ html_theme_options = {
             "url": "getting-started/index",
         },
         {
-            "title": "Core Concepts",
-            "url": "core-concepts/index",
+            "title": "Concepts",
+            "url": "concepts/index",
         },
         {
             "title": "Applications",
