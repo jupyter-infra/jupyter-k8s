@@ -813,7 +813,7 @@ helm-rollback: ## Rollback to previous Helm release.
 ##@ Documentation
 
 .PHONY: docs
-docs: ## Build documentation HTML.
+docs: docs-diagrams ## Build documentation HTML.
 	$(MAKE) -C docs html
 
 .PHONY: docs-serve

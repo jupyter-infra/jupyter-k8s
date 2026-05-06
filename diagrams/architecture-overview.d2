@@ -1,0 +1,164 @@
+# Jupyter-K8s — 10,000-foot View
+
+vars: {
+  d2-config: {
+    layout-engine: dagre
+  }
+}
+
+classes: {
+  box: {
+    shape: rectangle
+    style: {
+      bold: true
+      stroke-width: 3
+      font-size: 20
+    }
+  }
+
+  green_flow: {
+    style: {
+      stroke: "#2e7d32"
+      stroke-width: 3
+    }
+  }
+
+  blue_flow: {
+    style: {
+      stroke: "#1565c0"
+      stroke-width: 3
+    }
+  }
+}
+
+direction: right
+
+# Column 1: User Laptop
+laptop: "User Laptop" {
+  style: {
+    fill: "#e8f5e9"
+    stroke: "#2e7d32"
+    stroke-width: 3
+    bold: true
+    font-size: 20
+  }
+
+  kubectl: "kubectl" {
+    class: box
+    icon: icons/kubernetes.svg
+    style: {
+      fill: "#c8e6c9"
+      stroke: "#388e3c"
+    }
+  }
+
+  browser: "Web Browser" {
+    class: box
+    icon: icons/firefox.svg
+    style: {
+      fill: "#c8e6c9"
+      stroke: "#388e3c"
+    }
+  }
+}
+
+# Column 2: Kubernetes Cluster
+cluster: "Kubernetes Cluster" {
+  style: {
+    fill: "#e3f2fd"
+    stroke: "#1565c0"
+    stroke-width: 3
+    bold: true
+    font-size: 20
+  }
+
+  api_server: "API Server" {
+    class: box
+    icon: icons/api-server.svg
+    style: {
+      fill: "#bbdefb"
+      stroke: "#1565c0"
+    }
+  }
+
+  router: "Router" {
+    class: box
+    icon: icons/ing.svg
+    style: {
+      fill: "#ffe0b2"
+      stroke: "#f57c00"
+    }
+  }
+
+  operator: "Operator" {
+    class: box
+    icon: icons/jupyter.svg
+    style: {
+      fill: "#bbdefb"
+      stroke: "#1565c0"
+    }
+  }
+
+  authmiddleware: "Authmiddleware" {
+    class: box
+    icon: icons/jupyter.svg
+    style: {
+      fill: "#ffe0b2"
+      stroke: "#f57c00"
+    }
+  }
+
+  workspace: "Workspace" {
+    class: box
+    style: {
+      fill: "#e1bee7"
+      stroke: "#8e24aa"
+    }
+
+    volume: "" {
+      shape: image
+      icon: icons/pv.svg
+    }
+
+    pod: "" {
+      shape: image
+      icon: icons/pod.svg
+    }
+
+  }
+}
+
+# Flows: management path (green)
+laptop.kubectl -> cluster.api_server: "create Workspace" {
+  class: green_flow
+}
+
+cluster.api_server -> cluster.operator: "reconcile" {
+  class: green_flow
+}
+
+cluster.operator -> cluster.workspace.pod: "create" {
+  class: green_flow
+}
+
+cluster.operator -> cluster.workspace.volume: "create" {
+  class: green_flow
+}
+
+# Flows: browser access (blue)
+laptop.browser -> cluster.router: "HTTPS" {
+  class: blue_flow
+}
+
+cluster.router -> cluster.authmiddleware: "forward auth" {
+  class: blue_flow
+}
+
+cluster.authmiddleware -> cluster.operator: "authorize" {
+  class: blue_flow
+}
+
+
+cluster.router -> cluster.workspace.pod: "proxy" {
+  class: blue_flow
+}
