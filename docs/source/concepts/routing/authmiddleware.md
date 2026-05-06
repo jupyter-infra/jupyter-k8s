@@ -18,8 +18,8 @@ When no cookie is present, the auth middleware handles first-time authentication
 
 | Strategy | First request |
 |----------|--------------|
-| **OIDC** | Redirect through the identity provider (OAuth2 flow) |
-| **Bearer token** | Validate the bearer token via the Extension API's `BearerTokenReview`, then issue a session cookie |
+| **OIDC** | Redirect through the identity provider (OAuth2 flow), then authorize via [`ConnectionAccessReview`](../connections/access-review) |
+| **Bearer token** | Validate the bearer token via the Extension API's [`BearerTokenReview`](../connections/token-review), then issue a session cookie |
 
 Both paths end with a signed JWT cookie scoped to the specific workspace path.
 
@@ -30,3 +30,9 @@ The middleware watches a Kubernetes Secret containing the HMAC signing key. A **
 ## Stateless design
 
 No session store, no database. All session state lives in the JWT cookie. This allows horizontal scaling — any auth middleware pod can verify any request without coordination.
+
+## Separation of responsibilities
+
+Auth middleware delegates access decisions and bearer token validation to the **Extension API**. It never reads workspace resources or RBAC policies directly.
+
+The JWTs that auth middleware uses for session cookies are independent from the JWTs that the Extension API uses for bearer token URLs — each has its own signing key and rotation schedule.

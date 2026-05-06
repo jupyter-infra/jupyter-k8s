@@ -43,4 +43,6 @@ Unlike a normal Kubernetes resource, a WorkspaceConnection does not persist in E
 
 web-access
 remote-access
+access-review
+token-review
 ```

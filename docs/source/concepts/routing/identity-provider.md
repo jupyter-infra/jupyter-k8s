@@ -8,7 +8,7 @@ The identity provider:
 
 1. Authenticates the user (login page, SSO, etc.)
 2. Issues an OIDC token containing the user's Kubernetes identity - username and group memberships
-3. The auth middleware uses the Kubernetes identity embedded in this token to authorize access using a `Create:ConnectionAccessReview`
+3. The auth middleware uses the Kubernetes identity embedded in this token to authorize access using a [`Create:ConnectionAccessReview`](../connections/access-review)
 
 ## Common configurations
 
@@ -25,3 +25,5 @@ The AWS guided charts bundle [Dex](https://dexidp.io/) as the identity provider 
 ## Bearer token alternative
 
 If you don't need browser-based OIDC login (e.g. programmatic access from CLI tools), you can set access strategies that leverage **bearer token** access. Users obtain a time-limited token via the `Create:Connection` API and pass it in the URL.
+
+The bearer token is opaque to auth middleware, which validates it by calling [`Create:BearerTokenReview`](../connections/token-review).
