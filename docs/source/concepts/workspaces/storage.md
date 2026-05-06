@@ -4,6 +4,8 @@ Each workspace gets a dedicated PersistentVolumeClaim (PVC) for durable storage 
 
 The workspace storage persists when a workspace is stopped.
 
+Workspaces can also mount shared volumes — pre-existing PVCs that multiple workspaces reference. This enables collaboration patterns like shared datasets, team code repositories, or common model artifacts across workspaces.
+
 ## Primary storage
 
 Configured via `spec.storage`:

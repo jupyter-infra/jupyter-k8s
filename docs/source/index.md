@@ -26,7 +26,7 @@ Workspaces are native Kubernetes resources. Your users manage and access them us
 :::
 
 :::{grid-item-card} 📓 Multi-Application Support
-Run JupyterLab, VS Code, or bring your own apps. Each workspace gets its own persistent storage and unique URL.
+Run JupyterLab, VS Code, or bring your own apps. Persistent per-user storage with optional shared volumes for team collaboration.
 :::
 
 :::{grid-item-card} 🛡️ Secure by Default
