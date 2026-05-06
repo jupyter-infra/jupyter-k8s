@@ -17,7 +17,6 @@ kubectl create -f - <<EOF
 apiVersion: connection.workspace.jupyter.org/v1alpha1
 kind: WorkspaceConnection
 metadata:
-  name: vscode
   namespace: team-alice
 spec:
   workspaceName: alice-workspace

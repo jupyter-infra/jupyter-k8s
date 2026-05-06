@@ -12,6 +12,7 @@ metadata:
   namespace: alice-team
 spec:
   workspaceName: alice-workspace
+  workspaceConnectionType: web-ui
 EOF
 ```
 

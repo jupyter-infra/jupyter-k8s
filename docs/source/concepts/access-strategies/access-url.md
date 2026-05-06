@@ -37,9 +37,10 @@ kubectl create -f - <<EOF
 apiVersion: connection.workspace.jupyter.org/v1alpha1
 kind: WorkspaceConnection
 metadata:
-  name: connect
+  namespace: <workspace-namespace>
 spec:
   workspaceName: <workspace-name>
+  workspaceConnectionType: web-ui
 EOF
 ```
 
