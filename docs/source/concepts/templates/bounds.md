@@ -1,6 +1,6 @@
 # Bounds
 
-Templates can enforce constraints that prevent workspace users to create or update a workspace that exceeds resource limits or uses unauthorized configurations.
+Templates can enforce constraints that prevent workspace users from creating or updating a workspace that exceeds resource limits or uses unauthorized configurations.
 
 Note that these bounds only apply to a workspace that references the template.
 

@@ -1,6 +1,6 @@
 # Templates
 
-A **WorkspaceTemplate** provides an easy-way to configure a workspace and to enforce constraints on its attributes.
+A **WorkspaceTemplate** provides an easy way to configure a workspace and to enforce constraints on its attributes.
 
 Workspace templates have a 1:many relationship with workspaces; multiple workspaces may reference the same template, but a workspace can reference at most one template.
 
@@ -31,7 +31,7 @@ There are two primary use cases for templates:
 1. cluster or team administrators to provide trusted configurations to workspace users
 2. advanced workspace users to save and reuse their own workspace configurations
 
-A user with the right RBAC permission can create a template as follow:
+A user with the right RBAC permission can create a template as follows:
 ```yaml
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
@@ -49,7 +49,7 @@ apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
   name: template-for-team-alice
-  namespace: ateam-alice
+  namespace: team-alice
 spec:
   displayName: Team Alice Template
   defaultImage: my-repository/my-image:my-tag

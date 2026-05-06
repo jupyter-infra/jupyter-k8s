@@ -36,10 +36,10 @@ spec:
 ## Merge behavior
 
 Deployment modifications are **injections** — they add attributes to the deployment.
-In case of conflict, any configurations the access strategy provides take precedence over the `workspace.spec`.
+In case of conflict, configurations the access strategy provides take precedence over the `workspace.spec`.
 
 The controller applies the access strategy configuration to the workspace's resources during reconciliation:
 - **Appends** additional containers (sidecars) to the workspace pod.
-- **Creates** init containers for the pod's containers.
+- **Creates** init containers for the pod.
 - **Resolves** Environment variables in `mergeEnv` from Go templates (with access to `.Workspace` and `.AccessStrategy`); then
-- **Merges** them by name. In case of conflict, the access strategy defined environment variables take precedence the `workspace.spec.env`.
+- **Merges** them by name. In case of conflict, the access strategy's environment variables take precedence over `workspace.spec.env`.

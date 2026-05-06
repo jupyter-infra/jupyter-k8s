@@ -1,6 +1,6 @@
 # Storage
 
-Each workspace gets a dedicated PersistentVolumeClaim (PVC) for durable storage that survives pod restarts, re-scheduling.
+Each workspace gets a dedicated PersistentVolumeClaim (PVC) for durable storage that survives pod restarts and re-scheduling.
 
 The workspace storage persists when a workspace is stopped.
 

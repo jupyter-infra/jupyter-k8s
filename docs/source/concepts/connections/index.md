@@ -2,7 +2,7 @@
 
 A **Connection** is a short-lived resource that provides a user with a URL (or session) to access their workspace.
 
-A workspace user can generate a Connection to a workspace with `kubectl` as follow:
+A workspace user can generate a Connection to a workspace with:
 
 ```bash
 kubectl create -f - <<EOF

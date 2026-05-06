@@ -16,7 +16,7 @@ The fully resolved URL appears in the `workspace.status`, and points to the rout
 To find their workspace's access URL, a workspace user can run:
 
 ```bash
-kubeclt get Workspace <workspace-name> -o yaml 
+kubectl get Workspace <workspace-name> -o yaml
 ```
 
 ## `bearerAuthURLTemplate`

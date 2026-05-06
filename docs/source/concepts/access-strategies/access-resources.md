@@ -36,7 +36,7 @@ spec:
 
 ## Lifecycle
 
-During the reconciliation loop of a workspace, the controller :
+During the reconciliation loop of a workspace, the controller:
 
 - **Creates** access resources before setting the `workspace.status` to `Available`, and sets the workspace as their `owner.reference`
 - **Updates** access resources when the access strategy or workspace spec changes.

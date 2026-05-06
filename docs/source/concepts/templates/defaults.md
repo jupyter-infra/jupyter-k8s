@@ -31,7 +31,7 @@ For example, if a `workspace.spec` specifies a `containerSecurityContext`, the t
 
 ## Merge rules
 
-The following `template.spec` attributes modify a attribute even when the workspace user specified a value for that attribute in the `workspace.spec` or `workspace.metadata`.
+The following `template.spec` attributes modify an attribute even when the workspace user specified a value for that attribute in the `workspace.spec` or `workspace.metadata`.
 
 
 | Template field | Workspace field it fills |
@@ -39,12 +39,12 @@ The following `template.spec` attributes modify a attribute even when the worksp
 | `baseEnv` | `spec.env` |
 | `baseLabels` | `metadata.labels` |
 
-For such attributes, the controllers **adds** the template defaults to the user-specified workspace attributes.
+For such attributes, the controller **adds** the template defaults to the user-specified workspace attributes.
 
-In case of a conflict between the template default and the value specified by the workspace, the workspace attribute takes precedence.
+In case of conflict between the template default and the value specified by the workspace, the workspace attribute takes precedence.
 
 ## When defaults apply
 
-The **Mutating admission webhook** for workspaces injects the default at workspace creation and update time.
+The **mutating admission webhook** for workspaces injects defaults at workspace creation and update time.
 
 When a `template.spec` changes, the controller does not modify running workspaces that already reference it — this is the **lazy application** model.

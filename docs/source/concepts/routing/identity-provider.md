@@ -8,7 +8,7 @@ The identity provider:
 
 1. Authenticates the user (login page, SSO, etc.)
 2. Issues an OIDC token containing the user's Kubernetes identity - username and group memberships
-3. The auth middleware uses the Kubernetes identity embedded in this token to authorize access using a `Create:WorkspaceAccessReview`
+3. The auth middleware uses the Kubernetes identity embedded in this token to authorize access using a `Create:ConnectionAccessReview`
 
 ## Common configurations
 
