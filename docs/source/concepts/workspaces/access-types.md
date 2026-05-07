@@ -60,5 +60,3 @@ roleRef:
 ```
 
 This grants `alice` the ability to create connections (and therefore access workspaces) in the `team-alice` namespace. The `workspace.spec.accessType` further narrows access — even with RBAC permission, an `OwnerOnly` workspace only allows its creator to connect.
-
-For a deeper treatment of authentication and authorization patterns, see [Dive Deeper > Security](../../dive-deeper/index).

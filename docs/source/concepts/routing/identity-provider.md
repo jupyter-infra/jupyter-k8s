@@ -1,6 +1,6 @@
 # Identity Provider
 
-When using OIDC-based web access, the routing layer needs an identity provider (IdP) to authenticate users. The operator itself is IdP-agnostic — you bring your own.
+When using OIDC-based web access, the routing layer needs an identity provider (IdP) to authenticate users. **Jupyter K8s** is IdP-agnostic — you bring your own.
 
 ## Role of the IdP
 

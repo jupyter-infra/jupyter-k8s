@@ -55,7 +55,7 @@ status:
 
 ## Who calls it
 
-The auth middleware calls `Create:BearerTokenReview` during bearer-token authentication (its `/auth` route) — when a user first accesses a workspace using a bearer token URL. Once the token is verified, the middleware issues a signed JWT session cookie. Subsequent requests use the cookie and do not require another token review.
+**Auth middleware** calls `Create:BearerTokenReview` during bearer-token authentication (its [`/bearer-auth` route](../../dive-deeper/authmiddleware/routes)) — when a user first accesses a workspace using a bearer token URL. Once the token is verified, the middleware issues a signed JWT session cookie. Subsequent requests use the cookie and do not require another token review.
 
 The RBAC permissions required by the auth middleware's service account are:
 

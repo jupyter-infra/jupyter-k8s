@@ -4,7 +4,7 @@ The **shared namespace** is a cluster-wide namespace where administrators place 
 
 ## Configuration
 
-Set the `--default-template-namespace` flag on the operator (default: `jupyter-k8s-shared`) to identify the shared namespace. In the Helm chart, use `workspaceTemplates.defaultNamespace`.
+Set the `--default-template-namespace` flag on **Jupyter K8s** (default: `jupyter-k8s-shared`) to identify the shared namespace. In the Helm chart, use `workspaceTemplates.defaultNamespace`.
 
 ## Default template resolution
 
