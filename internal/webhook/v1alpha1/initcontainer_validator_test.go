@@ -65,15 +65,66 @@ var _ = Describe("InitContainerValidator", func() {
 
 		It("should allow template default init containers even when custom not allowed", func() {
 			template.Spec.DefaultInitContainers = []corev1.Container{
-				{Name: "template-init", Image: "busybox:latest"},
+				{Name: "template-init", Image: "busybox:latest", Command: []string{"sh", "-c", "echo hi"}},
 			}
 			template.Spec.AllowCustomInitContainers = nil
-			// Workspace has the same init containers as template defaults (set by defaulter)
 			initContainers := []corev1.Container{
-				{Name: "template-init", Image: "busybox:latest"},
+				{Name: "template-init", Image: "busybox:latest", Command: []string{"sh", "-c", "echo hi"}},
 			}
 			violation := validateInitContainers(initContainers, template)
 			Expect(violation).To(BeNil())
+		})
+
+		It("should reject when name matches but command differs from template default", func() {
+			template.Spec.DefaultInitContainers = []corev1.Container{
+				{Name: "template-init", Image: "busybox:latest", Command: []string{"sh", "-c", "echo hi"}},
+			}
+			template.Spec.AllowCustomInitContainers = nil
+			initContainers := []corev1.Container{
+				{Name: "template-init", Image: "busybox:latest", Command: []string{"sh", "-c", "echo HACKED"}},
+			}
+			violation := validateInitContainers(initContainers, template)
+			Expect(violation).NotTo(BeNil())
+			Expect(violation.Type).To(Equal(ViolationTypeInitContainersNotAllowed))
+		})
+
+		It("should reject when name matches but image differs from template default", func() {
+			template.Spec.DefaultInitContainers = []corev1.Container{
+				{Name: "template-init", Image: "busybox:latest", Command: []string{"echo"}},
+			}
+			template.Spec.AllowCustomInitContainers = nil
+			initContainers := []corev1.Container{
+				{Name: "template-init", Image: "evil:latest", Command: []string{"echo"}},
+			}
+			violation := validateInitContainers(initContainers, template)
+			Expect(violation).NotTo(BeNil())
+		})
+
+		It("should allow template defaults in different order", func() {
+			template.Spec.DefaultInitContainers = []corev1.Container{
+				{Name: "init-a", Image: "busybox:latest"},
+				{Name: "init-b", Image: "alpine:latest"},
+			}
+			template.Spec.AllowCustomInitContainers = nil
+			initContainers := []corev1.Container{
+				{Name: "init-b", Image: "alpine:latest"},
+				{Name: "init-a", Image: "busybox:latest"},
+			}
+			violation := validateInitContainers(initContainers, template)
+			Expect(violation).To(BeNil())
+		})
+
+		It("should reject when extra init containers are added beyond defaults", func() {
+			template.Spec.DefaultInitContainers = []corev1.Container{
+				{Name: "template-init", Image: "busybox:latest"},
+			}
+			template.Spec.AllowCustomInitContainers = nil
+			initContainers := []corev1.Container{
+				{Name: "template-init", Image: "busybox:latest"},
+				{Name: "extra", Image: "evil:latest"},
+			}
+			violation := validateInitContainers(initContainers, template)
+			Expect(violation).NotTo(BeNil())
 		})
 	})
 })
