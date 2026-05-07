@@ -1,6 +1,10 @@
 # Integrations
 
-**Jupyter K8s** is vendor-neutral — cloud-specific functionality is decoupled from the core controller via an HTTP sidecar plugin pattern.
+**Jupyter K8s** is vendor-neutral, and agnostic to the choice of router, authentication and authorization components.
+
+Cloud-specific functionalities integrate at the controller or **Extension API** level with HTTP sidecar plugins.
+
+Additional helm charts and deployment templates provide examples of integration with a specific cloud and routing components.
 
 ## Plugin architecture
 
@@ -20,21 +24,20 @@ The controller is the HTTP client; each plugin runs as a sidecar container on `l
                            (e.g. AWS SSM)
 ```
 
-The controller never imports cloud SDKs directly. All cloud operations flow through the plugin's HTTP interface.
+The controller does not make external API calls directly. All cloud operations flow through the plugin's HTTP interface.
 
-## Guided charts
+## Helm charts
 
-Guided charts are opinionated Helm charts that provide working deployments for **Jupyter K8s**. They are frequently tied to a specific cloud provider, and rely on cloud-specific operators and resource annotations.
+The operator chart deploys the core controller and CRDs, but a production deployment typically needs additional charts to:
 
-Some charts only create resources on the routing layer — selecting a router, authentication, and authorization components.
+- **Configure the routing layer** — select a reverse proxy, authentication mechanism, and authorization components.
+- **Integrate with cloud providers** — deploy cloud-specific plugins and resources (e.g. ALB ingress, SSM activations).
+- **Define access strategies** —integrate workspaces with the routing layer by creating access strategies.
 
-Other charts bundle **Jupyter K8s** with a plugin, the routing layer, and preconfigured access strategies — everything needed for a specific deployment scenario in a single `helm install`.
-
-See [AWS](aws) for the currently available guided charts.
 
 ```{toctree}
 :hidden:
 
-plugins
-aws
+plugins/index
+guided-charts/index
 ```

@@ -19,7 +19,6 @@ The controller parses the handler reference, resolves the plugin name to its HTT
 
 **Jupyter K8s** supports multiple plugins via `PluginEndpoints` configuration — a map from plugin name to localhost endpoint. Different access strategies can route to different plugins.
 
-
 ## Writing a plugin
 
 A plugin is a Go binary that:
@@ -29,3 +28,9 @@ A plugin is a Go binary that:
 3. Runs as a sidecar container in the controller pod, listening on localhost.
 
 The `jupyter-k8s-plugin` [repository](https://github.com/jupyter-infra/jupyter-k8s-plugin) provides the shared interfaces, HTTP client, and server framework.
+
+```{toctree}
+:hidden:
+
+aws-plugin
+```
