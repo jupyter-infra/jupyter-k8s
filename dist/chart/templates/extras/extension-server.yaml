@@ -1,0 +1,16 @@
+{{- if .Values.extensionApi.enable }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "extension-server" "context" $) }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  ports:
+  - name: https
+    port: 443
+    protocol: TCP
+    targetPort: 7443
+  selector:
+    control-plane: controller-manager
+  type: ClusterIP
+{{- end }}

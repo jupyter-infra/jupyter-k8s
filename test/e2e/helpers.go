@@ -123,31 +123,22 @@ func ensureCleanState() {
 func checkAndCleanCluster() {
 	ginkgo.GinkgoHelper()
 
-	ginkgo.By("checking if operator is already installed")
-	cmd := exec.Command("kubectl", "get", "deployment", "jupyter-k8s-controller-manager",
-		"-n", OperatorNamespace, "--ignore-not-found")
-	output, _ := utils.Run(cmd)
-
-	if strings.TrimSpace(output) != "" {
-		ginkgo.By("uninstalling existing operator")
-		cmd = exec.Command("make", "undeploy")
+	ginkgo.By("checking if operator is already installed via helm")
+	cmd := exec.Command("helm", "status", "jupyter-k8s",
+		"--namespace", OperatorNamespace)
+	if _, err := utils.Run(cmd); err == nil {
+		ginkgo.By("uninstalling existing helm release")
+		cmd = exec.Command("helm", "uninstall", "jupyter-k8s",
+			"--namespace", OperatorNamespace, "--wait", "--timeout", "3m")
 		_, _ = utils.Run(cmd)
-
-		// Wait for resources to be cleaned up
-		time.Sleep(10 * time.Second)
 	}
 
 	ginkgo.By("uninstalling existing CRDs")
-	// Use kubectl directly instead of make uninstall to avoid errors when CRDs don't exist
 	crds := GetWorkspaceCrds()
-
 	for _, crd := range crds {
 		cmd = exec.Command("kubectl", "delete", "crd", crd, "--ignore-not-found")
 		_, _ = utils.Run(cmd)
 	}
-
-	// Wait for CRDs to be removed
-	time.Sleep(5 * time.Second)
 }
 
 // diagnoseAndCleanupStuckResources is a generic function to handle resources stuck with finalizers

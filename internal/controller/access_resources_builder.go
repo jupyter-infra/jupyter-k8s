@@ -123,41 +123,45 @@ func (b *AccessResourcesBuilder) BuildUnstructuredResource(
 	return obj, nil
 }
 
+// ResolveTemplateURL resolves a Go text/template URL string using workspace, access strategy,
+// and service data. Shared by ResolveAccessURL and the access startup prober.
+func (b *AccessResourcesBuilder) ResolveTemplateURL(
+	urlTemplate string,
+	workspace *workspacev1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
+	service *corev1.Service,
+) (string, error) {
+	tmpl, err := template.New("url").Funcs(template.FuncMap{
+		"b32encode": workspaceutil.EncodeNamespaceB32,
+	}).Parse(urlTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse URL template: %w", err)
+	}
+
+	data := &fullAccessResourceData{
+		Workspace:      workspace,
+		AccessStrategy: accessStrategy,
+		Service:        service,
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute URL template: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
 // ResolveAccessURL processes the AccessURLTemplate
 func (b *AccessResourcesBuilder) ResolveAccessURL(
 	workspace *workspacev1alpha1.Workspace,
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 	service *corev1.Service,
 ) (string, error) {
-	accessUrlTemplate := accessStrategy.Spec.AccessURLTemplate
-
-	// no URL Template in the accessStrategy -> no AccessUrl
-	if accessUrlTemplate == "" {
+	if accessStrategy.Spec.AccessURLTemplate == "" {
 		return "", nil
 	}
-
-	// Resolve the AccessURLTemplate using the template engine
-	tmpl, err := template.New("accessURL").Funcs(template.FuncMap{
-		"b32encode": workspaceutil.EncodeNamespaceB32,
-	}).Parse(accessUrlTemplate)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse AccessURLTemplate: %w", err)
-	}
-
-	// Create template data
-	accessResourceData := &fullAccessResourceData{
-		Workspace:      workspace,
-		AccessStrategy: accessStrategy,
-		Service:        service,
-	}
-
-	// Execute template
-	var accessURLBuffer bytes.Buffer
-	if err := tmpl.Execute(&accessURLBuffer, accessResourceData); err != nil {
-		return "", fmt.Errorf("failed to execute AccessURLTemplate: %w", err)
-	}
-
-	return accessURLBuffer.String(), nil
+	return b.ResolveTemplateURL(accessStrategy.Spec.AccessURLTemplate, workspace, accessStrategy, service)
 }
 
 // ResolveAccessResourceSelector creates a label selector string for finding access resources

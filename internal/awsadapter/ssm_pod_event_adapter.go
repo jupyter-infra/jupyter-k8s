@@ -12,8 +12,8 @@ import (
 	"math/rand"
 	"time"
 
-	pluginapi "github.com/jupyter-infra/jupyter-k8s/api/plugin/v1alpha1"
-	"github.com/jupyter-infra/jupyter-k8s/internal/plugin"
+	pluginapi "github.com/jupyter-infra/jupyter-k8s-plugin/api"
+	"github.com/jupyter-infra/jupyter-k8s-plugin/plugin"
 	"github.com/jupyter-infra/jupyter-k8s/internal/pluginadapters"
 	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"

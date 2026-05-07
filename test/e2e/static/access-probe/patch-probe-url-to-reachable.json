@@ -1,0 +1,12 @@
+{
+  "spec": {
+    "accessStartupProbe": {
+      "httpGet": {
+        "urlTemplate": "http://{{ .Service.Name }}.{{ .Workspace.Namespace }}.svc.cluster.local:8888/"
+      },
+      "periodSeconds": 2,
+      "timeoutSeconds": 5,
+      "failureThreshold": 120
+    }
+  }
+}

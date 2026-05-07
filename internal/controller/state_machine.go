@@ -29,10 +29,11 @@ type StateMachineInterface interface {
 
 // StateMachine handles the state transitions for Workspace
 type StateMachine struct {
-	resourceManager *ResourceManager
-	statusManager   *StatusManager
-	recorder        record.EventRecorder
-	idleChecker     *WorkspaceIdleChecker
+	resourceManager     *ResourceManager
+	statusManager       *StatusManager
+	recorder            record.EventRecorder
+	idleChecker         *WorkspaceIdleChecker
+	accessStartupProber AccessStartupProberInterface
 }
 
 // NewStateMachine creates a new StateMachine
@@ -41,12 +42,14 @@ func NewStateMachine(
 	statusManager *StatusManager,
 	recorder record.EventRecorder,
 	idleChecker *WorkspaceIdleChecker,
+	accessStartupProber AccessStartupProberInterface,
 ) *StateMachine {
 	return &StateMachine{
-		resourceManager: resourceManager,
-		statusManager:   statusManager,
-		recorder:        recorder,
-		idleChecker:     idleChecker,
+		resourceManager:     resourceManager,
+		statusManager:       statusManager,
+		recorder:            recorder,
+		idleChecker:         idleChecker,
+		accessStartupProber: accessStartupProber,
 	}
 }
 
@@ -252,19 +255,47 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	deploymentReady := sm.resourceManager.IsDeploymentAvailable(deployment)
 	serviceReady := sm.resourceManager.IsServiceAvailable(service)
 
-	// Apply access strategy when compute and service resources are ready
+	// Apply access strategy when compute and service resources are ready.
+	// ReconcileAccessForDesiredRunningStatus assumes instantaneous effect after etcd
+	// update — it does not verify that the access route is actually serving traffic.
+	accessResourcesReady := false
+	requeueDelay := PollRequeueDelay
 	if deploymentReady && serviceReady {
-		// ReconcileAccess returns nil (no error) only when it successfully initiated
-		// the creation of all AccessRessources.
-		// TODO: add probe and requeue https://github.com/jupyter-infra/jupyter-k8s/issues/36
 		if err := sm.ReconcileAccessForDesiredRunningStatus(ctx, workspace, service, accessStrategy); err != nil {
 			return ctrl.Result{}, err
 		}
 
-		// Then only update to running status
-		logger.Info("Deployment and Service are both ready, updating to Running status")
+		// Gate on access startup probe before marking Available.
+		probeResult, probeErr := sm.ProbeAccessStartup(ctx, workspace, accessStrategy, service)
+		if probeErr != nil {
+			return ctrl.Result{}, probeErr
+		}
 
-		// Record workspace running event
+		switch probeResult.Status {
+		case ProbeNotDefined:
+			accessResourcesReady = true
+		case ProbeSucceeded:
+			accessResourcesReady = true
+		case ProbeAlreadySucceeded:
+			accessResourcesReady = true
+		case ProbeFailureThresholdExceeded:
+			if statusErr := sm.statusManager.UpdatePermanentDegradedRunningStatus(
+				ctx, workspace, ReasonAccessProbeThresholdExceeded, ReasonAccessNotReady,
+				"Access startup probe failed: threshold exceeded",
+				snapshotStatus); statusErr != nil {
+				return ctrl.Result{}, statusErr
+			}
+			// After status update, exit and stop requeuing
+			return ctrl.Result{}, nil
+		case ProbeRetrying:
+			requeueDelay = probeResult.RequeueAfter
+		case ProbePendingRetry:
+			requeueDelay = probeResult.RequeueAfter
+		}
+	}
+
+	if deploymentReady && serviceReady && accessResourcesReady {
+		logger.Info("Deployment and Service are both ready, updating to Running status")
 		sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceRunning", "Workspace is now running")
 
 		if err := sm.statusManager.UpdateRunningStatus(ctx, workspace, snapshotStatus); err != nil {
@@ -277,13 +308,15 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 
 	// Resources are being created/started but not fully ready yet
 	// Update status to Starting and requeue to check again later
-	logger.Info("Resources not fully ready", "deploymentReady", deploymentReady, "serviceReady", serviceReady)
+	logger.Info("Resources not fully ready",
+		"deploymentReady", deploymentReady, "serviceReady", serviceReady,
+		"accessResourcesReady", accessResourcesReady)
 	workspace.Status.DeploymentName = deployment.GetName()
 	workspace.Status.ServiceName = service.GetName()
 	readiness := WorkspaceRunningReadiness{
 		computeReady:         deploymentReady,
 		serviceReady:         serviceReady,
-		accessResourcesReady: false,
+		accessResourcesReady: accessResourcesReady,
 	}
 	if err := sm.statusManager.UpdateStartingStatus(
 		ctx, workspace, readiness, snapshotStatus); err != nil {
@@ -291,7 +324,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	}
 
 	// Requeue to check resource readiness again later
-	return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
+	return ctrl.Result{RequeueAfter: requeueDelay}, nil
 }
 
 // handleIdleShutdownForRunningWorkspace handles idle shutdown logic for running workspaces

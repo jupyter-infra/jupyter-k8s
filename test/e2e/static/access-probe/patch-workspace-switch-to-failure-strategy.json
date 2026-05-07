@@ -1,0 +1,8 @@
+{
+  "spec": {
+    "accessStrategy": {
+      "name": "access-strategy-probe-failure",
+      "namespace": "jupyter-k8s-shared"
+    }
+  }
+}

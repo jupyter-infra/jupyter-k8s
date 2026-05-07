@@ -32,13 +32,7 @@ var _ = Describe("CRD-Only Values Consistency", func() {
 		// Check each reference against schema, ignoring known missing values
 		// These are values used in templates but not defined in values.yaml
 		// They are typically used as optional fields that default to empty/nil
-		ignorePaths := []string{
-			"controllerManager.pod",
-			"controllerManager.pod.labels",
-			"controllerManager.container.env",
-			"controllerManager.serviceAccount",
-			"controllerManager.serviceAccount.annotations",
-		}
+		ignorePaths := []string{}
 		invalidRefs := helm.FindInvalidReferences(references, schema, ignorePaths...)
 
 		// Report any invalid references

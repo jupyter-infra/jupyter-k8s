@@ -1,0 +1,8 @@
+section#jupyter-k8s {
+    text-align: center;
+}
+
+.container.buttons > p {
+    display: flex;
+    justify-content: center;
+}

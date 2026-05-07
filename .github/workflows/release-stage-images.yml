@@ -1,0 +1,80 @@
+name: "Release: Stage Images"
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      short_sha:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image tag (e.g. v0.2.0)'
+        required: true
+      short_sha:
+        description: 'Short SHA (leave empty to use current HEAD)'
+        required: false
+
+env:
+  STAGING_REGISTRY: ghcr.io/jupyter-infra/staging
+
+jobs:
+  build-and-push:
+    name: Build ${{ matrix.image.name }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        image:
+          - name: jupyter-k8s-controller
+            dockerfile: Dockerfile
+          - name: jupyter-k8s-authmiddleware
+            dockerfile: images/authmiddleware/Dockerfile
+          - name: jupyter-k8s-rotator
+            dockerfile: images/rotator/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve short SHA
+        id: sha
+        run: |
+          SHA="${{ inputs.short_sha }}"
+          if [ -z "$SHA" ]; then
+            SHA=$(git rev-parse --short HEAD)
+          fi
+          echo "short_sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.image.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.STAGING_REGISTRY }}/${{ matrix.image.name }}:${{ inputs.version }}
+            ${{ env.STAGING_REGISTRY }}/${{ matrix.image.name }}:sha-${{ steps.sha.outputs.short_sha }}
+            ${{ env.STAGING_REGISTRY }}/${{ matrix.image.name }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ inputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}

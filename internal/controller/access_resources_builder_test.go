@@ -286,7 +286,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			)
 
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("failed to parse AccessURLTemplate"))
+			Expect(err.Error()).To(ContainSubstring("failed to parse URL template"))
 		})
 
 		It("Should return en error if substitutions cannot be made", func() {
@@ -301,7 +301,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			)
 
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("failed to execute AccessURLTemplate"))
+			Expect(err.Error()).To(ContainSubstring("failed to execute URL template"))
 		})
 	})
 

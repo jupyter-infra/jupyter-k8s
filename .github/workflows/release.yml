@@ -1,0 +1,145 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v0.2.0)'
+        required: true
+      dry_run:
+        description: 'Push to staging + run e2e, skip promotion and release'
+        type: boolean
+        default: false
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+      chart_version: ${{ steps.validate.outputs.chart_version }}
+      short_sha: ${{ steps.validate.outputs.short_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+
+      - name: Validate inputs
+        id: validate
+        run: |
+          VERSION="${{ inputs.version }}"
+
+          # Validate semver format
+          if ! echo "$VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'; then
+            echo "::error::Invalid version format: $VERSION (expected vX.Y.Z or vX.Y.Z-prerelease)"
+            exit 1
+          fi
+
+          # Chart version strips the v prefix
+          CHART_VERSION="${VERSION#v}"
+
+          # Check tag doesn't already exist
+          if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
+            echo "::error::Tag $VERSION already exists"
+            exit 1
+          fi
+
+          # Verify on main branch (skip for dry_run)
+          if [ "${{ inputs.dry_run }}" != "true" ]; then
+            BRANCH=$(git rev-parse --abbrev-ref HEAD)
+            if [ "$BRANCH" != "main" ]; then
+              echo "::error::Release must be from main branch (currently on $BRANCH). Use dry_run for testing from other branches."
+              exit 1
+            fi
+          fi
+
+          SHORT_SHA=$(git rev-parse --short HEAD)
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "chart_version=$CHART_VERSION" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+          echo "## Release validation passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Version: $VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Chart version: $CHART_VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "- SHA: $SHORT_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Dry run: ${{ inputs.dry_run }}" >> "$GITHUB_STEP_SUMMARY"
+
+  stage-images:
+    name: Stage images
+    needs: validate
+    uses: ./.github/workflows/release-stage-images.yml
+    with:
+      version: ${{ needs.validate.outputs.version }}
+      short_sha: ${{ needs.validate.outputs.short_sha }}
+    permissions:
+      contents: read
+      packages: write
+
+  stage-chart:
+    name: Stage chart
+    needs: [validate, stage-images]
+    uses: ./.github/workflows/release-stage-chart.yml
+    with:
+      version: ${{ needs.validate.outputs.version }}
+      chart_version: ${{ needs.validate.outputs.chart_version }}
+    permissions:
+      contents: read
+      packages: write
+
+  e2e:
+    name: E2E
+    needs: [validate, stage-images, stage-chart]
+    uses: ./.github/workflows/release-e2e.yml
+    with:
+      version: ${{ needs.validate.outputs.version }}
+      chart_version: ${{ needs.validate.outputs.chart_version }}
+    permissions:
+      contents: read
+      packages: read
+
+  promote-images:
+    name: Promote images
+    needs: [validate, e2e]
+    if: inputs.dry_run == false
+    uses: ./.github/workflows/release-promote-images.yml
+    with:
+      version: ${{ needs.validate.outputs.version }}
+      short_sha: ${{ needs.validate.outputs.short_sha }}
+    permissions:
+      contents: read
+      packages: write
+
+  promote-chart:
+    name: Promote chart
+    needs: [validate, e2e]
+    if: inputs.dry_run == false
+    uses: ./.github/workflows/release-promote-chart.yml
+    with:
+      chart_version: ${{ needs.validate.outputs.chart_version }}
+    permissions:
+      contents: read
+      packages: write
+
+  release:
+    name: Create release
+    needs: [validate, promote-images, promote-chart]
+    if: inputs.dry_run == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create tag
+        run: |
+          git tag ${{ needs.validate.outputs.version }}
+          git push origin ${{ needs.validate.outputs.version }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.version }}
+          generate_release_notes: true

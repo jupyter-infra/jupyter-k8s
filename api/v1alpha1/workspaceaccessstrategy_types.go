@@ -76,6 +76,50 @@ type PrimaryContainerModifications struct {
 	MergeEnv []AccessEnvTemplate `json:"mergeEnv,omitempty"`
 }
 
+// AccessStartupProbe defines how the controller verifies that access resources
+// are serving traffic before marking the workspace as Available. Modeled after
+// corev1.startupProbe — a one-shot gate that passes on the first successful
+// response and is never checked again.
+type AccessStartupProbe struct {
+	// HTTPGet specifies an HTTP GET to perform against the access path.
+	// +optional
+	HTTPGet *AccessHTTPGetProbe `json:"httpGet,omitempty"`
+
+	// Number of seconds after access resources are created before probes are initiated.
+	// Default: 0.
+	// +optional
+	InitialDelaySeconds int32 `json:"initialDelaySeconds,omitempty"`
+
+	// How often (in seconds) to perform the probe. Default: 2. Minimum: 1.
+	// +optional
+	PeriodSeconds int32 `json:"periodSeconds,omitempty"`
+
+	// Number of seconds after which the probe times out. Default: 5. Minimum: 1.
+	// +optional
+	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
+
+	// Minimum consecutive failures before giving up and marking the workspace as Degraded.
+	// Once degraded, the workspace must be stopped and restarted to retry the probe.
+	// Default: 30. Minimum: 1.
+	// +optional
+	FailureThreshold int32 `json:"failureThreshold,omitempty"`
+}
+
+// AccessHTTPGetProbe defines the HTTP GET action for access startup probing.
+type AccessHTTPGetProbe struct {
+	// URLTemplate is a Go text/template resolving to the URL to probe.
+	// Available variables: .Workspace, .AccessStrategy, .Service
+	// (same as accessURLTemplate and accessResourceTemplates).
+	URLTemplate string `json:"urlTemplate"`
+
+	// AdditionalSuccessStatusCodes extends the default success range (200–399)
+	// with extra HTTP status codes that indicate the route is live.
+	// Example: [401] for bearer-token auth flows where the auth middleware
+	// returns 401 on unauthenticated requests.
+	// +optional
+	AdditionalSuccessStatusCodes []int `json:"additionalSuccessStatusCodes,omitempty"`
+}
+
 // WorkspaceAccessStrategySpec defines the desired state of WorkspaceAccessStrategy
 type WorkspaceAccessStrategySpec struct {
 	// DisplayName is a human-readable name for this access strategy
@@ -124,6 +168,12 @@ type WorkspaceAccessStrategySpec struct {
 	// DeploymentModifications defines modifications to apply to workspace deployments
 	// +optional
 	DeploymentModifications *DeploymentModifications `json:"deploymentModifications,omitempty"`
+
+	// AccessStartupProbe defines how the controller verifies that access resources are
+	// serving traffic. If not set, access resources are considered ready as soon as they
+	// exist in the API server.
+	// +optional
+	AccessStartupProbe *AccessStartupProbe `json:"accessStartupProbe,omitempty"`
 }
 
 // WorkspaceAccessStrategyStatus defines the observed state of WorkspaceAccessStrategy

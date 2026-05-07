@@ -1,0 +1,23 @@
+{{- if and .Values.certManager.enable .Values.extensionApi.enable }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "extension-server-cert" "context" $) }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  commonName: extension-server
+  dnsNames:
+  - {{ include "jupyter-k8s.resourceName" (dict "suffix" "extension-server" "context" $) }}.{{ .Release.Namespace }}.svc
+  - {{ include "jupyter-k8s.resourceName" (dict "suffix" "extension-server" "context" $) }}.{{ .Release.Namespace }}.svc.cluster.local
+  duration: 2160h
+  issuerRef:
+    kind: Issuer
+    name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "selfsigned-issuer" "context" $) }}
+  privateKey:
+    rotationPolicy: Always
+  renewBefore: 360h
+  secretName: extension-server-cert
+  subject:
+    organizations:
+    - jupyter-k8s-operator
+{{- end }}

@@ -4,6 +4,9 @@ Distributed under the terms of the MIT license
 */
 
 // Package extensionapi provides extension API server functionality.
+//
+// +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations;mutatingwebhookconfigurations;validatingadmissionpolicies;validatingadmissionpolicybindings,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 package extensionapi
 
 import (
@@ -13,8 +16,8 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	"github.com/jupyter-infra/jupyter-k8s-plugin/pluginclient"
 	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
-	"github.com/jupyter-infra/jupyter-k8s/internal/pluginclient"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	genericapiserver "k8s.io/apiserver/pkg/server"

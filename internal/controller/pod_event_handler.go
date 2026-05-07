@@ -14,9 +14,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/jupyter-infra/jupyter-k8s-plugin/plugin"
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/awsadapter"
-	"github.com/jupyter-infra/jupyter-k8s/internal/plugin"
 	"github.com/jupyter-infra/jupyter-k8s/internal/pluginadapters"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )

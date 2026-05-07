@@ -44,12 +44,10 @@ type StorageSpec struct {
 	// Size specifies the size of the persistent volume
 	// Supports standard Kubernetes resource quantities (e.g., "10Gi", "500Mi", "1Ti")
 	// Integer values without units are interpreted as bytes
-	// +kubebuilder:default="10Gi"
 	Size resource.Quantity `json:"size,omitempty"`
 
 	// MountPath specifies where to mount the persistent volume in the container
 	// Default is /home/jovyan (jovyan is the standard user in Jupyter images)
-	// +kubebuilder:default="/home/jovyan"
 	MountPath string `json:"mountPath,omitempty"`
 }
 
@@ -240,6 +238,30 @@ type WorkspaceStatus struct {
 	// the workspace's AccessStrategy templates
 	// +optional
 	AccessResources []AccessResourceStatus `json:"accessResources,omitempty"`
+
+	// ObservedAccessStrategyVersion is a token capturing the identity and
+	// version of the AccessStrategy last evaluated during workspace
+	// reconciliation. The controller resets probe state when this value changes.
+	// +optional
+	ObservedAccessStrategyVersion string `json:"observedAccessStrategyVersion,omitempty"`
+
+	// AccessStartupProbeSucceeded indicates whether the access startup probe
+	// has passed. Set to true when the probe succeeds; reset to false when
+	// the workspace stops.
+	// +optional
+	AccessStartupProbeSucceeded bool `json:"accessStartupProbeSucceeded,omitempty"`
+
+	// AccessStartupProbeFailures tracks the number of consecutive failed access
+	// startup probe attempts. Set by the controller during the probing phase;
+	// cleared (nil) on success or when the workspace stops.
+	// +optional
+	AccessStartupProbeFailures *int32 `json:"accessStartupProbeFailures,omitempty"`
+
+	// EarliestNextProbeTime is the earliest wall-clock time at which the next
+	// access startup probe may fire. Set by the controller after each probe
+	// attempt to enforce spacing; survives watch-triggered re-reconciliations.
+	// +optional
+	EarliestNextProbeTime *metav1.Time `json:"earliestNextProbeTime,omitempty"`
 
 	// Conditions represent the current state of the Workspace resource.
 	// Each condition has a unique type and reflects the status of a specific aspect of the resource.

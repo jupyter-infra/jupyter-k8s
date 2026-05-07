@@ -1,23 +1,25 @@
-{{- if .Values.controllerManager.podDisruptionBudget.enabled }}
+{{- if .Values.manager.podDisruptionBudget.enabled }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: jupyter-k8s-controller-manager
+  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "controller-manager" "context" $) }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "chart.labels" . | nindent 4 }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "jupyter-k8s.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
     control-plane: controller-manager
     workspace.jupyter.org/component: controller
 spec:
-  {{- if .Values.controllerManager.podDisruptionBudget.minAvailable }}
-  minAvailable: {{ .Values.controllerManager.podDisruptionBudget.minAvailable }}
+  {{- if .Values.manager.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.manager.podDisruptionBudget.minAvailable }}
   {{- end }}
-  {{- if .Values.controllerManager.podDisruptionBudget.maxUnavailable }}
-  maxUnavailable: {{ .Values.controllerManager.podDisruptionBudget.maxUnavailable }}
+  {{- if .Values.manager.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.manager.podDisruptionBudget.maxUnavailable }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "chart.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/name: {{ include "jupyter-k8s.name" . }}
       control-plane: controller-manager
-      workspace.jupyter.org/component: controller
 {{- end }}

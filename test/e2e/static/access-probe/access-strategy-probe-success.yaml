@@ -1,0 +1,15 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: access-strategy-probe-success
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: Probe Success Strategy
+  accessResourceTemplates: []
+  accessURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
+  accessStartupProbe:
+    httpGet:
+      urlTemplate: "http://{{ .Service.Name }}.{{ .Workspace.Namespace }}.svc.cluster.local:8888/"
+    periodSeconds: 2
+    timeoutSeconds: 5
+    failureThreshold: 120

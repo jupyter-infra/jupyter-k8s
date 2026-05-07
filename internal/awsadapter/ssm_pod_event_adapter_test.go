@@ -17,7 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	pluginapi "github.com/jupyter-infra/jupyter-k8s/api/plugin/v1alpha1"
+	pluginapi "github.com/jupyter-infra/jupyter-k8s-plugin/api"
 )
 
 const (

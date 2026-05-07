@@ -9,9 +9,9 @@ import (
 	"context"
 	"strings"
 
+	"github.com/jupyter-infra/jupyter-k8s-plugin/plugin"
+	"github.com/jupyter-infra/jupyter-k8s-plugin/pluginclient"
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
-	"github.com/jupyter-infra/jupyter-k8s/internal/plugin"
-	"github.com/jupyter-infra/jupyter-k8s/internal/pluginclient"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -340,7 +340,8 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	// Create state machine
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
 	idleChecker := NewWorkspaceIdleChecker(k8sClient)
-	stateMachine := NewStateMachine(resourceManager, statusManager, eventRecorder, idleChecker)
+	accessStartupProber := NewAccessStartupProber(NewAccessResourcesBuilder())
+	stateMachine := NewStateMachine(resourceManager, statusManager, eventRecorder, idleChecker, accessStartupProber)
 
 	// Create plugin clients for pod event handling (if configured)
 	pluginClients := map[string]plugin.RemoteAccessPluginApis{}

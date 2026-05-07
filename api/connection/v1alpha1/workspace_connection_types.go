@@ -15,8 +15,6 @@ const (
 	// WorkspaceConnectionKind is the kind for workspace connection resources
 	WorkspaceConnectionKind = "WorkspaceConnection"
 
-	// ConnectionTypeVSCodeRemote represents VSCode remote connection type
-	ConnectionTypeVSCodeRemote = "vscode-remote"
 	// ConnectionTypeWebUI represents web UI connection type
 	ConnectionTypeWebUI = "web-ui"
 )

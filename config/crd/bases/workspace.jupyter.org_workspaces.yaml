@@ -3514,7 +3514,6 @@ spec:
                 description: Storage specifies the storage configuration
                 properties:
                   mountPath:
-                    default: /home/jovyan
                     description: |-
                       MountPath specifies where to mount the persistent volume in the container
                       Default is /home/jovyan (jovyan is the standard user in Jupyter images)
@@ -3523,7 +3522,6 @@ spec:
                     anyOf:
                     - type: integer
                     - type: string
-                    default: 10Gi
                     description: |-
                       Size specifies the size of the persistent volume
                       Supports standard Kubernetes resource quantities (e.g., "10Gi", "500Mi", "1Ti")
@@ -3660,6 +3658,19 @@ spec:
                   - namespace
                   type: object
                 type: array
+              accessStartupProbeFailures:
+                description: |-
+                  AccessStartupProbeFailures tracks the number of consecutive failed access
+                  startup probe attempts. Set by the controller during the probing phase;
+                  cleared (nil) on success or when the workspace stops.
+                format: int32
+                type: integer
+              accessStartupProbeSucceeded:
+                description: |-
+                  AccessStartupProbeSucceeded indicates whether the access startup probe
+                  has passed. Set to true when the probe succeeds; reset to false when
+                  the workspace stops.
+                type: boolean
               accessURL:
                 description: AccessURL is the URL at which the workspace can be accessed
                 type: string
@@ -3736,6 +3747,19 @@ spec:
               deploymentName:
                 description: DeploymentName is the name of the deployment managing
                   the Workspace pods
+                type: string
+              earliestNextProbeTime:
+                description: |-
+                  EarliestNextProbeTime is the earliest wall-clock time at which the next
+                  access startup probe may fire. Set by the controller after each probe
+                  attempt to enforce spacing; survives watch-triggered re-reconciliations.
+                format: date-time
+                type: string
+              observedAccessStrategyVersion:
+                description: |-
+                  ObservedAccessStrategyVersion is a token capturing the identity and
+                  version of the AccessStrategy last evaluated during workspace
+                  reconciliation. The controller resets probe state when this value changes.
                 type: string
               serviceName:
                 description: ServiceName is the name of the service exposing the Workspace
