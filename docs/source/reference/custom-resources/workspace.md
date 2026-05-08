@@ -184,6 +184,7 @@ _Appears in:_
 | `serviceAccountName` _string_ | ServiceAccountName specifies the name of the ServiceAccount to use for the workspace pod |  | Optional: \{\} <br /> |
 | `podSecurityContext` _[PodSecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#podsecuritycontext-v1-core)_ | PodSecurityContext specifies pod-level security context<br />Overrides template defaults when specified |  | Optional: \{\} <br /> |
 | `containerSecurityContext` _[SecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#securitycontext-v1-core)_ | ContainerSecurityContext specifies container-level security context for the main workspace container<br />Takes precedence over PodSecurityContext for the main container<br />Overrides template defaults when specified |  | Optional: \{\} <br /> |
+| `initContainers` _[Container](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#container-v1-core) array_ | InitContainers specifies init containers to run before the workspace container starts<br />When a template is used, template's DefaultInitContainers are applied if workspace has none<br />Requires AllowCustomInitContainers=true on the template to specify custom init containers |  | MaxItems: 10 <br />Optional: \{\} <br /> |
 
 
 

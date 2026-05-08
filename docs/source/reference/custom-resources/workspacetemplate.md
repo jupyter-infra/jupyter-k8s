@@ -177,6 +177,8 @@ _Appears in:_
 | `defaultLifecycle` _[Lifecycle](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#lifecycle-v1-core)_ | DefaultLifecycle specifies default lifecycle hooks for workspaces using this template |  | Optional: \{\} <br /> |
 | `defaultPodSecurityContext` _[PodSecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#podsecuritycontext-v1-core)_ | DefaultPodSecurityContext specifies default pod-level security context |  | Optional: \{\} <br /> |
 | `defaultContainerSecurityContext` _[SecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#securitycontext-v1-core)_ | DefaultContainerSecurityContext specifies default container-level security context for the main workspace container |  | Optional: \{\} <br /> |
+| `defaultInitContainers` _[Container](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#container-v1-core) array_ | DefaultInitContainers specifies default init containers for workspaces using this template<br />Applied during defaulting if the workspace does not specify any init containers |  | MaxItems: 10 <br />Optional: \{\} <br /> |
+| `allowCustomInitContainers` _boolean_ | AllowCustomInitContainers controls whether workspaces using this template<br />can specify custom init containers beyond the template defaults | false | Optional: \{\} <br /> |
 | `appType` _string_ | AppType specifies the application type for workspaces using this template |  | Optional: \{\} <br /> |
 
 
