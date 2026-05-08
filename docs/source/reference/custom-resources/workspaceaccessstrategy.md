@@ -10,7 +10,7 @@ WorkspaceAccessStrategy is the Schema for the workspaceaccessstrategies API
 | --- | --- |
 | `apiVersion` _string_ | `workspace.jupyter.org/v1alpha1` |
 | `kind` _string_ | `WorkspaceAccessStrategy` |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |
 | `spec` _[WorkspaceAccessStrategySpec](#workspaceaccessstrategyspec)_ | Spec defines the desired state of WorkspaceAccessStrategy |
 | `status` _[WorkspaceAccessStrategyStatus](#workspaceaccessstrategystatus)_ | Status defines the observed state of WorkspaceAccessStrategy |
 
@@ -114,9 +114,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `additionalContainers` _[Container](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#container-v1-core) array_ | AdditionalContainers to add to the pod (sidecars) |  | Optional: \{\} <br /> |
-| `volumes` _[Volume](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#volume-v1-core) array_ | Volumes to add to the pod |  | Optional: \{\} <br /> |
-| `initContainers` _[Container](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#container-v1-core) array_ | InitContainers to add to the pod |  | Optional: \{\} <br /> |
+| `additionalContainers` _[Container](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#container-v1-core) array_ | AdditionalContainers to add to the pod (sidecars) |  | Optional: \{\} <br /> |
+| `volumes` _[Volume](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#volume-v1-core) array_ | Volumes to add to the pod |  | Optional: \{\} <br /> |
+| `initContainers` _[Container](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#container-v1-core) array_ | InitContainers to add to the pod |  | Optional: \{\} <br /> |
 | `primaryContainerModifications` _[PrimaryContainerModifications](#primarycontainermodifications)_ | PrimaryContainerModifications to apply to the primary container |  | Optional: \{\} <br /> |
 
 
@@ -132,7 +132,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `volumeMounts` _[VolumeMount](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#volumemount-v1-core) array_ | VolumeMounts to add to the primary container |  | Optional: \{\} <br /> |
+| `volumeMounts` _[VolumeMount](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#volumemount-v1-core) array_ | VolumeMounts to add to the primary container |  | Optional: \{\} <br /> |
 | `mergeEnv` _[AccessEnvTemplate](#accessenvtemplate) array_ | MergeEnv defines environment variables to be added to the main container<br />These will be merged with any existing env vars in the Workspace's container |  | Optional: \{\} <br /> |
 
 
@@ -173,6 +173,6 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#condition-v1-meta) array_ | Conditions represent the latest available observations of the resource's state |  | Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#condition-v1-meta) array_ | Conditions represent the latest available observations of the resource's state |  | Optional: \{\} <br /> |
 
 

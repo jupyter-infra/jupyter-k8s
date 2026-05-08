@@ -10,7 +10,7 @@ Workspace is the Schema for the workspaces API
 | --- | --- |
 | `apiVersion` _string_ | `workspace.jupyter.org/v1alpha1` |
 | `kind` _string_ | `Workspace` |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |
 | `spec` _[WorkspaceSpec](#workspacespec)_ | spec defines the desired state of Workspace |
 | `status` _[WorkspaceStatus](#workspacestatus)_ | status defines the observed state of Workspace |
 
@@ -79,7 +79,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `httpGet` _[HTTPGetAction](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#httpgetaction-v1-core)_ | HTTPGet specifies the HTTP request to perform for idle detection |  | Optional: \{\} <br /> |
+| `httpGet` _[HTTPGetAction](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#httpgetaction-v1-core)_ | HTTPGet specifies the HTTP request to perform for idle detection |  | Optional: \{\} <br /> |
 
 
 
@@ -113,7 +113,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `storageClassName` _string_ | StorageClassName specifies the storage class to use for persistent storage |  |  |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#quantity-resource-api)_ | Size specifies the size of the persistent volume<br />Supports standard Kubernetes resource quantities (e.g., "10Gi", "500Mi", "1Ti")<br />Integer values without units are interpreted as bytes |  |  |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#quantity-resource-api)_ | Size specifies the size of the persistent volume<br />Supports standard Kubernetes resource quantities (e.g., "10Gi", "500Mi", "1Ti")<br />Integer values without units are interpreted as bytes |  |  |
 | `mountPath` _string_ | MountPath specifies where to mount the persistent volume in the container<br />Default is /home/jovyan (jovyan is the standard user in Jupyter images) |  |  |
 
 
@@ -168,22 +168,22 @@ _Appears in:_
 | `desiredStatus` _string_ | DesiredStatus specifies the desired operational status |  | Enum: [Running Stopped] <br /> |
 | `ownershipType` _string_ | OwnershipType specifies who can modify the workspace.<br />Public means anyone with RBAC permissions can update/delete the workspace.<br />OwnerOnly means only the creator can update/delete the workspace. |  | Enum: [Public OwnerOnly] <br />Optional: \{\} <br /> |
 | `accessType` _string_ | AccessType specifies who can connect to the workspace.<br />Public means anyone with RBAC permissions can connect to workspace.<br />OwnerOnly means only the creator can connect to the workspace. |  | Enum: [Public OwnerOnly] <br />Optional: \{\} <br /> |
-| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#resourcerequirements-v1-core)_ | Resources specifies the resource requirements |  |  |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#resourcerequirements-v1-core)_ | Resources specifies the resource requirements |  |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage specifies the storage configuration |  |  |
 | `volumes` _[VolumeSpec](#volumespec) array_ | Volumes specifies additional volumes to mount from existing PersistantVolumeClaims |  |  |
 | `containerConfig` _[ContainerConfig](#containerconfig)_ | ContainerConfig specifies container command and args configuration |  |  |
-| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#envvar-v1-core) array_ | Env specifies environment variables for the workspace container<br />When a template is used, template's BaseEnv vars are merged (workspace vars take precedence by name) |  | Optional: \{\} <br /> |
+| `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#envvar-v1-core) array_ | Env specifies environment variables for the workspace container<br />When a template is used, template's BaseEnv vars are merged (workspace vars take precedence by name) |  | Optional: \{\} <br /> |
 | `nodeSelector` _object (keys:string, values:string)_ | NodeSelector specifies node selection constraints for the workspace pod |  |  |
-| `affinity` _[Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#affinity-v1-core)_ | Affinity specifies node affinity and anti-affinity rules for the workspace pod |  |  |
-| `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#toleration-v1-core) array_ | Tolerations specifies tolerations for the workspace pod to schedule on nodes with matching taints |  |  |
-| `lifecycle` _[Lifecycle](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#lifecycle-v1-core)_ | Lifecycle specifies actions that the management system should take<br />in response to container lifecycle events (for instance, lifecycle hooks) |  |  |
+| `affinity` _[Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#affinity-v1-core)_ | Affinity specifies node affinity and anti-affinity rules for the workspace pod |  |  |
+| `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#toleration-v1-core) array_ | Tolerations specifies tolerations for the workspace pod to schedule on nodes with matching taints |  |  |
+| `lifecycle` _[Lifecycle](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#lifecycle-v1-core)_ | Lifecycle specifies actions that the management system should take<br />in response to container lifecycle events (for instance, lifecycle hooks) |  |  |
 | `accessStrategy` _[AccessStrategyRef](#accessstrategyref)_ | AccessStrategy specifies the WorkspaceAccessStrategy to use |  | Optional: \{\} <br /> |
 | `templateRef` _[TemplateRef](#templateref)_ | TemplateRef references a WorkspaceTemplate to use as base configuration<br />When set, template provides defaults and workspace spec fields act as overrides |  | Optional: \{\} <br /> |
 | `idleShutdown` _[IdleShutdownSpec](#idleshutdownspec)_ | IdleShutdown specifies idle shutdown configuration |  | Optional: \{\} <br /> |
 | `appType` _string_ | AppType specifies the application type for this workspace |  | Optional: \{\} <br /> |
 | `serviceAccountName` _string_ | ServiceAccountName specifies the name of the ServiceAccount to use for the workspace pod |  | Optional: \{\} <br /> |
-| `podSecurityContext` _[PodSecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#podsecuritycontext-v1-core)_ | PodSecurityContext specifies pod-level security context<br />Overrides template defaults when specified |  | Optional: \{\} <br /> |
-| `containerSecurityContext` _[SecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#securitycontext-v1-core)_ | ContainerSecurityContext specifies container-level security context for the main workspace container<br />Takes precedence over PodSecurityContext for the main container<br />Overrides template defaults when specified |  | Optional: \{\} <br /> |
+| `podSecurityContext` _[PodSecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#podsecuritycontext-v1-core)_ | PodSecurityContext specifies pod-level security context<br />Overrides template defaults when specified |  | Optional: \{\} <br /> |
+| `containerSecurityContext` _[SecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#securitycontext-v1-core)_ | ContainerSecurityContext specifies container-level security context for the main workspace container<br />Takes precedence over PodSecurityContext for the main container<br />Overrides template defaults when specified |  | Optional: \{\} <br /> |
 
 
 
@@ -206,7 +206,7 @@ _Appears in:_
 | `observedAccessStrategyVersion` _string_ | ObservedAccessStrategyVersion is a token capturing the identity and<br />version of the AccessStrategy last evaluated during workspace<br />reconciliation. The controller resets probe state when this value changes. |  | Optional: \{\} <br /> |
 | `accessStartupProbeSucceeded` _boolean_ | AccessStartupProbeSucceeded indicates whether the access startup probe<br />has passed. Set to true when the probe succeeds; reset to false when<br />the workspace stops. |  | Optional: \{\} <br /> |
 | `accessStartupProbeFailures` _integer_ | AccessStartupProbeFailures tracks the number of consecutive failed access<br />startup probe attempts. Set by the controller during the probing phase;<br />cleared (nil) on success or when the workspace stops. |  | Optional: \{\} <br /> |
-| `earliestNextProbeTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#time-v1-meta)_ | EarliestNextProbeTime is the earliest wall-clock time at which the next<br />access startup probe may fire. Set by the controller after each probe<br />attempt to enforce spacing; survives watch-triggered re-reconciliations. |  | Optional: \{\} <br /> |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#condition-v1-meta) array_ | Conditions represent the current state of the Workspace resource.<br />Each condition has a unique type and reflects the status of a specific aspect of the resource.<br />Standard condition types include:<br />- "Available": the resource is fully functional and ready to use<br />- "Progressing": the resource is being created, updated, or stopped<br />- "Degraded": the resource failed to reach or maintain its desired state<br />- "Stopped": the workspace has been stopped and resources scaled down<br />The status of each condition is one of True, False, or Unknown. |  | Optional: \{\} <br /> |
+| `earliestNextProbeTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#time-v1-meta)_ | EarliestNextProbeTime is the earliest wall-clock time at which the next<br />access startup probe may fire. Set by the controller after each probe<br />attempt to enforce spacing; survives watch-triggered re-reconciliations. |  | Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#condition-v1-meta) array_ | Conditions represent the current state of the Workspace resource.<br />Each condition has a unique type and reflects the status of a specific aspect of the resource.<br />Standard condition types include:<br />- "Available": the resource is fully functional and ready to use<br />- "Progressing": the resource is being created, updated, or stopped<br />- "Degraded": the resource failed to reach or maintain its desired state<br />- "Stopped": the workspace has been stopped and resources scaled down<br />The status of each condition is one of True, False, or Unknown. |  | Optional: \{\} <br /> |
 
 

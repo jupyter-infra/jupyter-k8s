@@ -89,6 +89,9 @@ def main():
     groups: dict[str, list[dict]] = {root: [] for root in roots}
     for s in sections:
         owner = ownership.get(s["name"], roots[0] if roots else None)
+        if owner is None or owner not in groups:
+            print(f"WARNING: type '{s['name']}' could not be assigned to a root resource, defaulting to '{roots[0]}'", file=sys.stderr)
+            owner = roots[0] if roots else None
         if owner and owner in groups:
             groups[owner].append(s)
 

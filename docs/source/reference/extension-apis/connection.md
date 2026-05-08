@@ -10,7 +10,7 @@ WorkspaceConnectionRequest represents the request body for creating a workspace 
 | --- | --- |
 | `apiVersion` _string_ | `connection.workspace.jupyter.org/v1alpha1` |
 | `kind` _string_ | `WorkspaceConnectionRequest` |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |
 | `spec` _[WorkspaceConnectionRequestSpec](#workspaceconnectionrequestspec)_ |  |
 
 
@@ -42,7 +42,7 @@ WorkspaceConnectionResponse represents the response for a workspace connection
 | --- | --- |
 | `apiVersion` _string_ | `connection.workspace.jupyter.org/v1alpha1` |
 | `kind` _string_ | `WorkspaceConnectionResponse` |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |
 | `spec` _[WorkspaceConnectionRequestSpec](#workspaceconnectionrequestspec)_ |  |
 | `status` _[WorkspaceConnectionResponseStatus](#workspaceconnectionresponsestatus)_ |  |
 

@@ -4,8 +4,8 @@ processor:
   ignoreFields:
     - "TypeMeta$"
 
-renderer:
-  kubernetesVersion: "1.31"
+render:
+  kubernetesVersion: "1.35"
   knownTypes:
     - name: Quantity
       package: k8s.io/apimachinery/pkg/api/resource
