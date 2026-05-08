@@ -29,7 +29,7 @@ There is an exception to this rule: **Jupyter K8s** allows workspaces of _any_ n
 
 There are two primary use cases for templates:
 1. cluster or team administrators to provide trusted configurations to workspace users
-2. advanced workspace users to save and reuse their own workspace configurations
+2. expert workspace users who want to reuse their favorite workspace configurations
 
 A user with the right RBAC permission can create a template as follows:
 ```yaml

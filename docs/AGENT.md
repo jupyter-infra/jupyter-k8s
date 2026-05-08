@@ -14,7 +14,10 @@ From the repo root:
 ### Product names in body text
 
 Use bold for product names in running text:
-- **JupyterLab**, **JupyterK8s**, **Traefik**
+- **Jupyter K8s**, **Extension API**, **Auth middleware**, **JupyterLab**, **Traefik**
+
+Use **Jupyter K8s** (not "the operator") when referring to the project as subject.
+Use **Extension API** and **Auth middleware** (not "the extension API server" or "the auth middleware component").
 
 Use plain text (no bold, no backticks) in headings and `{toctree}` entries:
 - `## JupyterLab` — correct

@@ -9,7 +9,7 @@ The routing namespace typically comprises three main elements:
 2. authentication components
 3. authorization components
 
-**Jupyter K8s** operator does not make any assumption as to which specific router, authentication or authorization components you choose to use in your cluster.
+**Jupyter K8s** does not make any assumption as to which specific router, authentication or authorization components you choose to use in your cluster.
 
 For authorization, **Jupyter K8s** provides a native implementation which calls the **Extension API** to authorize workspace access, but you are free to use your own authorization middleware.
 

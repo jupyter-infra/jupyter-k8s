@@ -1,10 +1,10 @@
 # Router
 
-The router is a reverse proxy that terminates TLS and routes HTTPS requests to workspace pods. The operator is router-agnostic — the access strategy's resource templates determine what routing resources the operator should create.
+The router is a reverse proxy that routes HTTPS requests to workspace pods. **Jupyter K8s** is router-agnostic — the access strategy's resource templates determine what routing resources the controller creates.
 
 ## How it works
 
-1. The operator creates **routing resources** (e.g. Traefik IngressRoutes) in the workspace's namespace as defined by the workspace's access strategy.
+1. The controller creates **routing resources** (e.g. Traefik IngressRoutes) in the workspace's namespace as defined by the workspace's access strategy.
 2. The router picks up these resources and configures routes automatically.
 3. Every request passes through the authentication and authorization components before reaching the workspace pod.
 
@@ -26,7 +26,7 @@ The router matches this path and forwards the request — after authentication a
 
 ## Router choice
 
-The guided charts use [Traefik](https://traefik.io/) as the default router, but any ingress controller that supports:
+Some guided charts use [Traefik](https://traefik.io/) as the default router, but any ingress controller that supports:
 
 - Forward-auth middleware (delegating authorization to an external service)
 - Path-based routing

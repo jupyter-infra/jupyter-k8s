@@ -6,7 +6,7 @@ A template optionally can add labels to the `workspace.metadata.labels`.
 
 ## What gets defaulted
 
-The general rule is a template default applies **only** when the `workspace.spec` omits this particular attribute.
+The general rule is that a template default applies **only** when the `workspace.spec` omits this particular attribute.
 
 For example, if a `workspace.spec` specifies a `containerSecurityContext`, the template's `defaultContainerSecurityContext` won't be applied at all.
 
@@ -45,6 +45,6 @@ In case of conflict between the template default and the value specified by the 
 
 ## When defaults apply
 
-The **mutating admission webhook** for workspaces injects defaults at workspace creation and update time.
+The **[workspace mutating webhook](../../dive-deeper/webhooks/workspace-defaults.md)** injects defaults at workspace creation and update time.
 
 When a `template.spec` changes, the controller does not modify running workspaces that already reference it — this is the **lazy application** model.

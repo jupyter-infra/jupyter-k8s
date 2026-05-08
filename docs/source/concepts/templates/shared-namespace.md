@@ -4,11 +4,12 @@ The **shared namespace** is a cluster-wide namespace where administrators place 
 
 ## Configuration
 
-Set the `--default-template-namespace` flag on the operator (default: `jupyter-k8s-shared`) to identify the shared namespace. In the Helm chart, use `workspaceTemplates.defaultNamespace`.
+Set the `--default-template-namespace` flag on **Jupyter K8s** (default: `jupyter-k8s-shared`) to identify the shared namespace. In the Helm chart, use `workspaceTemplates.defaultNamespace`.
 
+(default-template-resolution)=
 ## Default template resolution
 
-When a user creates a workspace without a `spec.templateRef`, the mutating webhook looks for a default template — a template labeled with:
+When a user creates a workspace without a `spec.templateRef`, the [**workspace mutating webhook**](../../dive-deeper/webhooks/workspace-defaults.md) looks for a default template — a template labeled with:
 
 ```yaml
 metadata:
@@ -21,7 +22,7 @@ The lookup order is:
 1. **Workspace namespace** — search for a default-labeled template in the workspace's own namespace.
 2. **Shared namespace** — if no local default is found, fall back to the shared namespace.
 
-A local default always takes priority over the shared one. When the webhook finds a default template, it sets `spec.templateRef` to point to it.
+A template in the workspace's namespace takes priority over a template in the shared namespace. When the webhook finds a default template, it sets the workspace's `spec.templateRef` attribute to point to that template.
 
 If neither namespace contains a default template, the webhook leaves `spec.templateRef` unset.
 
@@ -40,7 +41,7 @@ metadata:
   labels:
     workspace.jupyter.org/default-template: "true"
 spec:
-  defaultImage: my-repo/jupyter:latest
+  defaultImage: <repo>/<application-image-name>:<tag>
   defaultAccessStrategy:
     name: web-access
   primaryStorage:

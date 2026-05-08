@@ -1,8 +1,8 @@
 # Access Review
 
-A **ConnectionAccessReview** is a request to the Extension API that checks whether a given user is allowed to connect to a workspace — without actually creating a connection. It performs a similar function as the core Kubernetes API [SubjectAccessReview](https://dev-k8sref-io.web.app/docs/authorization/subjectaccessreview-v1/).
+A **ConnectionAccessReview** is a request to the **Extension API** that checks whether a given user is allowed to connect to a workspace — without actually creating a connection. It performs a similar function as the core Kubernetes API [SubjectAccessReview](https://dev-k8sref-io.web.app/docs/authorization/subjectaccessreview-v1/).
 
-Authorization components (such as the auth middleware) call `Create:ConnectionAccessReview` when making decision to grant or reject access to a workspace.
+Authorization components (such as the **Auth middleware**) call `Create:ConnectionAccessReview` when making decision to grant or reject access to a workspace.
 
 ## How it works
 
@@ -38,7 +38,7 @@ spec:
 
 ## Response
 
-The Extension API returns the same object with `status` populated:
+**Extension API** returns the same object with `status` populated:
 
 ```yaml
 status:
@@ -54,9 +54,9 @@ status:
 
 ## Who calls it
 
-The auth middleware calls `Create:ConnectionAccessReview` during initial authentication (its `/auth` route) — when a user first accesses a workspace and no valid session cookie exists yet. Once authorized, it issues a signed JWT cookie. Subsequent requests hit the `/verify` route, which only validates the JWT signature and expiry — no call to the Extension API.
+**Auth middleware** calls `Create:ConnectionAccessReview` during initial authentication (its `/auth` route) — when a user first accesses a workspace and no valid session cookie exists yet. Once authorized, it issues a signed JWT cookie. Subsequent requests hit the `/verify` route, which only validates the JWT signature and expiry — no call to the **Extension API**.
 
-The RBAC permissions required by the auth middleware's service account are:
+The RBAC permissions required by the **Auth middleware**'s service account are:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -73,5 +73,5 @@ rules:
 |-|--------------------|---------------------------------|
 | **Purpose** | Generate a connection URL or session | Check if access would be allowed |
 | **Side effects** | May sign a bearer token, invoke plugins | None — read-only check |
-| **Caller** | Workspace users (via kubectl or API) | Authorization middleware |
+| **Caller** | Workspace users (via kubectl or API) | Authorization components |
 | **Persists** | No (virtual resource) | No (virtual resource) |

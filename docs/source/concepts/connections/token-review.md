@@ -6,7 +6,7 @@ Authentication components (such as the auth middleware) call `Create:BearerToken
 
 ## How it works
 
-The caller sends a `Create:BearerTokenReview` with the opaque token string. The Extension API:
+The caller sends a `Create:BearerTokenReview` with the opaque token string. **Extension API**:
 
 1. **Validates the signature** — verifies the token was signed by a known HMAC key.
 2. **Checks expiry** — rejects expired tokens.
@@ -29,7 +29,7 @@ spec:
 
 ## Response
 
-The Extension API returns the same object with `status` populated:
+**Extension API** returns the same object with `status` populated:
 
 ```yaml
 status:
@@ -55,9 +55,9 @@ status:
 
 ## Who calls it
 
-The auth middleware calls `Create:BearerTokenReview` during bearer-token authentication (its `/auth` route) — when a user first accesses a workspace using a bearer token URL. Once the token is verified, the middleware issues a signed JWT session cookie. Subsequent requests use the cookie and do not require another token review.
+**Auth middleware** calls `Create:BearerTokenReview` during bearer-token authentication (its [`/bearer-auth` route](../../dive-deeper/authmiddleware/routes)) — when a user first accesses a workspace using a bearer token URL. Once the token is verified, the middleware issues a signed JWT session cookie. Subsequent requests use the cookie and do not require another token review.
 
-The RBAC permissions required by the auth middleware's service account are:
+The RBAC permissions required by **Auth middleware**'s service account are:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1

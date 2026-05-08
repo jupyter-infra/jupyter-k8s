@@ -2,9 +2,9 @@
 
 How the components of **Jupyter K8s** fit together — from custom resources to network routing.
 
-The operator manages three custom resources:
+**Jupyter K8s** manages three custom resources:
 - **Workspace**: Represents a single compute environment — a pod with dedicated storage and possibly a unique URL.
-- **WorkspaceTemplate**: Provides default configuration to a workspace, and enforce bounds for variations.
+- **WorkspaceTemplate**: Provides default configuration to a workspace, and enforces bounds for variations.
 - **WorkspaceAccessStrategy**: Configures a workspace so that the routing layers can connect to it.
 
 ## 10k View
@@ -15,7 +15,7 @@ The operator manages three custom resources:
 
 | Component | Role | Deployment |
 |-----------|------|------------|
-| **Controller** | Reconciles Workspace CRs into pods, services, and routing resources | `jupyter-k8s-system` namespace |
+| **Controller** | Reconciles Workspace CRs into deployments, services, and routing resources | `jupyter-k8s-system` namespace |
 | **Extension API** | Serves the Connection APIs (aggregated into the K8s API server) | Same pod as controller |
 | **Router** | Reverse proxy (e.g. Traefik) that routes HTTPS traffic to workspaces | `jupyter-k8s-router` namespace |
 | **Auth Middleware** | Validates JWTs and enforces per-workspace authorization on every request | Same namespace as router |
@@ -39,10 +39,11 @@ Browser ──► Router ──► Auth Middleware ──► Workspace Pod
 
 ## Namespace layout
 
-The operator separates concerns across namespaces (default values below):
+**Jupyter K8s** separates concerns across namespaces (default values below):
 
-- **`jupyter-k8s-system`** — operator deployment (controller + extension API) and its JWT signing secret.
+- **`jupyter-k8s-system`** — controller deployment (controller + **Extension API**) and its JWT signing secret.
 - **`jupyter-k8s-router`** — reverse proxy, auth middleware, identity provider (if using OIDC), and its own JWT signing secret.
+- **`jupyter-k8s-shared`** - a [special namespace](../concepts/templates/shared-namespace) for templates and access strategies that can be referenced by any workspace in the cluster. 
 - **Workspace namespaces** — one or more namespaces where the workspace resources, as well as their pods, services, and ingress routes live.
 
 ```{toctree}
