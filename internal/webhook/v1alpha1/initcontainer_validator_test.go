@@ -100,7 +100,7 @@ var _ = Describe("InitContainerValidator", func() {
 			Expect(violation).NotTo(BeNil())
 		})
 
-		It("should allow template defaults in different order", func() {
+		It("should reject when init containers are reordered from template defaults", func() {
 			template.Spec.DefaultInitContainers = []corev1.Container{
 				{Name: "init-a", Image: "busybox:latest"},
 				{Name: "init-b", Image: "alpine:latest"},
@@ -111,7 +111,8 @@ var _ = Describe("InitContainerValidator", func() {
 				{Name: "init-a", Image: "busybox:latest"},
 			}
 			violation := validateInitContainers(initContainers, template)
-			Expect(violation).To(BeNil())
+			Expect(violation).NotTo(BeNil())
+			Expect(violation.Type).To(Equal(ViolationTypeInitContainersNotAllowed))
 		})
 
 		It("should reject when extra init containers are added beyond defaults", func() {
