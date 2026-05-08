@@ -31,4 +31,6 @@ On `DELETE`, the webhook only checks ownership permission for `OwnerOnly` worksp
 
 ## Lazy constraint enforcement
 
-The webhook enforces template constraints at **admission time** — when a user creates or updates a workspace. Changing constraints on a template does not retroactively reject existing workspaces. Instead, the template controller marks affected workspaces for compliance checking.
+The webhook enforces template constraints at **admission time** — when a user creates or updates a workspace.
+
+Changing constraints on a template does not immediately impact running workspaces. Instead, the template controller marks affected workspaces for compliance checking.

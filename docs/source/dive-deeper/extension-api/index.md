@@ -6,9 +6,9 @@
 
 | Resource | Verb | Purpose |
 |----------|------|---------|
-| `workspaceconnections` | `POST` | Create a connection URL (bearer token or plugin-delegated) |
-| `connectionaccessreviews` | `POST` | Check whether a user can connect to a workspace |
-| `bearertokenreviews` | `POST` | Validate a bearer token and return the associated user identity |
+| {ref}`workspaceconnections <extensionapi-create-connection>` | `POST` | Create a connection URL (bearer token or plugin-delegated) |
+| {ref}`connectionaccessreviews <extensionapi-create-connection-access-review>` | `POST` | Check whether a user can connect to a workspace |
+| {ref}`bearertokenreviews <extensionapi-create-bearer-token-review>` | `POST` | Validate a bearer token and return the associated user identity |
 
 ```{toctree}
 :hidden:

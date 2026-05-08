@@ -6,6 +6,7 @@
 /apis/connection.workspace.jupyter.org/v1alpha1/namespaces/{namespace}/{resource}
 ```
 
+(extensionapi-create-connection)=
 ## POST /workspaceconnections
 
 Creates a connection URL for a workspace.
@@ -53,17 +54,17 @@ Valid connection types:
 
 **Extension API** uses the workspace's access strategy to determine how to generate the connection URL.
 
-#### For `web-ui` connections
+#### [Browser-based Connections](../../concepts/connections/web-access.md)
 
-**Extension API** handles these directly using the k8s-native path:
+**Extension API** uses the k8s-native path:
 1. Checks that `spec.bearerAuthURLTemplate` is defined on the access strategy.
 2. Creates a signer from the `signerFactory` (k8s-native HMAC or plugin-delegated).
 3. Signs a short-lived bearer token with the user's identity, scoped to the workspace path and domain.
 4. Renders the URL from `bearerAuthURLTemplate` and appends `?token=<jwt>`.
 
-#### For `{ide}-remote` connections
+#### [Desktop IDE-based Connections](../../concepts/connections/remote-access.md)
 
-**Extension API** delegates to a plugin sidecar:
+**Extension API** delegates to a [plugin](../../integrations/plugins/index.md):
 1. Looks up the connection type in the access strategy's `createConnectionHandlerMap`.
 2. Falls back to `createConnectionHandler` if no map entry matches.
 3. Parses the handler reference (format: `plugin:action`, e.g. `aws:createSession`).
@@ -84,6 +85,7 @@ spec:
     podUid: "extensionapi::PodUid()"
 ```
 
+(extensionapi-create-connection-access-review)=
 ## POST /connectionaccessreviews
 
 Checks whether a user can connect to a specific workspace. Used by **Auth middleware** on session establishment and refresh.
@@ -108,7 +110,7 @@ Checks whether a user can connect to a specific workspace. Used by **Auth middle
 
 **Flow:**
 
-1. Performs a `SubjectAccessReview` — checks the user has `create` permission on `workspaceconnections` in the namespace.
+1. Performs a [SubjectAccessReview](https://dev-k8sref-io.web.app/docs/authorization/subjectaccessreview-v1/) — checks the user has `create` permission on `workspaceconnections` in the namespace.
 2. Fetches the workspace and checks `spec.accessType` — if `OwnerOnly`, only the workspace creator is allowed.
 3. Returns `allowed: true/false` with a reason.
 
@@ -124,6 +126,7 @@ Checks whether a user can connect to a specific workspace. Used by **Auth middle
 }
 ```
 
+(extensionapi-create-bearer-token-review)=
 ## POST /bearertokenreviews
 
 Validates a bearer token and returns the authenticated user identity. Used by **Auth middleware** when handling `/bearer-auth` requests.

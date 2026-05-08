@@ -28,7 +28,7 @@ spec:
   bearerAuthURLTemplate: "https://jupyter.example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/auth?token={{ .Token }}"
 ```
 
-The Extension API populates the `{{ .Token }}` variable with a signed bearer token at connection creation time.
+**Extension API** populates the `{{ .Token }}` variable with a signed bearer token at connection creation time.
 
 To generate a bearer token URL, a workspace user can run:
 
@@ -46,7 +46,7 @@ EOF
 
 ## Connection handlers
 
-For more advanced connection types (remote IDE access, tunneling), the access strategy maps connection types to plugin handlers:
+For more advanced connection types (remote IDE access, tunneling), the access strategy maps connection types to [plugin](../../integrations/plugins/index.md) handlers:
 
 ```yaml
 spec:
@@ -55,4 +55,4 @@ spec:
     vscode-remote: "aws:createSession"
 ```
 
-In this example, when a workspace user requests a connection of type `vscode-remote`, the Extension API dispatches to the `aws` plugin's `createSession` action.
+In this example, when a workspace user requests a connection of type `vscode-remote`, **Extension API** dispatches to the `aws` plugin's `createSession` action.

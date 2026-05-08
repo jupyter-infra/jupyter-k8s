@@ -4,9 +4,9 @@ Remote access lets desktop IDEs (e.g. VS Code) connect directly to a workspace w
 
 ## How it works
 
-1. User creates a Connection with a non-web type (e.g. `vscode-remote`).
-2. The Extension API looks up the access strategy's `createConnectionHandlerMap` for that type.
-3. The Extension API invokes the plugin handler (e.g. `aws:createSession`).
+1. User creates a [Connection](index) with a non-web type (e.g. `vscode-remote`).
+2. **Extension API** looks up the access strategy's `createConnectionHandlerMap` for that type.
+3. **Extension API** invokes the [plugin](../../integrations/plugins/index.md) handler (e.g. `aws:createSession`).
 4. The plugin returns connection details — typically a session ID or tunnel endpoint.
 5. The user's local IDE connects using those details.
 

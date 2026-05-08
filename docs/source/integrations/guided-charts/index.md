@@ -15,8 +15,8 @@ Ask yourself:
 
 | Chart | Cloud | Router & TLS | Identities | Admission | Access Types |
 |---|---|---|---|---|---|
-| {ref}`aws-oidc <chart-aws-oidc>` | AWS (EKS) | Traefik with Let's Encrypt + NLB | OIDC (GitHub) |  Dex + Oauth2-proxy + **Auth middleware** | Web browser |
-| {ref}`aws-hyperpod <chart-aws-hyperpod>` | AWS (HyperPod) | Traefik + ALB with ACM | bearer token (IAM) |  **Auth middleware** | Web browser, desktop IDE |
+| {ref}`AWS OIDC <chart-aws-oidc>` | AWS (EKS) | Traefik with Let's Encrypt + NLB | OIDC (GitHub) |  Dex + Oauth2-proxy + **Auth middleware** | Web browser |
+| {ref}`AWS HyperPod <chart-aws-hyperpod>` | AWS (HyperPod) | Traefik + ALB with ACM | bearer token (IAM) |  **Auth middleware** | Web browser, desktop IDE |
 
 ```{toctree}
 :hidden:

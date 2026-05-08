@@ -1,6 +1,6 @@
 # Template Validation
 
-WorkspaceTemplate has a validating-only webhook that fires on `UPDATE`. It uses `failurePolicy: Ignore`, so template updates succeed even when the webhook is unavailable.
+WorkspaceTemplates have a validating-only webhook that fires on `UPDATE`. It uses `failurePolicy: Ignore`, so template updates succeed even when the webhook is unavailable.
 
 ## Behavior
 

@@ -4,9 +4,9 @@
 
 ## Deployment
 
-Unlike **Extension API** (which runs in the controller pod), **Auth middleware** is a separate binary with its own image (`jupyter-k8s-authmiddleware`). It is deployed by either:
-- The **Auth Middleware Helm chart** (standalone)
-- A **guided chart** (e.g. `jupyter-k8s-aws-oidc`) that bundles it with Traefik and Dex
+Unlike **Extension API** (which runs in the controller pod), **Auth middleware** is a separate binary with its own image (`jupyter-k8s-authmiddleware`). It is deployed separately.
+
+For example, the {ref}`AWS-OIDC <chart-aws-oidc>` guided chart bundles it with Traefik, Dex and Oauth2-Proxy.
 
 ## Configuration
 

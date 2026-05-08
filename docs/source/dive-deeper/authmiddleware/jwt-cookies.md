@@ -6,8 +6,8 @@ These tokens provide stateless authentication on every proxied request.
 
 ## Token lifecycle
 
-1. **Issued** — when a user authenticates via `/auth` (OIDC) or `/bearer-auth` (bearer token exchange).
-2. **Validated** — on every request via `/verify`.
+1. **Issued** — when a user authenticates via {ref}`/auth <authmiddleware-auth>` (OIDC) or {ref}`/bearer-auth <authmiddleware-bearer-auth>` (bearer token exchange).
+2. **Validated** — on every request via {ref}`/verify <authmiddleware-verify>`.
 3. **Refreshed** — transparently when nearing expiration (if refresh is enabled and access review passes).
 4. **Expired** — after `jwtExpiration` elapses, requiring re-authentication.
 
@@ -37,7 +37,7 @@ These tokens provide stateless authentication on every proxied request.
 | `COOKIE_SAME_SITE` | `Lax` | CSRF protection |
 | `COOKIE_MAX_AGE` | 24 hours | Browser-side expiry |
 
-Auth middleware scopes the cookies to the workspace path — each workspace gets its own cookie. This prevents cookies from one workspace being sent with requests to another.
+**Auth middleware** scopes the cookies to the workspace path — each workspace gets its own cookie. This prevents cookies from one workspace being sent with requests to another.
 
 ## Token refresh
 

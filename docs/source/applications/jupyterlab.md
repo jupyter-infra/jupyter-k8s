@@ -71,10 +71,10 @@ Open `http://localhost:8888` in your browser.
 
 When an access strategy with a reverse proxy and identity provider is configured, users navigate directly to the workspace URL.
 
-See [Concepts: Web Access](../concepts/connections/web-access) for the full flow.
+See {ref}`Concepts: Web Access OIDC<web-access-oidc-flow>` for details.
 
 ### Web access (Bearer token)
 
 For environments without an IdP, or for sharing a workspace URL, **Jupyter K8s** can generate bearer-token URLs.
 
-See [Concepts: Web Access](../concepts/connections/web-access) for details.
+See {ref}`Concepts: Web Access Bearer Token<web-access-bearer-token-flow>` for details.

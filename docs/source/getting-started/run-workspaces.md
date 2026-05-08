@@ -19,16 +19,6 @@ spec:
   displayName: My Notebook
   image: <your-repo>/<your-image>:<your-tag>
   desiredStatus: Running
-  resources:
-    requests:
-      cpu: "200m"
-      memory: "256Mi"
-    limits:
-      cpu: "1"
-      memory: "1Gi"
-  storage:
-    size: "5Gi"
-    mountPath: "/home/jovyan"
 ```
 
 ```bash

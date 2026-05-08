@@ -29,7 +29,7 @@ controller:
         AWS_REGION: "us-west-2"
 ```
 
-The chart creates a sidecar container in the controller pod and registers `http://localhost:<port>` as the plugin endpoint under the given name. Access strategies can then reference the plugin using the `aws:` prefix in handler fields.
+When the operator chart is configured this way, it creates a sidecar container in the controller pod and registers `http://localhost:<port>` as the plugin endpoint under the given name. Access strategies can then reference the plugin using the `aws:` prefix in handler fields.
 
 For reference, the {ref}`aws-hyperpod <chart-aws-hyperpod>` guided chart configures the **JupyterK8s** chart to use this plugin.
 

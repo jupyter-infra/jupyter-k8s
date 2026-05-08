@@ -10,7 +10,7 @@ The helm charts deploy the following to support **Auth middleware**:
 
 ## Rotation behavior
 
-The rotator follows the same mechanism as the Extension API rotator:
+The rotator follows the same mechanism as the **Extension API** rotator:
 
 1. Generates a new HMAC key and appends it to the Secret.
 2. Retains up to a configurable number of keys (default: 3).
@@ -18,7 +18,7 @@ The rotator follows the same mechanism as the Extension API rotator:
 
 ## Graceful transition
 
-The auth middleware watches its signing Secret via controller-runtime event handlers. On update:
+**Auth middleware** pods its signing Secret via controller-runtime event handlers. On update:
 
 1. All keys are reloaded from the Secret.
 2. A `newKeyUseDelay` (default: 5 seconds) prevents using the new key for signing until all replicas have observed it.
@@ -28,7 +28,7 @@ Because session tokens have a 1-hour TTL (default) and refresh happens transpare
 
 ## Why separate from the Extension API
 
-The auth middleware and Extension API run in different namespaces and serve different purposes:
+The **Auth middleware** and **Extension API** run in different namespaces and serve different purposes:
 
 | | Extension API | Auth Middleware |
 |---|---|---|

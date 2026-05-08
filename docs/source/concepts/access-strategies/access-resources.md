@@ -49,3 +49,5 @@ On deletion of the workspace, Kubernetes' garbage collector detects and deletes 
 ## Access startup probe
 
 After creating access resources but before marking the `workspace.status` as `Available`, the controller can probe the resulting route to confirm it's fully wired up. To enable this behavior, configure the `spec.accessStartupProbe` attribute of your access strategy.
+
+See [Dive Deeper: Access Probe](../../dive-deeper/workspace-lifecycle/access-probes.md) for more details.

@@ -5,10 +5,10 @@
 ## Bearer token flow
 
 1. A user creates a `WorkspaceConnection` with type `web-ui`.
-2. The Extension API signs a JWT with the user's identity, scoped to the workspace's path and domain.
+2. **Extension API** signs a JWT with the user's identity, scoped to the workspace's path and domain.
 3. The token is embedded in a URL (rendered from the access strategy's `bearerAuthURLTemplate`).
 4. The user opens this URL in their browser.
-5. The auth middleware validates the token via a [`BearerTokenReview`](../../concepts/connections/token-review) call back to the Extension API, then issues a long-lived session cookie.
+5. **Auth middleware** validates the token via a [`BearerTokenReview`](../../concepts/connections/token-review) call back to **Extension API**, then issues a long-lived session cookie.
 
 ## Token properties
 
@@ -32,18 +32,18 @@ The bearer token includes:
 
 ## Signing
 
-The Extension API uses a `CompositeSignerFactory` that supports multiple signing backends:
+**Extension API** uses a `CompositeSignerFactory` that supports multiple signing backends:
 
 - **k8s-native** — HMAC signing with keys stored in a Kubernetes Secret. This is the default when `extensionApi.jwtSecret.enable=true`.
-- **Plugin-delegated** — signing delegated to a plugin sidecar via `JwtPluginApis`. Used when an access strategy references a plugin-backed signer.
+- **Plugin-delegated** — signing delegated to a [plugin](../../integrations/plugins/index.md) via `JwtPluginApis`. Used when an access strategy references a plugin-backed signer.
 
 The signer selection depends on the access strategy configuration.
 
 ## BearerTokenReview
 
-When the auth middleware receives a bearer token URL, it calls the Extension API's `bearertokenreviews` endpoint:
+When **Auth middleware** receives a bearer token URL, it calls **Extension API**'s `bearertokenreviews` endpoint:
 
-1. The Extension API extracts the `kid` from the token header and validates the signature against the corresponding key.
+1. **Extension API** extracts the `kid` from the token header and validates the signature against the corresponding key.
 2. It checks that the token has not expired.
-3. It returns the authenticated user identity (username, groups, UID, path).
-4. The auth middleware uses this identity to issue a session cookie.
+3. It returns the authenticated user identity (username, groups, UID, extra, path).
+4. **Auth middleware** uses this identity to issue a session cookie.

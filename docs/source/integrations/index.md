@@ -28,7 +28,7 @@ The controller does not make external API calls directly. All cloud operations f
 
 ## Helm charts
 
-The operator chart deploys the core controller and CRDs, but a production deployment typically needs additional charts to:
+The operator chart deploys the core controller, **Extension API** and CRDs, but a production deployment typically needs additional charts to:
 
 - **Configure the routing layer** — select a reverse proxy, authentication mechanism, and authorization components.
 - **Integrate with cloud providers** — deploy cloud-specific plugins and resources (e.g. ALB ingress, SSM activations).

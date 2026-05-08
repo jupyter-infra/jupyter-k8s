@@ -33,7 +33,7 @@ Key settings (set via Helm values under `extensionApi`):
 
 ## Plugin endpoints
 
-When the Helm chart configures plugins, **Extension API** creates HTTP clients for each plugin endpoint:
+When the Helm chart configures [plugins](../../integrations/plugins/index.md), **Extension API** creates HTTP clients for each plugin endpoint:
 
 ```yaml
 controller:
