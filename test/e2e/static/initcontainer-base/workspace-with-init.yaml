@@ -1,0 +1,20 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-with-init
+  namespace: default
+spec:
+  displayName: "Workspace with Init Containers"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  initContainers:
+    - name: setup-dirs
+      image: busybox:latest
+      command: ["sh", "-c", "echo init-done"]

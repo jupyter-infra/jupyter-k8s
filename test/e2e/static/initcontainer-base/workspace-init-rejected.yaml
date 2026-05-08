@@ -1,0 +1,14 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-init-rejected
+  namespace: default
+spec:
+  displayName: "Workspace with rejected init containers"
+  desiredStatus: Running
+  templateRef:
+    name: no-init-container-template
+  initContainers:
+    - name: my-init
+      image: busybox:latest
+      command: ["sh", "-c", "echo should-be-rejected"]

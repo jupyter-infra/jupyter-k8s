@@ -145,6 +145,18 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultContainerSecurityContext *corev1.SecurityContext `json:"defaultContainerSecurityContext,omitempty"`
 
+	// DefaultInitContainers specifies default init containers for workspaces using this template
+	// Applied during defaulting if the workspace does not specify any init containers
+	// +kubebuilder:validation:MaxItems=10
+	// +optional
+	DefaultInitContainers []corev1.Container `json:"defaultInitContainers,omitempty"`
+
+	// AllowCustomInitContainers controls whether workspaces using this template
+	// can specify custom init containers beyond the template defaults
+	// +kubebuilder:default=false
+	// +optional
+	AllowCustomInitContainers *bool `json:"allowCustomInitContainers,omitempty"`
+
 	// AppType specifies the application type for workspaces using this template
 	// +optional
 	AppType string `json:"appType,omitempty"`

@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-template-init
+  namespace: default
+spec:
+  displayName: "Workspace inheriting template init containers"
+  desiredStatus: Running
+  templateRef:
+    name: init-container-template

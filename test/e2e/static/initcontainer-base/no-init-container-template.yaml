@@ -1,0 +1,16 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: no-init-container-template
+  namespace: default
+spec:
+  displayName: "Template disallowing Init Containers"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultResources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  allowCustomInitContainers: false

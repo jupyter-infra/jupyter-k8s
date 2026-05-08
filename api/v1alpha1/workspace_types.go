@@ -185,6 +185,13 @@ type WorkspaceSpec struct {
 	// Overrides template defaults when specified
 	// +optional
 	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
+
+	// InitContainers specifies init containers to run before the workspace container starts
+	// When a template is used, template's DefaultInitContainers are applied if workspace has none
+	// Requires AllowCustomInitContainers=true on the template to specify custom init containers
+	// +kubebuilder:validation:MaxItems=10
+	// +optional
+	InitContainers []corev1.Container `json:"initContainers,omitempty"`
 }
 
 // AccessResourceStatus defines the status of a resource created from a template
