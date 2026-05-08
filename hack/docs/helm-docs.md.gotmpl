@@ -1,0 +1,26 @@
+{{- /*
+Custom helm-docs template to generate MyST-compatible Markdown for Sphinx docs.
+*/ -}}
+# Operator Chart
+
+Configuration reference for the **Jupyter K8s** operator Helm chart (`oci://ghcr.io/jupyter-infra/charts/{{ template "chart.name" . }}`).
+
+Chart version: {{ .Version }} | App version: {{ .AppVersion }}
+
+## Values
+
+```{list-table}
+:header-rows: 1
+:widths: 30 12 29 29
+
+* - Key
+  - Type
+  - Default
+  - Description
+{{- range .Values }}
+* - `{{ .Key }}`
+  - {{ .Type }}
+  - {{ if .Default }}{{ .Default }}{{ else }}{{ .AutoDefault }}{{ end }}
+  - {{ if .Description }}{{ .Description }}{{ else }}{{ .AutoDescription }}{{ end }}
+{{- end }}
+```

@@ -6,3 +6,8 @@ section#jupyter-k8s {
     display: flex;
     justify-content: center;
 }
+
+.colwidths-given table {
+    table-layout: fixed;
+    word-wrap: break-word;
+}

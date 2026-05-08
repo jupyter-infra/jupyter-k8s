@@ -1,14 +1,16 @@
 # Packages
 
-**Jupyter K8s** publishes the following artifacts to GitHub Container Registry (`ghcr.io/jupyter-infra`).
+**Jupyter K8s** publishes the following artifacts.
 
 ## Container images
+
+Published to GitHub Container Registry (`ghcr.io/jupyter-infra`).
 
 | Image | Description |
 |-------|-------------|
 | `ghcr.io/jupyter-infra/jupyter-k8s-controller` | Controller and Extension API server. Manages workspace resources and serves the Connection APIs. |
 | `ghcr.io/jupyter-infra/jupyter-k8s-authmiddleware` | JWT auth middleware. Deployed alongside a reverse proxy to authorize workspace requests. |
-| `ghcr.io/jupyter-infra/jupyter-k8s-rotator` | HMAC key rotation to run in a CronJob. Rotates the signing keys used by the controller and auth middleware. |
+| `ghcr.io/jupyter-infra/jupyter-k8s-rotator` | HMAC key rotation CronJob. Rotates the signing keys used by the controller and auth middleware. |
 
 ## Helm chart
 

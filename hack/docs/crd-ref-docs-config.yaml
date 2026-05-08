@@ -1,0 +1,57 @@
+processor:
+  ignoreTypes:
+    - ".*List$"
+  ignoreFields:
+    - "TypeMeta$"
+
+renderer:
+  kubernetesVersion: "1.31"
+  knownTypes:
+    - name: Quantity
+      package: k8s.io/apimachinery/pkg/api/resource
+      link: https://kubernetes.io/docs/reference/kubernetes-api/common-definitions/quantity/
+    - name: ObjectMeta
+      package: k8s.io/apimachinery/pkg/apis/meta/v1
+      link: https://kubernetes.io/docs/reference/kubernetes-api/common-definitions/object-meta/
+    - name: Condition
+      package: k8s.io/apimachinery/pkg/apis/meta/v1
+      link: https://kubernetes.io/docs/reference/kubernetes-api/common-definitions/conditions/
+    - name: Time
+      package: k8s.io/apimachinery/pkg/apis/meta/v1
+      link: https://kubernetes.io/docs/reference/kubernetes-api/common-definitions/object-meta/#System
+    - name: ResourceRequirements
+      package: k8s.io/api/core/v1
+      link: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#resources
+    - name: EnvVar
+      package: k8s.io/api/core/v1
+      link: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#environment-variables
+    - name: Container
+      package: k8s.io/api/core/v1
+      link: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#Container
+    - name: Volume
+      package: k8s.io/api/core/v1
+      link: https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/volume/
+    - name: VolumeMount
+      package: k8s.io/api/core/v1
+      link: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#volumes-1
+    - name: PodSecurityContext
+      package: k8s.io/api/core/v1
+      link: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context
+    - name: SecurityContext
+      package: k8s.io/api/core/v1
+      link: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
+    - name: Affinity
+      package: k8s.io/api/core/v1
+      link: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#scheduling
+    - name: Toleration
+      package: k8s.io/api/core/v1
+      link: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#scheduling
+    - name: Lifecycle
+      package: k8s.io/api/core/v1
+      link: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#lifecycle-1
+    - name: HTTPGetAction
+      package: k8s.io/api/core/v1
+      link: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#lifecycle-1
+    - name: ResourceName
+      package: k8s.io/api/core/v1
+      link: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#resources

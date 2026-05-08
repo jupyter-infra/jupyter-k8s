@@ -63,5 +63,8 @@ contributor-guide/index
 :hidden:
 :caption: Reference
 
-reference/index
+reference/custom-resources/index
+reference/extension-apis/index
+reference/helm-charts/index
+reference/packages
 ```

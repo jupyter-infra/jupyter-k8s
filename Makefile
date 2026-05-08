@@ -701,6 +701,8 @@ KIND ?= kind
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
+CRD_REF_DOCS ?= $(LOCALBIN)/crd-ref-docs
+HELM_DOCS ?= $(LOCALBIN)/helm-docs
 
 # GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 GOLANGCI_LINT := golangci-lint
@@ -713,6 +715,8 @@ ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
 GOLANGCI_LINT_VERSION ?= v2.4.0
+CRD_REF_DOCS_VERSION ?= v0.3.0
+HELM_DOCS_VERSION ?= v1.14.2
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -746,6 +750,16 @@ golangci-lint:
 # golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 # $(GOLANGCI_LINT): $(LOCALBIN)
 # 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+.PHONY: crd-ref-docs
+crd-ref-docs: $(CRD_REF_DOCS) ## Download crd-ref-docs locally if necessary.
+$(CRD_REF_DOCS): $(LOCALBIN)
+	$(call go-install-tool,$(CRD_REF_DOCS),github.com/elastic/crd-ref-docs,$(CRD_REF_DOCS_VERSION))
+
+.PHONY: helm-docs
+helm-docs-tool: $(HELM_DOCS) ## Download helm-docs locally if necessary.
+$(HELM_DOCS): $(LOCALBIN)
+	$(call go-install-tool,$(HELM_DOCS),github.com/norwoodj/helm-docs/cmd/helm-docs,$(HELM_DOCS_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
@@ -813,7 +827,7 @@ helm-rollback: ## Rollback to previous Helm release.
 ##@ Documentation
 
 .PHONY: docs
-docs: docs-diagrams ## Build documentation HTML.
+docs: docs-diagrams docs-ref ## Build documentation HTML.
 	$(MAKE) -C docs html
 
 .PHONY: docs-serve
@@ -832,3 +846,31 @@ docs-diagrams: ## Render d2 diagrams to SVG.
 		[ -f "$$f" ] || continue; \
 		d2 "$$f" "docs/source/_static/img/diagrams/$$(basename "$${f%.d2}.svg")"; \
 	done
+
+.PHONY: docs-ref
+docs-ref: docs-crd-ref docs-helm-ref ## Generate all reference docs.
+
+.PHONY: docs-crd-ref
+docs-crd-ref: crd-ref-docs ## Generate CRD reference docs.
+	$(CRD_REF_DOCS) \
+		--source-path=api/v1alpha1 \
+		--config=hack/docs/crd-ref-docs-config.yaml \
+		--templates-dir=hack/docs/templates \
+		--renderer=markdown \
+		--output-path=docs/source/reference/crds.md
+	python3 hack/docs/split-crd-ref.py docs/source/reference/crds.md docs/source/reference/custom-resources
+	@rm docs/source/reference/crds.md
+	$(CRD_REF_DOCS) \
+		--source-path=api/connection/v1alpha1 \
+		--config=hack/docs/crd-ref-docs-config.yaml \
+		--templates-dir=hack/docs/templates-connection \
+		--renderer=markdown \
+		--output-path=docs/source/reference/extension-api.md
+	python3 hack/docs/split-extension-api.py docs/source/reference/extension-api.md docs/source/reference/extension-apis
+	@rm docs/source/reference/extension-api.md
+
+.PHONY: docs-helm-ref
+docs-helm-ref: helm-docs-tool ## Generate Helm values reference docs.
+	$(HELM_DOCS) --chart-search-root=dist/chart \
+		--template-files=../../hack/docs/helm-docs.md.gotmpl \
+		--output-file=../../docs/source/reference/helm-charts/operator.md

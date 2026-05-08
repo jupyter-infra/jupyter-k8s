@@ -56,7 +56,7 @@ helm install jupyter-k8s oci://ghcr.io/jupyter-infra/charts/jupyter-k8s \
   --set manager.resources.limits.memory=512Mi
 ```
 
-See the [Helm Chart Values](../reference/index) reference for all available options.
+See the [Helm Chart Values](../reference/helm-charts/operator) reference for all available options.
 
 ## Bring your applications
 
@@ -83,5 +83,4 @@ kubectl delete crds \
 :hidden:
 
 run-workspaces
-packages
 ```
