@@ -8,7 +8,7 @@ The validating webhook enforces constraints on workspace create, update, and del
 |-------|-------------|
 | Template constraints | Validates resources, images, storage size, and idle shutdown bounds against the template's constraint fields |
 | Access strategy namespace | Rejects references to access strategies outside the workspace's own namespace or the configured shared namespace |
-| Volume ownership | Rejects PVC references the user does not own |
+| Volume ownership | Rejects references to other workspaces' primary storage PVCs (secondary storage can be shared freely) |
 
 ## Bypassed for controller/admins
 
