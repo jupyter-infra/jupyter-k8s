@@ -41,4 +41,3 @@ guided-charts/**/*.lock
 
 # docs
 docs/build/
-docs/source/_static/img/diagrams/
