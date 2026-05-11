@@ -4,6 +4,8 @@
 
 ## Bearer token flow
 
+![Bearer token flow](/_static/img/diagrams/web-access-bearer-token.svg)
+
 1. A user creates a `WorkspaceConnection` with type `web-ui`.
 2. **Extension API** signs a JWT with the user's identity, scoped to the workspace's path and domain.
 3. The token is embedded in a URL (rendered from the access strategy's `bearerAuthURLTemplate`).

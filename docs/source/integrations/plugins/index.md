@@ -2,6 +2,8 @@
 
 A plugin is an HTTP server that runs alongside the controller container in the manager pod.
 
+![Plugin dispatch](/_static/img/diagrams/plugin-dispatch.svg)
+
 ## Handler dispatch
 
 Access strategies map operations to plugin handlers using a `plugin:action` format:

@@ -7,6 +7,8 @@ Web access lets users open a workspace in their browser.
 (web-access-oidc-flow)=
 ## OIDC flow
 
+![OIDC flow](/_static/img/diagrams/web-access-oidc.svg)
+
 The user navigates to the workspace URL. The **Auth middleware** (if in use) detects no valid session cookie and initiates an OAuth2/OIDC login:
 
 1. Browser is redirected to the identity provider login page.
@@ -21,6 +23,8 @@ Refer to the {ref}`AWS-OIDC guided chart <chart-aws-oidc>` for an example implem
 
 (web-access-bearer-token-flow)=
 ## Bearer token flow
+
+![Bearer token flow](/_static/img/diagrams/web-access-bearer-token.svg)
 
 For programmatic access or environments without an IdP:
 

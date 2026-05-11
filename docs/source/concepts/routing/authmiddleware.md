@@ -4,6 +4,8 @@ The **Auth middleware** is a stateless HTTP server that authorizes every request
 
 ## Request flow
 
+![JWT read flow](/_static/img/diagrams/jwt-read.svg)
+
 On each incoming request the **Auth middleware**:
 
 1. Extracts the JWT from a path-scoped cookie.

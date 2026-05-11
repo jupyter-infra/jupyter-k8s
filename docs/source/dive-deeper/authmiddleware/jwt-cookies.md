@@ -4,6 +4,8 @@
 
 These tokens provide stateless authentication on every proxied request.
 
+![JWT lifecycle](/_static/img/diagrams/jwt-lifecycle.svg)
+
 ## Token lifecycle
 
 1. **Issued** — when a user authenticates via {ref}`/auth <authmiddleware-auth>` (OIDC) or {ref}`/bearer-auth <authmiddleware-bearer-auth>` (bearer token exchange).

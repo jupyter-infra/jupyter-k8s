@@ -6,7 +6,22 @@
 
 Unlike **Extension API** (which runs in the controller pod), **Auth middleware** is a separate binary with its own image (`jupyter-k8s-authmiddleware`). It is deployed separately.
 
-For example, the {ref}`AWS-OIDC <chart-aws-oidc>` guided chart bundles it with Traefik, Dex and Oauth2-Proxy.
+For example, the {ref}`AWS-OIDC <chart-aws-oidc>` guided chart bundles it with Traefik, Dex and 
+Oauth2-Proxy.
+
+## Flows
+
+### Initial connection with OIDC
+
+![OIDC web access flow](/_static/img/diagrams/web-access-oidc.svg)
+
+### Initial connection with Bearer Token URL
+
+![Bearer token web access flow](/_static/img/diagrams/web-access-bearer-token.svg)
+
+### Subsequent connections
+
+![Subsequent access flow](/_static/img/diagrams/jwt-read.svg)
 
 ## Configuration
 
