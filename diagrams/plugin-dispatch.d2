@@ -1,0 +1,211 @@
+# Plugin Dispatch — Controller to Sidecar
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+  }
+}
+
+classes: {
+  box: {
+    shape: rectangle
+    style: {
+      bold: true
+      stroke-width: 3
+      font-size: 20
+      border-radius: 8
+    }
+  }
+
+  column_container: {
+    style: {
+      stroke-width: 0
+      fill: transparent
+    }
+    grid-columns: 1
+  }
+
+  icon_labeled_block: {
+    shape: rectangle
+    label.near: top-right
+    style: {
+      bold: true
+      stroke-width: 3
+      font-size: 20
+    }
+  }
+
+  namespace: {
+    shape: rectangle
+    style: {
+      bold: true
+      stroke-width: 2
+      stroke-dash: 5
+      font-size: 18
+    }
+  }
+
+  flow_relay: {
+    shape: square
+    width: 1
+    height: 1
+    style: {
+      stroke-width: 0
+      fill: transparent
+    }
+  }
+
+  spacer: {
+    style: {
+      opacity: 0
+      stroke-width: 0
+    }
+  }
+
+  green_flow: {
+    style: {
+      stroke: "#2e7d32"
+      stroke-width: 3
+    }
+  }
+
+  red_flow: {
+    style: {
+      stroke: "#c62828"
+      stroke-width: 3
+    }
+  }
+}
+
+grid-rows: 1
+grid-columns: 2
+
+cluster: "Kubernetes Cluster" {
+  class: icon_labeled_block
+  style: {
+    fill: "#e3f2fd"
+    stroke: "#1565c0"
+  }
+  grid-columns: 1
+
+  # Row 1: Operator Namespace
+  operator-namespace: "Operator Namespace" {
+    class: namespace
+    style: {
+      fill: "#bbdefb"
+      stroke: "#1565c0"
+    }
+
+    manager_pod: "Manager Pod" {
+      class: box
+      icon: icons/deploy.svg
+      style: {
+        fill: "#bbdefb"
+        stroke: "#1565c0"
+      }
+      grid-columns: 3
+      grid-rows: 1
+
+      controller: "Controller" {
+        class: box
+        icon: icons/jupyter.svg
+        style: {
+          fill: "#bbdefb"
+          stroke: "#1565c0"
+        }
+      }
+
+      s1: "" { class: spacer }
+
+      plugin: "Plugin" {
+        class: box
+        icon: icons/docker.svg
+        style: {
+          fill: "#bbdefb"
+          stroke: "#1565c0"
+        }
+      }
+    }
+  }
+
+  # Row 2: Workspace + Shared Namespaces
+  row2: "" {
+    style: {
+      stroke-width: 0
+      fill: transparent
+    }
+    grid-columns: 2
+    grid-rows: 1
+
+    workspace-namespace: "Workspace Namespace" {
+      class: namespace
+      style: {
+        fill: "#e1bee7"
+        stroke: "#8e24aa"
+      }
+
+      workspace: "Workspace" {
+        class: box
+        icon: icons/crd.svg
+        style: {
+          fill: "#e1bee7"
+          stroke: "#8e24aa"
+        }
+      }
+    }
+
+    shared-namespace: "Shared Namespace" {
+      class: namespace
+      style: {
+        fill: "#e8f5e9"
+        stroke: "#2e7d32"
+      }
+
+      access_strategy: "Access\nStrategy" {
+        class: box
+        icon: icons/crd.svg
+        style: {
+          fill: "#e8f5e9"
+          stroke: "#2e7d32"
+        }
+      }
+    }
+  }
+}
+
+cloud: "Cloud Provider" {
+  class: icon_labeled_block
+  style: {
+    fill: "#f5f5f5"
+    stroke: "#757575"
+  }
+  grid-columns: 1
+
+  s1: "" { class: spacer }
+
+  cloud_api: "Cloud API" {
+    class: box
+    style: {
+      fill: "#f5f5f5"
+      stroke: "#757575"
+    }
+  }
+}
+
+# Green: reconcile reads
+cluster.operator-namespace.manager_pod.controller -> cluster.row2.workspace-namespace.workspace: "1. Read" {
+  class: green_flow
+}
+
+cluster.operator-namespace.manager_pod.controller -> cluster.row2.shared-namespace.access_strategy: "2. Read" {
+  class: green_flow
+}
+
+# Red: plugin call chain
+cluster.operator-namespace.manager_pod.controller -> cluster.operator-namespace.manager_pod.plugin: "3. HTTP\n(localhost)" {
+  class: red_flow
+}
+
+cluster.operator-namespace.manager_pod.plugin -> cloud.cloud_api: "4. SDK call" {
+  class: red_flow
+}

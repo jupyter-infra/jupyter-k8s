@@ -1,0 +1,285 @@
+# JWT Lifecycle — Auth Middleware
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+  }
+}
+
+classes: {
+  box: {
+    shape: rectangle
+    style: {
+      bold: true
+      stroke-width: 3
+      font-size: 20
+      border-radius: 8
+    }
+  }
+
+  column_container: {
+    style: {
+      stroke-width: 0
+      fill: transparent
+    }
+    grid-columns: 1
+  }
+
+  icon_labeled_block: {
+    shape: rectangle
+    label.near: top-right
+    style: {
+      bold: true
+      stroke-width: 3
+      font-size: 20
+    }
+  }
+
+  namespace: {
+    shape: rectangle
+    style: {
+      bold: true
+      stroke-width: 2
+      stroke-dash: 5
+      font-size: 18
+    }
+  }
+
+  flow_relay: {
+    shape: square
+    width: 1
+    height: 1
+    style: {
+      stroke-width: 0
+      fill: transparent
+    }
+  }
+
+  spacer: {
+    style: {
+      opacity: 0
+      stroke-width: 0
+    }
+  }
+
+  red_flow: {
+    style: {
+      stroke: "#c62828"
+      stroke-width: 3
+    }
+  }
+
+  gray_flow: {
+    style: {
+      stroke: "#757575"
+      stroke-width: 2
+      stroke-dash: 5
+    }
+  }
+}
+
+grid-rows: 1
+grid-columns: 2
+
+laptop: "User Laptop" {
+  class: icon_labeled_block
+  style: {
+    fill: "#e8f5e9"
+    stroke: "#2e7d32"
+  }
+  grid-columns: 1
+
+  s1: "" { class: spacer }
+
+  s2: "" { class: spacer }
+
+  browser: "Browser" {
+    class: box
+    icon: icons/firefox.svg
+    style: {
+      fill: "#c8e6c9"
+      stroke: "#388e3c"
+    }
+  }
+
+  s3: "" { class: spacer }
+
+  s4: "" { class: spacer }
+
+  cookie_relay: "" {
+    class: flow_relay
+  }
+}
+
+cluster: "Kubernetes Cluster" {
+  class: icon_labeled_block
+  style: {
+    fill: "#e3f2fd"
+    stroke: "#1565c0"
+  }
+  grid-columns: 2
+
+  left_column: "" {
+    class: column_container
+
+    router-namespace: "Router Namespace" {
+      class: namespace
+      style: {
+        fill: "#ffe0b2"
+        stroke: "#f57c00"
+      }
+      grid-columns: 1
+
+      jwt_row: "" {
+        style: {
+          stroke-width: 0
+          fill: transparent
+        }
+        grid-columns: 3
+        grid-rows: 1
+
+        jwt_secret: "JWT Secret" {
+          class: box
+          icon: icons/secret.svg
+          style: {
+            fill: "#ffe0b2"
+            stroke: "#f57c00"
+          }
+        }
+
+        s1: "" { class: spacer }
+
+        rotator: "Rotator" {
+          class: box
+          icon: icons/cronjob.svg
+          style: {
+            fill: "#ffe0b2"
+            stroke: "#f57c00"
+          }
+        }
+      }
+
+      authmiddleware: "Auth Middleware" {
+        class: box
+        icon: icons/jupyter.svg
+        style: {
+          fill: "#ffe0b2"
+          stroke: "#f57c00"
+        }
+      }
+
+      forward_auth_relays: "" {
+        style: {
+          stroke-width: 0
+          fill: transparent
+        }
+        grid-columns: 4
+        grid-rows: 1
+
+        s1: "" { class: spacer }
+        relay_down: "" { class: flow_relay }
+        s2: "" { class: spacer }
+        relay_up: "" { class: flow_relay }
+      }
+
+      router: "Router" {
+        class: box
+        icon: icons/ing.svg
+        style: {
+          fill: "#ffe0b2"
+          stroke: "#f57c00"
+        }
+      }
+    }
+  }
+
+  right_column: "" {
+    class: column_container
+
+    operator-namespace: "Operator Namespace" {
+      class: namespace
+      style: {
+        fill: "#bbdefb"
+        stroke: "#1565c0"
+      }
+
+      extensionapi: "Extension API" {
+        class: box
+        icon: icons/jupyter.svg
+        style: {
+          fill: "#bbdefb"
+          stroke: "#1565c0"
+        }
+      }
+    }
+
+    s1: "" { class: spacer }
+
+    workspace-namespace: "Workspace Namespace" {
+      class: namespace
+      style: {
+        fill: "#e1bee7"
+        stroke: "#8e24aa"
+      }
+
+      workspace: "Workspace" {
+        class: box
+        icon: icons/pod.svg
+        style: {
+          fill: "#e1bee7"
+          stroke: "#8e24aa"
+        }
+      }
+    }
+  }
+}
+
+# Red: verify + proxy on every request
+laptop.browser -> cluster.left_column.router-namespace.router: "1. Request + cookie" {
+  class: red_flow
+}
+
+cluster.left_column.router-namespace.router -> cluster.left_column.router-namespace.forward_auth_relays.relay_down: "/verify" {
+  class: red_flow
+  target-arrowhead.shape: none
+}
+
+cluster.left_column.router-namespace.forward_auth_relays.relay_down -> cluster.left_column.router-namespace.authmiddleware: "2. Check\nkid, exp, path" {
+  class: red_flow
+}
+
+cluster.left_column.router-namespace.authmiddleware -> cluster.left_column.router-namespace.forward_auth_relays.relay_up: "200" {
+  class: red_flow
+  target-arrowhead.shape: none
+}
+
+cluster.left_column.router-namespace.forward_auth_relays.relay_up -> cluster.left_column.router-namespace.router: "JWT cookie\n(refreshed if near exp)" {
+  class: red_flow
+}
+
+cluster.left_column.router-namespace.router -> cluster.right_column.workspace-namespace.workspace: "4. Proxy to\nworkspace" {
+  class: red_flow
+}
+
+cluster.left_column.router-namespace.router -> laptop.cookie_relay: "5. Set JWT cookie\n(path-scoped)" {
+  class: red_flow
+  target-arrowhead.shape: none
+}
+
+laptop.cookie_relay -> laptop.browser: "" {
+  class: red_flow
+}
+
+# Red: refresh re-checks authorization
+cluster.left_column.router-namespace.authmiddleware -> cluster.right_column.operator-namespace.extensionapi: "3. ConnectionAccessReview\n(if refresh)" {
+  class: red_flow
+}
+
+# Gray dashed: key rotation
+cluster.left_column.router-namespace.jwt_row.rotator -> cluster.left_column.router-namespace.jwt_row.jwt_secret: "Rotate keys" {
+  class: gray_flow
+}
+
+cluster.left_column.router-namespace.authmiddleware -> cluster.left_column.router-namespace.jwt_row.jwt_secret: "Watch" {
+  class: gray_flow
+}
