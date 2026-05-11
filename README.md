@@ -3,7 +3,6 @@
 [![Documentation](https://readthedocs.org/projects/jupyter-k8s/badge/?version=latest)](https://jupyter-k8s.readthedocs.io/en/latest/)
 [![Tests](https://github.com/jupyter-infra/jupyter-k8s/actions/workflows/test.yml/badge.svg)](https://github.com/jupyter-infra/jupyter-k8s/actions/workflows/test.yml)
 [![E2E Tests](https://github.com/jupyter-infra/jupyter-k8s/actions/workflows/test-e2e.yml/badge.svg)](https://github.com/jupyter-infra/jupyter-k8s/actions/workflows/test-e2e.yml)
-[![Version](https://ghcr-badge.egpl.dev/jupyter-infra/charts/jupyter-k8s/latest_tag?label=chart)](https://github.com/jupyter-infra/jupyter-k8s/pkgs/container/charts%2Fjupyter-k8s)
 
 A Kubernetes operator for Jupyter notebooks and interactive IDEs — managing compute, storage, networking, and access control for multiple users.
 
