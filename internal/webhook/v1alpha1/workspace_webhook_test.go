@@ -124,6 +124,20 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(workspace.Annotations).To(Equal(map[string]string{}))
 		})
 
+		It("should default desiredStatus to Running when not set", func() {
+			workspace.Spec.DesiredStatus = ""
+			err := defaulter.Default(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspace.Spec.DesiredStatus).To(Equal(controller.DefaultDesiredStatus))
+		})
+
+		It("should not override desiredStatus when already set", func() {
+			workspace.Spec.DesiredStatus = controller.DesiredStateStopped
+			err := defaulter.Default(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(workspace.Spec.DesiredStatus).To(Equal(controller.DesiredStateStopped))
+		})
+
 		It("should return error for wrong object type", func() {
 			wrongObj := &runtime.Unknown{}
 			err := defaulter.Default(ctx, wrongObj)
