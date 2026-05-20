@@ -356,6 +356,21 @@ var _ = Describe("Workspace Status", Ordered, func() {
 				To(BeTrue(), "Service should exist")
 		})
 	})
+
+	Context("DesiredStatus Defaulting", func() {
+		const noDesiredStatusWorkspace = "workspace-no-desired-status"
+
+		It("should default desiredStatus to Running when not specified", func() {
+			By("creating workspace without desiredStatus field")
+			createWorkspaceForTest(noDesiredStatusWorkspace, statusGroupDir, statusSubgroupDir)
+
+			By("verifying spec.desiredStatus was defaulted to Running by the webhook")
+			desiredStatus, err := kubectlGet("workspace", noDesiredStatusWorkspace, statusTestNamespace,
+				"{.spec.desiredStatus}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(desiredStatus).To(Equal("Running"), "desiredStatus should be defaulted to Running by the mutating webhook")
+		})
+	})
 })
 
 func deleteResourcesForStatusTest() {

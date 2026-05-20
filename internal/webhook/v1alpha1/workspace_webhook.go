@@ -267,6 +267,10 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 		return nil
 	}
 
+	if workspace.Spec.DesiredStatus == "" {
+		workspace.Spec.DesiredStatus = controller.DefaultDesiredStatus
+	}
+
 	// Add ownership tracking annotations
 	if workspace.Annotations == nil {
 		workspace.Annotations = make(map[string]string)
