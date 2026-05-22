@@ -13,17 +13,26 @@ The UI operates on the `workspace.jupyter.org/v1alpha1` CRD API directly — it 
 
 ## Installation
 
-The **Web UI** is included in the {ref}`AWS-OIDC chart <chart-aws-oidc>`. No additional installation is required when using that chart.
-
-For standalone deployment, add the container to your cluster with a routing layer that provides OIDC authentication:
+The **Web UI** is deployed via the `jupyter-k8s-aws-oidc` Helm chart. Enable it in your [`values.yaml`](https://github.com/jupyter-infra/jupyter-k8s-aws/blob/main/charts/aws-oidc/values.yaml):
 
 ```yaml
 webApp:
+  enabled: true
   repository: ghcr.io/jupyter-infra
   imageName: jupyter-k8s-ui
-  imageTag: v0.1.0-rc.1
+  imageTag: latest
   namespace: default
 ```
+
+Then install or upgrade the chart:
+
+```bash
+helm upgrade --install jupyter-k8s-aws-oidc \
+  oci://ghcr.io/jupyter-infra/charts/jupyter-k8s-aws-oidc \
+  -f values.yaml
+```
+
+This creates a Deployment, Service, IngressRoute, and RBAC resources for the Web UI.
 
 ## Requirements
 
