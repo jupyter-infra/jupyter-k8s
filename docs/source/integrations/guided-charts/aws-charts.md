@@ -12,6 +12,7 @@ A full web-access stack for EKS clusters. Users access the applications running 
 - [Dex](https://dexidp.io/docs/getting-started/) as the OIDC identity provider
 - [OAuth2-Proxy](https://oauth2-proxy.github.io/oauth2-proxy/) to manage workspace-wide cookies
 - **Auth middleware** configured to verify the OIDC token from `dex`
+- [Web UI](../web-ui/index) — workspace management console for creating and managing workspaces from the browser
 - Preconfigured access strategies and templates for browser-based workspace access
 
 **Access pattern:**
