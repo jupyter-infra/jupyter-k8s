@@ -71,7 +71,7 @@ SHELL = /usr/bin/env bash -o pipefail
 all: build
 
 .PHONY: release
-release: helm-generate build lint-fix lint-fix-e2e test helm-lint helm-test ## Run all checks required before PR submission (excluding e2e tests)
+release: helm-generate build-installer docs-ref build lint-fix lint-fix-e2e test helm-lint helm-test ## Run all checks required before PR submission (excluding e2e tests). Regenerates every artifact verified by verify-generated.yml.
 
 ##@ General
 
@@ -261,6 +261,19 @@ helm-generate: manifests
 	kubebuilder edit --plugins=helm/v2-alpha --force
 	./hack/apply-helm-patches.sh
 
+.PHONY: verify-generated
+verify-generated: manifests generate build-installer helm-generate docs-ref ## Regenerate all committed artifacts and fail if any drift from the checked-in copies.
+	@if [ -n "$$(git status --porcelain -- config dist docs)" ]; then \
+		echo "ERROR: generated files are out of date. Run the generation targets and commit the result:"; \
+		echo "  make manifests generate build-installer helm-generate docs-ref"; \
+		echo ""; \
+		git status --porcelain -- config dist docs; \
+		echo ""; \
+		git --no-pager diff -- config dist docs; \
+		exit 1; \
+	fi
+	@echo "Generated files are up to date."
+
 .PHONY: helm-package
 helm-package: helm-generate ## Package the Helm chart
 	helm package dist/chart -d dist
@@ -277,7 +290,11 @@ helm-test: ## Test the Helm chart with helm template
 	cd /tmp/helm-test-chart && helm dependency build
 	helm template $(HELM_RELEASE) /tmp/helm-test-chart --output-dir dist/test-output-crd-only \
 		--set accessResources.traefik.enable=true \
-		--set extensionApi.enable=true
+		--set extensionApi.enable=true \
+		--set extensionApi.jwtSecret.enable=true \
+		--set manager.nodeSelector.jupyter-deploy/role=components \
+		--set manager.tolerations[0].key=dedicated \
+		--set manager.tolerations[0].operator=Exists
 	rm -rf /tmp/helm-test-chart
 	go test ./test/helm/crd-only -v
 

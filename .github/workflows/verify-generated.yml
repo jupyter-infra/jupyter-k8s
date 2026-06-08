@@ -1,0 +1,39 @@
+name: Verify Generated Files
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify-generated:
+    name: Generated artifacts up to date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # kubebuilder is the one generation tool not auto-installed by the
+      # Makefile (controller-gen, kustomize, crd-ref-docs and helm-docs are
+      # go-installed on demand). Keep the version in sync with the recipe in
+      # release-stage-chart.yml.
+      - name: Install kubebuilder
+        run: |
+          curl -L -o kubebuilder "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v4.13.1/kubebuilder_$(go env GOOS)_$(go env GOARCH)"
+          chmod +x kubebuilder
+          sudo mv kubebuilder /usr/local/bin/
+
+      - name: Install Helm
+        run: make install-helm
+
+      # Regenerates manifests, install.yaml, the Helm chart and reference docs,
+      # then fails if anything drifts from the committed copies. This is the
+      # guard that stops PRs landing with stale generated files.
+      - name: Verify generated files are up to date
+        run: make verify-generated
