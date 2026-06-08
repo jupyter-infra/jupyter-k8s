@@ -129,6 +129,7 @@ Ask user before running.
 - Build: `make build`
 - Run linter: `make lint`
 - Run unit tests: `make test`
+- Verify generated files are up to date: `make verify-generated` (regenerates manifests, chart, install.yaml, reference docs and fails on drift — enforced in CI by `verify-generated.yml`)
 - Run linter for e2e code: `make lint-e2e`
 - Run end-to-end tests (creates a separate kind cluster): `make test-e2e`
 - Run focused e2e tests: `make test-e2e-focus FOCUS="<selector name>"` (e.g., `FOCUS="Workspace Access Strategy"`)

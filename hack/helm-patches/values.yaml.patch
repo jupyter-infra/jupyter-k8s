@@ -35,8 +35,6 @@ extensionApi:
   jwtIssuer: "workspaces-controller"
   jwtAudience: "workspaces-controller"
   # K8s-native JWT secret configuration
-  # When enabled, JWTs are signed with HMAC keys from a K8s Secret
-  # instead of AWS KMS. The secret is rotated by a CronJob.
   jwtSecret:
     enable: false
     secretName: "jupyter-k8s-extensionapi-secrets"
@@ -55,11 +53,15 @@ extensionApi:
         limits:
           cpu: 100m
           memory: 128Mi
+      # Note: the rotator inherits the controller's scheduling
+      # (manager.nodeSelector / tolerations / topologySpreadConstraints);
+      # it has no scheduling knobs of its own.
 
 # [CONTROLLER]: Controller configuration
 controller:
   # Plugin sidecars to deploy alongside the controller
   # Each plugin runs as a sidecar container in the controller pod
+  plugins: []
   # Example:
   #   plugins:
   #     - name: aws
@@ -72,4 +74,3 @@ controller:
   #       env:
   #         PLUGIN_PORT: "8080"
   #         AWS_REGION: "us-west-2"
-  plugins: []

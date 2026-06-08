@@ -1,0 +1,21 @@
+# This patch adds scheduling configuration support to the jwt-rotator CronJob
+# The scheduling fields are set to empty defaults and can be customized using kustomize overlays
+# (mirrors config/default/manager_scheduling_patch.yaml so rotator pods can be scheduled
+# alongside the controller).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: jwt-rotator
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          # Default empty nodeSelector - can be overridden in overlays
+          nodeSelector: {}
+
+          # Default empty tolerations - can be overridden in overlays
+          tolerations: []
+
+          # Default empty topologySpreadConstraints - can be overridden in overlays
+          topologySpreadConstraints: []

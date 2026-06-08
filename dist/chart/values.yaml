@@ -217,6 +217,9 @@ extensionApi:
         limits:
           cpu: 100m
           memory: 128Mi
+      # Note: the rotator inherits the controller's scheduling
+      # (manager.nodeSelector / tolerations / topologySpreadConstraints);
+      # it has no scheduling knobs of its own.
 
 # [CONTROLLER]: Controller configuration
 controller:
