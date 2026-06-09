@@ -96,6 +96,7 @@ func TestSafelyAddFinalizerToAccessStrategy_HasFinalizer_IsNoop(t *testing.T) {
 		logger,
 		fakeClient,
 		accessStrategy,
+		AccessStrategyFinalizerName,
 	)
 
 	// Assertions
@@ -140,6 +141,7 @@ func TestSafelyAddFinalizerToAccessStrategy_NoFinalizer_CallsUpdate(t *testing.T
 		logger,
 		fakeClient,
 		accessStrategy,
+		AccessStrategyFinalizerName,
 	)
 
 	// Assertions
@@ -199,6 +201,7 @@ func TestSafelyAddFinalizerToAccessStrategy_OnConflictWithFinalizerAdded_CallsGe
 		logger,
 		fakeClient,
 		accessStrategy,
+		AccessStrategyFinalizerName,
 	)
 
 	// Assertions
@@ -246,6 +249,7 @@ func TestSafelyAddFinalizerToAccessStrategy_OnConflictWithFinalizerNotAdded_Retu
 		logger,
 		fakeClient,
 		accessStrategy,
+		AccessStrategyFinalizerName,
 	)
 
 	// Assertions
@@ -296,6 +300,7 @@ func TestSafelyAddFinalizerToAccessStrategy_OnConflictWithGetError_ReturnGetErro
 		logger,
 		fakeClient,
 		accessStrategy,
+		AccessStrategyFinalizerName,
 	)
 
 	// Assertions
@@ -344,6 +349,7 @@ func TestSafelyAddFinalizerToAccessStrategy_OnNonConflictError_ReturnUpdateError
 		logger,
 		fakeClient,
 		accessStrategy,
+		AccessStrategyFinalizerName,
 	)
 
 	// Assertions
@@ -390,6 +396,7 @@ func TestSafelyRemoveFinalizerFromAccessStrategy_NoFinalizer_IsNoop(t *testing.T
 		logger,
 		fakeClient,
 		accessStrategy,
+		AccessStrategyFinalizerName,
 		false, // deletedOk = false
 	)
 
@@ -438,6 +445,7 @@ func TestSafelyRemoveFinalizerFromAccessStrategy_WithFinalizer_CallsUpdate(t *te
 		logger,
 		fakeClient,
 		accessStrategy,
+		AccessStrategyFinalizerName,
 		false, // deletedOk = false
 	)
 
@@ -501,6 +509,7 @@ func TestSafelyRemoveFinalizerFromAccessStrategy_OnConflictWithFinalizerRemoved_
 		logger,
 		fakeClient,
 		accessStrategy,
+		AccessStrategyFinalizerName,
 		false, // deletedOk = false
 	)
 
@@ -551,6 +560,7 @@ func TestSafelyRemoveFinalizerFromAccessStrategy_OnConflictWithFinalizerNotRemov
 		logger,
 		fakeClient,
 		accessStrategy,
+		AccessStrategyFinalizerName,
 		false, // deletedOk = false
 	)
 
@@ -604,6 +614,7 @@ func TestSafelyRemoveFinalizerFromAccessStrategy_OnConflictWithGetError_ReturnGe
 		logger,
 		fakeClient,
 		accessStrategy,
+		AccessStrategyFinalizerName,
 		false, // deletedOk = false
 	)
 
@@ -655,6 +666,7 @@ func TestSafelyRemoveFinalizerFromAccessStrategy_OnNonConflictError_ReturnUpdate
 		logger,
 		fakeClient,
 		accessStrategy,
+		AccessStrategyFinalizerName,
 		false, // deletedOk = false
 	)
 
@@ -709,6 +721,7 @@ func TestSafelyRemoveFinalizerFromAccessStrategy_WithDeletedOkTrue_NotFoundIsOk(
 		logger,
 		fakeClient,
 		accessStrategy,
+		AccessStrategyFinalizerName,
 		true, // deletedOk = true
 	)
 
@@ -762,6 +775,7 @@ func TestSafelyRemoveFinalizerFromAccessStrategy_OnConflictWithNotFoundGetAndDel
 		logger,
 		fakeClient,
 		accessStrategy,
+		AccessStrategyFinalizerName,
 		true, // deletedOk = true
 	)
 
@@ -776,4 +790,68 @@ func TestSafelyRemoveFinalizerFromAccessStrategy_OnConflictWithNotFoundGetAndDel
 	// Verify that finalizer is removed from our local copy
 	assert.False(t, controllerutil.ContainsFinalizer(accessStrategy, AccessStrategyFinalizerName),
 		"Finalizer should be removed from our local copy")
+}
+
+func TestEnsureAccessStrategyFinalizerByRef(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+	logger := zap.New(zap.UseDevMode(true)).WithName("test")
+
+	const (
+		asName = "web-access"
+		asNs   = "shared-ns"
+	)
+
+	t.Run("empty name is a no-op", func(t *testing.T) {
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		err := EnsureAccessStrategyFinalizerByRef(context.Background(), logger, c, "", asNs, AccessStrategyTemplateFinalizerName, true)
+		assert.NoError(t, err)
+	})
+
+	t.Run("missing access strategy is tolerated when mustExist is false (backfill path)", func(t *testing.T) {
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		err := EnsureAccessStrategyFinalizerByRef(context.Background(), logger, c, asName, asNs, AccessStrategyTemplateFinalizerName, false)
+		assert.NoError(t, err)
+	})
+
+	t.Run("missing access strategy is an error when mustExist is true (webhook path)", func(t *testing.T) {
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		err := EnsureAccessStrategyFinalizerByRef(context.Background(), logger, c, asName, asNs, AccessStrategyTemplateFinalizerName, true)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("adds template finalizer when access strategy exists without it", func(t *testing.T) {
+		as := &workspacev1alpha1.WorkspaceAccessStrategy{
+			ObjectMeta: metav1.ObjectMeta{Name: asName, Namespace: asNs},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(as).Build()
+
+		err := EnsureAccessStrategyFinalizerByRef(context.Background(), logger, c, asName, asNs, AccessStrategyTemplateFinalizerName, true)
+		assert.NoError(t, err)
+
+		got := &workspacev1alpha1.WorkspaceAccessStrategy{}
+		assert.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: asName, Namespace: asNs}, got))
+		assert.True(t, controllerutil.ContainsFinalizer(got, AccessStrategyTemplateFinalizerName))
+		// The workspace finalizer must NOT be added by the template path.
+		assert.False(t, controllerutil.ContainsFinalizer(got, AccessStrategyFinalizerName))
+	})
+
+	t.Run("is idempotent when finalizer already present", func(t *testing.T) {
+		as := &workspacev1alpha1.WorkspaceAccessStrategy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       asName,
+				Namespace:  asNs,
+				Finalizers: []string{AccessStrategyTemplateFinalizerName},
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(as).Build()
+
+		err := EnsureAccessStrategyFinalizerByRef(context.Background(), logger, c, asName, asNs, AccessStrategyTemplateFinalizerName, true)
+		assert.NoError(t, err)
+
+		got := &workspacev1alpha1.WorkspaceAccessStrategy{}
+		assert.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: asName, Namespace: asNs}, got))
+		assert.True(t, controllerutil.ContainsFinalizer(got, AccessStrategyTemplateFinalizerName))
+	})
 }
