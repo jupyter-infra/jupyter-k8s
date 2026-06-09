@@ -13662,6 +13662,27 @@ webhooks:
     resources:
     - workspaces
   sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: jupyter-k8s-controller-manager
+      namespace: jupyter-k8s-system
+      path: /mutate-workspace-jupyter-org-v1alpha1-workspacetemplate
+      port: 9443
+  failurePolicy: Ignore
+  name: mworkspacetemplate-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - workspace.jupyter.org
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - workspacetemplates
+  sideEffects: None
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
