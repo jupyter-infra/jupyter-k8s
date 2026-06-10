@@ -24,8 +24,15 @@ const (
 	// TemplateFinalizerName is the name of the finalizer placed on a template that is referenced by workspaces
 	TemplateFinalizerName = "workspace.jupyter.org/template-protection"
 
-	// AccessStrategyFinalizerName is the name of the finalizer place on an accessStrategy that is referenced by workspaces
+	// AccessStrategyFinalizerName is the name of the finalizer placed on an accessStrategy that is referenced by workspaces
 	AccessStrategyFinalizerName = "workspace.jupyter.org/accessstrategy-protection"
+
+	// AccessStrategyTemplateFinalizerName is the name of the finalizer placed on an accessStrategy that is
+	// referenced by templates (via spec.defaultAccessStrategy). It is intentionally distinct from
+	// AccessStrategyFinalizerName so workspace and template references protect the access strategy
+	// independently: each finalizer is managed solely by its own referrer type, and Kubernetes keeps the
+	// access strategy alive until BOTH are removed.
+	AccessStrategyTemplateFinalizerName = "workspace.jupyter.org/accessstrategy-template-protection"
 
 	// ConflictRetryDelayMilliseconds is the base delay in milliseconds before retrying after a conflict
 	ConflictRetryDelayMilliseconds = 100

@@ -7,6 +7,7 @@ package workspace
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
@@ -16,28 +17,33 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-// SafelyAddFinalizerToAccessStrategy attempts to add a finalizer to an AccessStrategy,
+// SafelyAddFinalizerToAccessStrategy attempts to add the named finalizer to an AccessStrategy,
 // handling conflict errors by checking if the finalizer was added in a concurrent operation.
+//
+// finalizerName selects which protection finalizer to manage: AccessStrategyFinalizerName for
+// workspace references, or AccessStrategyTemplateFinalizerName for template references. The two are
+// managed independently so the access strategy survives until all referrer types release it.
 func SafelyAddFinalizerToAccessStrategy(
 	ctx context.Context,
 	logger logr.Logger,
 	k8sClient client.Client,
-	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) error {
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
+	finalizerName string) error {
 
 	// Check if finalizer is already present
-	if controllerutil.ContainsFinalizer(accessStrategy, AccessStrategyFinalizerName) {
-		logger.V(1).Info("Finalizer already present on AccessStrategy")
+	if controllerutil.ContainsFinalizer(accessStrategy, finalizerName) {
+		logger.V(1).Info("Finalizer already present on AccessStrategy", "finalizer", finalizerName)
 		return nil
 	}
 
 	// Add the finalizer
-	logger.Info("Adding finalizer to AccessStrategy")
-	controllerutil.AddFinalizer(accessStrategy, AccessStrategyFinalizerName)
+	logger.Info("Adding finalizer to AccessStrategy", "finalizer", finalizerName)
+	controllerutil.AddFinalizer(accessStrategy, finalizerName)
 
 	// Try to update
 	updateErr := k8sClient.Update(ctx, accessStrategy)
 	if updateErr == nil {
-		logger.Info("Successfully added finalizer to AccessStrategy")
+		logger.Info("Successfully added finalizer to AccessStrategy", "finalizer", finalizerName)
 		return nil
 	}
 
@@ -58,8 +64,8 @@ func SafelyAddFinalizerToAccessStrategy(
 	}
 
 	// Check if finalizer is already present in the latest version
-	if controllerutil.ContainsFinalizer(latestAccessStrategy, AccessStrategyFinalizerName) {
-		logger.Info("Finalizer already present in latest version of AccessStrategy")
+	if controllerutil.ContainsFinalizer(latestAccessStrategy, finalizerName) {
+		logger.Info("Finalizer already present in latest version of AccessStrategy", "finalizer", finalizerName)
 		return nil
 	}
 
@@ -68,71 +74,68 @@ func SafelyAddFinalizerToAccessStrategy(
 	return updateErr
 }
 
-// SafelyRemoveFinalizerFromAccessStrategy attempts to remove a finalizer from an AccessStrategy,
-// handling conflict errors by checking if the finalizer was removed in a concurrent operation.
+// EnsureAccessStrategyFinalizerByRef adds the named protection finalizer to the AccessStrategy
+// identified by name/namespace, if it does not already carry it. It is the shared lazy-finalizer
+// primitive used by referrers to mark an AccessStrategy as in-use; callers pass the finalizer name for
+// their referrer type (e.g. AccessStrategyTemplateFinalizerName for templates).
 //
-// If deletedOk is true, NotFound errors are treated as success (the finalizer is effectively removed
-// if the resource itself is gone).
-func SafelyRemoveFinalizerFromAccessStrategy(
+// mustExist controls how a missing AccessStrategy is treated:
+//   - true (admission webhook): a missing AccessStrategy is an error, so create/update of a referrer
+//     pointing at a non-existent AccessStrategy is rejected. This is the layer that actually prevents
+//     dangling references from being persisted.
+//   - false (controller backfill): a missing AccessStrategy is tolerated and skipped. A referrer only
+//     reaches the controller with a dangling reference if the webhook was bypassed (failurePolicy:
+//     Ignore - pod down, racing, or a pre-existing resource), and by then it is already in etcd. The
+//     controller cannot un-persist it or conjure the AccessStrategy, so returning an error here would
+//     only hot-loop the reconcile on an unfixable condition with no upside. Instead we skip; the
+//     AccessStrategy controller backfills the finalizer if the AccessStrategy is created later.
+//
+// Tolerating the dangling reference on the controller path does not leak to runtime: a workspace that
+// inherits such a reference (directly or via a template's defaultAccessStrategy) is rejected fail-fast by
+// the workspace admission webhook, which validates AccessStrategy existence unconditionally under
+// failurePolicy: fail. The dangling referrer is therefore inert - it cannot back a running workspace.
+//
+// Removal is intentionally not handled here - it stays lazy in the AccessStrategy controller, which can
+// see when this referrer type no longer references the AccessStrategy.
+func EnsureAccessStrategyFinalizerByRef(
 	ctx context.Context,
 	logger logr.Logger,
 	k8sClient client.Client,
-	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
-	deletedOk bool) error {
+	accessStrategyName string,
+	accessStrategyNamespace string,
+	finalizerName string,
+	mustExist bool) error {
 
-	// Check if finalizer is present
-	if !controllerutil.ContainsFinalizer(accessStrategy, AccessStrategyFinalizerName) {
-		logger.V(1).Info("Finalizer not present on AccessStrategy")
+	if accessStrategyName == "" {
 		return nil
 	}
 
-	// Remove the finalizer
-	logger.Info("Removing finalizer from AccessStrategy")
-	controllerutil.RemoveFinalizer(accessStrategy, AccessStrategyFinalizerName)
-
-	// Try to update
-	updateErr := k8sClient.Update(ctx, accessStrategy)
-	if updateErr == nil {
-		logger.Info("Successfully removed finalizer from AccessStrategy")
-		return nil
-	}
-
-	// Handle NotFound error if deletedOk is true
-	if errors.IsNotFound(updateErr) && deletedOk {
-		logger.Info("AccessStrategy not found but deletedOk is true, considering finalizer removal successful")
-		return nil
-	}
-
-	// Check if it's a conflict error
-	if !errors.IsConflict(updateErr) {
-		logger.Error(updateErr, "Failed to remove finalizer from AccessStrategy (non-conflict error)")
-		return updateErr
-	}
-
-	// Get the latest version
-	latestAccessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{}
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{}
 	err := k8sClient.Get(ctx, types.NamespacedName{
-		Name:      accessStrategy.Name,
-		Namespace: accessStrategy.Namespace,
-	}, latestAccessStrategy)
-
-	// Handle NotFound error during refresh if deletedOk is true
+		Name:      accessStrategyName,
+		Namespace: accessStrategyNamespace,
+	}, accessStrategy)
 	if err != nil {
-		if errors.IsNotFound(err) && deletedOk {
-			logger.Info("AccessStrategy no longer exists but deletedOk is true, considering finalizer removal successful")
+		if errors.IsNotFound(err) {
+			if mustExist {
+				logger.Info("Referenced AccessStrategy not found",
+					"accessStrategy", accessStrategyName, "namespace", accessStrategyNamespace)
+				return fmt.Errorf("referenced AccessStrategy %s not found in namespace %s",
+					accessStrategyName, accessStrategyNamespace)
+			}
+			// AccessStrategy doesn't exist yet; the AccessStrategy controller will backfill the
+			// finalizer once it observes this referrer. Not an error on the backfill path.
+			logger.V(1).Info("AccessStrategy not found while ensuring finalizer, skipping",
+				"accessStrategy", accessStrategyName, "namespace", accessStrategyNamespace)
 			return nil
 		}
-		logger.Error(err, "Failed to get latest AccessStrategy")
-		return err
+		return fmt.Errorf("failed to get AccessStrategy %s/%s: %w",
+			accessStrategyNamespace, accessStrategyName, err)
 	}
 
-	// Check if finalizer is already gone in the latest version
-	if !controllerutil.ContainsFinalizer(latestAccessStrategy, AccessStrategyFinalizerName) {
-		logger.Info("Finalizer already removed in latest version of AccessStrategy")
+	if controllerutil.ContainsFinalizer(accessStrategy, finalizerName) {
 		return nil
 	}
 
-	// Finalizer is still present in the latest version, return the conflict error
-	logger.Error(updateErr, "Finalizer still present in latest version, returning conflict error")
-	return updateErr
+	return SafelyAddFinalizerToAccessStrategy(ctx, logger, k8sClient, accessStrategy, finalizerName)
 }

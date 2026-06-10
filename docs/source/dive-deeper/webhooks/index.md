@@ -8,6 +8,7 @@
 |---------|----------|------|----------------|-------|
 | [Workspace defaults](workspace-defaults) | `workspaces` | Mutating | `Fail` | create, update |
 | [Workspace validation](workspace-validation) | `workspaces` | Validating | `Fail` | create, update, delete |
+| [Template defaults](template-validation) | `workspacetemplates` | Mutating | `Ignore` | create, update |
 | [Template validation](template-validation) | `workspacetemplates` | Validating | `Ignore` | update |
 | Pod exec | `pods/exec` | Validating | `Ignore` | connect |
 

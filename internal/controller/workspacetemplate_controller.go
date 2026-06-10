@@ -61,6 +61,22 @@ func (r *WorkspaceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return r.handleDeletion(ctx, template)
 	}
 
+	// Ensure access strategy labels reflect spec.defaultAccessStrategy so the access strategy
+	// deletion webhook can find referencing templates with an efficient label query.
+	if updated, err := r.reconcileAccessStrategyLabels(ctx, template); err != nil {
+		return ctrl.Result{}, err
+	} else if updated {
+		// Labels changed and were persisted; requeue happens via the update event.
+		return ctrl.Result{}, nil
+	}
+
+	// Backfill the protection finalizer on the referenced AccessStrategy (safety net for when the
+	// mutating webhook is unavailable). Only adds; removal is handled by the AccessStrategy controller
+	// when the last referrer is gone.
+	if err := r.ensureAccessStrategyFinalizer(ctx, template); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Handle spec changes to track generation updates
 	shouldUpdateStatus, newGeneration := r.handleSpecChanges(ctx, template)
 
@@ -137,6 +153,59 @@ func (r *WorkspaceTemplateReconciler) manageFinalizer(ctx context.Context, templ
 	// Case 3: State is correct (both have workspaces+finalizer, or neither)
 	logger.V(1).Info("Finalizer state is correct, no action needed")
 	return ctrl.Result{}, nil
+}
+
+// reconcileAccessStrategyLabels backfills the access strategy lookup labels on a template so that the
+// access strategy deletion webhook can find referencing templates via an efficient label query.
+//
+// The mutating webhook stamps these labels eagerly at admission; this controller path is the safety net
+// that backfills templates created before label support (or otherwise missing the label). The label
+// computation is shared via workspace.ApplyAccessStrategyLabels. Returns true when labels changed and
+// were persisted.
+func (r *WorkspaceTemplateReconciler) reconcileAccessStrategyLabels(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) (bool, error) {
+	logger := logf.FromContext(ctx)
+
+	if !workspace.ApplyAccessStrategyLabels(template) {
+		return false, nil
+	}
+
+	if err := r.Update(ctx, template); err != nil {
+		logger.Error(err, "Failed to update template access strategy labels", "templateName", template.Name)
+		return false, fmt.Errorf("failed to update access strategy labels on template %s/%s: %w",
+			template.Namespace, template.Name, err)
+	}
+
+	logger.Info("Backfilled template access strategy labels",
+		"templateName", template.Name,
+		"accessStrategyName", template.Labels[workspace.LabelAccessStrategyName],
+		"accessStrategyNamespace", template.Labels[workspace.LabelAccessStrategyNamespace])
+	return true, nil
+}
+
+// ensureAccessStrategyFinalizer backfills the protection finalizer on the AccessStrategy referenced by
+// this template (via spec.defaultAccessStrategy). The mutating webhook adds it eagerly at admission;
+// this is the controller-side safety net for when the webhook is unavailable. It only adds the
+// finalizer - removal is the AccessStrategy controller's responsibility once the last referrer is gone.
+func (r *WorkspaceTemplateReconciler) ensureAccessStrategyFinalizer(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) error {
+	logger := logf.FromContext(ctx)
+
+	if template.Spec.DefaultAccessStrategy == nil || template.Spec.DefaultAccessStrategy.Name == "" {
+		return nil
+	}
+
+	asName := template.Labels[workspace.LabelAccessStrategyName]
+	asNamespace := template.Labels[workspace.LabelAccessStrategyNamespace]
+
+	// mustExist=false: tolerate a missing AccessStrategy on the backfill path. A template can slip in
+	// referencing a non-existent AccessStrategy only if the webhook was unavailable (failurePolicy:
+	// Ignore); the controller must not wedge on it.
+	if err := workspace.EnsureAccessStrategyFinalizerByRef(ctx, logger, r.Client, asName, asNamespace,
+		workspace.AccessStrategyTemplateFinalizerName, false); err != nil {
+		logger.Error(err, "Failed to ensure finalizer on AccessStrategy referenced by template",
+			"templateName", template.Name, "accessStrategy", asName, "namespace", asNamespace)
+		return err
+	}
+	return nil
 }
 
 func (r *WorkspaceTemplateReconciler) handleDeletion(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) (ctrl.Result, error) {

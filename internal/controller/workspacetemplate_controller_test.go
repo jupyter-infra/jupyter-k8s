@@ -453,4 +453,93 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 				"finalizer should remain when workspaces are using the template")
 		})
 	})
+
+	Context("Access Strategy Label Reconciliation", func() {
+		var (
+			ctx        context.Context
+			template   *workspacev1alpha1.WorkspaceTemplate
+			reconciler *WorkspaceTemplateReconciler
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			reconciler = &WorkspaceTemplateReconciler{Client: k8sClient}
+		})
+
+		AfterEach(func() {
+			if template != nil {
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, template))).To(Succeed())
+			}
+		})
+
+		reconcileTemplate := func() {
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: template.Name, Namespace: template.Namespace},
+			})
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		It("stamps access strategy labels from spec.defaultAccessStrategy (explicit namespace)", func() {
+			template = &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("tmpl-as-%d", time.Now().UnixNano()), Namespace: "default"},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:           "Test Template",
+					DefaultImage:          "quay.io/jupyter/minimal-notebook:latest",
+					DefaultAccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "web-access", Namespace: "shared-ns"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+
+			reconcileTemplate()
+
+			updated := &workspacev1alpha1.WorkspaceTemplate{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updated)).To(Succeed())
+			Expect(updated.Labels[workspaceutil.LabelAccessStrategyName]).To(Equal("web-access"))
+			Expect(updated.Labels[workspaceutil.LabelAccessStrategyNamespace]).To(Equal("shared-ns"))
+		})
+
+		It("defaults the label namespace to the template's own namespace when ref namespace is empty", func() {
+			template = &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("tmpl-as-%d", time.Now().UnixNano()), Namespace: "default"},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:           "Test Template",
+					DefaultImage:          "quay.io/jupyter/minimal-notebook:latest",
+					DefaultAccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "web-access"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+
+			reconcileTemplate()
+
+			updated := &workspacev1alpha1.WorkspaceTemplate{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updated)).To(Succeed())
+			Expect(updated.Labels[workspaceutil.LabelAccessStrategyName]).To(Equal("web-access"))
+			Expect(updated.Labels[workspaceutil.LabelAccessStrategyNamespace]).To(Equal("default"))
+		})
+
+		It("removes access strategy labels when the reference is cleared", func() {
+			template = &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("tmpl-as-%d", time.Now().UnixNano()), Namespace: "default"},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:           "Test Template",
+					DefaultImage:          "quay.io/jupyter/minimal-notebook:latest",
+					DefaultAccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "web-access", Namespace: "default"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, template)).To(Succeed())
+			reconcileTemplate()
+
+			// Clear the reference and reconcile again.
+			updated := &workspacev1alpha1.WorkspaceTemplate{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updated)).To(Succeed())
+			updated.Spec.DefaultAccessStrategy = nil
+			Expect(k8sClient.Update(ctx, updated)).To(Succeed())
+
+			reconcileTemplate()
+
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updated)).To(Succeed())
+			Expect(updated.Labels).NotTo(HaveKey(workspaceutil.LabelAccessStrategyName))
+			Expect(updated.Labels).NotTo(HaveKey(workspaceutil.LabelAccessStrategyNamespace))
+		})
+	})
 })

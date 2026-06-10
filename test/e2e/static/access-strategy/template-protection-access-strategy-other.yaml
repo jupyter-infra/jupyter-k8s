@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: template-protection-access-strategy-other
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: Template Protection Access Strategy (swap target)
+  accessResourceTemplates: []
+  accessURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"

@@ -277,6 +277,78 @@ func ListActiveWorkspacesByAccessStrategy(
 	return activeWorkspaces, nextToken, nil
 }
 
+// ApplyAccessStrategyLabels sets (or clears) the access strategy lookup labels on a template in place,
+// based on its spec.defaultAccessStrategy. The label namespace is resolved the same way workspaces
+// resolve access strategy references: an explicit ref namespace is honored, otherwise it defaults to
+// the template's own namespace (there is no shared-namespace fallback). Returns true if any label
+// changed, so callers can decide whether a persist is needed.
+//
+// This is the single source of truth shared by the WorkspaceTemplate mutating webhook (which stamps
+// the labels eagerly at admission) and the controller (which backfills them for pre-existing templates).
+func ApplyAccessStrategyLabels(template *workspacev1alpha1.WorkspaceTemplate) bool {
+	desiredName := ""
+	desiredNamespace := ""
+	if template.Spec.DefaultAccessStrategy != nil && template.Spec.DefaultAccessStrategy.Name != "" {
+		desiredName = template.Spec.DefaultAccessStrategy.Name
+		desiredNamespace = template.Namespace
+		if template.Spec.DefaultAccessStrategy.Namespace != "" {
+			desiredNamespace = template.Spec.DefaultAccessStrategy.Namespace
+		}
+	}
+
+	currentName := template.Labels[LabelAccessStrategyName]
+	currentNamespace := template.Labels[LabelAccessStrategyNamespace]
+	if currentName == desiredName && currentNamespace == desiredNamespace {
+		return false
+	}
+
+	if desiredName == "" {
+		delete(template.Labels, LabelAccessStrategyName)
+		delete(template.Labels, LabelAccessStrategyNamespace)
+		return true
+	}
+
+	if template.Labels == nil {
+		template.Labels = make(map[string]string)
+	}
+	template.Labels[LabelAccessStrategyName] = desiredName
+	template.Labels[LabelAccessStrategyNamespace] = desiredNamespace
+	return true
+}
+
+// HasActiveTemplatesWithAccessStrategy reports whether at least one active (non-deleted) WorkspaceTemplate
+// references the specified AccessStrategy via spec.defaultAccessStrategy. It is the template-side
+// counterpart of HasActiveWorkspacesWithAccessStrategy and, like it, is used by the lazy-finalizer
+// reconcile hot path where only a boolean is needed (so it can early-exit rather than materialize counts).
+//
+// Like the other template query this is label-based: the controller/webhook stamp
+// LabelAccessStrategyName / LabelAccessStrategyNamespace on templates from their defaultAccessStrategy.
+func HasActiveTemplatesWithAccessStrategy(
+	ctx context.Context,
+	k8sClient client.Client,
+	accessStrategyName string,
+	accessStrategyNamespace string) (bool, error) {
+
+	templateList := &workspacev1alpha1.WorkspaceTemplateList{}
+
+	labels := map[string]string{
+		LabelAccessStrategyName:      accessStrategyName,
+		LabelAccessStrategyNamespace: accessStrategyNamespace,
+	}
+
+	if err := k8sClient.List(ctx, templateList, client.MatchingLabels(labels)); err != nil {
+		return false, fmt.Errorf("failed to check templates by access strategy label: %w", err)
+	}
+
+	for i := range templateList.Items {
+		if templateList.Items[i].DeletionTimestamp.IsZero() {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // GetWorkspaceReconciliationRequestsForAccessStrategy retrieves all active workspaces using the specified AccessStrategy.
 // This function retrieves all matching workspaces in a single call without using continuation tokens,
 // which is compatible with the controller-runtime cache client.

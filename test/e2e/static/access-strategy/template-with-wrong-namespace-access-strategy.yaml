@@ -1,0 +1,21 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: template-with-wrong-namespace-access-strategy
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Template Referencing An Access Strategy In The Wrong Namespace"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  # The access strategy 'template-protection-access-strategy' exists, but in jupyter-k8s-shared,
+  # not in 'default'. The template webhook resolves the ref namespace verbatim and must reject it.
+  defaultAccessStrategy:
+    name: template-protection-access-strategy
+    namespace: default
+  resourceBounds:
+    resources:
+      cpu:
+        min: 100m
+        max: "2"
+      memory:
+        min: 128Mi
+        max: 4Gi
