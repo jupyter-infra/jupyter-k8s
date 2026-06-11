@@ -371,7 +371,7 @@ func main() {
 	// This webhook manages lazy finalizers to prevent template deletion while in use
 	// nolint:goconst
 	if os.Getenv("ENABLE_WORKSPACE_TEMPLATE_WEBHOOK") != "false" {
-		if err := webhookv1alpha1.SetupWorkspaceTemplateWebhookWithManager(mgr); err != nil {
+		if err := webhookv1alpha1.SetupWorkspaceTemplateWebhookWithManager(mgr, defaultTemplateNamespace); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "WorkspaceTemplate")
 			os.Exit(1)
 		}

@@ -111,3 +111,130 @@ var _ = Describe("WorkspaceTemplate Defaulter", func() {
 		Expect(err).To(HaveOccurred())
 	})
 })
+
+var _ = Describe("WorkspaceTemplate Validator", func() {
+	var (
+		ctx       context.Context
+		validator WorkspaceTemplateCustomValidator
+	)
+
+	// templateWithAS builds a template in "team-a" referencing an access strategy in asNamespace.
+	templateWithAS := func(asNamespace string) *workspacev1alpha1.WorkspaceTemplate {
+		return &workspacev1alpha1.WorkspaceTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "tmpl", Namespace: "team-a"},
+			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+				DefaultAccessStrategy: &workspacev1alpha1.AccessStrategyRef{
+					Name:      "some-strategy",
+					Namespace: asNamespace,
+				},
+			},
+		}
+	}
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		validator = WorkspaceTemplateCustomValidator{
+			accessStrategyValidator: NewAccessStrategyValidator("shared-ns"),
+		}
+	})
+
+	Context("ValidateCreate", func() {
+		It("allows a template referencing an access strategy in its own namespace", func() {
+			warnings, err := validator.ValidateCreate(ctx, templateWithAS("team-a"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("allows a template referencing an access strategy in the shared namespace", func() {
+			warnings, err := validator.ValidateCreate(ctx, templateWithAS("shared-ns"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("rejects a template referencing an access strategy in another namespace", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithAS("team-b"))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("team-b"))
+			Expect(err.Error()).To(ContainSubstring("template namespace"))
+		})
+
+		It("returns an error for a non-template object", func() {
+			_, err := validator.ValidateCreate(ctx, &workspacev1alpha1.Workspace{})
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Context("ValidateUpdate", func() {
+		It("rejects an update that points the access strategy at another namespace", func() {
+			_, err := validator.ValidateUpdate(ctx, templateWithAS("team-a"), templateWithAS("team-b"))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("team-b"))
+		})
+
+		It("allows removing the access strategy reference", func() {
+			oldTemplate := templateWithAS("team-b")
+			newTemplate := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "tmpl", Namespace: "team-a"},
+			}
+			warnings, err := validator.ValidateUpdate(ctx, oldTemplate, newTemplate)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("returns a warning when constraint fields change", func() {
+			oldTemplate := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "tmpl", Namespace: "team-a"},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					AllowedImages: []string{"image-a"},
+				},
+			}
+			newTemplate := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "tmpl", Namespace: "team-a"},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					AllowedImages: []string{"image-a", "image-b"},
+				},
+			}
+			warnings, err := validator.ValidateUpdate(ctx, oldTemplate, newTemplate)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(HaveLen(1))
+			Expect(warnings[0]).To(ContainSubstring("compliance validation"))
+		})
+
+		It("returns no warning when no constraint fields change", func() {
+			oldTemplate := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "tmpl", Namespace: "team-a"},
+				Spec:       workspacev1alpha1.WorkspaceTemplateSpec{DisplayName: "before"},
+			}
+			newTemplate := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "tmpl", Namespace: "team-a"},
+				Spec:       workspacev1alpha1.WorkspaceTemplateSpec{DisplayName: "after"},
+			}
+			warnings, err := validator.ValidateUpdate(ctx, oldTemplate, newTemplate)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("returns an error when the new object is not a template", func() {
+			_, err := validator.ValidateUpdate(ctx, templateWithAS("team-a"), &workspacev1alpha1.Workspace{})
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("returns an error when the old object is not a template", func() {
+			_, err := validator.ValidateUpdate(ctx, &workspacev1alpha1.Workspace{}, templateWithAS("team-a"))
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Context("ValidateDelete", func() {
+		It("allows deletion and returns no warnings", func() {
+			warnings, err := validator.ValidateDelete(ctx, templateWithAS("team-b"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("returns an error for a non-template object", func() {
+			_, err := validator.ValidateDelete(ctx, &workspacev1alpha1.Workspace{})
+			Expect(err).To(HaveOccurred())
+		})
+	})
+})
