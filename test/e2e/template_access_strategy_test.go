@@ -94,7 +94,7 @@ var _ = Describe("Template Access Strategy Protection", Ordered, func() {
 	Context("Webhook rejection when the access strategy cannot be resolved", func() {
 		It("should reject creating a template whose access strategy does not exist", func() {
 			By("creating a template referencing a non-existent access strategy")
-			verifyCreateTemplateRejectedByWebhook(missingASTemplateFilename, groupDir, missingASTemplateName)
+			verifyCreateTemplateRejectedByWebhook(missingASTemplateFilename, groupDir, missingASTemplateName, "not found")
 		})
 
 		It("should reject creating a template whose access strategy exists only in another namespace", func() {
@@ -102,7 +102,8 @@ var _ = Describe("Template Access Strategy Protection", Ordered, func() {
 			createAccessStrategyForTest(accessStrategyFilename, groupDir, "")
 
 			By("creating a template that references the same name but in the 'default' namespace")
-			verifyCreateTemplateRejectedByWebhook(wrongNamespaceTemplateFile, groupDir, wrongNamespaceTemplateName)
+			verifyCreateTemplateRejectedByWebhook(
+				wrongNamespaceTemplateFile, groupDir, wrongNamespaceTemplateName, "is not allowed")
 		})
 
 		It("should reject mutating a template to reference a non-existent access strategy", func() {

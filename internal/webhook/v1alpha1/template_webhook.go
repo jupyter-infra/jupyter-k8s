@@ -26,11 +26,15 @@ var templatelog = logf.Log.WithName("workspacetemplate-resource")
 
 // SetupWorkspaceTemplateWebhookWithManager registers the webhook for WorkspaceTemplate in the manager.
 func SetupWorkspaceTemplateWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace string) error {
+	accessStrategyValidator := NewAccessStrategyValidator(defaultTemplateNamespace)
 	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.WorkspaceTemplate{}).
 		WithValidator(&WorkspaceTemplateCustomValidator{
-			accessStrategyValidator: NewAccessStrategyValidator(defaultTemplateNamespace),
+			accessStrategyValidator: accessStrategyValidator,
 		}).
-		WithDefaulter(&WorkspaceTemplateCustomDefaulter{client: mgr.GetClient()}).
+		WithDefaulter(&WorkspaceTemplateCustomDefaulter{
+			client:                  mgr.GetClient(),
+			accessStrategyValidator: accessStrategyValidator,
+		}).
 		Complete()
 }
 
@@ -48,7 +52,8 @@ func SetupWorkspaceTemplateWebhookWithManager(mgr ctrl.Manager, defaultTemplateN
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceTemplateCustomDefaulter struct {
-	client client.Client
+	client                  client.Client
+	accessStrategyValidator *AccessStrategyValidator
 }
 
 var _ webhook.CustomDefaulter = &WorkspaceTemplateCustomDefaulter{}
@@ -76,7 +81,11 @@ func (d *WorkspaceTemplateCustomDefaulter) Default(ctx context.Context, obj runt
 	// add when referenced, never remove here - the AccessStrategy controller removes it when the last
 	// referrer (across workspaces and templates) is gone. mustExist=true rejects the template write when
 	// the referenced AccessStrategy does not exist, matching the workspace webhook.
+	// Check namespace scope first so we never modify an AccessStrategy in a disallowed namespace.
 	if template.Spec.DefaultAccessStrategy != nil && template.Spec.DefaultAccessStrategy.Name != "" {
+		if err := d.accessStrategyValidator.ValidateCreateTemplate(template); err != nil {
+			return err
+		}
 		asName := template.Labels[workspaceutil.LabelAccessStrategyName]
 		asNamespace := template.Labels[workspaceutil.LabelAccessStrategyNamespace]
 		if err := workspaceutil.EnsureAccessStrategyFinalizerByRef(ctx, templatelog, d.client, asName, asNamespace,

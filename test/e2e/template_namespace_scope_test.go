@@ -30,9 +30,9 @@ import (
 // access strategy so the reference resolves and only the scope rule can fail it.
 var _ = Describe("Template Namespace Scope", Ordered, func() {
 	const (
-		groupDir           = "template"
-		subgroup           = "scope"
-		workspaceNamespace = "default"
+		groupDir          = "template"
+		subgroup          = "scope"
+		templateNamespace = "default"
 	)
 
 	BeforeAll(func() {
@@ -57,7 +57,7 @@ var _ = Describe("Template Namespace Scope", Ordered, func() {
 		createTemplateForTest("template-local-as", groupDir, subgroup)
 
 		Eventually(func(g Gomega) {
-			output, err := kubectlGet("workspacetemplate", "template-local-as", workspaceNamespace,
+			output, err := kubectlGet("workspacetemplate", "template-local-as", templateNamespace,
 				"{.metadata.name}")
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(output).To(Equal("template-local-as"))
@@ -69,7 +69,7 @@ var _ = Describe("Template Namespace Scope", Ordered, func() {
 		createTemplateForTest("template-shared-as", groupDir, subgroup)
 
 		Eventually(func(g Gomega) {
-			output, err := kubectlGet("workspacetemplate", "template-shared-as", workspaceNamespace,
+			output, err := kubectlGet("workspacetemplate", "template-shared-as", templateNamespace,
 				"{.metadata.name}")
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(output).To(Equal("template-shared-as"))
@@ -83,7 +83,7 @@ var _ = Describe("Template Namespace Scope", Ordered, func() {
 		Expect(err).To(HaveOccurred(), "Expected webhook to reject cross-namespace access strategy reference")
 
 		cmd = exec.Command("kubectl", "get", "workspacetemplate", "template-cross-ns-as-rejected",
-			"-n", workspaceNamespace, "--ignore-not-found")
+			"-n", templateNamespace, "--ignore-not-found")
 		output, err := utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(output).To(BeEmpty())

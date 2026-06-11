@@ -32,7 +32,10 @@ var _ = Describe("WorkspaceTemplate Defaulter", func() {
 	// newDefaulter builds a defaulter backed by a fake client seeded with the given objects.
 	newDefaulter := func(objs ...client.Object) WorkspaceTemplateCustomDefaulter {
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
-		return WorkspaceTemplateCustomDefaulter{client: fakeClient}
+		return WorkspaceTemplateCustomDefaulter{
+			client:                  fakeClient,
+			accessStrategyValidator: NewAccessStrategyValidator("shared-ns"),
+		}
 	}
 
 	accessStrategyIn := func(name, namespace string) *workspacev1alpha1.WorkspaceAccessStrategy {

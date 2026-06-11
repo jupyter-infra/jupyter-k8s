@@ -1,10 +1,12 @@
 # Template Validation
 
-WorkspaceTemplates have a validating-only webhook that fires on `UPDATE`. It uses `failurePolicy: Ignore`, so template updates succeed even when the webhook is unavailable.
+WorkspaceTemplates have a validating webhook that fires on `CREATE` and `UPDATE`. It uses `failurePolicy: Ignore`, so template operations succeed even when the webhook is unavailable.
 
 ## Behavior
 
-The webhook never blocks updates. When constraint fields change, it returns a **warning** telling the user that the template controller will re-validate affected workspaces.
+On **create and update**, the webhook rejects templates whose `defaultAccessStrategy` references an access strategy in a disallowed namespace (see [shared namespace](../../concepts/templates/shared-namespace.md)). This prevents admins from creating templates that would make any referencing workspace un-admittable.
+
+On **update**, when constraint fields change, the webhook returns a **warning** telling the user that the template controller will re-validate affected workspaces.
 
 ## Constraint fields
 

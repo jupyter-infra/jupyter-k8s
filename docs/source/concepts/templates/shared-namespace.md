@@ -28,7 +28,9 @@ If neither namespace contains a default template, the webhook leaves `spec.templ
 
 ## Cross-namespace references
 
-Normally, a `workspace.spec.templateRef` and `workspace.spec.accessStrategy` can only reference resources in the workspace's own namespace. The shared namespace is the one exception — workspaces in any namespace may reference templates and access strategies that live in the shared namespace.
+Normally, a `workspace.spec.templateRef` and `workspace.spec.accessStrategy` can only reference resources in the workspace's own namespace. The same rule applies to templates: a `template.spec.defaultAccessStrategy` can only reference an access strategy in the template's own namespace or the shared namespace. This prevents admins from creating templates that would make any referencing workspace un-admittable.
+
+The shared namespace is the one exception to both rules — workspaces and templates in any namespace may reference templates and access strategies that live in the shared namespace.
 
 ## Example setup
 
