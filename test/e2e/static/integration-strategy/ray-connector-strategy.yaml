@@ -1,0 +1,25 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceIntegrationStrategy
+metadata:
+  name: ray-connector
+  namespace: default
+spec:
+  displayName: Ray Cluster Connector
+  resourceLookup:
+    apiVersion: ray.io/v1
+    kind: RayCluster
+    name: "{{ .Parameters.rayClusterName }}"
+    namespace: "{{ .Workspace.Namespace }}"
+  deploymentModifications:
+    podModifications:
+      additionalContainers:
+        - name: ray-sidecar
+          image: '{{ resource "{.spec.headGroupSpec.template.spec.containers[0].image}" }}'
+          args:
+            - "ray start --address={{ resource \"{.status.head.serviceName}\" }}:6379 --block"
+      primaryContainerModifications:
+        mergeEnv:
+          - name: RAY_HEAD_SERVICE
+            valueTemplate: '{{ resource "{.status.head.serviceName}" }}'
+          - name: RAY_CLUSTER_NAME
+            valueTemplate: "{{ .Parameters.rayClusterName }}"

@@ -26,6 +26,7 @@ type DeploymentBuilder struct {
 	scheme        *runtime.Scheme
 	options       WorkspaceControllerOptions
 	imageResolver *ImageResolver
+	client        client.Client
 }
 
 // NewDeploymentBuilder creates a new DeploymentBuilder
@@ -34,6 +35,7 @@ func NewDeploymentBuilder(scheme *runtime.Scheme, options WorkspaceControllerOpt
 		scheme:        scheme,
 		options:       options,
 		imageResolver: NewImageResolver(options.ApplicationImagesRegistry),
+		client:        k8sClient,
 	}
 }
 
@@ -53,17 +55,31 @@ func (db *DeploymentBuilder) BuildDeployment(ctx context.Context, workspace *wor
 	return deployment, nil
 }
 
-// BuildDeploymentWithAccessStrategy creates a Deployment resource with access strategy applied
-// This is a helper function that should be called from ResourceManager
-func (db *DeploymentBuilder) BuildDeploymentWithAccessStrategy(
+// BuildDeploymentWithStrategies creates a Deployment resource with integration
+// strategy and access strategy applied, in that order:
+//
+//	base deployment → integration strategy → access strategy
+//
+// Integration strategy runs first so that any sidecars/volumes it adds are present
+// before access strategy modifications, and access strategy env vars take precedence.
+// Both strategies are fetched by the caller and passed in (nil means not referenced).
+func (db *DeploymentBuilder) BuildDeploymentWithStrategies(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
+	integrationStrategy *workspacev1alpha1.WorkspaceIntegrationStrategy,
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 ) (*appsv1.Deployment, error) {
 	// Build the base deployment
 	deployment, err := db.BuildDeployment(ctx, workspace)
 	if err != nil {
 		return nil, err
+	}
+
+	// Apply integration strategy (sidecars, volumes, env) before access strategy
+	if integrationStrategy != nil {
+		if err := db.ApplyIntegrationStrategyToDeployment(ctx, deployment, workspace, integrationStrategy); err != nil {
+			return nil, fmt.Errorf("failed to apply integration strategy to deployment: %w", err)
+		}
 	}
 
 	if accessStrategy != nil {
@@ -315,10 +331,11 @@ func (db *DeploymentBuilder) NeedsUpdate(
 	ctx context.Context,
 	existingDeployment *appsv1.Deployment,
 	workspace *workspacev1alpha1.Workspace,
+	integrationStrategy *workspacev1alpha1.WorkspaceIntegrationStrategy,
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 ) (bool, error) {
-	// Build the desired deployment spec with access strategy applied
-	desiredDeployment, err := db.BuildDeploymentWithAccessStrategy(ctx, workspace, accessStrategy)
+	// Build the desired deployment spec with strategies applied
+	desiredDeployment, err := db.BuildDeploymentWithStrategies(ctx, workspace, integrationStrategy, accessStrategy)
 	if err != nil {
 		return false, fmt.Errorf("failed to build desired deployment: %w", err)
 	}

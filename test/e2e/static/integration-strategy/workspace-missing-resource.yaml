@@ -1,0 +1,20 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-missing-resource
+  namespace: default
+spec:
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  integrationStrategy:
+    name: ray-connector
+    parameters:
+      - name: rayClusterName
+        value: nonexistent-cluster
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

@@ -1,0 +1,200 @@
+#
+# Ray Cluster Connector — default WorkspaceIntegrationStrategy
+#
+# This is the DEFAULT strategy shipped to customers. An admin installs it once; each customer
+# only supplies the RayCluster name (and optionally namespace) on their Workspace. It injects a
+# "ray-sidecar" that joins the cluster, plus the env/volumes the workspace client needs to attach.
+#
+# Every value below is justified inline.
+#
+# VERSION MATCHING (customer responsibility): Ray requires the client (workspace) and cluster to
+# match on Ray version AND Python version to the patch level. The sidecar image is resolved from
+# the RayCluster head image, so the cluster head image must match the workspace image's Ray/Python.
+# Simplest guarantee: run the RayCluster on the SAME image as the workspace.
+#
+# OBJECT STORE / SHARED MEMORY SIZING: Ray's object store (plasma) lives in /dev/shm. Containers
+# default /dev/shm to 64MB, so without intervention Ray spills to /tmp (slow) and warns. Ray's own
+# guidance is to size shared memory to >=30% of available RAM, but in a container Ray's auto-sizing
+# is non-deterministic (it may read the cgroup limit OR the whole node's RAM). We therefore PIN the
+# object store explicitly and keep three values coupled and consistent:
+#     --object-store-memory  ==  /dev/shm emptyDir sizeLimit  <=  sidecar memory limit (minus overhead)
+# Defaults below use a modest 1Gi object store appropriate for a connection broker. Raise all three
+# together for workloads that pull large Ray Data results back into the workspace.
+#
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceIntegrationStrategy
+metadata:
+  labels:
+    app.kubernetes.io/name: jupyter-k8s
+    app.kubernetes.io/managed-by: kustomize
+  name: ray-connector
+spec:
+  displayName: "Ray Cluster Connector"   # human-facing label shown in an integration picker UI
+
+  # resourceLookup: fetch the customer-named RayCluster at reconcile time so we can read live
+  # values from it (head image, head service name, GCS port). name/namespace support templates.
+  resourceLookup:
+    apiVersion: ray.io/v1                 # KubeRay RayCluster API group/version
+    kind: RayCluster
+    name: "{{ .Parameters.rayClusterName }}"        # customer-supplied on the workspace
+    # Namespace of the RayCluster. The UI pre-fills rayClusterNamespace with the workspace's own
+    # namespace (the HyperPod single-tenant-namespace default), but the customer can point at a
+    # RayCluster in another namespace by overriding this parameter.
+    namespace: "{{ .Parameters.rayClusterNamespace }}"
+
+  deploymentModifications:
+    podModifications:
+      additionalContainers:
+        - name: ray-sidecar
+          # Image resolved from the RayCluster head container, guaranteeing the sidecar's Ray
+          # binary matches the cluster it joins. (Workspace<->cluster version match is still the
+          # customer's responsibility — see header.)
+          image: '{{ resource "{.spec.headGroupSpec.template.spec.containers[0].image}" }}'
+          # Use /bin/sh (not /bin/bash): the sidecar inherits the customer's RayCluster head image,
+          # which we do not control. Slim/distroless Ray images (e.g. rayproject/ray:*-slim) ship
+          # without /bin/bash and would CrashLoopBackOff on "/bin/bash: not found". /bin/sh is
+          # present on effectively all images, and the args below use no bash-specific syntax.
+          command: ["/bin/sh", "-c"]
+          args:
+            # Join the RayCluster as a zero-resource client node.
+            #   --address=<head-svc>.<ns>.svc.cluster.local:<gcs-port>
+            #        Head service DNS name and GCS port are read from RayCluster .status, which
+            #        KubeRay owns and keeps correct even if naming/port conventions change. The
+            #        service DNS (not the pod IP) is stable across head restarts, enabling
+            #        auto-reconnect.
+            #   --num-cpus=0 --num-gpus=0  the sidecar contributes NO compute and advertises no
+            #        GPUs, so the Ray scheduler never places tasks/actors on the workspace pod.
+            #        It exists only to host the local Ray session the workspace attaches to.
+            #   --object-store-memory  EXPLICITLY pin the plasma object store to 1Gi. We do NOT let
+            #        Ray auto-size it: inside a container Ray may read either the cgroup limit OR the
+            #        whole node's RAM (non-deterministic), and if it reads node RAM it sizes the store
+            #        far larger than the sidecar's limit and OOM-kills it. Pinning makes the footprint
+            #        deterministic. This 1Gi must stay coupled to two other values: the /dev/shm
+            #        sizeLimit (>= this, or Ray fails to start) and the sidecar memory limit
+            #        (>= this + raylet/temp overhead). Ray Data materializes blocks here when results
+            #        are pulled workspace-side; raise all three together for heavier data pulls.
+            #   --temp-dir=/tmp/ray  explicit shared session dir (see ray-tmp volume); the workspace
+            #        attaches via this dir, so it must be deterministic.
+            #   --block  keep ray in the foreground so the container stays alive; on exit k8s restarts
+            #        it and it re-resolves the head DNS (this is how head-restart auto-recovery works).
+            - >-
+              ray start
+              --address={{ resource "{.status.head.serviceName}" }}.{{ .Parameters.rayClusterNamespace }}.svc.cluster.local:{{ resource "{.status.endpoints.gcs-server}" }}
+              --num-cpus=0
+              --num-gpus=0
+              --object-store-memory=1073741824
+              --temp-dir=/tmp/ray
+              --block
+          resources:
+            # NON-ZERO requests (a 0 request makes the sidecar first to be evicted and gives the
+            # scheduler no signal). The memory limit must be >= object-store (1Gi) + raylet overhead
+            # (~256Mi) + the /tmp/ray tmpfs; 1.5Gi covers a 1Gi object store with headroom. These
+            # three are coupled: object-store-memory (1Gi) <= /dev/shm sizeLimit (1Gi) <= covered by
+            # this memory limit. Raise all three together for heavier Ray Data result-pulling.
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1536Mi"
+          securityContext:
+            # runAsUser/Group 1000/100 is an ASSUMPTION about BOTH images: the workspace image and
+            # the resolved sidecar (RayCluster head) image must run as uid 1000 so they share the
+            # /tmp/ray session dir. sagemaker-distribution (sagemaker-user) and rayproject/ray (ray)
+            # both use uid 1000, so this works today — but it is image coupling. If either image uses
+            # a different uid, the workspace cannot read the sidecar's session files and ray.init()
+            # fails. Document this requirement for custom images.
+            runAsUser: 1000
+            runAsGroup: 100
+            runAsNonRoot: true              # defense-in-depth: never run as root
+            allowPrivilegeEscalation: false # defense-in-depth
+            capabilities:
+              drop: ["ALL"]                 # sidecar needs no Linux capabilities
+          # Readiness reflects actual Ray connectivity: `ray status` queries GCS and exits 0 only
+          # when connected to the head. The sidecar shows NotReady while disconnected (e.g. during a
+          # head restart) and Ready once reconnected. This is a signal only (not a liveness probe),
+          # surfaced in pod status for the controller/UI to consume.
+          readinessProbe:
+            exec:
+              command: ["ray", "status"]
+            initialDelaySeconds: 10         # let `ray start` come up before the first probe
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3             # tolerate transient blips before flipping NotReady
+          volumeMounts:
+            - name: ray-tmp
+              mountPath: /tmp/ray
+            # Real shared-memory mount: container /dev/shm defaults to 64MB, which is too small for
+            # Ray's plasma object store and triggers the "object store using /tmp instead of /dev/shm"
+            # warning + degraded performance. Mount a tmpfs at /dev/shm sized to the object store
+            # (1Gi). NOTE: /dev/shm sizeLimit must be >= --object-store-memory or Ray fails to start
+            # with "object store size exceeds the capacity of /dev/shm".
+            - name: ray-dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: ray-tmp
+          # tmpfs shared session dir (Ray session/temp IO is latency-sensitive). Shared between the
+          # sidecar and the workspace container so the workspace's ray.init() discovers the sidecar's
+          # local Ray session. Cap bounds the tmpfs against the pod memory limit.
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+        - name: ray-dshm
+          # tmpfs /dev/shm sized to match --object-store-memory (1Gi). medium: Memory means this
+          # counts against container memory, which is why the sidecar memory limit (1536Mi) is sized
+          # to cover it plus the raylet. Keep this == object-store-memory; raise both together.
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+      primaryContainerModifications:
+        volumeMounts:
+          # Mount the SAME session dir into the workspace container so ray.init() (RAY_ADDRESS=auto)
+          # finds the local session the sidecar created.
+          - name: ray-tmp
+            mountPath: /tmp/ray
+          # The workspace client also materializes Ray Data blocks locally when results are pulled
+          # back into the notebook, so it needs the same enlarged /dev/shm, not the 64MB default.
+          - name: ray-dshm
+            mountPath: /dev/shm
+        mergeEnv:
+          # RAY_ADDRESS=auto: ray.init() with no arguments attaches to the local session in /tmp/ray
+          # (created by the sidecar) instead of bootstrapping a new cluster. This is the single most
+          # important env var — it is what makes ray.init() succeed from the workspace.
+          - name: RAY_ADDRESS
+            valueTemplate: "auto"
+          # Informational only (handy for debugging version-match issues). Safe to omit.
+          - name: RAY_HEAD_IMAGE
+            valueTemplate: '{{ resource "{.spec.headGroupSpec.template.spec.containers[0].image}" }}'
+          - name: RAY_CLUSTER_NAME
+            valueTemplate: "{{ .Parameters.rayClusterName }}"
+---
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  labels:
+    app.kubernetes.io/name: jupyter-k8s
+    app.kubernetes.io/managed-by: kustomize
+  name: alice-notebook
+spec:
+  displayName: "Alice's Notebook"
+  # Use the SAME image as the RayCluster head/workers so Ray + Python versions match exactly.
+  image: "public.ecr.aws/sagemaker/sagemaker-distribution:latest-cpu"
+  desiredStatus: Running
+  # HyperPod admission policy requires >= 8Gi memory request for remote-access workspaces.
+  resources:
+    requests:
+      cpu: "1"
+      memory: "8Gi"
+    limits:
+      cpu: "2"
+      memory: "8Gi"
+  # All the customer configures: the strategy name + which Ray cluster (and its namespace).
+  # Parameters are a name/value list (extensible per-entry; values are strings interpolated into
+  # the strategy's templates). The UI pre-fills rayClusterNamespace with the workspace's namespace.
+  integrationStrategy:
+    name: ray-connector
+    parameters:
+      - name: rayClusterName
+        value: demo-cluster
+      - name: rayClusterNamespace
+        value: alice-ns

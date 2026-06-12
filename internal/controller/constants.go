@@ -35,6 +35,10 @@ const (
 	LabelAccessStrategyName = "workspace.jupyter.org/access-strategy-name"
 	// LabelAccessStrategyNamespace is the label key for access strategy namespace
 	LabelAccessStrategyNamespace = "workspace.jupyter.org/access-strategy-namespace"
+	// LabelIntegrationStrategyName is the label key for integration strategy name
+	LabelIntegrationStrategyName = "workspace.jupyter.org/integration-strategy-name"
+	// LabelIntegrationStrategyNamespace is the label key for integration strategy namespace
+	LabelIntegrationStrategyNamespace = "workspace.jupyter.org/integration-strategy-namespace"
 	// LabelWorkspaceTemplate is the label key for workspace template name
 	LabelWorkspaceTemplate = "workspace.jupyter.org/template-name"
 	// LabelWorkspaceTemplateNamespace is the label key for workspace template namespace
@@ -136,13 +140,15 @@ const (
 // SystemManagedMetadataKeys defines all workspace.jupyter.org/ prefixed keys that the system manages.
 // Any new system-managed key with the reserved prefix MUST be added here.
 var SystemManagedMetadataKeys = map[string]MetadataKeyPolicy{
-	AnnotationCreatedBy:             SetOnCreateOnly,
-	AnnotationLastUpdatedBy:         SetAlways,
-	PreemptionReasonAnnotation:      SetAlways,
-	LabelWorkspaceTemplate:          SetAlways,
-	LabelWorkspaceTemplateNamespace: SetAlways,
-	LabelAccessStrategyName:         SetAlways,
-	LabelAccessStrategyNamespace:    SetAlways,
+	AnnotationCreatedBy:               SetOnCreateOnly,
+	AnnotationLastUpdatedBy:           SetAlways,
+	PreemptionReasonAnnotation:        SetAlways,
+	LabelWorkspaceTemplate:            SetAlways,
+	LabelWorkspaceTemplateNamespace:   SetAlways,
+	LabelAccessStrategyName:           SetAlways,
+	LabelAccessStrategyNamespace:      SetAlways,
+	LabelIntegrationStrategyName:      SetAlways,
+	LabelIntegrationStrategyNamespace: SetAlways,
 }
 
 // GenerateDeploymentName creates a consistent deployment name

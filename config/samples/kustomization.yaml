@@ -9,4 +9,5 @@ resources:
 # - workspace_with_container_config.yaml
 # - workspace_with_lifecycle.yaml
 # - workspace_with_node_selector.yaml
+# - workspace_integration_strategy_ray.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

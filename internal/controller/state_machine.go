@@ -21,10 +21,11 @@ import (
 
 // StateMachineInterface defines the interface for state machine operations
 type StateMachineInterface interface {
-	ReconcileDesiredState(ctx context.Context, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (ctrl.Result, error)
+	ReconcileDesiredState(ctx context.Context, workspace *workspacev1alpha1.Workspace, integrationStrategy *workspacev1alpha1.WorkspaceIntegrationStrategy, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (ctrl.Result, error)
 	ReconcileDeletion(ctx context.Context, workspace *workspacev1alpha1.Workspace) (ctrl.Result, error)
 	getDesiredStatus(workspace *workspacev1alpha1.Workspace) string
 	GetAccessStrategyForWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*workspacev1alpha1.WorkspaceAccessStrategy, error)
+	GetIntegrationStrategyForWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*workspacev1alpha1.WorkspaceIntegrationStrategy, error)
 }
 
 // StateMachine handles the state transitions for Workspace
@@ -57,6 +58,7 @@ func NewStateMachine(
 func (sm *StateMachine) ReconcileDesiredState(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
+	integrationStrategy *workspacev1alpha1.WorkspaceIntegrationStrategy,
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
@@ -67,7 +69,7 @@ func (sm *StateMachine) ReconcileDesiredState(
 	case DesiredStateStopped:
 		return sm.reconcileDesiredStoppedStatus(ctx, workspace, &snapshotStatus)
 	case DesiredStateRunning:
-		return sm.reconcileDesiredRunningStatus(ctx, workspace, &snapshotStatus, accessStrategy)
+		return sm.reconcileDesiredRunningStatus(ctx, workspace, &snapshotStatus, integrationStrategy, accessStrategy)
 	default:
 		err := fmt.Errorf("unknown desired status: %s", desiredStatus)
 		// Update error condition
@@ -91,6 +93,11 @@ func (sm *StateMachine) getDesiredStatus(workspace *workspacev1alpha1.Workspace)
 // GetAccessStrategyForWorkspace retrieves the AccessStrategy for a workspace
 func (sm *StateMachine) GetAccessStrategyForWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*workspacev1alpha1.WorkspaceAccessStrategy, error) {
 	return sm.resourceManager.GetAccessStrategyForWorkspace(ctx, workspace)
+}
+
+// GetIntegrationStrategyForWorkspace retrieves the IntegrationStrategy for a workspace
+func (sm *StateMachine) GetIntegrationStrategyForWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*workspacev1alpha1.WorkspaceIntegrationStrategy, error) {
+	return sm.resourceManager.GetIntegrationStrategyForWorkspace(ctx, workspace)
 }
 
 func (sm *StateMachine) reconcileDesiredStoppedStatus(
@@ -209,6 +216,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
 	snapshotStatus *workspacev1alpha1.WorkspaceStatus,
+	integrationStrategy *workspacev1alpha1.WorkspaceIntegrationStrategy,
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 	logger.Info("Attempting to bring Workspace status to 'Running'")
@@ -225,7 +233,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	}
 
 	// EnsureDeploymentExists creates deployment if missing, or returns existing deployment
-	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace, accessStrategy)
+	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace, integrationStrategy, accessStrategy)
 	if err != nil {
 		deployErr := fmt.Errorf("failed to ensure deployment exists: %w", err)
 		// Update error condition
