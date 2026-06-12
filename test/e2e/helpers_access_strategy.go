@@ -185,9 +185,8 @@ func verifyAccessStrategyHeldByTemplate(accessStrategyName string) {
 }
 
 // verifyCreateTemplateRejectedByWebhook attempts to create a template from the given fixture and asserts
-// the template mutating webhook rejects it (because the referenced AccessStrategy does not exist at the
-// resolved name/namespace), then that the template was not persisted.
-func verifyCreateTemplateRejectedByWebhook(filename, group, templateName string) {
+// the webhook rejects it with an error containing expectedSubstring, then that the template was not persisted.
+func verifyCreateTemplateRejectedByWebhook(filename, group, templateName, expectedSubstring string) {
 	ginkgo.GinkgoHelper()
 
 	path := BuildTestResourcePath(filename, group, "")
@@ -195,9 +194,9 @@ func verifyCreateTemplateRejectedByWebhook(filename, group, templateName string)
 	cmd := exec.Command("kubectl", "apply", "-f", path)
 	output, err := utils.Run(cmd)
 	gomega.Expect(err).To(gomega.HaveOccurred(),
-		fmt.Sprintf("template webhook should reject %s referencing a non-existent access strategy", templateName))
-	gomega.Expect(output).To(gomega.ContainSubstring("not found"),
-		"rejection should explain that the referenced access strategy was not found")
+		fmt.Sprintf("template webhook should reject %s", templateName))
+	gomega.Expect(output).To(gomega.ContainSubstring(expectedSubstring),
+		fmt.Sprintf("rejection should contain %q", expectedSubstring))
 
 	ginkgo.By(fmt.Sprintf("verifying template %s was not created", templateName))
 	cmd = exec.Command("kubectl", "get", "workspacetemplate", templateName, "-n", SharedNamespace, "--ignore-not-found")

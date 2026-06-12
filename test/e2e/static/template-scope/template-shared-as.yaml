@@ -1,0 +1,18 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: template-shared-as
+  namespace: default
+spec:
+  displayName: "Template with shared access strategy"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  allowedImages:
+    - jk8s-application-jupyter-uv:latest
+  primaryStorage:
+    defaultSize: 1Gi
+    minSize: 100Mi
+    maxSize: 20Gi
+  appType: jupyter
+  defaultAccessStrategy:
+    name: shared-access-strategy
+    namespace: jupyter-k8s-shared

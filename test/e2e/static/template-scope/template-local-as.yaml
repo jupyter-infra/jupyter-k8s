@@ -1,0 +1,18 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: template-local-as
+  namespace: default
+spec:
+  displayName: "Template with local access strategy"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  allowedImages:
+    - jk8s-application-jupyter-uv:latest
+  primaryStorage:
+    defaultSize: 1Gi
+    minSize: 100Mi
+    maxSize: 20Gi
+  appType: jupyter
+  defaultAccessStrategy:
+    name: local-access-strategy
+    namespace: default

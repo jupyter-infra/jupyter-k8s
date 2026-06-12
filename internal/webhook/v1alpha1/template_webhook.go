@@ -25,10 +25,16 @@ import (
 var templatelog = logf.Log.WithName("workspacetemplate-resource")
 
 // SetupWorkspaceTemplateWebhookWithManager registers the webhook for WorkspaceTemplate in the manager.
-func SetupWorkspaceTemplateWebhookWithManager(mgr ctrl.Manager) error {
+func SetupWorkspaceTemplateWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace string) error {
+	accessStrategyValidator := NewAccessStrategyValidator(defaultTemplateNamespace)
 	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.WorkspaceTemplate{}).
-		WithValidator(&WorkspaceTemplateCustomValidator{}).
-		WithDefaulter(&WorkspaceTemplateCustomDefaulter{client: mgr.GetClient()}).
+		WithValidator(&WorkspaceTemplateCustomValidator{
+			accessStrategyValidator: accessStrategyValidator,
+		}).
+		WithDefaulter(&WorkspaceTemplateCustomDefaulter{
+			client:                  mgr.GetClient(),
+			accessStrategyValidator: accessStrategyValidator,
+		}).
 		Complete()
 }
 
@@ -46,7 +52,8 @@ func SetupWorkspaceTemplateWebhookWithManager(mgr ctrl.Manager) error {
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceTemplateCustomDefaulter struct {
-	client client.Client
+	client                  client.Client
+	accessStrategyValidator *AccessStrategyValidator
 }
 
 var _ webhook.CustomDefaulter = &WorkspaceTemplateCustomDefaulter{}
@@ -74,7 +81,11 @@ func (d *WorkspaceTemplateCustomDefaulter) Default(ctx context.Context, obj runt
 	// add when referenced, never remove here - the AccessStrategy controller removes it when the last
 	// referrer (across workspaces and templates) is gone. mustExist=true rejects the template write when
 	// the referenced AccessStrategy does not exist, matching the workspace webhook.
+	// Check namespace scope first so we never modify an AccessStrategy in a disallowed namespace.
 	if template.Spec.DefaultAccessStrategy != nil && template.Spec.DefaultAccessStrategy.Name != "" {
+		if err := d.accessStrategyValidator.ValidateCreateTemplate(template); err != nil {
+			return err
+		}
 		asName := template.Labels[workspaceutil.LabelAccessStrategyName]
 		asNamespace := template.Labels[workspaceutil.LabelAccessStrategyNamespace]
 		if err := workspaceutil.EnsureAccessStrategyFinalizerByRef(ctx, templatelog, d.client, asName, asNamespace,
@@ -88,15 +99,19 @@ func (d *WorkspaceTemplateCustomDefaulter) Default(ctx context.Context, obj runt
 	return nil
 }
 
-// +kubebuilder:webhook:path=/validate-workspace-jupyter-org-v1alpha1-workspacetemplate,mutating=false,failurePolicy=ignore,sideEffects=None,groups=workspace.jupyter.org,resources=workspacetemplates,verbs=update,versions=v1alpha1,name=vworkspacetemplate-v1alpha1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
+// +kubebuilder:webhook:path=/validate-workspace-jupyter-org-v1alpha1-workspacetemplate,mutating=false,failurePolicy=ignore,sideEffects=None,groups=workspace.jupyter.org,resources=workspacetemplates,verbs=create;update,versions=v1alpha1,name=vworkspacetemplate-v1alpha1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
 
 // WorkspaceTemplateCustomValidator struct is responsible for validating the WorkspaceTemplate resource
-// when it is updated. It checks if constraint fields changed and returns warnings.
-// The WorkspaceTemplate controller is responsible for marking affected workspaces for compliance checking.
+// when it is created or updated. On create/update it enforces that any referenced access strategy lives
+// in an allowed namespace (the template's own or the shared namespace), so the template cannot make
+// referencing workspaces un-admittable. On update it also checks if constraint fields changed and
+// returns warnings; the WorkspaceTemplate controller is responsible for marking affected workspaces
+// for compliance checking.
 //
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceTemplateCustomValidator struct {
+	accessStrategyValidator *AccessStrategyValidator
 }
 
 var _ webhook.CustomValidator = &WorkspaceTemplateCustomValidator{}
@@ -109,7 +124,12 @@ func (v *WorkspaceTemplateCustomValidator) ValidateCreate(ctx context.Context, o
 	}
 	templatelog.Info("Validation for WorkspaceTemplate upon creation", "name", template.GetName())
 
-	// No special validation needed on create
+	// Enforce that the referenced access strategy is in an allowed namespace, so the template
+	// cannot make referencing workspaces fail their own admission webhook.
+	if err := v.accessStrategyValidator.ValidateCreateTemplate(template); err != nil {
+		return nil, err
+	}
+
 	return nil, nil
 }
 
@@ -124,6 +144,12 @@ func (v *WorkspaceTemplateCustomValidator) ValidateUpdate(ctx context.Context, o
 		return nil, fmt.Errorf("expected a WorkspaceTemplate object for the newObj but got %T", newObj)
 	}
 	templatelog.Info("Validation for WorkspaceTemplate upon update", "name", newTemplate.GetName())
+
+	// Enforce that the referenced access strategy is in an allowed namespace, so the template
+	// cannot make referencing workspaces fail their own admission webhook.
+	if err := v.accessStrategyValidator.ValidateUpdateTemplate(oldTemplate, newTemplate); err != nil {
+		return nil, err
+	}
 
 	// Check if constraint fields changed
 	if constraintsChanged(oldTemplate, newTemplate) {
