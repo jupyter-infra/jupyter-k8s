@@ -164,8 +164,11 @@ var _ = Describe("AccessStrategy controller", func() {
 			mockClient.listFunc = func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 				listCalled = true
 
-				// Add a workspace to the list
-				workspaceList := list.(*workspacev1alpha1.WorkspaceList)
+				// The reconciler lists both workspaces and templates; only populate the workspace list.
+				workspaceList, ok := list.(*workspacev1alpha1.WorkspaceList)
+				if !ok {
+					return nil // WorkspaceTemplateList (or other) - leave empty
+				}
 				workspaceList.Items = []workspacev1alpha1.Workspace{
 					{
 						ObjectMeta: metav1.ObjectMeta{
@@ -202,6 +205,122 @@ var _ = Describe("AccessStrategy controller", func() {
 			Expect(updateCalled).To(BeTrue(), "Update should be called to add finalizer")
 			Expect(updatedAccessStrategy).NotTo(BeNil())
 			Expect(controllerutil.ContainsFinalizer(updatedAccessStrategy, workspace.AccessStrategyFinalizerName)).To(BeTrue(), "Finalizer should be added")
+		})
+
+		It("Should add the finalizer when a TEMPLATE references the AccessStrategy and no workspaces do", func() {
+			accessStrategyWithoutFinalizer := accessStrategy.DeepCopy()
+			mockClient.getFunc = func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if key.Name == accessStrategy.Name && key.Namespace == accessStrategy.Namespace {
+					accessStrategyWithoutFinalizer.DeepCopyInto(obj.(*workspacev1alpha1.WorkspaceAccessStrategy))
+					return nil
+				}
+				return fmt.Errorf("unexpected key: %v", key)
+			}
+
+			// No workspaces reference it, but one template does.
+			mockClient.listFunc = func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+				if templateList, ok := list.(*workspacev1alpha1.WorkspaceTemplateList); ok {
+					templateList.Items = []workspacev1alpha1.WorkspaceTemplate{
+						{ObjectMeta: metav1.ObjectMeta{Name: "tmpl", Namespace: "test-namespace"}},
+					}
+				}
+				// WorkspaceList left empty
+				return nil
+			}
+
+			updateCalled := false
+			var updatedAccessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
+			mockClient.updateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+				updateCalled = true
+				updatedAccessStrategy = obj.(*workspacev1alpha1.WorkspaceAccessStrategy)
+				return nil
+			}
+
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: accessStrategyKey})
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(updateCalled).To(BeTrue(), "Update should be called to add finalizer for template reference")
+			Expect(updatedAccessStrategy).NotTo(BeNil())
+			// The template path adds the dedicated template finalizer, NOT the workspace one.
+			Expect(controllerutil.ContainsFinalizer(updatedAccessStrategy, workspace.AccessStrategyTemplateFinalizerName)).To(BeTrue())
+			Expect(controllerutil.ContainsFinalizer(updatedAccessStrategy, workspace.AccessStrategyFinalizerName)).To(BeFalse())
+		})
+
+		It("Should retain the template finalizer while a template still references it (no update needed)", func() {
+			// AccessStrategy already carries only the template finalizer; a template still references it.
+			accessStrategyWithFinalizer := accessStrategy.DeepCopy()
+			controllerutil.AddFinalizer(accessStrategyWithFinalizer, workspace.AccessStrategyTemplateFinalizerName)
+			mockClient.getFunc = func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if key.Name == accessStrategy.Name && key.Namespace == accessStrategy.Namespace {
+					accessStrategyWithFinalizer.DeepCopyInto(obj.(*workspacev1alpha1.WorkspaceAccessStrategy))
+					return nil
+				}
+				return fmt.Errorf("unexpected key: %v", key)
+			}
+
+			// No workspaces, but a template still references it -> template finalizer must NOT be removed.
+			mockClient.listFunc = func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+				if templateList, ok := list.(*workspacev1alpha1.WorkspaceTemplateList); ok {
+					templateList.Items = []workspacev1alpha1.WorkspaceTemplate{
+						{ObjectMeta: metav1.ObjectMeta{Name: "tmpl", Namespace: "test-namespace"}},
+					}
+				}
+				return nil
+			}
+
+			updateCalled := false
+			mockClient.updateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+				updateCalled = true
+				return nil
+			}
+
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: accessStrategyKey})
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(updateCalled).To(BeFalse(), "template finalizer must be retained while a template references the AccessStrategy")
+		})
+
+		It("Should remove only the workspace finalizer when workspaces are gone but a template still references it", func() {
+			// AccessStrategy carries BOTH finalizers; no workspaces remain but a template still references it.
+			// The workspace finalizer must be removed while the template finalizer is retained.
+			accessStrategyWithBoth := accessStrategy.DeepCopy()
+			controllerutil.AddFinalizer(accessStrategyWithBoth, workspace.AccessStrategyFinalizerName)
+			controllerutil.AddFinalizer(accessStrategyWithBoth, workspace.AccessStrategyTemplateFinalizerName)
+			mockClient.getFunc = func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if key.Name == accessStrategy.Name && key.Namespace == accessStrategy.Namespace {
+					accessStrategyWithBoth.DeepCopyInto(obj.(*workspacev1alpha1.WorkspaceAccessStrategy))
+					return nil
+				}
+				return fmt.Errorf("unexpected key: %v", key)
+			}
+
+			// No workspaces; one template still references it.
+			mockClient.listFunc = func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+				if templateList, ok := list.(*workspacev1alpha1.WorkspaceTemplateList); ok {
+					templateList.Items = []workspacev1alpha1.WorkspaceTemplate{
+						{ObjectMeta: metav1.ObjectMeta{Name: "tmpl", Namespace: "test-namespace"}},
+					}
+				}
+				return nil
+			}
+
+			var updatedAccessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
+			mockClient.updateFunc = func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+				updatedAccessStrategy = obj.(*workspacev1alpha1.WorkspaceAccessStrategy)
+				return nil
+			}
+
+			result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: accessStrategyKey})
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(updatedAccessStrategy).NotTo(BeNil())
+			Expect(controllerutil.ContainsFinalizer(updatedAccessStrategy, workspace.AccessStrategyFinalizerName)).To(BeFalse(),
+				"workspace finalizer should be removed once no workspaces reference it")
+			Expect(controllerutil.ContainsFinalizer(updatedAccessStrategy, workspace.AccessStrategyTemplateFinalizerName)).To(BeTrue(),
+				"template finalizer should be retained while a template references it")
 		})
 
 		It("Should call Update to remove the finalizer if present and no workspace references the AccessStrategy", func() {
@@ -258,8 +377,11 @@ var _ = Describe("AccessStrategy controller", func() {
 
 			// Mock hasWorkspaces to return true
 			mockClient.listFunc = func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-				// Add a workspace to the list
-				workspaceList := list.(*workspacev1alpha1.WorkspaceList)
+				// The reconciler lists both workspaces and templates; only populate the workspace list.
+				workspaceList, ok := list.(*workspacev1alpha1.WorkspaceList)
+				if !ok {
+					return nil // WorkspaceTemplateList (or other) - leave empty
+				}
 				workspaceList.Items = []workspacev1alpha1.Workspace{
 					{
 						ObjectMeta: metav1.ObjectMeta{
@@ -365,8 +487,11 @@ var _ = Describe("AccessStrategy controller", func() {
 
 			// Mock hasWorkspaces to return true
 			mockClient.listFunc = func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-				// Add a workspace to the list
-				workspaceList := list.(*workspacev1alpha1.WorkspaceList)
+				// The reconciler lists both workspaces and templates; only populate the workspace list.
+				workspaceList, ok := list.(*workspacev1alpha1.WorkspaceList)
+				if !ok {
+					return nil // WorkspaceTemplateList (or other) - leave empty
+				}
 				workspaceList.Items = []workspacev1alpha1.Workspace{
 					{
 						ObjectMeta: metav1.ObjectMeta{

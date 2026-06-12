@@ -53,6 +53,18 @@ spec:
             seccompProfile:
               type: RuntimeDefault
           serviceAccountName: {{ include "jupyter-k8s.resourceName" (dict "suffix" "jwt-rotator" "context" $) }}
+          {{- /* The rotator is a tiny, short-lived key-rotation job with no
+                 placement needs of its own, so it inherits the controller's
+                 scheduling to land alongside the control plane (issue #382). */}}
+          {{- with .Values.manager.nodeSelector }}
+          nodeSelector: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.manager.tolerations }}
+          tolerations: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.manager.topologySpreadConstraints }}
+          topologySpreadConstraints: {{ toYaml . | nindent 12 }}
+          {{- end }}
   schedule: '*/15 * * * *'
   successfulJobsHistoryLimit: 3
 {{- end }}

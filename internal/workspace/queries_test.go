@@ -960,3 +960,130 @@ func TestGetWorkspaceReconciliationRequestsForAccessStrategy_OnListError_ReturnE
 	assert.Nil(t, requests)
 	assert.Contains(t, err.Error(), "failed to list workspaces by access strategy: failed to list workspaces by AccessStrategy label: mock list error")
 }
+
+func TestApplyAccessStrategyLabels(t *testing.T) {
+	tests := []struct {
+		name          string
+		templateNs    string
+		ref           *workspacev1alpha1.AccessStrategyRef
+		startLabels   map[string]string
+		wantChanged   bool
+		wantName      string
+		wantNamespace string
+		wantAbsent    bool
+	}{
+		{
+			name:          "explicit ref namespace is honored",
+			templateNs:    "team-a",
+			ref:           &workspacev1alpha1.AccessStrategyRef{Name: "web-access", Namespace: "shared-ns"},
+			wantChanged:   true,
+			wantName:      "web-access",
+			wantNamespace: "shared-ns",
+		},
+		{
+			name:          "empty ref namespace defaults to template namespace",
+			templateNs:    "team-a",
+			ref:           &workspacev1alpha1.AccessStrategyRef{Name: "web-access"},
+			wantChanged:   true,
+			wantName:      "web-access",
+			wantNamespace: "team-a",
+		},
+		{
+			name:        "no ref clears existing labels",
+			templateNs:  "team-a",
+			ref:         nil,
+			startLabels: map[string]string{LabelAccessStrategyName: "web-access", LabelAccessStrategyNamespace: "team-a"},
+			wantChanged: true,
+			wantAbsent:  true,
+		},
+		{
+			name:          "already-correct labels report no change",
+			templateNs:    "team-a",
+			ref:           &workspacev1alpha1.AccessStrategyRef{Name: "web-access", Namespace: "team-a"},
+			startLabels:   map[string]string{LabelAccessStrategyName: "web-access", LabelAccessStrategyNamespace: "team-a"},
+			wantChanged:   false,
+			wantName:      "web-access",
+			wantNamespace: "team-a",
+		},
+		{
+			name:        "no ref and no labels reports no change",
+			templateNs:  "team-a",
+			ref:         nil,
+			wantChanged: false,
+			wantAbsent:  true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "t1", Namespace: tc.templateNs, Labels: tc.startLabels},
+				Spec:       workspacev1alpha1.WorkspaceTemplateSpec{DefaultAccessStrategy: tc.ref},
+			}
+
+			changed := ApplyAccessStrategyLabels(tmpl)
+			assert.Equal(t, tc.wantChanged, changed)
+
+			if tc.wantAbsent {
+				assert.NotContains(t, tmpl.Labels, LabelAccessStrategyName)
+				assert.NotContains(t, tmpl.Labels, LabelAccessStrategyNamespace)
+			} else {
+				assert.Equal(t, tc.wantName, tmpl.Labels[LabelAccessStrategyName])
+				assert.Equal(t, tc.wantNamespace, tmpl.Labels[LabelAccessStrategyNamespace])
+			}
+		})
+	}
+}
+
+func TestHasActiveTemplatesWithAccessStrategy(t *testing.T) {
+	const (
+		asName = "web-access"
+		asNs   = "team-notebooks"
+	)
+
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+
+	labeledTemplate := func(name string, deleting bool) *workspacev1alpha1.WorkspaceTemplate {
+		tmpl := &workspacev1alpha1.WorkspaceTemplate{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: asNs,
+				Labels: map[string]string{
+					LabelAccessStrategyName:      asName,
+					LabelAccessStrategyNamespace: asNs,
+				},
+			},
+		}
+		if deleting {
+			now := metav1.Now()
+			tmpl.DeletionTimestamp = &now
+			tmpl.Finalizers = []string{"keep-for-test"}
+		}
+		return tmpl
+	}
+
+	tests := []struct {
+		name      string
+		templates []client.Object
+		want      bool
+	}{
+		{name: "no templates", templates: nil, want: false},
+		{name: "one active template", templates: []client.Object{labeledTemplate("t1", false)}, want: true},
+		{name: "only a deleting template", templates: []client.Object{labeledTemplate("t1", true)}, want: false},
+		{
+			name:      "mix of active and deleting",
+			templates: []client.Object{labeledTemplate("t1", true), labeledTemplate("t2", false)},
+			want:      true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.templates...).Build()
+			got, err := HasActiveTemplatesWithAccessStrategy(context.Background(), fakeClient, asName, asNs)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}

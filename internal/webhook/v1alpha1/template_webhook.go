@@ -12,11 +12,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
 // log is for logging in this package.
@@ -26,7 +28,64 @@ var templatelog = logf.Log.WithName("workspacetemplate-resource")
 func SetupWorkspaceTemplateWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.WorkspaceTemplate{}).
 		WithValidator(&WorkspaceTemplateCustomValidator{}).
+		WithDefaulter(&WorkspaceTemplateCustomDefaulter{client: mgr.GetClient()}).
 		Complete()
+}
+
+// +kubebuilder:webhook:path=/mutate-workspace-jupyter-org-v1alpha1-workspacetemplate,mutating=true,failurePolicy=ignore,sideEffects=None,groups=workspace.jupyter.org,resources=workspacetemplates,verbs=create;update,versions=v1alpha1,name=mworkspacetemplate-v1alpha1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
+
+// WorkspaceTemplateCustomDefaulter stamps the access strategy lookup labels on a WorkspaceTemplate so
+// the access strategy deletion webhook can find referencing templates with an efficient label query,
+// and eagerly adds the protection finalizer to the referenced AccessStrategy so it cannot be deleted
+// while the template references it. It mirrors how the workspace defaulter stamps template lookup
+// labels and finalizes the AccessStrategy.
+//
+// Uses failurePolicy: Ignore so template writes are not blocked if the webhook is unavailable; the
+// controller backfills both the labels and the finalizer as a safety net.
+//
+// NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
+// as this struct is used only for temporary operations and does not need to be deeply copied.
+type WorkspaceTemplateCustomDefaulter struct {
+	client client.Client
+}
+
+var _ webhook.CustomDefaulter = &WorkspaceTemplateCustomDefaulter{}
+
+// Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind WorkspaceTemplate.
+func (d *WorkspaceTemplateCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
+	template, ok := obj.(*workspacev1alpha1.WorkspaceTemplate)
+	if !ok {
+		return fmt.Errorf("expected a WorkspaceTemplate object but got %T", obj)
+	}
+
+	// Skip on delete (defaulters don't run on delete, but guard defensively) and when being deleted.
+	if !template.DeletionTimestamp.IsZero() {
+		return nil
+	}
+
+	if workspaceutil.ApplyAccessStrategyLabels(template) {
+		templatelog.Info("Stamped access strategy labels on WorkspaceTemplate",
+			"name", template.GetName(),
+			"accessStrategyName", template.Labels[workspaceutil.LabelAccessStrategyName],
+			"accessStrategyNamespace", template.Labels[workspaceutil.LabelAccessStrategyNamespace])
+	}
+
+	// Eagerly add the protection finalizer to the referenced AccessStrategy (lazy finalizer pattern):
+	// add when referenced, never remove here - the AccessStrategy controller removes it when the last
+	// referrer (across workspaces and templates) is gone. mustExist=true rejects the template write when
+	// the referenced AccessStrategy does not exist, matching the workspace webhook.
+	if template.Spec.DefaultAccessStrategy != nil && template.Spec.DefaultAccessStrategy.Name != "" {
+		asName := template.Labels[workspaceutil.LabelAccessStrategyName]
+		asNamespace := template.Labels[workspaceutil.LabelAccessStrategyNamespace]
+		if err := workspaceutil.EnsureAccessStrategyFinalizerByRef(ctx, templatelog, d.client, asName, asNamespace,
+			workspaceutil.AccessStrategyTemplateFinalizerName, true); err != nil {
+			templatelog.Error(err, "Failed to add finalizer to AccessStrategy referenced by template",
+				"template", template.GetName(), "accessStrategy", asName, "namespace", asNamespace)
+			return fmt.Errorf("failed to add finalizer to AccessStrategy referenced by template: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // +kubebuilder:webhook:path=/validate-workspace-jupyter-org-v1alpha1-workspacetemplate,mutating=false,failurePolicy=ignore,sideEffects=None,groups=workspace.jupyter.org,resources=workspacetemplates,verbs=update,versions=v1alpha1,name=vworkspacetemplate-v1alpha1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443

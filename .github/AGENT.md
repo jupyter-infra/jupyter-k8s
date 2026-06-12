@@ -6,6 +6,7 @@
 |----------|---------|---------|
 | `lint.yml` | push/PR | golangci-lint + helm lint |
 | `test.yml` | push/PR | Unit tests |
+| `verify-generated.yml` | push/PR | Regenerate manifests, chart, install.yaml, reference docs; fail on drift (`make verify-generated`) |
 | `test-chart.yml` | push/PR | Helm install on Kind (operator-only chart) |
 | `test-e2e.yml` | push/PR/dispatch | Full E2E on Kind |
 | `release.yml` | `workflow_dispatch` | Orchestrator: stage → e2e → promote → release |

@@ -473,6 +473,32 @@ var _ = Describe("Workspace Access Strategy", Ordered, func() {
 				workspaceNamespace,
 			)
 		})
+
+		It("should release the access strategy only after both referencing workspaces are deleted", func() {
+			By("creating an AccessStrategy")
+			createAccessStrategyForTest(basicAccessStrategyFilename, groupDir, "")
+
+			By("creating two workspaces referencing the same AccessStrategy")
+			createWorkspaceForTest(workspaceWithAccessStrategy, groupDir, "")
+			createWorkspaceForTest(workspaceStoppedWithAccessStrategy, groupDir, "")
+			verifyWorkspaceAccessStrategyFinalizerPresent(basicAccessStrategyName)
+
+			By("deleting the AccessStrategy (workspace-protection finalizer holds it in Terminating)")
+			deleteAccessStrategyNoWait(basicAccessStrategyName)
+			verifyAccessStrategyStillHeld(basicAccessStrategyName)
+
+			By("deleting the first workspace - the second still references the AccessStrategy")
+			deleteWorkspace(workspaceWithAccessStrategy, workspaceNamespace)
+			verifyWorkspaceAccessStrategyFinalizerPresent(basicAccessStrategyName)
+			verifyAccessStrategyStillHeld(basicAccessStrategyName)
+
+			By("deleting the second workspace - nothing references the AccessStrategy now")
+			deleteWorkspace(workspaceStoppedWithAccessStrategy, workspaceNamespace)
+
+			By("verifying the AccessStrategy is finally released")
+			WaitForResourceToNotExist("workspaceaccessstrategy", basicAccessStrategyName, SharedNamespace,
+				30*time.Second, 2*time.Second)
+		})
 	})
 
 	Context("Change to Access Strategy in Running Workspace", func() {

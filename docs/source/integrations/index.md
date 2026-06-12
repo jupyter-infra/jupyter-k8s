@@ -34,10 +34,10 @@ The operator chart deploys the core controller, **Extension API** and CRDs, but 
 - **Integrate with cloud providers** — deploy cloud-specific plugins and resources (e.g. ALB ingress, SSM activations).
 - **Define access strategies** —integrate workspaces with the routing layer by creating access strategies.
 
-
 ```{toctree}
 :hidden:
 
+web-ui/index
 plugins/index
 guided-charts/index
 ```

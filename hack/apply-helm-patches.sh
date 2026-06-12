@@ -39,7 +39,9 @@ if ! grep -q "podDisruptionBudget:" "${CHART_DIR}/values.yaml"; then
 fi
 
 # --- values.yaml: add topologySpreadConstraints if missing ---
-if ! grep -q "topologySpreadConstraints:" "${CHART_DIR}/values.yaml"; then
+# Anchor to the manager-level (2-space) key so a rotator-level
+# topologySpreadConstraints from values.yaml.patch doesn't satisfy this guard.
+if ! grep -q "^  topologySpreadConstraints:" "${CHART_DIR}/values.yaml"; then
     sed -i '/^  tolerations: \[\]/a\\n  ## Topology spread constraints\n  ##\n  topologySpreadConstraints: []' "${CHART_DIR}/values.yaml"
 fi
 
@@ -222,6 +224,18 @@ spec:
             seccompProfile:
               type: RuntimeDefault
           serviceAccountName: {{ include "jupyter-k8s.resourceName" (dict "suffix" "jwt-rotator" "context" $) }}
+          {{- /* The rotator is a tiny, short-lived key-rotation job with no
+                 placement needs of its own, so it inherits the controller's
+                 scheduling to land alongside the control plane (issue #382). */}}
+          {{- with .Values.manager.nodeSelector }}
+          nodeSelector: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.manager.tolerations }}
+          tolerations: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.manager.topologySpreadConstraints }}
+          topologySpreadConstraints: {{ toYaml . | nindent 12 }}
+          {{- end }}
   schedule: '*/15 * * * *'
   successfulJobsHistoryLimit: 3
 {{- end }}
@@ -387,6 +401,13 @@ sed -i '/--enable-extension-api/d' "${CHART_DIR}/values.yaml"
 sed -i '/--application-images-pull-policy/d' "${CHART_DIR}/values.yaml"
 sed -i '/--application-images-registry/d' "${CHART_DIR}/values.yaml"
 sed -i '/--default-template-namespace/d' "${CHART_DIR}/values.yaml"
+
+# --- values.yaml: inject helm-docs annotations ---
+# helm-docs (docs-helm-ref target) reads `# --` comments from values.yaml to
+# generate docs/source/reference/helm-charts/operator.md. kubebuilder + the
+# patches above don't produce them, so annotate as the final values.yaml step.
+echo "Injecting helm-docs annotations into values.yaml..."
+python3 "${SCRIPT_DIR}/docs/annotate-values.py" "${CHART_DIR}/values.yaml"
 
 # --- Restore CI workflow files that kubebuilder overwrites with local values ---
 # kubebuilder edit substitutes CONTAINER_TOOL and IMG with local defaults
