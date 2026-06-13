@@ -138,7 +138,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
 
 			sm := buildStateMachine()
-			result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			result, err := sm.ReconcileDesiredState(ctx, workspace, nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).NotTo(Equal(PollRequeueDelay))
 
@@ -202,7 +202,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
 
 			sm := buildStateMachine()
-			result, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			result, err := sm.ReconcileDesiredState(ctx, workspace, nil, accessStrategy)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).NotTo(Equal(PollRequeueDelay))
 
@@ -231,7 +231,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 			sm := buildStateMachine()
-			result, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			result, err := sm.ReconcileDesiredState(ctx, workspace, nil, accessStrategy)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).NotTo(Equal(PollRequeueDelay))
 
@@ -264,7 +264,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 			sm := buildStateMachine()
-			result, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			result, err := sm.ReconcileDesiredState(ctx, workspace, nil, accessStrategy)
 			Expect(err).NotTo(HaveOccurred())
 			// failureThreshold=3 < ProbeBackoffThreshold, so backoff is active
 			// from the start: first failure → periodSeconds*2 = 4s
@@ -301,7 +301,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 			sm := buildStateMachine()
-			result, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			result, err := sm.ReconcileDesiredState(ctx, workspace, nil, accessStrategy)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 			Expect(result.RequeueAfter).To(BeNumerically("<=", 2*time.Second))
@@ -335,7 +335,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 			sm := buildStateMachine()
-			result, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			result, err := sm.ReconcileDesiredState(ctx, workspace, nil, accessStrategy)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).NotTo(Equal(PollRequeueDelay))
 
@@ -369,7 +369,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			mockProber.ready = false
 
 			sm := buildStateMachine()
-			result, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			result, err := sm.ReconcileDesiredState(ctx, workspace, nil, accessStrategy)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
@@ -401,7 +401,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 			sm := buildStateMachine()
-			result, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			result, err := sm.ReconcileDesiredState(ctx, workspace, nil, accessStrategy)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 
@@ -442,7 +442,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 			sm := buildStateMachine()
-			_, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil, accessStrategy)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("template resolution failed"))
 		})
@@ -508,7 +508,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
 
 			sm := buildStateMachine()
-			_, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil, accessStrategy)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to parse URL template"))
 		})
@@ -531,7 +531,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			makeWorkspaceStale(workspace)
 
 			sm := buildStateMachine()
-			_, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil, accessStrategy)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to update Workspace.Status"))
 		})
@@ -548,7 +548,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			makeWorkspaceStale(workspace)
 
 			sm := buildStateMachine()
-			_, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil, accessStrategy)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to update Workspace.Status"))
 		})
@@ -571,7 +571,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			makeWorkspaceStale(workspace)
 
 			sm := buildStateMachine()
-			_, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil, accessStrategy)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to update Workspace.Status"))
 		})

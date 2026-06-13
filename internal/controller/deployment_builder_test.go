@@ -576,7 +576,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			// Change workspace image
 			workspace.Spec.Image = "jupyter/base-notebook:v2"
 
-			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil)
+			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(needsUpdate).To(BeTrue())
 		})
@@ -589,13 +589,13 @@ var _ = Describe("DeploymentBuilder", func() {
 				corev1.ResourceMemory: resource.MustParse("512Mi"),
 			}
 
-			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil)
+			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(needsUpdate).To(BeTrue())
 		})
 
 		It("should not detect update when nothing changed", func() {
-			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil)
+			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(needsUpdate).To(BeFalse())
 		})
@@ -726,7 +726,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace.Annotations["new-annotation"] = "new-value"
 			workspace.Annotations["initial-annotation"] = "updated-value"
 
-			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil)
+			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(needsUpdate).To(BeTrue(), "deployment should need update when annotations change")
 

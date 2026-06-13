@@ -24,16 +24,17 @@ import (
 
 // MockStateMachine is a mock implementation of the StateMachine for testing
 type MockStateMachine struct {
-	reconcileDesiredStateFunc         func(ctx context.Context, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (ctrl.Result, error)
-	reconcileDeletionFunc             func(ctx context.Context, workspace *workspacev1alpha1.Workspace) (ctrl.Result, error)
-	getDesiredStatusFunc              func(workspace *workspacev1alpha1.Workspace) string
-	getAccessStrategyForWorkspaceFunc func(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*workspacev1alpha1.WorkspaceAccessStrategy, error)
+	reconcileDesiredStateFunc              func(ctx context.Context, workspace *workspacev1alpha1.Workspace, integrationStrategy *workspacev1alpha1.WorkspaceIntegrationStrategy, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (ctrl.Result, error)
+	reconcileDeletionFunc                  func(ctx context.Context, workspace *workspacev1alpha1.Workspace) (ctrl.Result, error)
+	getDesiredStatusFunc                   func(workspace *workspacev1alpha1.Workspace) string
+	getAccessStrategyForWorkspaceFunc      func(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*workspacev1alpha1.WorkspaceAccessStrategy, error)
+	getIntegrationStrategyForWorkspaceFunc func(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*workspacev1alpha1.WorkspaceIntegrationStrategy, error)
 }
 
 // ReconcileDesiredState is a mock implementation for testing
-func (m *MockStateMachine) ReconcileDesiredState(ctx context.Context, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (ctrl.Result, error) {
+func (m *MockStateMachine) ReconcileDesiredState(ctx context.Context, workspace *workspacev1alpha1.Workspace, integrationStrategy *workspacev1alpha1.WorkspaceIntegrationStrategy, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (ctrl.Result, error) {
 	if m.reconcileDesiredStateFunc != nil {
-		return m.reconcileDesiredStateFunc(ctx, workspace, accessStrategy)
+		return m.reconcileDesiredStateFunc(ctx, workspace, integrationStrategy, accessStrategy)
 	}
 	return ctrl.Result{}, nil
 }
@@ -58,6 +59,14 @@ func (m *MockStateMachine) getDesiredStatus(workspace *workspacev1alpha1.Workspa
 func (m *MockStateMachine) GetAccessStrategyForWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*workspacev1alpha1.WorkspaceAccessStrategy, error) {
 	if m.getAccessStrategyForWorkspaceFunc != nil {
 		return m.getAccessStrategyForWorkspaceFunc(ctx, workspace)
+	}
+	return nil, nil
+}
+
+// GetIntegrationStrategyForWorkspace is a mock implementation for testing
+func (m *MockStateMachine) GetIntegrationStrategyForWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*workspacev1alpha1.WorkspaceIntegrationStrategy, error) {
+	if m.getIntegrationStrategyForWorkspaceFunc != nil {
+		return m.getIntegrationStrategyForWorkspaceFunc(ctx, workspace)
 	}
 	return nil, nil
 }
@@ -167,6 +176,7 @@ var _ = Describe("Workspace Controller", func() {
 					reconcileDesiredStateFunc: func(
 						ctx context.Context,
 						workspace *workspacev1alpha1.Workspace,
+						integrationStrategy *workspacev1alpha1.WorkspaceIntegrationStrategy,
 						accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 					) (ctrl.Result, error) {
 						reconcileDesiredStateCalled = true
@@ -674,6 +684,7 @@ var _ = Describe("Workspace Controller", func() {
 					reconcileDesiredStateFunc: func(
 						ctx context.Context,
 						workspace *workspacev1alpha1.Workspace,
+						integrationStrategy *workspacev1alpha1.WorkspaceIntegrationStrategy,
 						accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 					) (ctrl.Result, error) {
 						reconcileDesiredStateCalled = true
@@ -745,6 +756,7 @@ var _ = Describe("Workspace Controller", func() {
 					reconcileDesiredStateFunc: func(
 						ctx context.Context,
 						workspace *workspacev1alpha1.Workspace,
+						integrationStrategy *workspacev1alpha1.WorkspaceIntegrationStrategy,
 						accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 					) (ctrl.Result, error) {
 						return ctrl.Result{}, fmt.Errorf("test error from ReconcileDesiredState")
@@ -822,6 +834,7 @@ var _ = Describe("Workspace Controller", func() {
 					reconcileDesiredStateFunc: func(
 						ctx context.Context,
 						workspace *workspacev1alpha1.Workspace,
+						integrationStrategy *workspacev1alpha1.WorkspaceIntegrationStrategy,
 						accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 					) (ctrl.Result, error) {
 						reconcileDesiredStateCalled = true
@@ -903,6 +916,7 @@ var _ = Describe("Workspace Controller", func() {
 					reconcileDesiredStateFunc: func(
 						ctx context.Context,
 						workspace *workspacev1alpha1.Workspace,
+						integrationStrategy *workspacev1alpha1.WorkspaceIntegrationStrategy,
 						accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 					) (ctrl.Result, error) {
 						reconcileDesiredStateCalled = true
@@ -977,6 +991,7 @@ var _ = Describe("Workspace Controller", func() {
 					reconcileDesiredStateFunc: func(
 						ctx context.Context,
 						workspace *workspacev1alpha1.Workspace,
+						integrationStrategy *workspacev1alpha1.WorkspaceIntegrationStrategy,
 						accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 					) (ctrl.Result, error) {
 						reconcileDesiredStateCalled = true

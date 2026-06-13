@@ -96,7 +96,7 @@ var _ = Describe("reconcileDesiredStoppedStatus access resources", func() {
 			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
 
 			sm := buildStateMachine()
-			result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			result, err := sm.ReconcileDesiredState(ctx, workspace, nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 
@@ -131,7 +131,7 @@ var _ = Describe("reconcileDesiredStoppedStatus access resources", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 			sm := buildStateMachine()
-			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil, nil)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to retrieve AccessResource"))
 
@@ -151,7 +151,7 @@ var _ = Describe("reconcileDesiredStoppedStatus access resources", func() {
 			makeWorkspaceStale(workspace)
 
 			sm := buildStateMachine()
-			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil, nil)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to retrieve AccessResource"))
 		})
@@ -169,7 +169,7 @@ var _ = Describe("reconcileDesiredStoppedStatus access resources", func() {
 			makeWorkspaceStale(workspace)
 
 			sm := buildStateMachine()
-			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil, nil)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to retrieve AccessResource"))
 		})
@@ -181,7 +181,7 @@ var _ = Describe("reconcileDesiredStoppedStatus access resources", func() {
 			makeWorkspaceStale(workspace)
 
 			sm := buildStateMachine()
-			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil, nil)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to update Workspace.Status"))
 		})

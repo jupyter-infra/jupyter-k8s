@@ -92,6 +92,7 @@ func (r *WorkspaceReconciler) SetStateMachine(sm StateMachineInterface) {
 // +kubebuilder:rbac:groups=traefik.io,resources=middlewares,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=ray.io,resources=rayclusters,verbs=get;list
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -219,21 +220,31 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{RequeueAfter: PollRequeueDelay}, nil
 	}
 
-	// Get desired status to decide if we need to fetch AccessStrategy
+	// Get desired status to decide if we need to fetch strategies
 	desiredStatus := r.stateMachine.getDesiredStatus(workspace)
 
-	// Only fetch AccessStrategy if desiredStatus is not Stopped and workspace has AccessStrategy defined
+	// Only fetch strategies if desiredStatus is not Stopped and the workspace references them
 	var accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
-	if desiredStatus != DesiredStateStopped && workspace.Spec.AccessStrategy != nil {
-		accessStrategy, err = r.stateMachine.GetAccessStrategyForWorkspace(ctx, workspace)
-		if err != nil {
-			logger.Error(err, "Failed to get AccessStrategy")
-			return ctrl.Result{}, err
+	var integrationStrategy *workspacev1alpha1.WorkspaceIntegrationStrategy
+	if desiredStatus != DesiredStateStopped {
+		if workspace.Spec.AccessStrategy != nil {
+			accessStrategy, err = r.stateMachine.GetAccessStrategyForWorkspace(ctx, workspace)
+			if err != nil {
+				logger.Error(err, "Failed to get AccessStrategy")
+				return ctrl.Result{}, err
+			}
+		}
+		if workspace.Spec.IntegrationStrategy != nil {
+			integrationStrategy, err = r.stateMachine.GetIntegrationStrategyForWorkspace(ctx, workspace)
+			if err != nil {
+				logger.Error(err, "Failed to get IntegrationStrategy")
+				return ctrl.Result{}, err
+			}
 		}
 	}
 
-	// Delegate to state machine for business logic, passing the accessStrategy
-	return r.stateMachine.ReconcileDesiredState(ctx, workspace, accessStrategy)
+	// Delegate to state machine for business logic, passing the fetched strategies
+	return r.stateMachine.ReconcileDesiredState(ctx, workspace, integrationStrategy, accessStrategy)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -413,3 +424,4 @@ func (r *WorkspaceReconciler) accessStrategyEventHandler(ctx context.Context, ob
 
 	return requests
 }
+
