@@ -202,6 +202,39 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
+	// Handle IntegrationStrategy labels
+	if workspace.Spec.IntegrationStrategy != nil && workspace.Spec.IntegrationStrategy.Name != "" {
+		// IntegrationStrategy is referenced - ensure both labels are set
+		integrationStrategyName := workspace.Spec.IntegrationStrategy.Name
+		integrationStrategyNamespace := workspace.Namespace
+		if workspace.Spec.IntegrationStrategy.Namespace != "" {
+			integrationStrategyNamespace = workspace.Spec.IntegrationStrategy.Namespace
+		}
+
+		if workspace.Labels[LabelIntegrationStrategyName] != integrationStrategyName {
+			workspace.Labels[LabelIntegrationStrategyName] = integrationStrategyName
+			labelsChanged[LabelIntegrationStrategyName] = integrationStrategyName
+			needsUpdate = true
+		}
+		if workspace.Labels[LabelIntegrationStrategyNamespace] != integrationStrategyNamespace {
+			workspace.Labels[LabelIntegrationStrategyNamespace] = integrationStrategyNamespace
+			labelsChanged[LabelIntegrationStrategyNamespace] = integrationStrategyNamespace
+			needsUpdate = true
+		}
+	} else {
+		// IntegrationStrategy is not referenced - ensure labels are removed
+		if _, hasLabel := workspace.Labels[LabelIntegrationStrategyName]; hasLabel {
+			delete(workspace.Labels, LabelIntegrationStrategyName)
+			labelsRemoved = append(labelsRemoved, LabelIntegrationStrategyName)
+			needsUpdate = true
+		}
+		if _, hasNamespaceLabel := workspace.Labels[LabelIntegrationStrategyNamespace]; hasNamespaceLabel {
+			delete(workspace.Labels, LabelIntegrationStrategyNamespace)
+			labelsRemoved = append(labelsRemoved, LabelIntegrationStrategyNamespace)
+			needsUpdate = true
+		}
+	}
+
 	// Perform a single update if any labels or finalizer have changed
 	if needsUpdate {
 		logger.Info("Updating workspace labels",
@@ -251,6 +284,13 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder.Watches(
 		&workspacev1alpha1.WorkspaceAccessStrategy{},
 		handler.EnqueueRequestsFromMapFunc(r.accessStrategyEventHandler),
+	)
+
+	// Watch for changes to IntegrationStrategy resources to trigger reconciliation
+	// of Workspaces that reference them
+	builder.Watches(
+		&workspacev1alpha1.WorkspaceIntegrationStrategy{},
+		handler.EnqueueRequestsFromMapFunc(r.integrationStrategyEventHandler),
 	)
 
 	// Conditionally watch pods based on configuration
@@ -409,6 +449,43 @@ func (r *WorkspaceReconciler) accessStrategyEventHandler(ctx context.Context, ob
 		logger.Info("Found no active workspace referencing access strategy",
 			"accessStrategy", accessStrategy.Name,
 			"namespace", accessStrategy.Namespace)
+	}
+
+	return requests
+}
+
+// integrationStrategyEventHandler maps IntegrationStrategy events to Workspace reconciliation requests
+func (r *WorkspaceReconciler) integrationStrategyEventHandler(ctx context.Context, obj client.Object) []reconcile.Request {
+	logger := logf.FromContext(ctx)
+	integrationStrategy, ok := obj.(*workspacev1alpha1.WorkspaceIntegrationStrategy)
+	if !ok {
+		// Not an IntegrationStrategy
+		return nil
+	}
+
+	logger.Info("Handling IntegrationStrategy event",
+		"integrationStrategy", integrationStrategy.Name,
+		"namespace", integrationStrategy.Namespace)
+
+	requests, listErr := workspaceutil.GetWorkspaceReconciliationRequestsForIntegrationStrategy(
+		ctx,
+		r.Client,
+		integrationStrategy.Name,
+		integrationStrategy.Namespace)
+	if listErr != nil {
+		logger.Error(
+			listErr,
+			"Failed to list Workspaces associated with integration strategy",
+			"integrationStrategy", integrationStrategy.Name,
+			"namespace", integrationStrategy.Namespace)
+		return nil
+	}
+
+	if len(requests) > 0 {
+		logger.Info("Found active workspaces referencing integration strategy",
+			"integrationStrategy", integrationStrategy.Name,
+			"namespace", integrationStrategy.Namespace,
+			"workspaceCount", len(requests))
 	}
 
 	return requests

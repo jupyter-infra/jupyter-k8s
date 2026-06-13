@@ -21,6 +21,12 @@ const (
 	// LabelAccessStrategyNamespace is the label key for access strategy namespace in the Workspace labels
 	LabelAccessStrategyNamespace = "workspace.jupyter.org/access-strategy-namespace"
 
+	// LabelIntegrationStrategyName is the label key for integration strategy name in the Workspace labels
+	LabelIntegrationStrategyName = "workspace.jupyter.org/integration-strategy-name"
+
+	// LabelIntegrationStrategyNamespace is the label key for integration strategy namespace in the Workspace labels
+	LabelIntegrationStrategyNamespace = "workspace.jupyter.org/integration-strategy-namespace"
+
 	// TemplateFinalizerName is the name of the finalizer placed on a template that is referenced by workspaces
 	TemplateFinalizerName = "workspace.jupyter.org/template-protection"
 
