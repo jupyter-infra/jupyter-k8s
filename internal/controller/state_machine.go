@@ -445,7 +445,8 @@ func (sm *StateMachine) ReconcileDeletion(ctx context.Context, workspace *worksp
 	}
 
 	// Update status to Deleting
-	if err := sm.statusManager.UpdateDeletingStatus(ctx, workspace); err != nil {
+	snapshotStatus := workspace.Status.DeepCopy()
+	if err := sm.statusManager.UpdateDeletingStatus(ctx, workspace, snapshotStatus); err != nil {
 		logger.Error(err, "Failed to update deleting status")
 		return ctrl.Result{}, err
 	}
