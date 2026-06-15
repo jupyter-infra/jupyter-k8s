@@ -169,7 +169,8 @@ jobs:
             "$REVIEW_IMAGE" \
             sh -c "git config --global --add safe.directory /workspace \
               && roborev ci review --ref ${base_sha}..${HEAD_SHA} \
-                   --pr ${PR} --gh-repo ${REPO} --comment --min-severity medium" \
+                   --pr ${PR} --gh-repo ${REPO} --comment \
+                   --min-severity medium --reasoning standard" \
             || status=error
 
           gh api -X POST "repos/${REPO}/statuses/${HEAD_SHA}" \
