@@ -371,6 +371,52 @@ var _ = Describe("Workspace Status", Ordered, func() {
 			Expect(desiredStatus).To(Equal("Running"), "desiredStatus should be defaulted to Running by the mutating webhook")
 		})
 	})
+
+	Context("Deleting State", func() {
+		const deletionWorkspace = "workspace-deletion-test"
+
+		It("should set Deleting=True and Available=False when workspace is deleted", func() {
+			By("creating workspace with desiredStatus=Running")
+			createWorkspaceForTest(deletionWorkspace, statusGroupDir, statusSubgroupDir)
+
+			By("waiting for Available condition to become True")
+			WaitForWorkspaceToReachCondition(
+				deletionWorkspace,
+				statusTestNamespace,
+				ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("deleting the workspace")
+			cmd := exec.Command("kubectl", "delete", "workspace", deletionWorkspace,
+				"-n", statusTestNamespace, "--wait=false")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for Deleting condition to become True")
+			WaitForWorkspaceToReachCondition(
+				deletionWorkspace,
+				statusTestNamespace,
+				ConditionTypeDeleting,
+				ConditionTrue,
+			)
+
+			By("verifying Available=False while Deleting=True")
+			VerifyWorkspaceConditions(deletionWorkspace, statusTestNamespace, map[string]string{
+				ConditionTypeAvailable:   ConditionFalse,
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionFalse,
+				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionTrue,
+			})
+
+			By("waiting for workspace to be fully deleted")
+			Eventually(func() bool {
+				_, err := kubectlGet("workspace", deletionWorkspace, statusTestNamespace, "{.metadata.name}")
+				return err != nil
+			}).WithTimeout(statusTestTimeout).WithPolling(statusTestPolling).Should(BeTrue())
+		})
+	})
 })
 
 func deleteResourcesForStatusTest() {
