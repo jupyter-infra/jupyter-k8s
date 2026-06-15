@@ -87,9 +87,9 @@ var _ = Describe("ReconcileDeletion", func() {
 		_, err := sm.ReconcileDeletion(ctx, ws)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Reload and verify conditions
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(ws), ws)).To(Succeed())
-
+		// After ReconcileDeletion, the workspace is modified in-place with updated conditions.
+		// The object may be garbage-collected (finalizer removed + DeletionTimestamp set),
+		// so we verify the in-memory object rather than reloading from the API.
 		deletingCond := findCondition(ws.Status.Conditions, ConditionTypeDeleting)
 		Expect(deletingCond).NotTo(BeNil())
 		Expect(deletingCond.Status).To(Equal(metav1.ConditionTrue))
@@ -120,16 +120,14 @@ var _ = Describe("ReconcileDeletion", func() {
 		Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
 	})
 
-	It("should remove finalizer when all resources are cleaned up", func() {
+	It("should remove finalizer and allow deletion when all resources are cleaned up", func() {
 		ws := newDeletingWorkspace()
 
 		sm := buildStateMachine()
 		_, err := sm.ReconcileDeletion(ctx, ws)
 		Expect(err).NotTo(HaveOccurred())
 
-		// No deployment/service exist, so CleanupAllResources returns true
-		// Finalizer should be removed
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(ws), ws)).To(Succeed())
+		// Finalizer removed in-place — object is garbage-collected by the API server
 		Expect(controllerutil.ContainsFinalizer(ws, WorkspaceFinalizerName)).To(BeFalse())
 	})
 
@@ -138,15 +136,15 @@ var _ = Describe("ReconcileDeletion", func() {
 
 		// Set resource names
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(ws), ws)).To(Succeed())
-		ws.Status.DeploymentName = "test-deployment"
-		ws.Status.ServiceName = "test-service"
+		ws.Status.DeploymentName = "del-test-deploy"
+		ws.Status.ServiceName = "del-test-svc"
 		Expect(k8sClient.Status().Update(ctx, ws)).To(Succeed())
 
 		sm := buildStateMachine()
 		_, err := sm.ReconcileDeletion(ctx, ws)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(ws), ws)).To(Succeed())
+		// Verify in-memory object (workspace is garbage-collected after finalizer removal)
 		Expect(ws.Status.DeploymentName).To(BeEmpty())
 		Expect(ws.Status.ServiceName).To(BeEmpty())
 	})
