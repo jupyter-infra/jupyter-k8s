@@ -118,7 +118,7 @@ jobs:
           docker pull "$REVIEW_IMAGE"
 
       - name: Mark review in progress
-        if: steps.pr.outputs.skip != 'true'
+        if: steps.pr.outputs.skip != 'true' && !inputs.smoke
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -143,14 +143,15 @@ jobs:
           [[ "$out" == *BEDROCK_OK* ]]
 
       - name: Run review
+        id: run
         if: steps.pr.outputs.skip != 'true' && !inputs.smoke
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           REVIEW_IMAGE: ${{ vars.REVIEW_IMAGE }}
           PR: ${{ steps.pr.outputs.pr }}
           HEAD_SHA: ${{ steps.pr.outputs.head }}
           BASE_SHA: ${{ steps.pr.outputs.base }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           # Fetch the PR head as git objects only. Never checked out, never executed.
@@ -158,7 +159,6 @@ jobs:
             || git fetch --no-tags origin "pull/${PR}/head:refs/roborev/head"
           base_sha=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
 
-          status=success
           docker run --rm \
             -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
             -e AWS_REGION -e AWS_DEFAULT_REGION \
@@ -170,9 +170,21 @@ jobs:
             sh -c "git config --global --add safe.directory /workspace \
               && roborev ci review --ref ${base_sha}..${HEAD_SHA} \
                    --pr ${PR} --gh-repo ${REPO} --comment \
-                   --min-severity medium --reasoning standard" \
-            || status=error
+                   --min-severity medium --reasoning standard"
 
+      # Always close out the pending status, even if fetch/review failed or the
+      # run was cancelled, so no PR is left with a dangling "review running".
+      - name: Report status
+        if: always() && steps.pr.outputs.skip != 'true' && !inputs.smoke
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ steps.pr.outputs.head }}
+          OUTCOME: ${{ steps.run.outcome }}
+        run: |
+          set -euo pipefail
+          state=error
+          [ "$OUTCOME" = "success" ] && state=success
           gh api -X POST "repos/${REPO}/statuses/${HEAD_SHA}" \
-            -f context=roborev/review -f state="$status" \
-            -f description="review $status" > /dev/null
+            -f context=roborev/review -f state="$state" \
+            -f description="review $state" > /dev/null
