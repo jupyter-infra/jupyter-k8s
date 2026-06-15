@@ -98,6 +98,18 @@ var _ = Describe("ReconcileDeletion", func() {
 		availableCond = findCondition(ws.Status.Conditions, ConditionTypeAvailable)
 		Expect(availableCond).NotTo(BeNil())
 		Expect(availableCond.Status).To(Equal(metav1.ConditionFalse))
+
+		progressingCond := findCondition(ws.Status.Conditions, ConditionTypeProgressing)
+		Expect(progressingCond).NotTo(BeNil())
+		Expect(progressingCond.Status).To(Equal(metav1.ConditionFalse))
+
+		degradedCond := findCondition(ws.Status.Conditions, ConditionTypeDegraded)
+		Expect(degradedCond).NotTo(BeNil())
+		Expect(degradedCond.Status).To(Equal(metav1.ConditionFalse))
+
+		stoppedCond := findCondition(ws.Status.Conditions, ConditionTypeStopped)
+		Expect(stoppedCond).NotTo(BeNil())
+		Expect(stoppedCond.Status).To(Equal(metav1.ConditionFalse))
 	})
 
 	It("should skip when no finalizer is present", func() {

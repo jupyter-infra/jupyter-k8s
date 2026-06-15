@@ -411,10 +411,7 @@ var _ = Describe("Workspace Status", Ordered, func() {
 			})
 
 			By("waiting for workspace to be fully deleted")
-			Eventually(func() bool {
-				_, err := kubectlGet("workspace", deletionWorkspace, statusTestNamespace, "{.metadata.name}")
-				return err != nil
-			}).WithTimeout(statusTestTimeout).WithPolling(statusTestPolling).Should(BeTrue())
+			WaitForWorkspaceDeletion(deletionWorkspace, statusTestNamespace)
 		})
 	})
 })

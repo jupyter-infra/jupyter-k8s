@@ -219,6 +219,19 @@ func UpdateWorkspaceDesiredState(workspaceName, namespace, desiredState string) 
 	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Failed to update workspace desiredStatus")
 }
 
+// WaitForWorkspaceDeletion polls until the workspace is fully removed from the cluster (NotFound).
+func WaitForWorkspaceDeletion(workspaceName, namespace string) {
+	ginkgo.GinkgoHelper()
+
+	gomega.Eventually(func(g gomega.Gomega) {
+		cmd := exec.Command("kubectl", "get", "workspace", workspaceName,
+			"-n", namespace, "--ignore-not-found", "-o", "name")
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(strings.TrimSpace(string(output))).To(gomega.BeEmpty(), "workspace should no longer exist")
+	}).WithTimeout(2 * time.Minute).WithPolling(3 * time.Second).Should(gomega.Succeed())
+}
+
 // deleteWorkspaceAsUser deletes a workspace with kubectl impersonation
 func deleteWorkspaceAsUser(name, user string, groups []string) error {
 	ginkgo.GinkgoHelper()
