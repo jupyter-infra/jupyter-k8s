@@ -228,7 +228,7 @@ func WaitForWorkspaceDeletion(workspaceName, namespace string) {
 			"-n", namespace, "--ignore-not-found", "-o", "name")
 		output, err := utils.Run(cmd)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
-		g.Expect(strings.TrimSpace(string(output))).To(gomega.BeEmpty(), "workspace should no longer exist")
+		g.Expect(strings.TrimSpace(output)).To(gomega.BeEmpty(), "workspace should no longer exist")
 	}).WithTimeout(2 * time.Minute).WithPolling(3 * time.Second).Should(gomega.Succeed())
 }
 
