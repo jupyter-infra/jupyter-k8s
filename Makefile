@@ -206,6 +206,18 @@ lint-fix-e2e: golangci-lint ## Run golangci-lint linter on e2e tests and perform
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
 
+##@ Code Review
+
+.PHONY: review
+review: ## AI review of the current branch vs main (roborev, runs locally, no daemon)
+	@command -v roborev >/dev/null 2>&1 || { echo "roborev not found. Install it from https://roborev.io, then optionally run 'make review-setup'."; exit 1; }
+	roborev review --branch --local --wait
+
+.PHONY: review-setup
+review-setup: ## Opt-in: install the roborev post-commit hook for continuous local review
+	@command -v roborev >/dev/null 2>&1 || { echo "roborev not found. Install it from https://roborev.io first."; exit 1; }
+	roborev init --agent claude-code
+
 ##@ Build
 
 .PHONY: build

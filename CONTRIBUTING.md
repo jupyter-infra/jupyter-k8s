@@ -68,6 +68,32 @@ go test ./internal/controller/... -coverprofile=cover.out
 go tool cover -html=cover.out
 ```
 
+## Code review
+
+Pull requests are reviewed automatically by [roborev](https://roborev.io), which posts a
+review comment on each revision. You can run the same review locally before pushing to catch
+issues early.
+
+Install roborev from [roborev.io](https://roborev.io), then:
+
+```bash
+make review
+```
+
+This reviews your current branch against `main` using whatever AI coding agent you have
+installed (claude-code, codex, gemini, and others), with no daemon or background process. It
+shares its review policy (`.roborev.toml`) with CI, so local findings match what CI will post.
+
+To review every commit automatically instead of on demand (opt-in):
+
+```bash
+make review-setup   # one-time: installs the roborev post-commit hook
+roborev show HEAD   # view the latest review
+roborev refine      # iterate: review, fix, repeat
+```
+
+Local review is optional; CI reviews every PR regardless.
+
 ## Local cluster
 
 ### Container runtime
