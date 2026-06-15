@@ -1,0 +1,177 @@
+# Automated roborev PR review.
+#
+# Triggered on pull_request_target so it runs with base-repo credentials even
+# for fork PRs (a plain pull_request workflow gets no OIDC token from a fork).
+# The review fires per PR revision, in parallel with CI, regardless of CI result.
+#
+# SECURITY: pull_request_target runs with repository credentials. This job must
+# never execute code from the PR. It checks out the trusted base branch, fetches
+# the PR head as git objects only, and hands roborev a ref range. The assumed IAM
+# role can only pull the review image and invoke Bedrock, and GITHUB_TOKEN can only
+# comment and set statuses, so a prompt-injected review of a malicious diff can at
+# worst spend model tokens and post a misleading comment.
+#
+# Inert until these repo variables are set (after the tf-aws-review-ci template is
+# deployed and the review image is published):
+#   REVIEW_RUN_ROLE_ARN   IAM role ARN (review_run_iam_role_arn output)
+#   REVIEW_IMAGE          ECR image ref, e.g. <repo-url>:latest
+#   REVIEW_BEDROCK_MODEL  Bedrock model / inference-profile ID
+#   REVIEW_AWS_REGION     optional, defaults to us-west-2
+
+name: roborev review
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to review"
+        required: true
+        type: string
+      smoke:
+        description: "Smoke test only: verify the OIDC to Bedrock chain, skip review"
+        type: boolean
+        default: false
+
+# One review per PR; a new push cancels the in-flight review for that PR.
+concurrency:
+  group: roborev-review-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+  id-token: write
+
+jobs:
+  review:
+    name: roborev review
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: >-
+      github.event.pull_request.draft != true
+      && vars.REVIEW_RUN_ROLE_ARN != ''
+      && vars.REVIEW_IMAGE != ''
+      && vars.REVIEW_BEDROCK_MODEL != ''
+    environment: review
+    steps:
+      # Trusted base branch only. The PR head is fetched as data later, never run.
+      - name: Checkout base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Resolve PR and head SHA
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_FROM_EVENT: ${{ github.event.pull_request.number }}
+          HEAD_FROM_EVENT: ${{ github.event.pull_request.head.sha }}
+          PR_FROM_INPUT: ${{ inputs.pr }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            pr="$PR_FROM_INPUT"
+          else
+            pr="$PR_FROM_EVENT"
+          fi
+
+          # Current head of the PR. The stale-head guard below compares this to the
+          # revision that triggered the run, so superseded revisions are skipped
+          # before any model tokens are spent.
+          current_head=$(gh api "repos/$REPO/pulls/$pr" --jq .head.sha)
+
+          if [ "$EVENT_NAME" != "workflow_dispatch" ] && [ "$HEAD_FROM_EVENT" != "$current_head" ]; then
+            echo "PR #$pr head moved ($HEAD_FROM_EVENT -> $current_head); skipping superseded revision."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          base=$(gh api "repos/$REPO/pulls/$pr" --jq .base.sha)
+          {
+            echo "pr=$pr"
+            echo "head=$current_head"
+            echo "base=$base"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        if: steps.pr.outputs.skip != 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.REVIEW_RUN_ROLE_ARN }}
+          aws-region: ${{ vars.REVIEW_AWS_REGION || 'us-west-2' }}
+
+      - name: Pull review image
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          REVIEW_IMAGE: ${{ vars.REVIEW_IMAGE }}
+        run: |
+          set -euo pipefail
+          registry="${REVIEW_IMAGE%%/*}"
+          aws ecr get-login-password --region "${{ vars.REVIEW_AWS_REGION || 'us-west-2' }}" \
+            | docker login --username AWS --password-stdin "$registry"
+          docker pull "$REVIEW_IMAGE"
+
+      - name: Mark review in progress
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api -X POST "repos/$REPO/statuses/${{ steps.pr.outputs.head }}" \
+            -f context=roborev/review -f state=pending \
+            -f description="review running" > /dev/null
+
+      - name: Smoke test (Bedrock reachability)
+        if: steps.pr.outputs.skip != 'true' && inputs.smoke
+        env:
+          REVIEW_IMAGE: ${{ vars.REVIEW_IMAGE }}
+        run: |
+          set -euo pipefail
+          out=$(docker run --rm \
+            -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
+            -e AWS_REGION -e AWS_DEFAULT_REGION \
+            -e CLAUDE_CODE_USE_BEDROCK=1 \
+            -e ANTHROPIC_MODEL="${{ vars.REVIEW_BEDROCK_MODEL }}" \
+            "$REVIEW_IMAGE" claude -p "Reply with exactly: BEDROCK_OK")
+          echo "model replied: $out"
+          [[ "$out" == *BEDROCK_OK* ]]
+
+      - name: Run review
+        if: steps.pr.outputs.skip != 'true' && !inputs.smoke
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          REVIEW_IMAGE: ${{ vars.REVIEW_IMAGE }}
+          PR: ${{ steps.pr.outputs.pr }}
+          HEAD_SHA: ${{ steps.pr.outputs.head }}
+          BASE_SHA: ${{ steps.pr.outputs.base }}
+        run: |
+          set -euo pipefail
+          # Fetch the PR head as git objects only. Never checked out, never executed.
+          git fetch --no-tags origin "+${HEAD_SHA}:refs/roborev/head" 2>/dev/null \
+            || git fetch --no-tags origin "pull/${PR}/head:refs/roborev/head"
+          base_sha=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+
+          status=success
+          docker run --rm \
+            -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
+            -e AWS_REGION -e AWS_DEFAULT_REGION \
+            -e CLAUDE_CODE_USE_BEDROCK=1 \
+            -e ANTHROPIC_MODEL="${{ vars.REVIEW_BEDROCK_MODEL }}" \
+            -e GH_TOKEN \
+            -v "$PWD:/workspace" -w /workspace \
+            "$REVIEW_IMAGE" \
+            sh -c "git config --global --add safe.directory /workspace \
+              && roborev ci review --ref ${base_sha}..${HEAD_SHA} \
+                   --pr ${PR} --gh-repo ${REPO} --comment --min-severity medium" \
+            || status=error
+
+          gh api -X POST "repos/${REPO}/statuses/${HEAD_SHA}" \
+            -f context=roborev/review -f state="$status" \
+            -f description="review $status" > /dev/null
