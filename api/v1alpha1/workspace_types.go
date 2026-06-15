@@ -61,6 +61,46 @@ type AccessStrategyRef struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
+// IntegrationParameter is a single user-provided input for strategy expression resolution.
+type IntegrationParameter struct {
+	// Name of the parameter, referenced in strategy expressions as {{ .Parameters.<Name> }}
+	Name string `json:"name"`
+
+	// Value of the parameter (substituted into strategy expression fields at reconcile time)
+	// +optional
+	Value string `json:"value,omitempty"`
+}
+
+// IntegrationStrategyRef defines a reference to a WorkspaceIntegrationStrategy
+type IntegrationStrategyRef struct {
+	// Name of the WorkspaceIntegrationStrategy
+	Name string `json:"name"`
+
+	// Namespace where the WorkspaceIntegrationStrategy is located
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// Parameters provided by the user for strategy expression resolution.
+	// Each parameter is referenced in strategy expressions as {{ .Parameters.<Name> }}.
+	// Names must be unique.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	Parameters []IntegrationParameter `json:"parameters,omitempty"`
+}
+
+// ParametersMap flattens the extensible name/value parameter list into a map keyed
+// by name for {{ .Parameters.<name> }} expression access. Duplicate names are rejected
+// at admission by the +listMapKey=name marker (the API server enforces set semantics
+// on the name key), so a simple last-write assignment is safe here.
+func (r *IntegrationStrategyRef) ParametersMap() map[string]string {
+	m := make(map[string]string, len(r.Parameters))
+	for _, p := range r.Parameters {
+		m[p.Name] = p.Value
+	}
+	return m
+}
+
 // TemplateRef defines a reference to a WorkspaceTemplate
 type TemplateRef struct {
 	// Name of the WorkspaceTemplate
@@ -192,6 +232,11 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:MaxItems=10
 	// +optional
 	InitContainers []corev1.Container `json:"initContainers,omitempty"`
+
+	// IntegrationStrategy references a WorkspaceIntegrationStrategy that injects runtime capabilities
+	// (sidecars, volumes, env vars) into the workspace pod with template-based dynamic resolution.
+	// +optional
+	IntegrationStrategy *IntegrationStrategyRef `json:"integrationStrategy,omitempty"`
 }
 
 // AccessResourceStatus defines the status of a resource created from a template

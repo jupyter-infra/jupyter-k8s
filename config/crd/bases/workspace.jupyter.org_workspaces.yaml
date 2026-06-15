@@ -2971,6 +2971,45 @@ spec:
                   type: object
                 maxItems: 10
                 type: array
+              integrationStrategy:
+                description: |-
+                  IntegrationStrategy references a WorkspaceIntegrationStrategy that injects runtime capabilities
+                  (sidecars, volumes, env vars) into the workspace pod with template-based dynamic resolution.
+                properties:
+                  name:
+                    description: Name of the WorkspaceIntegrationStrategy
+                    type: string
+                  namespace:
+                    description: Namespace where the WorkspaceIntegrationStrategy
+                      is located
+                    type: string
+                  parameters:
+                    description: |-
+                      Parameters provided by the user for strategy expression resolution.
+                      Each parameter is referenced in strategy expressions as {{ .Parameters.<Name> }}.
+                      Names must be unique.
+                    items:
+                      description: IntegrationParameter is a single user-provided
+                        input for strategy expression resolution.
+                      properties:
+                        name:
+                          description: Name of the parameter, referenced in strategy
+                            expressions as {{ .Parameters.<Name> }}
+                          type: string
+                        value:
+                          description: Value of the parameter (substituted into strategy
+                            expression fields at reconcile time)
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                required:
+                - name
+                type: object
               lifecycle:
                 description: |-
                   Lifecycle specifies actions that the management system should take
