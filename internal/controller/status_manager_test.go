@@ -60,7 +60,7 @@ var _ = Describe("StatusManager", func() {
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 				// Verify exactly 4 conditions
-				Expect(workspace.Status.Conditions).To(HaveLen(4))
+				Expect(workspace.Status.Conditions).To(HaveLen(5))
 
 				// Verify Available=True
 				availableCond := findCondition(workspace.Status.Conditions, ConditionTypeAvailable)
@@ -100,7 +100,7 @@ var _ = Describe("StatusManager", func() {
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 				// Verify exactly 4 conditions
-				Expect(workspace.Status.Conditions).To(HaveLen(4))
+				Expect(workspace.Status.Conditions).To(HaveLen(5))
 
 				// Verify Available=False with ComputeNotReady reason
 				availableCond := findCondition(workspace.Status.Conditions, ConditionTypeAvailable)
@@ -138,7 +138,7 @@ var _ = Describe("StatusManager", func() {
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 				// Verify exactly 4 conditions
-				Expect(workspace.Status.Conditions).To(HaveLen(4))
+				Expect(workspace.Status.Conditions).To(HaveLen(5))
 
 				// Verify Available=False with ServiceNotReady reason
 				availableCond := findCondition(workspace.Status.Conditions, ConditionTypeAvailable)
@@ -176,7 +176,7 @@ var _ = Describe("StatusManager", func() {
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 				// Verify exactly 4 conditions
-				Expect(workspace.Status.Conditions).To(HaveLen(4))
+				Expect(workspace.Status.Conditions).To(HaveLen(5))
 
 				// Verify Available=False with AccessNotReady reason
 				availableCond := findCondition(workspace.Status.Conditions, ConditionTypeAvailable)
@@ -286,7 +286,7 @@ var _ = Describe("StatusManager", func() {
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 				// Verify exactly 4 conditions
-				Expect(workspace.Status.Conditions).To(HaveLen(4))
+				Expect(workspace.Status.Conditions).To(HaveLen(5))
 
 				// Verify Degraded=True (changed from Running state)
 				degradedCond := findCondition(workspace.Status.Conditions, ConditionTypeDegraded)
@@ -336,7 +336,7 @@ var _ = Describe("StatusManager", func() {
 
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
-				Expect(workspace.Status.Conditions).To(HaveLen(4))
+				Expect(workspace.Status.Conditions).To(HaveLen(5))
 
 				// Degraded=True with degradedReason
 				degradedCond := findCondition(workspace.Status.Conditions, ConditionTypeDegraded)
@@ -465,6 +465,7 @@ var _ = Describe("StatusManager", func() {
 					ConditionTypeProgressing,
 					ConditionTypeDegraded,
 					ConditionTypeStopped,
+					ConditionTypeDeleting,
 				}
 
 				// Test UpdateStartingStatus

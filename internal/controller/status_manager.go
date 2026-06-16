@@ -131,12 +131,20 @@ func (sm *StatusManager) UpdateStartingStatus(
 		"Workspace is starting",
 	)
 
+	deletingCondition := NewCondition(
+		ConditionTypeDeleting,
+		metav1.ConditionFalse,
+		ReasonDesiredStateRunning,
+		"Workspace is starting",
+	)
+
 	// Apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+		deletingCondition,
 	}
 
 	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
@@ -177,6 +185,7 @@ func (sm *StatusManager) UpdatePermanentDegradedRunningStatus(
 		NewCondition(ConditionTypeProgressing, metav1.ConditionFalse, degradedReason, message),
 		NewCondition(ConditionTypeDegraded, metav1.ConditionTrue, degradedReason, message),
 		NewCondition(ConditionTypeStopped, metav1.ConditionFalse, ReasonDesiredStateRunning, "Workspace desired state is Running"),
+		NewCondition(ConditionTypeDeleting, metav1.ConditionFalse, ReasonDesiredStateRunning, "Workspace desired state is Running"),
 	}
 
 	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
@@ -224,12 +233,20 @@ func (sm *StatusManager) UpdateRunningStatus(
 		"Workspace is running",
 	)
 
+	deletingCondition := NewCondition(
+		ConditionTypeDeleting,
+		metav1.ConditionFalse,
+		ReasonDesiredStateRunning,
+		"Workspace is running",
+	)
+
 	// apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+		deletingCondition,
 	}
 
 	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
@@ -305,12 +322,20 @@ func (sm *StatusManager) UpdateStoppingStatus(
 		stoppingMessage,
 	)
 
+	deletingCondition := NewCondition(
+		ConditionTypeDeleting,
+		metav1.ConditionFalse,
+		ReasonDesiredStateStopped,
+		"Workspace is stopping",
+	)
+
 	// Apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+		deletingCondition,
 	}
 
 	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
@@ -365,12 +390,20 @@ func (sm *StatusManager) UpdateStoppedStatus(
 		"Workspace is stopped",
 	)
 
+	deletingCondition := NewCondition(
+		ConditionTypeDeleting,
+		metav1.ConditionFalse,
+		ReasonDesiredStateStopped,
+		"Workspace is stopped",
+	)
+
 	// Apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+		deletingCondition,
 	}
 
 	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
