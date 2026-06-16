@@ -141,6 +141,15 @@ spec:
                   If not provided, the AccessURL will not be set in the workspace status
                   Example: "https://example.com/workspace-path/"
                 type: string
+              applicationBasePathTemplate:
+                description: |-
+                  ApplicationBasePathTemplate is a Go template string for the routing prefix under which
+                  the workspace application is served. Used by idle detection to construct the full
+                  endpoint path: resolvedBasePath + httpGet.path.
+                  Template variables: .Workspace, .AccessStrategy, .Service
+                  Defaults to "/" when absent.
+                  Example: "/workspaces/{{.Workspace.Namespace}}/{{.Workspace.Name}}/"
+                type: string
               bearerAuthURLTemplate:
                 description: |-
                   BearerAuthURLTemplate is a template string for constructing the bearer auth URL
@@ -6743,6 +6752,28 @@ spec:
                               type: object
                             type: array
                             x-kubernetes-list-type: atomic
+                          lastActivityTimestamp:
+                            description: |-
+                              LastActivityTimestamp describes how to extract and parse the last-activity
+                              timestamp from the JSON response body.
+                            properties:
+                              format:
+                                default: RFC3339
+                                description: |-
+                                  Format specifies how to parse the extracted value.
+                                  "RFC3339" expects an RFC 3339 timestamp string.
+                                  "unix" expects epoch seconds (numeric or string).
+                                enum:
+                                - RFC3339
+                                - unix
+                                type: string
+                              responseBodyPath:
+                                description: |-
+                                  ResponseBodyPath is a dot-separated path to the timestamp value in the
+                                  JSON response body (e.g. "last_activity" or "status.lastActive").
+                                  Default: "lastActiveTimestamp"
+                                type: string
+                            type: object
                           path:
                             description: Path to access on the HTTP server.
                             type: string
@@ -6759,6 +6790,16 @@ spec:
                             description: |-
                               Scheme to use for connecting to the host.
                               Defaults to HTTP.
+                            type: string
+                          transport:
+                            default: podExec
+                            description: |-
+                              Transport selects how the operator reaches the endpoint.
+                              "podExec" executes curl inside the workspace container (legacy).
+                              "network" makes a direct HTTP call from the operator to the pod IP.
+                            enum:
+                            - podExec
+                            - network
                             type: string
                         required:
                         - port
@@ -9007,6 +9048,12 @@ spec:
               accessURL:
                 description: AccessURL is the URL at which the workspace can be accessed
                 type: string
+              applicationBasePath:
+                description: |-
+                  ApplicationBasePath is the resolved routing prefix for the workspace application.
+                  Set during access-resources reconciliation; used by idle detection to construct
+                  the full endpoint path.
+                type: string
               conditions:
                 description: |-
                   Conditions represent the current state of the Workspace resource.
@@ -10553,6 +10600,28 @@ spec:
                               type: object
                             type: array
                             x-kubernetes-list-type: atomic
+                          lastActivityTimestamp:
+                            description: |-
+                              LastActivityTimestamp describes how to extract and parse the last-activity
+                              timestamp from the JSON response body.
+                            properties:
+                              format:
+                                default: RFC3339
+                                description: |-
+                                  Format specifies how to parse the extracted value.
+                                  "RFC3339" expects an RFC 3339 timestamp string.
+                                  "unix" expects epoch seconds (numeric or string).
+                                enum:
+                                - RFC3339
+                                - unix
+                                type: string
+                              responseBodyPath:
+                                description: |-
+                                  ResponseBodyPath is a dot-separated path to the timestamp value in the
+                                  JSON response body (e.g. "last_activity" or "status.lastActive").
+                                  Default: "lastActiveTimestamp"
+                                type: string
+                            type: object
                           path:
                             description: Path to access on the HTTP server.
                             type: string
@@ -10569,6 +10638,16 @@ spec:
                             description: |-
                               Scheme to use for connecting to the host.
                               Defaults to HTTP.
+                            type: string
+                          transport:
+                            default: podExec
+                            description: |-
+                              Transport selects how the operator reaches the endpoint.
+                              "podExec" executes curl inside the workspace container (legacy).
+                              "network" makes a direct HTTP call from the operator to the pod IP.
+                            enum:
+                            - podExec
+                            - network
                             type: string
                         required:
                         - port
