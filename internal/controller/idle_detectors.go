@@ -9,6 +9,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,85 +21,88 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// EndpointIdleResponse represents the response from /api/idle endpoint
-type EndpointIdleResponse struct {
-	LastActivity string `json:"lastActiveTimestamp"`
-}
+const (
+	defaultResponseBodyPath = "lastActiveTimestamp"
+	defaultTimestampFormat  = "RFC3339"
+	transportPodExec        = "podExec"
+	transportNetwork        = "network"
+)
 
-// IdleDetector interface for different detection methods
+// IdleDetector interface for different detection methods.
+// host is the target address (service ClusterIP for network, pod IP for podExec).
 type IdleDetector interface {
-	CheckIdle(ctx context.Context, workspaceName string, pod *corev1.Pod, idleConfig *workspacev1alpha1.IdleShutdownSpec) (*IdleCheckResult, error)
+	CheckIdle(ctx context.Context, workspace *workspacev1alpha1.Workspace, host string, idleConfig *workspacev1alpha1.IdleShutdownSpec) (*IdleCheckResult, error)
 }
 
 func createIdleDetectorImpl(detection *workspacev1alpha1.IdleDetectionSpec) (IdleDetector, error) {
-	switch {
-	case detection.HTTPGet != nil:
-		return NewHTTPGetDetector(), nil
-	default:
+	if detection.HTTPGet == nil {
 		return nil, fmt.Errorf("no detection method configured")
 	}
+	return NewNetworkHTTPGetDetector(), nil
 }
 
-// CreateIdleDetector factory function variable (allows for unit testing)
+// CreateIdleDetector is the factory used by the idle checker to instantiate a detector
+// for the network transport path. It is a package-level var so that unit tests can
+// override it with a mock detector without requiring a real HTTP server.
 var CreateIdleDetector = createIdleDetectorImpl
 
-// HTTPGetDetector implements HTTP endpoint checking
-type HTTPGetDetector struct {
+// --- podExec transport (curl-in-pod) ---
+
+// PodExecHTTPGetDetector implements HTTP endpoint checking via pod exec (curl)
+type PodExecHTTPGetDetector struct {
 	execUtil pluginadapters.PodExecInterface
+	pod      *corev1.Pod
 }
 
-// NewHTTPGetDetectorWithExec creates a new HTTPGetDetector with the provided pluginadapters.PodExecInterface
-func NewHTTPGetDetectorWithExec(execUtil pluginadapters.PodExecInterface) *HTTPGetDetector {
-	return &HTTPGetDetector{
+// NewPodExecHTTPGetDetectorWithExec creates a new PodExecHTTPGetDetector with the provided pluginadapters.PodExecInterface
+func NewPodExecHTTPGetDetectorWithExec(execUtil pluginadapters.PodExecInterface, pod *corev1.Pod) *PodExecHTTPGetDetector {
+	return &PodExecHTTPGetDetector{
 		execUtil: execUtil,
+		pod:      pod,
 	}
 }
 
-// NewHTTPGetDetector creates a new HTTPGetDetector with a real PodExecUtil
-func NewHTTPGetDetector() *HTTPGetDetector {
+// NewPodExecHTTPGetDetectorForPod creates a new PodExecHTTPGetDetector with a real PodExecUtil for the given pod
+func NewPodExecHTTPGetDetectorForPod(pod *corev1.Pod) *PodExecHTTPGetDetector {
 	execUtil, err := NewPodExecUtil()
 	if err != nil {
-		// In production, this should not happen if k8s config is available
 		panic(fmt.Sprintf("Failed to create pod exec util: %v", err))
 	}
-	return NewHTTPGetDetectorWithExec(execUtil)
+	return NewPodExecHTTPGetDetectorWithExec(execUtil, pod)
 }
 
-// CheckIdle implements the IdleDetector interface for HTTP endpoint checking
-func (h *HTTPGetDetector) CheckIdle(ctx context.Context, workspaceName string, pod *corev1.Pod, idleConfig *workspacev1alpha1.IdleShutdownSpec) (*IdleCheckResult, error) {
-	logger := logf.FromContext(ctx).WithValues("pod", pod.Name)
+// CheckIdle implements the IdleDetector interface for HTTP endpoint checking via pod exec.
+// host is the pod IP (used to find the pod for exec).
+func (h *PodExecHTTPGetDetector) CheckIdle(ctx context.Context, workspace *workspacev1alpha1.Workspace, host string, idleConfig *workspacev1alpha1.IdleShutdownSpec) (*IdleCheckResult, error) {
+	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name)
 
-	// Get HTTP config from resolved idle config
 	httpGetConfig := idleConfig.Detection.HTTPGet
 	if httpGetConfig == nil {
 		return &IdleCheckResult{IsIdle: false, ShouldRetry: false}, fmt.Errorf("httpGet config is nil")
 	}
 
-	// Build URL with scheme support
 	scheme := string(httpGetConfig.Scheme)
 	if scheme == "" {
 		scheme = "http"
 	}
 	port := httpGetConfig.Port.String()
-	url := fmt.Sprintf("%s://localhost:%s%s", scheme, port, httpGetConfig.Path)
+	fullPath := resolveIdlePath(workspace.Status.ApplicationBasePath, httpGetConfig.Path)
+	url := fmt.Sprintf("%s://localhost:%s%s", scheme, port, fullPath)
 
-	// Single curl call with status code
 	cmd := []string{"curl", "-s", "-w", "\\nHTTP Status: %{http_code}\\n", url}
 
-	logger.V(1).Info("Calling idle endpoint", "port", port, "path", httpGetConfig.Path)
+	logger.V(1).Info("Calling idle endpoint via podExec", "port", port, "path", fullPath)
 
-	// Always execute in the workspace container
 	const workspaceContainerName = "workspace"
-	output, err := h.execUtil.ExecInPod(ctx, pod, workspaceContainerName, cmd, "")
+	output, err := h.execUtil.ExecInPod(ctx, h.pod, workspaceContainerName, cmd, "")
 	if err != nil {
-		// Handle curl exit codes - connection refused (temporary failure)
+		// curl exit code 7 = connection refused (temporary failure)
 		if strings.Contains(err.Error(), "exit code 7") {
 			return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("connection refused")
 		}
 		return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("curl execution failed: %w", err)
 	}
 
-	// Parse output to separate response body and status code
 	lines := strings.Split(output, "\n")
 	var responseBody strings.Builder
 	var statusCode string
@@ -112,47 +118,189 @@ func (h *HTTPGetDetector) CheckIdle(ctx context.Context, workspaceName string, p
 		}
 	}
 
+	return h.handleHTTPResponse(ctx, workspace.Name, statusCode, responseBody.String(), httpGetConfig, idleConfig)
+}
+
+// --- network transport (direct HTTP from operator) ---
+
+// NetworkHTTPGetDetector implements HTTP endpoint checking via direct network call
+type NetworkHTTPGetDetector struct {
+	httpClient *http.Client
+}
+
+// NewNetworkHTTPGetDetector creates a new NetworkHTTPGetDetector with a shared http.Client
+func NewNetworkHTTPGetDetector() *NetworkHTTPGetDetector {
+	return &NetworkHTTPGetDetector{
+		httpClient: &http.Client{
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+	}
+}
+
+// NewNetworkHTTPGetDetectorWithClient creates a NetworkHTTPGetDetector with a custom http.Client (for testing)
+func NewNetworkHTTPGetDetectorWithClient(client *http.Client) *NetworkHTTPGetDetector {
+	return &NetworkHTTPGetDetector{httpClient: client}
+}
+
+// CheckIdle implements the IdleDetector interface via direct HTTP call to the service ClusterIP.
+func (n *NetworkHTTPGetDetector) CheckIdle(ctx context.Context, workspace *workspacev1alpha1.Workspace, host string, idleConfig *workspacev1alpha1.IdleShutdownSpec) (*IdleCheckResult, error) {
+	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name)
+
+	httpGetConfig := idleConfig.Detection.HTTPGet
+	if httpGetConfig == nil {
+		return &IdleCheckResult{IsIdle: false, ShouldRetry: false}, fmt.Errorf("httpGet config is nil")
+	}
+
+	scheme := string(httpGetConfig.Scheme)
+	if scheme == "" {
+		scheme = "http"
+	}
+	port := httpGetConfig.Port.String()
+	fullPath := resolveIdlePath(workspace.Status.ApplicationBasePath, httpGetConfig.Path)
+	url := fmt.Sprintf("%s://%s:%s%s", scheme, host, port, fullPath)
+
+	logger.V(1).Info("Calling idle endpoint via network", "url", url)
+
+	reqCtx, cancel := context.WithTimeout(ctx, IdleProbeTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
+	if err != nil {
+		return &IdleCheckResult{IsIdle: false, ShouldRetry: false}, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := n.httpClient.Do(req)
+	if err != nil {
+		return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	statusCode := strconv.Itoa(resp.StatusCode)
+	return handleHTTPResponseCommon(ctx, workspace.Name, statusCode, string(body), httpGetConfig, idleConfig)
+}
+
+// --- shared response handling ---
+
+func (h *PodExecHTTPGetDetector) handleHTTPResponse(ctx context.Context, workspaceName, statusCode, body string, httpGetConfig *workspacev1alpha1.IdleHTTPGetAction, idleConfig *workspacev1alpha1.IdleShutdownSpec) (*IdleCheckResult, error) {
+	return handleHTTPResponseCommon(ctx, workspaceName, statusCode, body, httpGetConfig, idleConfig)
+}
+
+func handleHTTPResponseCommon(ctx context.Context, workspaceName, statusCode, body string, httpGetConfig *workspacev1alpha1.IdleHTTPGetAction, idleConfig *workspacev1alpha1.IdleShutdownSpec) (*IdleCheckResult, error) {
+	logger := logf.FromContext(ctx)
+
 	switch statusCode {
 	case "404":
-		// 404 is a permanent failure - endpoint doesn't exist
+		// Permanent failure — endpoint doesn't exist, no point retrying
 		return &IdleCheckResult{IsIdle: false, ShouldRetry: false}, fmt.Errorf("endpoint not found")
 	case "200":
-		// Parse the JSON response
-		var idleResp EndpointIdleResponse
-		if err := json.Unmarshal([]byte(responseBody.String()), &idleResp); err != nil {
-			logger.Error(err, "Failed to parse idle response", "output", responseBody.String())
-			return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("failed to parse idle response: %w", err)
+		fieldPath := defaultResponseBodyPath
+		format := defaultTimestampFormat
+		if httpGetConfig.LastActivityTimestamp != nil {
+			if httpGetConfig.LastActivityTimestamp.ResponseBodyPath != "" {
+				fieldPath = httpGetConfig.LastActivityTimestamp.ResponseBodyPath
+			}
+			if httpGetConfig.LastActivityTimestamp.Format != "" {
+				format = httpGetConfig.LastActivityTimestamp.Format
+			}
 		}
 
-		// Validate the response
-		if idleResp.LastActivity == "" {
-			logger.Error(nil, "Empty lastActiveTimestamp in response", "output", responseBody.String())
-			return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("invalid idle response: empty lastActiveTimestamp")
+		timestampStr, err := extractJSONField(body, fieldPath)
+		if err != nil {
+			logger.Error(err, "Failed to extract timestamp from response", "fieldPath", fieldPath, "body", body)
+			return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("failed to extract timestamp field %q: %w", fieldPath, err)
 		}
 
-		// Check if workspace is idle based on timeout
-		isIdle := h.checkIdleTimeout(ctx, workspaceName, &idleResp, idleConfig)
-		logger.V(1).Info("Successfully retrieved idle status", "lastActivity", idleResp.LastActivity, "isIdle", isIdle)
+		if timestampStr == "" {
+			logger.Error(nil, "Empty timestamp value in response", "fieldPath", fieldPath)
+			return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("empty timestamp value at %q", fieldPath)
+		}
+
+		lastActivity, err := parseTimestamp(timestampStr, format)
+		if err != nil {
+			logger.Error(err, "Failed to parse timestamp", "value", timestampStr, "format", format)
+			return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("failed to parse timestamp: %w", err)
+		}
+
+		isIdle := checkIdleTimeout(ctx, workspaceName, lastActivity, idleConfig)
+		logger.V(1).Info("Successfully checked idle status", "lastActivity", lastActivity, "isIdle", isIdle)
 		return &IdleCheckResult{IsIdle: isIdle, ShouldRetry: true}, nil
 	default:
-		// treat other HTTP errors as retryable
+		// Treat other HTTP errors (5xx, etc.) as retryable
 		return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("unexpected HTTP status: %s", statusCode)
 	}
 }
 
-// checkIdleTimeout checks if workspace should be stopped due to idle timeout
-func (h *HTTPGetDetector) checkIdleTimeout(ctx context.Context, workspaceName string, idleResp *EndpointIdleResponse, idleConfig *workspacev1alpha1.IdleShutdownSpec) bool {
-	logger := logf.FromContext(ctx).WithValues("workspace", workspaceName)
-
-	// Parse last activity time with case-insensitive timezone
-	// Some Jupyter servers return lowercase 'z' instead of uppercase 'Z' for UTC timezone
-	// RFC3339 requires uppercase 'Z', so we normalize it here
-	lastActivityStr := strings.ToUpper(idleResp.LastActivity) // Convert 'z' to 'Z'
-	lastActivity, err := time.Parse(time.RFC3339, lastActivityStr)
-	if err != nil {
-		logger.Error(err, "Failed to parse last activity time", "lastActivity", idleResp.LastActivity)
-		return false
+// extractJSONField extracts a value from a JSON body using a dot-separated path.
+func extractJSONField(body, path string) (string, error) {
+	var data any
+	if err := json.Unmarshal([]byte(body), &data); err != nil {
+		return "", fmt.Errorf("invalid JSON: %w", err)
 	}
+
+	parts := strings.Split(path, ".")
+	current := data
+	for _, part := range parts {
+		m, ok := current.(map[string]any)
+		if !ok {
+			return "", fmt.Errorf("field %q: expected object, got %T", part, current)
+		}
+		current, ok = m[part]
+		if !ok {
+			return "", fmt.Errorf("field %q not found", part)
+		}
+	}
+
+	switch v := current.(type) {
+	case string:
+		return v, nil
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64), nil
+	default:
+		return fmt.Sprintf("%v", v), nil
+	}
+}
+
+// parseTimestamp parses a timestamp string according to the specified format.
+func parseTimestamp(value, format string) (time.Time, error) {
+	switch format {
+	case "unix":
+		epoch, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("invalid unix timestamp %q: %w", value, err)
+		}
+		sec := int64(epoch)
+		nsec := int64((epoch - float64(sec)) * 1e9)
+		return time.Unix(sec, nsec), nil
+	default:
+		// Some Jupyter servers return lowercase 'z' instead of uppercase 'Z' for UTC.
+		// RFC3339 requires uppercase, so normalize before parsing.
+		normalized := strings.ToUpper(value)
+		t, err := time.Parse(time.RFC3339, normalized)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("invalid RFC3339 timestamp %q: %w", value, err)
+		}
+		return t, nil
+	}
+}
+
+// resolveIdlePath joins the application base path with the httpGet path.
+func resolveIdlePath(basePath, httpGetPath string) string {
+	if basePath == "" || basePath == "/" {
+		return httpGetPath
+	}
+	return strings.TrimRight(basePath, "/") + "/" + strings.TrimLeft(httpGetPath, "/")
+}
+
+// checkIdleTimeout checks if workspace should be stopped due to idle timeout
+func checkIdleTimeout(ctx context.Context, workspaceName string, lastActivity time.Time, idleConfig *workspacev1alpha1.IdleShutdownSpec) bool {
+	logger := logf.FromContext(ctx).WithValues("workspace", workspaceName)
 
 	timeout := time.Duration(idleConfig.IdleTimeoutInMinutes) * time.Minute
 	idleTime := time.Since(lastActivity)

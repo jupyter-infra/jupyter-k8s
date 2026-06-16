@@ -146,6 +146,7 @@ func main() {
 	var jwtTTL time.Duration
 	var newKeyUseDelay time.Duration
 	var pluginEndpointsFlag string
+	var idleCheckInterval time.Duration
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -189,6 +190,8 @@ func main() {
 		"Delay before using a newly rotated signing key (e.g. 5s). Uses server default if not set.")
 	flag.StringVar(&pluginEndpointsFlag, "plugin-endpoints", "",
 		"Comma-separated list of plugin name=endpoint pairs (e.g. aws=http://localhost:8080)")
+	flag.DurationVar(&idleCheckInterval, "idle-check-interval", controller.DefaultIdleCheckInterval,
+		"Interval between idle status checks for running workspaces")
 	opts := zap.Options{
 		Development: false,
 	}
@@ -327,6 +330,7 @@ func main() {
 		EnableWorkspacePodWatching:  enableWorkspacePodWatching,
 		DefaultTemplateNamespace:    defaultTemplateNamespace,
 		PluginEndpoints:             pluginEndpoints,
+		IdleCheckInterval:           idleCheckInterval,
 	}
 
 	// Convert parsed GVKWatches to controller.GVKWatch format

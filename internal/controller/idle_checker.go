@@ -8,6 +8,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,44 +30,81 @@ type IdleCheckResult struct {
 
 // WorkspaceIdleChecker provides utilities for checking workspace idle status
 type WorkspaceIdleChecker struct {
-	client client.Client
+	client        client.Client
+	checkInterval time.Duration
 }
 
-// NewWorkspaceIdleChecker creates a new WorkspaceIdleChecker instance
-func NewWorkspaceIdleChecker(k8sClient client.Client) *WorkspaceIdleChecker {
+// NewWorkspaceIdleChecker creates a new WorkspaceIdleChecker instance.
+// If checkInterval is zero or negative, DefaultIdleCheckInterval is used.
+func NewWorkspaceIdleChecker(k8sClient client.Client, checkInterval time.Duration) *WorkspaceIdleChecker {
+	if checkInterval <= 0 {
+		checkInterval = DefaultIdleCheckInterval
+	}
 	return &WorkspaceIdleChecker{
-		client: k8sClient,
+		client:        k8sClient,
+		checkInterval: checkInterval,
 	}
 }
 
-// CheckWorkspaceIdle checks if a workspace is idle using the configured detection method
-func (w *WorkspaceIdleChecker) CheckWorkspaceIdle(ctx context.Context, workspace *workspacev1alpha1.Workspace, idleConfig *workspacev1alpha1.IdleShutdownSpec) (*IdleCheckResult, error) {
-	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name, "namespace", workspace.Namespace)
+// CheckInterval returns the configured interval between idle checks.
+func (w *WorkspaceIdleChecker) CheckInterval() time.Duration {
+	return w.checkInterval
+}
 
-	// Find the workspace pod
-	pod, err := w.findWorkspacePod(ctx, workspace)
-	if err != nil {
-		logger.Error(err, "Failed to find workspace pod")
-		return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("failed to find workspace pod: %w", err)
+// CheckWorkspaceIdle checks if a workspace is idle using the configured detection method.
+// For transport:network, it uses the service ClusterIP (already available from the reconcile).
+// For transport:podExec, it finds a running pod and execs curl into it.
+func (w *WorkspaceIdleChecker) CheckWorkspaceIdle(ctx context.Context, workspace *workspacev1alpha1.Workspace, service *corev1.Service, idleConfig *workspacev1alpha1.IdleShutdownSpec) (*IdleCheckResult, error) {
+	transport := transportPodExec
+	if idleConfig.Detection.HTTPGet != nil && idleConfig.Detection.HTTPGet.Transport != "" {
+		transport = idleConfig.Detection.HTTPGet.Transport
 	}
 
-	// Create appropriate detector
+	if transport == transportNetwork {
+		return w.checkViaNetwork(ctx, workspace, service, idleConfig)
+	}
+	return w.checkViaPodExec(ctx, workspace, idleConfig)
+}
+
+func (w *WorkspaceIdleChecker) checkViaNetwork(ctx context.Context, workspace *workspacev1alpha1.Workspace, service *corev1.Service, idleConfig *workspacev1alpha1.IdleShutdownSpec) (*IdleCheckResult, error) {
+	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name)
+
+	if service == nil {
+		logger.Error(nil, "No service available for network idle check")
+		return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("no service available for workspace")
+	}
+
+	host := service.Spec.ClusterIP
+	if host == "" || host == "None" {
+		return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("service has no ClusterIP")
+	}
+
 	detector, err := CreateIdleDetector(&idleConfig.Detection)
 	if err != nil {
 		logger.Error(err, "Failed to create idle detector")
 		return &IdleCheckResult{IsIdle: false, ShouldRetry: false}, fmt.Errorf("failed to create idle detector: %w", err)
 	}
 
-	// Use detector to check idle status
-	result, err := detector.CheckIdle(ctx, workspace.Name, pod, idleConfig)
-	return result, err
+	return detector.CheckIdle(ctx, workspace, host, idleConfig)
+}
+
+func (w *WorkspaceIdleChecker) checkViaPodExec(ctx context.Context, workspace *workspacev1alpha1.Workspace, idleConfig *workspacev1alpha1.IdleShutdownSpec) (*IdleCheckResult, error) {
+	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name)
+
+	pod, err := w.findWorkspacePod(ctx, workspace)
+	if err != nil {
+		logger.Error(err, "Failed to find workspace pod")
+		return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("failed to find workspace pod: %w", err)
+	}
+
+	detector := NewPodExecHTTPGetDetectorForPod(pod)
+	return detector.CheckIdle(ctx, workspace, "localhost", idleConfig)
 }
 
 // findWorkspacePod finds the pod for a workspace
 func (w *WorkspaceIdleChecker) findWorkspacePod(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.Pod, error) {
 	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name)
 
-	// List pods with the workspace labels
 	podList := &corev1.PodList{}
 	labels := GenerateLabels(workspace.Name)
 
@@ -74,7 +112,6 @@ func (w *WorkspaceIdleChecker) findWorkspacePod(ctx context.Context, workspace *
 		return nil, fmt.Errorf("failed to list pods: %w", err)
 	}
 
-	// Find a running pod
 	for _, pod := range podList.Items {
 		if pod.Status.Phase == corev1.PodRunning {
 			logger.V(1).Info("Found running workspace pod", "pod", pod.Name)

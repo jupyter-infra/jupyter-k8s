@@ -40,14 +40,25 @@ func createTestPod() *corev1.Pod {
 	}
 }
 
+func createTestWorkspaceForDetector() *workspacev1alpha1.Workspace {
+	return &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testWorkspaceName,
+			Namespace: "default",
+		},
+	}
+}
+
 func createTestIdleConfig() *workspacev1alpha1.IdleShutdownSpec {
 	return &workspacev1alpha1.IdleShutdownSpec{
 		IdleTimeoutInMinutes: 30,
 		Detection: workspacev1alpha1.IdleDetectionSpec{
-			HTTPGet: &corev1.HTTPGetAction{
-				Path:   "/api/idle",
-				Port:   intstr.FromInt(8888),
-				Scheme: corev1.URISchemeHTTP,
+			HTTPGet: &workspacev1alpha1.IdleHTTPGetAction{
+				HTTPGetAction: corev1.HTTPGetAction{
+					Path:   "/api/idle",
+					Port:   intstr.FromInt(8888),
+					Scheme: corev1.URISchemeHTTP,
+				},
 			},
 		},
 	}
@@ -55,23 +66,12 @@ func createTestIdleConfig() *workspacev1alpha1.IdleShutdownSpec {
 
 // Tests for CreateIdleDetector
 func TestCreateIdleDetector_HTTPGet_Success(t *testing.T) {
-	// Override factory function to avoid K8s client creation in tests
-	originalCreateIdleDetector := CreateIdleDetector
-	CreateIdleDetector = func(detection *workspacev1alpha1.IdleDetectionSpec) (IdleDetector, error) {
-		if detection.HTTPGet != nil {
-			mockExecUtil := &MockPodExecUtil{}
-			return NewHTTPGetDetectorWithExec(mockExecUtil), nil
-		}
-		return nil, fmt.Errorf("no detection method configured")
-	}
-	defer func() {
-		CreateIdleDetector = originalCreateIdleDetector
-	}()
-
 	detection := &workspacev1alpha1.IdleDetectionSpec{
-		HTTPGet: &corev1.HTTPGetAction{
-			Path: "/api/idle",
-			Port: intstr.FromInt(8888),
+		HTTPGet: &workspacev1alpha1.IdleHTTPGetAction{
+			HTTPGetAction: corev1.HTTPGetAction{
+				Path: "/api/idle",
+				Port: intstr.FromInt(8888),
+			},
 		},
 	}
 
@@ -79,7 +79,7 @@ func TestCreateIdleDetector_HTTPGet_Success(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, detector)
-	assert.IsType(t, &HTTPGetDetector{}, detector)
+	assert.IsType(t, &NetworkHTTPGetDetector{}, detector)
 }
 
 func TestCreateIdleDetector_NoDetectionMethod_Error(t *testing.T) {
@@ -92,17 +92,19 @@ func TestCreateIdleDetector_NoDetectionMethod_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "no detection method configured")
 }
 
-// Tests for NewHTTPGetDetector
-func TestNewHTTPGetDetectorWithExec_Success(t *testing.T) {
+// Tests for NewPodExecHTTPGetDetector
+func TestNewPodExecHTTPGetDetectorWithExec_Success(t *testing.T) {
 	mockExecUtil := &MockPodExecUtil{}
-	detector := NewHTTPGetDetectorWithExec(mockExecUtil)
+	pod := createTestPod()
+	detector := NewPodExecHTTPGetDetectorWithExec(mockExecUtil, pod)
 
 	assert.NotNil(t, detector)
 	assert.NotNil(t, detector.execUtil)
 	assert.Equal(t, mockExecUtil, detector.execUtil)
+	assert.Equal(t, pod, detector.pod)
 }
 
-// Mock for testing HTTPGetDetector.CheckIdle
+// Mock for testing PodExecHTTPGetDetector.CheckIdle
 type MockPodExecUtil struct {
 	mock.Mock
 }
@@ -112,13 +114,13 @@ func (m *MockPodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, contai
 	return args.String(0), args.Error(1)
 }
 
-// Helper to create HTTPGetDetector with mock
-func createDetectorWithMock(mockExecUtil *MockPodExecUtil) *HTTPGetDetector {
-	return NewHTTPGetDetectorWithExec(mockExecUtil)
+// Helper to create PodExecHTTPGetDetector with mock
+func createDetectorWithMock(mockExecUtil *MockPodExecUtil) *PodExecHTTPGetDetector {
+	return NewPodExecHTTPGetDetectorWithExec(mockExecUtil, createTestPod())
 }
 
-// Test HTTPGetDetector.CheckIdle method
-func TestHTTPGetDetector_CheckIdle_Success_NotIdle(t *testing.T) {
+// Test PodExecHTTPGetDetector.CheckIdle method
+func TestPodExecHTTPGetDetector_CheckIdle_Success_NotIdle(t *testing.T) {
 	// Create mock
 	mockExecUtil := &MockPodExecUtil{}
 	detector := createDetectorWithMock(mockExecUtil)
@@ -139,7 +141,7 @@ HTTP Status: 200`, recentTime)
 		"").Return(curlOutput, nil)
 
 	// Execute
-	result, err := detector.CheckIdle(ctx, testWorkspaceName, pod, idleConfig)
+	result, err := detector.CheckIdle(ctx, createTestWorkspaceForDetector(), "localhost", idleConfig)
 
 	// Assert
 	assert.NoError(t, err)
@@ -149,7 +151,7 @@ HTTP Status: 200`, recentTime)
 	mockExecUtil.AssertExpectations(t)
 }
 
-func TestHTTPGetDetector_CheckIdle_Success_IsIdle(t *testing.T) {
+func TestPodExecHTTPGetDetector_CheckIdle_Success_IsIdle(t *testing.T) {
 	// Create mock
 	mockExecUtil := &MockPodExecUtil{}
 	detector := createDetectorWithMock(mockExecUtil)
@@ -170,7 +172,7 @@ HTTP Status: 200`, oldTime)
 		"").Return(curlOutput, nil)
 
 	// Execute
-	result, err := detector.CheckIdle(ctx, testWorkspaceName, pod, idleConfig)
+	result, err := detector.CheckIdle(ctx, createTestWorkspaceForDetector(), "localhost", idleConfig)
 
 	// Assert
 	assert.NoError(t, err)
@@ -180,7 +182,7 @@ HTTP Status: 200`, oldTime)
 	mockExecUtil.AssertExpectations(t)
 }
 
-func TestHTTPGetDetector_CheckIdle_HTTP404_PermanentFailure(t *testing.T) {
+func TestPodExecHTTPGetDetector_CheckIdle_HTTP404_PermanentFailure(t *testing.T) {
 	// Create mock
 	mockExecUtil := &MockPodExecUtil{}
 	detector := createDetectorWithMock(mockExecUtil)
@@ -199,7 +201,7 @@ func TestHTTPGetDetector_CheckIdle_HTTP404_PermanentFailure(t *testing.T) {
 		"").Return(curlOutput, nil)
 
 	// Execute
-	result, err := detector.CheckIdle(ctx, testWorkspaceName, pod, idleConfig)
+	result, err := detector.CheckIdle(ctx, createTestWorkspaceForDetector(), "localhost", idleConfig)
 
 	// Assert
 	assert.Error(t, err)
@@ -210,7 +212,7 @@ func TestHTTPGetDetector_CheckIdle_HTTP404_PermanentFailure(t *testing.T) {
 	mockExecUtil.AssertExpectations(t)
 }
 
-func TestHTTPGetDetector_CheckIdle_ConnectionRefused_TemporaryFailure(t *testing.T) {
+func TestPodExecHTTPGetDetector_CheckIdle_ConnectionRefused_TemporaryFailure(t *testing.T) {
 	// Create mock
 	mockExecUtil := &MockPodExecUtil{}
 	detector := createDetectorWithMock(mockExecUtil)
@@ -227,7 +229,7 @@ func TestHTTPGetDetector_CheckIdle_ConnectionRefused_TemporaryFailure(t *testing
 		"").Return("", errors.New("command terminated with exit code 7"))
 
 	// Execute
-	result, err := detector.CheckIdle(ctx, testWorkspaceName, pod, idleConfig)
+	result, err := detector.CheckIdle(ctx, createTestWorkspaceForDetector(), "localhost", idleConfig)
 
 	// Assert
 	assert.Error(t, err)
@@ -238,7 +240,7 @@ func TestHTTPGetDetector_CheckIdle_ConnectionRefused_TemporaryFailure(t *testing
 	mockExecUtil.AssertExpectations(t)
 }
 
-func TestHTTPGetDetector_CheckIdle_HTTP500_TemporaryFailure(t *testing.T) {
+func TestPodExecHTTPGetDetector_CheckIdle_HTTP500_TemporaryFailure(t *testing.T) {
 	// Create mock
 	mockExecUtil := &MockPodExecUtil{}
 	detector := createDetectorWithMock(mockExecUtil)
@@ -271,7 +273,7 @@ func TestHTTPGetDetector_CheckIdle_HTTP500_TemporaryFailure(t *testing.T) {
 				"").Return(curlOutput, nil)
 
 			// Execute
-			result, err := detector.CheckIdle(ctx, testWorkspaceName, pod, idleConfig)
+			result, err := detector.CheckIdle(ctx, createTestWorkspaceForDetector(), "localhost", idleConfig)
 
 			// Assert
 			assert.Error(t, err)

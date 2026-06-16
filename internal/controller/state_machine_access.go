@@ -43,12 +43,19 @@ func (sm *StateMachine) ReconcileAccessForDesiredRunningStatus(
 		workspace.Status.AccessURL = accessUrl
 		workspace.Status.AccessResourceSelector = sm.resourceManager.accessResourcesBuilder.ResolveAccessResourceSelector(
 			workspace, accessStrategy)
+
+		applicationBasePath, appBasePathErr := sm.resourceManager.accessResourcesBuilder.ResolveApplicationBasePath(workspace, accessStrategy, service)
+		if appBasePathErr != nil {
+			logger.Error(appBasePathErr, "Failed to resolve applicationBasePathTemplate")
+		}
+		workspace.Status.ApplicationBasePath = applicationBasePath
 		return nil
 	}
 	// END OF CASE 1
 
 	// CASE 2: there is no AccessStrategy (it may have been removed by an update)
 	workspace.Status.AccessURL = ""
+	workspace.Status.ApplicationBasePath = ""
 	workspace.Status.AccessResourceSelector = ""
 	workspace.Status.AccessStartupProbeSucceeded = false
 	workspace.Status.ObservedAccessStrategyVersion = ""
@@ -67,6 +74,7 @@ func (sm *StateMachine) ReconcileAccessForDesiredStoppedStatus(ctx context.Conte
 	logger := logf.FromContext(ctx)
 
 	workspace.Status.AccessURL = ""
+	workspace.Status.ApplicationBasePath = ""
 	workspace.Status.AccessResourceSelector = ""
 	workspace.Status.AccessStartupProbeSucceeded = false
 	workspace.Status.ObservedAccessStrategyVersion = ""

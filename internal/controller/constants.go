@@ -104,8 +104,11 @@ const (
 	// LongRequeueDelay is the delay for long reconciliation cycles
 	LongRequeueDelay = 60 * time.Second
 
-	// IdleCheckInterval is the interval for checking workspace idle status
-	IdleCheckInterval = 5 * time.Minute
+	// DefaultIdleCheckInterval is the default interval for checking workspace idle status
+	DefaultIdleCheckInterval = 5 * time.Minute
+
+	// IdleProbeTimeout is the per-request timeout for network-based idle detection probes
+	IdleProbeTimeout = 10 * time.Second
 
 	// WorkspaceFinalizerName is the finalizer name for workspace cleanup protection
 	WorkspaceFinalizerName = "workspace.jupyter.org/workspace-protection"
