@@ -411,7 +411,6 @@ var _ = Describe("Workspace Status", Ordered, func() {
 				ConditionTypeProgressing: ConditionFalse,
 				ConditionTypeDegraded:    ConditionFalse,
 				ConditionTypeStopped:     ConditionFalse,
-				ConditionTypeDeleting:    ConditionFalse,
 				ConditionTypeDeleting:    ConditionTrue,
 			})
 

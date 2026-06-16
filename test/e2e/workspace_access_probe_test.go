@@ -66,7 +66,7 @@ var _ = Describe("Workspace Access Startup Probe", Ordered, func() {
 				controller.ConditionTypeDegraded:    ConditionFalse,
 				controller.ConditionTypeAvailable:   ConditionTrue,
 				controller.ConditionTypeStopped:     ConditionFalse,
-				ConditionTypeDeleting:    ConditionFalse,
+				ConditionTypeDeleting:               ConditionFalse,
 			})
 
 			// Verify the workspace stays Available and doesn't oscillate.
@@ -78,7 +78,7 @@ var _ = Describe("Workspace Access Startup Probe", Ordered, func() {
 				controller.ConditionTypeProgressing: ConditionFalse,
 				controller.ConditionTypeDegraded:    ConditionFalse,
 				controller.ConditionTypeStopped:     ConditionFalse,
-				ConditionTypeDeleting:    ConditionFalse,
+				ConditionTypeDeleting:               ConditionFalse,
 			}, "1m", "5s")
 
 			By("verifying accessStartupProbeFailures is cleared after success")
@@ -126,7 +126,7 @@ var _ = Describe("Workspace Access Startup Probe", Ordered, func() {
 				controller.ConditionTypeAvailable:   ConditionFalse,
 				controller.ConditionTypeProgressing: ConditionFalse,
 				controller.ConditionTypeStopped:     ConditionFalse,
-				ConditionTypeDeleting:    ConditionFalse,
+				ConditionTypeDeleting:               ConditionFalse,
 			}, "30s", "5s")
 
 			By("verifying accessStartupProbeFailures is retained at threshold")
@@ -172,7 +172,7 @@ var _ = Describe("Workspace Access Startup Probe", Ordered, func() {
 				controller.ConditionTypeDegraded:    ConditionFalse,
 				controller.ConditionTypeAvailable:   ConditionTrue,
 				controller.ConditionTypeStopped:     ConditionFalse,
-				ConditionTypeDeleting:    ConditionFalse,
+				ConditionTypeDeleting:               ConditionFalse,
 			})
 
 			By("verifying accessStartupProbeFailures is cleared after success")

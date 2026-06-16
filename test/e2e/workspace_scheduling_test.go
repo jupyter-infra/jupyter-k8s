@@ -51,7 +51,7 @@ var _ = Describe("Workspace Scheduling", Ordered, func() {
 				controller.ConditionTypeDegraded:    ConditionFalse,
 				controller.ConditionTypeAvailable:   ConditionTrue,
 				controller.ConditionTypeStopped:     ConditionFalse,
-				ConditionTypeDeleting:    ConditionFalse,
+				ConditionTypeDeleting:               ConditionFalse,
 			})
 
 			By("verifying workspace has correct affinity spec")
@@ -85,7 +85,7 @@ var _ = Describe("Workspace Scheduling", Ordered, func() {
 				controller.ConditionTypeDegraded:    ConditionFalse,
 				controller.ConditionTypeAvailable:   ConditionTrue,
 				controller.ConditionTypeStopped:     ConditionFalse,
-				ConditionTypeDeleting:    ConditionFalse,
+				ConditionTypeDeleting:               ConditionFalse,
 			})
 
 			By("verifying workspace has correct tolerations spec")
@@ -118,7 +118,7 @@ var _ = Describe("Workspace Scheduling", Ordered, func() {
 				controller.ConditionTypeDegraded:    ConditionFalse,
 				controller.ConditionTypeAvailable:   ConditionTrue,
 				controller.ConditionTypeStopped:     ConditionFalse,
-				ConditionTypeDeleting:    ConditionFalse,
+				ConditionTypeDeleting:               ConditionFalse,
 			})
 
 			By("verifying workspace has correct node selector spec")
