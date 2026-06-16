@@ -37,6 +37,7 @@ const (
 	ConditionTypeDegraded    = "Degraded"
 	ConditionTypeAvailable   = "Available"
 	ConditionTypeStopped     = "Stopped"
+	ConditionTypeDeleting    = "Deleting"
 )
 
 // WorkspaceLabelName is the label key used to identify workspace resources

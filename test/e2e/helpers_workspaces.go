@@ -46,8 +46,9 @@ func WaitForWorkspaceToReachCondition(
 	}).WithTimeout(5 * time.Minute).WithPolling(5 * time.Second).Should(gomega.Succeed())
 }
 
-// VerifyWorkspaceConditions verifies workspace status conditions
-// expectedConditions is a map of condition type to expected status (e.g., "Progressing" -> "True")
+// VerifyWorkspaceConditions verifies workspace status conditions exactly.
+// expectedConditions is a map of condition type to expected status (e.g., "Progressing" -> "True").
+// The workspace must have exactly the conditions specified — no more, no less.
 func VerifyWorkspaceConditions(
 	workspaceName string,
 	namespace string,
@@ -217,6 +218,19 @@ func UpdateWorkspaceDesiredState(workspaceName, namespace, desiredState string) 
 		"-n", namespace, "--type=merge", "-p", patchCmd)
 	_, err := utils.Run(cmd)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Failed to update workspace desiredStatus")
+}
+
+// WaitForWorkspaceDeletion polls until the workspace is fully removed from the cluster (NotFound).
+func WaitForWorkspaceDeletion(workspaceName, namespace string) {
+	ginkgo.GinkgoHelper()
+
+	gomega.Eventually(func(g gomega.Gomega) {
+		cmd := exec.Command("kubectl", "get", "workspace", workspaceName,
+			"-n", namespace, "--ignore-not-found", "-o", "name")
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(strings.TrimSpace(output)).To(gomega.BeEmpty(), "workspace should no longer exist")
+	}).WithTimeout(2 * time.Minute).WithPolling(3 * time.Second).Should(gomega.Succeed())
 }
 
 // deleteWorkspaceAsUser deletes a workspace with kubectl impersonation

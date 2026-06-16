@@ -25,6 +25,9 @@ const (
 
 	// ConditionTypeStopped indicates if the Workspace is in a stopped state
 	ConditionTypeStopped = "Stopped"
+
+	// ConditionTypeDeleting indicates the Workspace is being deleted and resources are being cleaned up
+	ConditionTypeDeleting = "Deleting"
 )
 
 // Condition reasons for Workspace resources
@@ -53,6 +56,9 @@ const (
 
 	// ConditionTypeAvailable reasons (special cases)
 	ReasonPreempted = "Preempted"
+
+	// ConditionTypeDeleting reasons
+	ReasonDeletionInProgress = "DeletionInProgress"
 )
 
 // NewCondition creates a new condition with the specified status

@@ -59,6 +59,7 @@ var _ = Describe("Workspace Status", Ordered, func() {
 				ConditionTypeDegraded:    ConditionFalse,
 				ConditionTypeAvailable:   ConditionTrue,
 				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionFalse,
 			})
 		})
 
@@ -159,6 +160,7 @@ var _ = Describe("Workspace Status", Ordered, func() {
 				ConditionTypeDegraded:    ConditionFalse,
 				ConditionTypeAvailable:   ConditionFalse,
 				ConditionTypeStopped:     ConditionTrue,
+				ConditionTypeDeleting:    ConditionFalse,
 			})
 		})
 
@@ -278,6 +280,7 @@ var _ = Describe("Workspace Status", Ordered, func() {
 				ConditionTypeDegraded:    ConditionFalse,
 				ConditionTypeAvailable:   ConditionFalse,
 				ConditionTypeStopped:     ConditionTrue,
+				ConditionTypeDeleting:    ConditionFalse,
 			})
 
 			By("verifying .status.deploymentName is removed")
@@ -334,6 +337,7 @@ var _ = Describe("Workspace Status", Ordered, func() {
 				ConditionTypeDegraded:    ConditionFalse,
 				ConditionTypeAvailable:   ConditionTrue,
 				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionFalse,
 			})
 
 			By("retrieving deployment and service names from workspace status")
@@ -369,6 +373,49 @@ var _ = Describe("Workspace Status", Ordered, func() {
 				"{.spec.desiredStatus}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(desiredStatus).To(Equal("Running"), "desiredStatus should be defaulted to Running by the mutating webhook")
+		})
+	})
+
+	Context("Deleting State", func() {
+		const deletionWorkspace = "workspace-deletion-test"
+
+		It("should set Deleting=True and Available=False when workspace is deleted", func() {
+			By("creating workspace with desiredStatus=Running")
+			createWorkspaceForTest(deletionWorkspace, statusGroupDir, statusSubgroupDir)
+
+			By("waiting for Available condition to become True")
+			WaitForWorkspaceToReachCondition(
+				deletionWorkspace,
+				statusTestNamespace,
+				ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("deleting the workspace")
+			cmd := exec.Command("kubectl", "delete", "workspace", deletionWorkspace,
+				"-n", statusTestNamespace, "--wait=false")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for Deleting condition to become True")
+			WaitForWorkspaceToReachCondition(
+				deletionWorkspace,
+				statusTestNamespace,
+				ConditionTypeDeleting,
+				ConditionTrue,
+			)
+
+			By("verifying Available=False while Deleting=True")
+			VerifyWorkspaceConditions(deletionWorkspace, statusTestNamespace, map[string]string{
+				ConditionTypeAvailable:   ConditionFalse,
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionFalse,
+				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionTrue,
+			})
+
+			By("waiting for workspace to be fully deleted")
+			WaitForWorkspaceDeletion(deletionWorkspace, statusTestNamespace)
 		})
 	})
 })
