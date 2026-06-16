@@ -18,6 +18,11 @@ workspacePodWatching:
   # When false, pod watching is disabled
   enable: false
 
+# [IDLE SHUTDOWN]: Idle shutdown configuration
+idleShutdown:
+  # Interval between idle status checks for running workspaces (e.g. "5m", "30s").
+  checkInterval: "5m"
+
 # [ACCESS RESOURCES]: Configure resources to watch for access strategy
 accessResources:
   # Guided mode using traefik proxy

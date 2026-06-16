@@ -79,6 +79,7 @@ spec:
         {{- if .Values.controller.plugins }}
         - "--plugin-endpoints={{ range $i, $p := .Values.controller.plugins }}{{ if $i }},{{ end }}{{ $p.name }}=http://localhost:{{ $p.port }}{{ end }}"
         {{- end }}
+        - "--idle-check-interval={{ .Values.idleShutdown.checkInterval }}"
         {{- if .Values.certManager.enable }}
         - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         {{- end }}
