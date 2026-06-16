@@ -59,6 +59,7 @@ var _ = Describe("Workspace Status", Ordered, func() {
 				ConditionTypeDegraded:    ConditionFalse,
 				ConditionTypeAvailable:   ConditionTrue,
 				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionFalse,
 			})
 		})
 
@@ -159,6 +160,7 @@ var _ = Describe("Workspace Status", Ordered, func() {
 				ConditionTypeDegraded:    ConditionFalse,
 				ConditionTypeAvailable:   ConditionFalse,
 				ConditionTypeStopped:     ConditionTrue,
+				ConditionTypeDeleting:    ConditionFalse,
 			})
 		})
 
@@ -278,6 +280,7 @@ var _ = Describe("Workspace Status", Ordered, func() {
 				ConditionTypeDegraded:    ConditionFalse,
 				ConditionTypeAvailable:   ConditionFalse,
 				ConditionTypeStopped:     ConditionTrue,
+				ConditionTypeDeleting:    ConditionFalse,
 			})
 
 			By("verifying .status.deploymentName is removed")
@@ -334,6 +337,7 @@ var _ = Describe("Workspace Status", Ordered, func() {
 				ConditionTypeDegraded:    ConditionFalse,
 				ConditionTypeAvailable:   ConditionTrue,
 				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionFalse,
 			})
 
 			By("retrieving deployment and service names from workspace status")
@@ -407,6 +411,7 @@ var _ = Describe("Workspace Status", Ordered, func() {
 				ConditionTypeProgressing: ConditionFalse,
 				ConditionTypeDegraded:    ConditionFalse,
 				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionFalse,
 				ConditionTypeDeleting:    ConditionTrue,
 			})
 

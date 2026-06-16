@@ -46,8 +46,9 @@ func WaitForWorkspaceToReachCondition(
 	}).WithTimeout(5 * time.Minute).WithPolling(5 * time.Second).Should(gomega.Succeed())
 }
 
-// VerifyWorkspaceConditions verifies workspace status conditions
-// expectedConditions is a map of condition type to expected status (e.g., "Progressing" -> "True")
+// VerifyWorkspaceConditions verifies workspace status conditions exactly.
+// expectedConditions is a map of condition type to expected status (e.g., "Progressing" -> "True").
+// The workspace must have exactly the conditions specified — no more, no less.
 func VerifyWorkspaceConditions(
 	workspaceName string,
 	namespace string,

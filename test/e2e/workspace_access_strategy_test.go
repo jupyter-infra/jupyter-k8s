@@ -59,6 +59,7 @@ var _ = Describe("Workspace Access Strategy", Ordered, func() {
 				controller.ConditionTypeDegraded:    ConditionFalse,
 				controller.ConditionTypeAvailable:   ConditionTrue,
 				controller.ConditionTypeStopped:     ConditionFalse,
+				controller.ConditionTypeDeleting:    ConditionFalse,
 			})
 
 			By("retrieving deployment name from workspace status")
@@ -102,6 +103,7 @@ var _ = Describe("Workspace Access Strategy", Ordered, func() {
 				controller.ConditionTypeDegraded:    ConditionFalse,
 				controller.ConditionTypeAvailable:   ConditionTrue,
 				controller.ConditionTypeStopped:     ConditionFalse,
+				controller.ConditionTypeDeleting:    ConditionFalse,
 			})
 
 			By("verifying network policy has been created")
@@ -211,6 +213,7 @@ var _ = Describe("Workspace Access Strategy", Ordered, func() {
 				controller.ConditionTypeDegraded:    ConditionFalse,
 				controller.ConditionTypeAvailable:   ConditionFalse,
 				controller.ConditionTypeStopped:     ConditionTrue,
+				controller.ConditionTypeDeleting:    ConditionFalse,
 			})
 
 			By("verifying no access resources have been created")
@@ -299,6 +302,7 @@ var _ = Describe("Workspace Access Strategy", Ordered, func() {
 				controller.ConditionTypeDegraded:    ConditionFalse,
 				controller.ConditionTypeAvailable:   ConditionFalse,
 				controller.ConditionTypeStopped:     ConditionTrue,
+				controller.ConditionTypeDeleting:    ConditionFalse,
 			})
 
 			By("consistently verifying access resources do not exist")
@@ -376,6 +380,7 @@ var _ = Describe("Workspace Access Strategy", Ordered, func() {
 				controller.ConditionTypeDegraded:    ConditionFalse,
 				controller.ConditionTypeAvailable:   ConditionTrue,
 				controller.ConditionTypeStopped:     ConditionFalse,
+				controller.ConditionTypeDeleting:    ConditionFalse,
 			})
 
 			By("verifying all access resources have been created")
