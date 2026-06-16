@@ -12,7 +12,6 @@ import (
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -132,12 +131,20 @@ func (sm *StatusManager) UpdateStartingStatus(
 		"Workspace is starting",
 	)
 
+	deletingCondition := NewCondition(
+		ConditionTypeDeleting,
+		metav1.ConditionFalse,
+		ReasonDesiredStateRunning,
+		"Workspace is starting",
+	)
+
 	// Apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+		deletingCondition,
 	}
 
 	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
@@ -178,6 +185,7 @@ func (sm *StatusManager) UpdatePermanentDegradedRunningStatus(
 		NewCondition(ConditionTypeProgressing, metav1.ConditionFalse, degradedReason, message),
 		NewCondition(ConditionTypeDegraded, metav1.ConditionTrue, degradedReason, message),
 		NewCondition(ConditionTypeStopped, metav1.ConditionFalse, ReasonDesiredStateRunning, "Workspace desired state is Running"),
+		NewCondition(ConditionTypeDeleting, metav1.ConditionFalse, ReasonDesiredStateRunning, "Workspace desired state is Running"),
 	}
 
 	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
@@ -225,12 +233,20 @@ func (sm *StatusManager) UpdateRunningStatus(
 		"Workspace is running",
 	)
 
+	deletingCondition := NewCondition(
+		ConditionTypeDeleting,
+		metav1.ConditionFalse,
+		ReasonDesiredStateRunning,
+		"Workspace is running",
+	)
+
 	// apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+		deletingCondition,
 	}
 
 	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
@@ -306,12 +322,20 @@ func (sm *StatusManager) UpdateStoppingStatus(
 		stoppingMessage,
 	)
 
+	deletingCondition := NewCondition(
+		ConditionTypeDeleting,
+		metav1.ConditionFalse,
+		ReasonDesiredStateStopped,
+		"Workspace is stopping",
+	)
+
 	// Apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+		deletingCondition,
 	}
 
 	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
@@ -366,12 +390,20 @@ func (sm *StatusManager) UpdateStoppedStatus(
 		"Workspace is stopped",
 	)
 
+	deletingCondition := NewCondition(
+		ConditionTypeDeleting,
+		metav1.ConditionFalse,
+		ReasonDesiredStateStopped,
+		"Workspace is stopped",
+	)
+
 	// Apply all conditions
 	conditions := []metav1.Condition{
 		availableCondition,
 		progressingCondition,
 		degradedCondition,
 		stoppedCondition,
+		deletingCondition,
 	}
 
 	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
@@ -383,16 +415,24 @@ func (sm *StatusManager) UpdateStoppedStatus(
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
-// UpdateDeletingStatus sets the workspace status to indicate deletion in progress
-func (sm *StatusManager) UpdateDeletingStatus(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
-	condition := metav1.Condition{
-		Type:               "Deleting",
-		Status:             metav1.ConditionTrue,
-		Reason:             "DeletionInProgress",
-		Message:            "Workspace resources are being deleted",
-		LastTransitionTime: metav1.Now(),
+// UpdateDeletingStatus sets Deleting=True to signal deletion in progress.
+// Other conditions are left unchanged — the UI uses Deleting as highest-priority status.
+func (sm *StatusManager) UpdateDeletingStatus(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) error {
+
+	conditions := []metav1.Condition{
+		NewCondition(ConditionTypeAvailable, metav1.ConditionFalse, ReasonDeletionInProgress, "Workspace is being deleted"),
+		NewCondition(ConditionTypeProgressing, metav1.ConditionFalse, ReasonDeletionInProgress, "Workspace is being deleted"),
+		NewCondition(ConditionTypeDegraded, metav1.ConditionFalse, ReasonNoError, "No errors detected"),
+		NewCondition(ConditionTypeStopped, metav1.ConditionFalse, ReasonDeletionInProgress, "Workspace is being deleted"),
+		NewCondition(ConditionTypeDeleting, metav1.ConditionTrue, ReasonDeletionInProgress, "Workspace resources are being deleted"),
 	}
 
-	meta.SetStatusCondition(&workspace.Status.Conditions, condition)
-	return sm.client.Status().Update(ctx, workspace)
+	conditionsToUpdate := MergeConditionsIfChanged(ctx, workspace, &conditions)
+
+	workspace.Status.DeploymentName = ""
+	workspace.Status.ServiceName = ""
+	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }

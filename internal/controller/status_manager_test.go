@@ -60,7 +60,7 @@ var _ = Describe("StatusManager", func() {
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 				// Verify exactly 4 conditions
-				Expect(workspace.Status.Conditions).To(HaveLen(4))
+				Expect(workspace.Status.Conditions).To(HaveLen(5))
 
 				// Verify Available=True
 				availableCond := findCondition(workspace.Status.Conditions, ConditionTypeAvailable)
@@ -100,7 +100,7 @@ var _ = Describe("StatusManager", func() {
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 				// Verify exactly 4 conditions
-				Expect(workspace.Status.Conditions).To(HaveLen(4))
+				Expect(workspace.Status.Conditions).To(HaveLen(5))
 
 				// Verify Available=False with ComputeNotReady reason
 				availableCond := findCondition(workspace.Status.Conditions, ConditionTypeAvailable)
@@ -138,7 +138,7 @@ var _ = Describe("StatusManager", func() {
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 				// Verify exactly 4 conditions
-				Expect(workspace.Status.Conditions).To(HaveLen(4))
+				Expect(workspace.Status.Conditions).To(HaveLen(5))
 
 				// Verify Available=False with ServiceNotReady reason
 				availableCond := findCondition(workspace.Status.Conditions, ConditionTypeAvailable)
@@ -176,7 +176,7 @@ var _ = Describe("StatusManager", func() {
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 				// Verify exactly 4 conditions
-				Expect(workspace.Status.Conditions).To(HaveLen(4))
+				Expect(workspace.Status.Conditions).To(HaveLen(5))
 
 				// Verify Available=False with AccessNotReady reason
 				availableCond := findCondition(workspace.Status.Conditions, ConditionTypeAvailable)
@@ -286,7 +286,7 @@ var _ = Describe("StatusManager", func() {
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 				// Verify exactly 4 conditions
-				Expect(workspace.Status.Conditions).To(HaveLen(4))
+				Expect(workspace.Status.Conditions).To(HaveLen(5))
 
 				// Verify Degraded=True (changed from Running state)
 				degradedCond := findCondition(workspace.Status.Conditions, ConditionTypeDegraded)
@@ -336,7 +336,7 @@ var _ = Describe("StatusManager", func() {
 
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
-				Expect(workspace.Status.Conditions).To(HaveLen(4))
+				Expect(workspace.Status.Conditions).To(HaveLen(5))
 
 				// Degraded=True with degradedReason
 				degradedCond := findCondition(workspace.Status.Conditions, ConditionTypeDegraded)
@@ -391,6 +391,73 @@ var _ = Describe("StatusManager", func() {
 			})
 		})
 
+		Describe("UpdateDeletingStatus", func() {
+			It("should set all conditions coherently when deleting a running workspace", func() {
+				// First bring workspace to Running state
+				snapshot := workspace.Status.DeepCopy()
+				err := statusManager.UpdateRunningStatus(ctx, workspace, snapshot)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+
+				// Verify Available=True before deletion
+				availableCond := findCondition(workspace.Status.Conditions, ConditionTypeAvailable)
+				Expect(availableCond).NotTo(BeNil())
+				Expect(availableCond.Status).To(Equal(metav1.ConditionTrue))
+
+				// Now update to Deleting
+				snapshot = workspace.Status.DeepCopy()
+				err = statusManager.UpdateDeletingStatus(ctx, workspace, snapshot)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+
+				// Verify 5 conditions
+				Expect(workspace.Status.Conditions).To(HaveLen(5))
+
+				// Verify Available=False
+				availableCond = findCondition(workspace.Status.Conditions, ConditionTypeAvailable)
+				Expect(availableCond).NotTo(BeNil())
+				Expect(availableCond.Status).To(Equal(metav1.ConditionFalse))
+				Expect(availableCond.Reason).To(Equal(ReasonDeletionInProgress))
+
+				// Verify Progressing=False
+				progressingCond := findCondition(workspace.Status.Conditions, ConditionTypeProgressing)
+				Expect(progressingCond).NotTo(BeNil())
+				Expect(progressingCond.Status).To(Equal(metav1.ConditionFalse))
+
+				// Verify Degraded=False
+				degradedCond := findCondition(workspace.Status.Conditions, ConditionTypeDegraded)
+				Expect(degradedCond).NotTo(BeNil())
+				Expect(degradedCond.Status).To(Equal(metav1.ConditionFalse))
+
+				// Verify Stopped=False
+				stoppedCond := findCondition(workspace.Status.Conditions, ConditionTypeStopped)
+				Expect(stoppedCond).NotTo(BeNil())
+				Expect(stoppedCond.Status).To(Equal(metav1.ConditionFalse))
+
+				// Verify Deleting=True
+				deletingCond := findCondition(workspace.Status.Conditions, ConditionTypeDeleting)
+				Expect(deletingCond).NotTo(BeNil())
+				Expect(deletingCond.Status).To(Equal(metav1.ConditionTrue))
+				Expect(deletingCond.Reason).To(Equal(ReasonDeletionInProgress))
+			})
+
+			It("should clear DeploymentName and ServiceName", func() {
+				// Set resource names first
+				workspace.Status.DeploymentName = "test-deployment"
+				workspace.Status.ServiceName = "test-service"
+				Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+
+				snapshot := workspace.Status.DeepCopy()
+				err := statusManager.UpdateDeletingStatus(ctx, workspace, snapshot)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+
+				Expect(workspace.Status.DeploymentName).To(BeEmpty())
+				Expect(workspace.Status.ServiceName).To(BeEmpty())
+			})
+		})
+
 		Describe("Condition Ordering Consistency", func() {
 			It("should maintain consistent condition order across all status updates", func() {
 				expectedOrder := []string{
@@ -398,6 +465,7 @@ var _ = Describe("StatusManager", func() {
 					ConditionTypeProgressing,
 					ConditionTypeDegraded,
 					ConditionTypeStopped,
+					ConditionTypeDeleting,
 				}
 
 				// Test UpdateStartingStatus

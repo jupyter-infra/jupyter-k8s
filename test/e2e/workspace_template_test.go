@@ -84,6 +84,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 				controller.ConditionTypeDegraded:    ConditionFalse,
 				controller.ConditionTypeAvailable:   ConditionTrue,
 				controller.ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:               ConditionFalse,
 			})
 		})
 
@@ -160,6 +161,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 				controller.ConditionTypeDegraded:    ConditionFalse,
 				controller.ConditionTypeAvailable:   ConditionTrue,
 				controller.ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:               ConditionFalse,
 			})
 		})
 
@@ -521,6 +523,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 				controller.ConditionTypeDegraded:    ConditionFalse,
 				controller.ConditionTypeAvailable:   ConditionTrue,
 				controller.ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:               ConditionFalse,
 			})
 
 			By("verifying templateRef was changed")
