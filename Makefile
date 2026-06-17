@@ -461,7 +461,7 @@ load-images-e2e: build-rotator ## Build and load all images into the e2e test Ki
 .PHONY: kubectl-kind
 kubectl-kind: ## Configure kubectl to use kind cluster
 	@echo "Setting kubectl context to kind-$(DEV_KIND_CLUSTER)..."
-	@if kubectl config get-contexts | grep -q "kind-$(DEV_KIND_CLUSTER)"; then \
+	@if kubectl config get-contexts -o name | grep "kind-$(DEV_KIND_CLUSTER)" > /dev/null 2>&1; then \
 		kubectl config use-context kind-$(DEV_KIND_CLUSTER); \
 		echo "✅ kubectl configured to use kind cluster. Current context: $$(kubectl config current-context)"; \
 	else \
@@ -605,7 +605,7 @@ setup-aws:
 
 kubectl-aws-internal: ## Configure kubectl to use remote cluster
 	@echo "Setting up kubectl to use remote cluster..."
-	@if kubectl config get-contexts | grep -q "$(EKS_CLUSTER_NAME)"; then \
+	@if kubectl config get-contexts -o name | grep "$(EKS_CLUSTER_NAME)" > /dev/null 2>&1; then \
 		echo "Switching to EKS cluster context..."; \
 		kubectl config use-context "$(EKS_CONTEXT)"; \
 		echo "✅ kubectl configured to use remote cluster. Current context: $$(kubectl config current-context)"; \
