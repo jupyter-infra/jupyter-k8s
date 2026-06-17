@@ -156,7 +156,7 @@ so push to get the complete CI review.
 For a continuous loop where every commit is reviewed automatically (opt-in):
 
 ```bash
-make review-setup  # one-time: installs the roborev post-commit hook + daemon
+make review-setup  # one-time: installs the roborev post-commit hook
 # then, after any commit:
 roborev show HEAD  # see the latest review
 roborev refine     # iterate: review, fix, repeat until clean
