@@ -136,7 +136,7 @@ Ask user before running.
 
 ## Automated code review
 
-Open PRs are reviewed automatically by [roborev](https://github.com/roborev-dev/roborev)
+Open PRs are reviewed automatically by [roborev](https://roborev.io)
 in CI (`.github/workflows/roborev-review.yml`): each revision gets one review comment,
 backed by Claude on Bedrock. The review is informational, maintainers still approve and merge.
 
@@ -147,9 +147,11 @@ You can run the same review locally before pushing. Install roborev from
 make review        # review the current branch vs main, on demand
 ```
 
-`make review` runs `roborev review --branch --local`: no daemon, no background process,
-using whatever coding agent you have installed (claude-code, codex, gemini, ...). It shares
-the review policy in [`.roborev.toml`](.roborev.toml) with CI, so the review types match.
+`make review` runs `roborev review --branch --local --wait`: no daemon, no background
+process, using whatever coding agent you have installed (claude-code, codex, gemini, ...).
+It shares the policy file [`.roborev.toml`](.roborev.toml) with CI. CI runs the full matrix
+defined there (the `default` and `security` review types); a local run does a single review,
+so push to get the complete CI review.
 
 For a continuous loop where every commit is reviewed automatically (opt-in):
 

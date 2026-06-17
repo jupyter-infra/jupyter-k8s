@@ -82,7 +82,9 @@ make review
 
 This reviews your current branch against `main` using whatever AI coding agent you have
 installed (claude-code, codex, gemini, and others), with no daemon or background process. It
-shares its review policy (`.roborev.toml`) with CI, so local findings match what CI will post.
+shares the policy file (`.roborev.toml`) with CI. CI runs the full matrix defined there (the
+`default` and `security` review types); a local run does a single review, so push to get the
+complete CI review.
 
 To review every commit automatically instead of on demand (opt-in):
 
