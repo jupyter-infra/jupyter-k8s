@@ -240,7 +240,6 @@ func TestNetworkHTTPGetDetector_ApplicationBasePath(t *testing.T) {
 	assert.Equal(t, "/workspaces/default/ws1/api/status", receivedPath)
 }
 
-
 func splitHostPort(t *testing.T, srv *httptest.Server) (string, string) {
 	t.Helper()
 	host, port, err := net.SplitHostPort(srv.Listener.Addr().String())

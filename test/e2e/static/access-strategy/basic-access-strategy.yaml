@@ -7,3 +7,4 @@ spec:
   displayName: Test Access Strategy
   accessResourceTemplates: []
   accessURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
+  applicationBasePathTemplate: "/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"
