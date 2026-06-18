@@ -99,7 +99,7 @@ _Appears in:_
 | `host` _string_ | Host name to connect to, defaults to the pod IP. You probably want to set<br />"Host" in httpHeaders instead. |  | Optional: \{\} <br /> |
 | `scheme` _[URIScheme](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#urischeme-v1-core)_ | Scheme to use for connecting to the host.<br />Defaults to HTTP. |  | Optional: \{\} <br /> |
 | `httpHeaders` _[HTTPHeader](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#httpheader-v1-core) array_ | Custom headers to set in the request. HTTP allows repeated headers. |  | Optional: \{\} <br /> |
-| `transport` _string_ | Transport selects how the operator reaches the endpoint.<br />"podExec" executes curl inside the workspace container (legacy).<br />"network" makes a direct HTTP call from the operator to the pod IP. | podExec | Enum: [podExec network] <br />Optional: \{\} <br /> |
+| `transport` _string_ | Transport selects how the operator reaches the endpoint.<br />"podExec" executes curl inside the workspace container (legacy).<br />"network" makes a direct HTTP call from the operator to the workspace Service's ClusterIP. | podExec | Enum: [podExec network] <br />Optional: \{\} <br /> |
 | `lastActivityTimestamp` _[IdleLastActivityTimestampSpec](#idlelastactivitytimestampspec)_ | LastActivityTimestamp describes how to extract and parse the last-activity<br />timestamp from the JSON response body. |  | Optional: \{\} <br /> |
 
 

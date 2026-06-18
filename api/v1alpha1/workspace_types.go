@@ -98,7 +98,7 @@ type IdleHTTPGetAction struct {
 
 	// Transport selects how the operator reaches the endpoint.
 	// "podExec" executes curl inside the workspace container (legacy).
-	// "network" makes a direct HTTP call from the operator to the pod IP.
+	// "network" makes a direct HTTP call from the operator to the workspace Service's ClusterIP.
 	// +kubebuilder:validation:Enum=podExec;network
 	// +kubebuilder:default=podExec
 	// +optional
