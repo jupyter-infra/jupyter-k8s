@@ -1,0 +1,15 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: idle-shutdown-test-strategy
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: Idle Shutdown Test Strategy
+  accessResourceTemplates: []
+  applicationBasePathTemplate: "/workspaces/{{.Workspace.Namespace}}/{{.Workspace.Name}}/"
+  deploymentModifications:
+    podModifications:
+      primaryContainerModifications:
+        mergeEnv:
+          - name: JUPYTER_BASE_URL
+            valueTemplate: "/workspaces/{{.Workspace.Namespace}}/{{.Workspace.Name}}/"

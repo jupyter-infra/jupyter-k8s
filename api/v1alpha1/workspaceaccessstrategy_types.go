@@ -135,6 +135,15 @@ type WorkspaceAccessStrategySpec struct {
 	// +optional
 	AccessURLTemplate string `json:"accessURLTemplate,omitempty"`
 
+	// ApplicationBasePathTemplate is a Go template string for the routing prefix under which
+	// the workspace application is served. Used by idle detection to construct the full
+	// endpoint path: resolvedBasePath + httpGet.path.
+	// Template variables: .Workspace, .AccessStrategy, .Service
+	// Defaults to "/" when absent.
+	// Example: "/workspaces/{{.Workspace.Namespace}}/{{.Workspace.Name}}/"
+	// +optional
+	ApplicationBasePathTemplate string `json:"applicationBasePathTemplate,omitempty"`
+
 	// BearerAuthURLTemplate is a template string for constructing the bearer auth URL
 	// Template variables include .Workspace and .AccessStrategy objects
 	// Used by the extension API to generate initial authentication URLs

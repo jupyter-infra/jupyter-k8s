@@ -133,6 +133,15 @@ spec:
                   If not provided, the AccessURL will not be set in the workspace status
                   Example: "https://example.com/workspace-path/"
                 type: string
+              applicationBasePathTemplate:
+                description: |-
+                  ApplicationBasePathTemplate is a Go template string for the routing prefix under which
+                  the workspace application is served. Used by idle detection to construct the full
+                  endpoint path: resolvedBasePath + httpGet.path.
+                  Template variables: .Workspace, .AccessStrategy, .Service
+                  Defaults to "/" when absent.
+                  Example: "/workspaces/{{.Workspace.Namespace}}/{{.Workspace.Name}}/"
+                type: string
               bearerAuthURLTemplate:
                 description: |-
                   BearerAuthURLTemplate is a template string for constructing the bearer auth URL

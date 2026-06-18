@@ -448,6 +448,114 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 		})
 	})
 
+	Context("applicationBasePath materialization", func() {
+		var accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
+
+		newWorkspaceWithAccessStrategy := func() *workspacev1alpha1.Workspace {
+			ws := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("sm-basepath-%d", time.Now().UnixNano()),
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					Image:         "jupyter/base-notebook:latest",
+					DesiredStatus: DesiredStateRunning,
+					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
+						Name: "test-strategy",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).To(Succeed())
+			return ws
+		}
+
+		BeforeEach(func() {
+			accessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-strategy",
+					Namespace:  "default",
+					UID:        types.UID("test-uid"),
+					Generation: 1,
+				},
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					DisplayName:             "Test Strategy",
+					AccessResourceTemplates: []workspacev1alpha1.AccessResourceTemplate{},
+				},
+			}
+		})
+
+		It("should set ApplicationBasePath from a templated value", func() {
+			mockProber.ready = true
+			accessStrategy.Spec.ApplicationBasePathTemplate = "/workspaces/{{.Workspace.Namespace}}/{{.Workspace.Name}}/"
+
+			workspace := newWorkspaceWithAccessStrategy()
+			dep := createReadyDeployment(workspace)
+			svc := createService(workspace)
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			sm := buildStateMachine()
+			_, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+			Expect(workspace.Status.ApplicationBasePath).To(Equal(
+				fmt.Sprintf("/workspaces/%s/%s/", workspace.Namespace, workspace.Name)))
+		})
+
+		It("should leave ApplicationBasePath empty when not configured", func() {
+			mockProber.ready = true
+
+			workspace := newWorkspaceWithAccessStrategy()
+			dep := createReadyDeployment(workspace)
+			svc := createService(workspace)
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			sm := buildStateMachine()
+			_, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+			Expect(workspace.Status.ApplicationBasePath).To(Equal(""))
+		})
+
+		It("should clear ApplicationBasePath when access strategy is removed", func() {
+			// Create a workspace without an AccessStrategy ref
+			ws := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("sm-basepath-clear-%d", time.Now().UnixNano()),
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					Image:         "jupyter/base-notebook:latest",
+					DesiredStatus: DesiredStateRunning,
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).To(Succeed())
+			dep := createReadyDeployment(ws)
+			svc := createService(ws)
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, ws) }()
+
+			// Simulate a previously-set base path (from before access strategy was removed)
+			ws.Status.ApplicationBasePath = "/workspaces/default/old/"
+			Expect(k8sClient.Status().Update(ctx, ws)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(ws), ws)).To(Succeed())
+
+			// Reconcile with nil accessStrategy (no ref in spec)
+			sm := buildStateMachine()
+			_, err := sm.ReconcileDesiredState(ctx, ws, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(ws), ws)).To(Succeed())
+			Expect(ws.Status.ApplicationBasePath).To(Equal(""))
+		})
+	})
+
 	Context("error paths", func() {
 		var accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
 
