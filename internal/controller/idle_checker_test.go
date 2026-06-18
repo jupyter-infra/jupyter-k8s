@@ -8,6 +8,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -138,7 +139,7 @@ func setupWorkspaceIdleCheckerTest(_ *testing.T) *testSetup {
 
 	// Override factory function
 	originalCreateIdleDetector := CreateIdleDetector
-	CreateIdleDetector = func(detection *workspacev1alpha1.IdleDetectionSpec) (IdleDetector, error) {
+	CreateIdleDetector = func(detection *workspacev1alpha1.IdleDetectionSpec, _ *http.Client) (IdleDetector, error) {
 		return mockDetector, nil
 	}
 
@@ -152,6 +153,50 @@ func setupWorkspaceIdleCheckerTest(_ *testing.T) *testSetup {
 		idleConfig:   idleConfig,
 		mockDetector: mockDetector,
 		cleanup:      cleanup,
+	}
+}
+
+// TestWorkspaceIdleChecker_ReusesHTTPClient verifies that the checker owns a single
+// long-lived *http.Client and hands that same instance to the detector factory on every
+// network idle check, rather than allocating a fresh client (and connection pool) per check.
+func TestWorkspaceIdleChecker_ReusesHTTPClient(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = workspacev1alpha1.AddToScheme(scheme)
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	checker := NewWorkspaceIdleChecker(fakeClient, 0)
+
+	// The checker must own a non-nil client up front.
+	assert.NotNil(t, checker.httpClient, "checker should allocate its http.Client eagerly")
+
+	// Capture the client passed to the factory on each call.
+	var captured []*http.Client
+	originalCreateIdleDetector := CreateIdleDetector
+	CreateIdleDetector = func(_ *workspacev1alpha1.IdleDetectionSpec, httpClient *http.Client) (IdleDetector, error) {
+		captured = append(captured, httpClient)
+		mockDetector := &MockIdleDetector{}
+		mockDetector.On("CheckIdle", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(&IdleCheckResult{IsIdle: false, ShouldRetry: true}, nil)
+		return mockDetector, nil
+	}
+	defer func() { CreateIdleDetector = originalCreateIdleDetector }()
+
+	workspace := createTestWorkspace()
+	service := createTestService()
+	idleConfig := createTestIdleConfigChecker(testTimeoutMinutes)
+
+	const checks = 3
+	for range [checks]struct{}{} {
+		_, err := checker.CheckWorkspaceIdle(context.Background(), workspace, service, idleConfig)
+		assert.NoError(t, err)
+	}
+
+	// The factory must have been called once per check, each time with the SAME
+	// client instance, and that instance must be the one the checker holds.
+	assert.Len(t, captured, checks)
+	for i, c := range captured {
+		assert.Same(t, checker.httpClient, c, "check %d received a different *http.Client", i)
 	}
 }
 
@@ -359,7 +404,7 @@ func TestWorkspaceIdleChecker_CheckWorkspaceIdle_DetectorCreationFailure(t *test
 
 	// Override factory function to return error
 	originalCreateIdleDetector := CreateIdleDetector
-	CreateIdleDetector = func(detection *workspacev1alpha1.IdleDetectionSpec) (IdleDetector, error) {
+	CreateIdleDetector = func(detection *workspacev1alpha1.IdleDetectionSpec, _ *http.Client) (IdleDetector, error) {
 		return nil, fmt.Errorf("failed to create detector: unsupported detection method")
 	}
 	defer func() {

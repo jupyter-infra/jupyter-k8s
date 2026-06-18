@@ -107,6 +107,12 @@ const (
 	// DefaultIdleCheckInterval is the default interval for checking workspace idle status
 	DefaultIdleCheckInterval = 5 * time.Minute
 
+	// MinIdleCheckInterval is the floor for the idle check interval. Sub-second
+	// intervals would reconcile and HTTP-probe every running workspace at that
+	// rate, saturating the work queue at scale, so positive values below this
+	// floor are clamped up to it.
+	MinIdleCheckInterval = 1 * time.Second
+
 	// IdleProbeTimeout is the per-request timeout for network-based idle detection probes
 	IdleProbeTimeout = 10 * time.Second
 

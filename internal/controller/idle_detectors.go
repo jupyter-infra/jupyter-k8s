@@ -10,7 +10,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -34,16 +36,17 @@ type IdleDetector interface {
 	CheckIdle(ctx context.Context, workspace *workspacev1alpha1.Workspace, host string, idleConfig *workspacev1alpha1.IdleShutdownSpec) (*IdleCheckResult, error)
 }
 
-func createIdleDetectorImpl(detection *workspacev1alpha1.IdleDetectionSpec) (IdleDetector, error) {
+func createIdleDetectorImpl(detection *workspacev1alpha1.IdleDetectionSpec, httpClient *http.Client) (IdleDetector, error) {
 	if detection.HTTPGet == nil {
 		return nil, fmt.Errorf("no detection method configured")
 	}
-	return NewNetworkHTTPGetDetector(), nil
+	return NewNetworkHTTPGetDetectorWithClient(httpClient), nil
 }
 
 // CreateIdleDetector is the factory used by the idle checker to instantiate a detector
-// for the network transport path. It is a package-level var so that unit tests can
-// override it with a mock detector without requiring a real HTTP server.
+// for the network transport path. The httpClient is owned by the WorkspaceIdleChecker
+// and shared across checks so connections are pooled. It is a package-level var so that
+// unit tests can override it with a mock detector without requiring a real HTTP server.
 var CreateIdleDetector = createIdleDetectorImpl
 
 // --- podExec transport (curl-in-pod) ---
@@ -81,17 +84,12 @@ func (h *PodExecHTTPGetDetector) CheckIdle(ctx context.Context, workspace *works
 		return &IdleCheckResult{IsIdle: false, ShouldRetry: false}, fmt.Errorf("httpGet config is nil")
 	}
 
-	scheme := string(httpGetConfig.Scheme)
-	if scheme == "" {
-		scheme = "http"
-	}
-	port := httpGetConfig.Port.String()
 	fullPath := resolveIdlePath(workspace.Status.ApplicationBasePath, httpGetConfig.Path)
-	url := fmt.Sprintf("%s://localhost:%s%s", scheme, port, fullPath)
+	probeURL := buildIdleProbeURL(httpGetConfig, "localhost", fullPath)
 
-	cmd := []string{"curl", "-s", "-w", "\\nHTTP Status: %{http_code}\\n", url}
+	cmd := []string{"curl", "-s", "-w", "\\nHTTP Status: %{http_code}\\n", probeURL}
 
-	logger.V(1).Info("Calling idle endpoint via podExec", "port", port, "path", fullPath)
+	logger.V(1).Info("Calling idle endpoint via podExec", "url", probeURL)
 
 	const workspaceContainerName = "workspace"
 	output, err := h.execUtil.ExecInPod(ctx, h.pod, workspaceContainerName, cmd, "")
@@ -128,18 +126,9 @@ type NetworkHTTPGetDetector struct {
 	httpClient *http.Client
 }
 
-// NewNetworkHTTPGetDetector creates a new NetworkHTTPGetDetector with a shared http.Client
-func NewNetworkHTTPGetDetector() *NetworkHTTPGetDetector {
-	return &NetworkHTTPGetDetector{
-		httpClient: &http.Client{
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		},
-	}
-}
-
-// NewNetworkHTTPGetDetectorWithClient creates a NetworkHTTPGetDetector with a custom http.Client (for testing)
+// NewNetworkHTTPGetDetectorWithClient creates a NetworkHTTPGetDetector that reuses the
+// provided http.Client. The client is owned by the WorkspaceIdleChecker and shared across
+// checks so TCP/TLS connections are pooled rather than re-established every cycle.
 func NewNetworkHTTPGetDetectorWithClient(client *http.Client) *NetworkHTTPGetDetector {
 	return &NetworkHTTPGetDetector{httpClient: client}
 }
@@ -153,20 +142,15 @@ func (n *NetworkHTTPGetDetector) CheckIdle(ctx context.Context, workspace *works
 		return &IdleCheckResult{IsIdle: false, ShouldRetry: false}, fmt.Errorf("httpGet config is nil")
 	}
 
-	scheme := string(httpGetConfig.Scheme)
-	if scheme == "" {
-		scheme = "http"
-	}
-	port := httpGetConfig.Port.String()
 	fullPath := resolveIdlePath(workspace.Status.ApplicationBasePath, httpGetConfig.Path)
-	url := fmt.Sprintf("%s://%s:%s%s", scheme, host, port, fullPath)
+	probeURL := buildIdleProbeURL(httpGetConfig, host, fullPath)
 
-	logger.V(1).Info("Calling idle endpoint via network", "url", url)
+	logger.V(1).Info("Calling idle endpoint via network", "url", probeURL)
 
 	reqCtx, cancel := context.WithTimeout(ctx, IdleProbeTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, probeURL, nil)
 	if err != nil {
 		return &IdleCheckResult{IsIdle: false, ShouldRetry: false}, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -296,6 +280,28 @@ func resolveIdlePath(basePath, httpGetPath string) string {
 		return httpGetPath
 	}
 	return strings.TrimRight(basePath, "/") + "/" + strings.TrimLeft(httpGetPath, "/")
+}
+
+// buildIdleProbeURL assembles the probe URL from components rather than string
+// concatenation. Building via url.URL keeps the workspace-controlled path confined
+// to the URL path: a value like "@evil-host/x" cannot collapse the host into userinfo
+// and steer the probe off the pinned host, and a path missing its leading slash
+// ("api/status") still yields a well-formed URL instead of an unparseable one.
+// net.JoinHostPort also produces correct bracketing for IPv6 hosts.
+func buildIdleProbeURL(httpGetConfig *workspacev1alpha1.IdleHTTPGetAction, host, fullPath string) string {
+	scheme := strings.ToLower(string(httpGetConfig.Scheme))
+	if scheme == "" {
+		scheme = "http"
+	}
+	if !strings.HasPrefix(fullPath, "/") {
+		fullPath = "/" + fullPath
+	}
+	u := url.URL{
+		Scheme: scheme,
+		Host:   net.JoinHostPort(host, httpGetConfig.Port.String()),
+		Path:   fullPath,
+	}
+	return u.String()
 }
 
 // checkIdleTimeout checks if workspace should be stopped due to idle timeout

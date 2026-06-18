@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -75,7 +76,7 @@ func TestCreateIdleDetector_HTTPGet_Success(t *testing.T) {
 		},
 	}
 
-	detector, err := CreateIdleDetector(detection)
+	detector, err := CreateIdleDetector(detection, http.DefaultClient)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, detector)
@@ -85,7 +86,7 @@ func TestCreateIdleDetector_HTTPGet_Success(t *testing.T) {
 func TestCreateIdleDetector_NoDetectionMethod_Error(t *testing.T) {
 	detection := &workspacev1alpha1.IdleDetectionSpec{}
 
-	detector, err := CreateIdleDetector(detection)
+	detector, err := CreateIdleDetector(detection, http.DefaultClient)
 
 	assert.Error(t, err)
 	assert.Nil(t, detector)

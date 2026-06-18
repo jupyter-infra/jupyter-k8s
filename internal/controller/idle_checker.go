@@ -8,6 +8,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -32,17 +33,32 @@ type IdleCheckResult struct {
 type WorkspaceIdleChecker struct {
 	client        client.Client
 	checkInterval time.Duration
+
+	// httpClient is shared across all network idle checks so TCP (and TLS)
+	// connections to frequently-probed services are reused between cycles
+	// instead of re-handshaked. http.Client is safe for concurrent use; the
+	// per-request timeout is applied via context in the detector.
+	httpClient *http.Client
 }
 
 // NewWorkspaceIdleChecker creates a new WorkspaceIdleChecker instance.
 // If checkInterval is zero or negative, DefaultIdleCheckInterval is used.
+// Positive values below MinIdleCheckInterval are clamped up to that floor.
 func NewWorkspaceIdleChecker(k8sClient client.Client, checkInterval time.Duration) *WorkspaceIdleChecker {
-	if checkInterval <= 0 {
+	switch {
+	case checkInterval <= 0:
 		checkInterval = DefaultIdleCheckInterval
+	case checkInterval < MinIdleCheckInterval:
+		checkInterval = MinIdleCheckInterval
 	}
 	return &WorkspaceIdleChecker{
 		client:        k8sClient,
 		checkInterval: checkInterval,
+		httpClient: &http.Client{
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}
 }
 
@@ -79,7 +95,7 @@ func (w *WorkspaceIdleChecker) checkViaNetwork(ctx context.Context, workspace *w
 		return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("service has no ClusterIP")
 	}
 
-	detector, err := CreateIdleDetector(&idleConfig.Detection)
+	detector, err := CreateIdleDetector(&idleConfig.Detection, w.httpClient)
 	if err != nil {
 		logger.Error(err, "Failed to create idle detector")
 		return &IdleCheckResult{IsIdle: false, ShouldRetry: false}, fmt.Errorf("failed to create idle detector: %w", err)

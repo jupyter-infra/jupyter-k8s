@@ -7,9 +7,14 @@ package controller
 
 import (
 	"fmt"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
 
 func TestResolveIdlePath(t *testing.T) {
@@ -31,6 +36,146 @@ func TestResolveIdlePath(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestBuildIdleProbeURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		scheme   corev1.URIScheme
+		port     intstr.IntOrString
+		host     string
+		fullPath string
+		expected string
+	}{
+		{
+			name:     "default scheme when empty",
+			port:     intstr.FromInt(8888),
+			host:     "10.96.0.1",
+			fullPath: "/api/status",
+			expected: "http://10.96.0.1:8888/api/status",
+		},
+		{
+			name:     "explicit https scheme",
+			scheme:   corev1.URISchemeHTTPS,
+			port:     intstr.FromInt(8888),
+			host:     "10.96.0.1",
+			fullPath: "/api/status",
+			expected: "https://10.96.0.1:8888/api/status",
+		},
+		{
+			// Path missing a leading slash must still produce a parseable URL
+			// rather than "http://host:8888api/status" (which fails to parse and
+			// would silently disable idle shutdown for the workspace).
+			name:     "path without leading slash is normalized",
+			port:     intstr.FromInt(8888),
+			host:     "10.96.0.1",
+			fullPath: "api/status",
+			expected: "http://10.96.0.1:8888/api/status",
+		},
+		{
+			// A workspace-controlled path beginning with "@" must NOT be able to
+			// collapse the pinned host into userinfo and steer the probe elsewhere.
+			// The host must remain the ClusterIP we were given.
+			name:     "userinfo injection cannot override host",
+			port:     intstr.FromInt(8888),
+			host:     "10.96.0.1",
+			fullPath: "@10.0.0.5/x",
+			expected: "http://10.96.0.1:8888/@10.0.0.5/x",
+		},
+		{
+			name:     "ipv6 host is bracketed",
+			port:     intstr.FromInt(8888),
+			host:     "fd00::1",
+			fullPath: "/api/status",
+			expected: "http://[fd00::1]:8888/api/status",
+		},
+		{
+			// Scheme comes from the CRD as a corev1.URIScheme ("HTTP"/"HTTPS",
+			// uppercase). It must be lowercased so the URL scheme is valid.
+			name:     "uppercase scheme is lowercased",
+			scheme:   corev1.URIScheme("HTTP"),
+			port:     intstr.FromInt(8888),
+			host:     "10.96.0.1",
+			fullPath: "/api/status",
+			expected: "http://10.96.0.1:8888/api/status",
+		},
+		{
+			// Port may be a named service port (intstr string form); it must be
+			// passed through verbatim rather than coerced to a number.
+			name:     "named string port is preserved",
+			port:     intstr.FromString("http-web"),
+			host:     "10.96.0.1",
+			fullPath: "/api/status",
+			expected: "http://10.96.0.1:http-web/api/status",
+		},
+		{
+			name:     "localhost host (podExec transport)",
+			port:     intstr.FromInt(8888),
+			host:     "localhost",
+			fullPath: "/api/idle",
+			expected: "http://localhost:8888/api/idle",
+		},
+		{
+			// An empty resolved path must still yield a valid root URL.
+			name:     "empty path becomes root",
+			port:     intstr.FromInt(8888),
+			host:     "10.96.0.1",
+			fullPath: "",
+			expected: "http://10.96.0.1:8888/",
+		},
+		{
+			// A workspace-controlled path must not be able to smuggle a query
+			// string into the probe URL; "?" is escaped inside the path segment.
+			name:     "query injection in path is escaped",
+			port:     intstr.FromInt(8888),
+			host:     "10.96.0.1",
+			fullPath: "/api/status?foo=bar",
+			expected: "http://10.96.0.1:8888/api/status%3Ffoo=bar",
+		},
+		{
+			// A protocol-relative-looking path ("//host") stays in the path and
+			// cannot repoint the request at another host.
+			name:     "double-slash path cannot repoint host",
+			port:     intstr.FromInt(8888),
+			host:     "10.96.0.1",
+			fullPath: "//evil.example.com/x",
+			expected: "http://10.96.0.1:8888//evil.example.com/x",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &workspacev1alpha1.IdleHTTPGetAction{
+				HTTPGetAction: corev1.HTTPGetAction{
+					Scheme: tt.scheme,
+					Port:   tt.port,
+				},
+			}
+			result := buildIdleProbeURL(cfg, tt.host, tt.fullPath)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+
+	// Security invariant: regardless of the workspace-controlled path, the host
+	// the request actually targets must remain the host we pinned. Parse the
+	// result back and assert net/http would dial the pinned host:port.
+	t.Run("host stays pinned for hostile paths", func(t *testing.T) {
+		const host, port = "10.96.0.1", "8888"
+		hostilePaths := []string{
+			"@10.0.0.5/x",          // userinfo collapse
+			"//evil.example.com/x", // protocol-relative
+			"@evil.example.com",    // userinfo without path
+			"api/status",           // missing leading slash
+		}
+		cfg := &workspacev1alpha1.IdleHTTPGetAction{
+			HTTPGetAction: corev1.HTTPGetAction{Port: intstr.FromString(port)},
+		}
+		for _, p := range hostilePaths {
+			parsed, err := url.Parse(buildIdleProbeURL(cfg, host, p))
+			assert.NoError(t, err, "path %q should produce a parseable URL", p)
+			assert.Equal(t, host+":"+port, parsed.Host, "path %q must not repoint the host", p)
+		}
+	})
 }
 
 func TestExtractJSONField(t *testing.T) {
