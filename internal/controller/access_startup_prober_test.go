@@ -18,6 +18,23 @@ import (
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
 
+// countingRoundTripper records how many requests pass through it and returns a
+// canned 200 response, so a test can assert which http.Client actually served a
+// request without needing a real network endpoint.
+type countingRoundTripper struct {
+	calls int
+}
+
+func (c *countingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	c.calls++
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       http.NoBody,
+		Request:    req,
+		Header:     make(http.Header),
+	}, nil
+}
+
 var _ = Describe("AccessStartupProber", func() {
 	var (
 		prober         *AccessStartupProber
@@ -232,6 +249,39 @@ var _ = Describe("AccessStartupProber", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ready).To(BeTrue())
 			Expect(redirectCount).To(Equal(1))
+		})
+
+		It("should reuse the prober's long-lived http.Client across probes", func() {
+			// The prober holds a single long-lived http.Client (created once in
+			// NewAccessStartupProber) so connections are pooled across probe cycles
+			// rather than re-handshaked per probe. Verify the SAME client instance
+			// is used on every Probe by routing it through a counting RoundTripper:
+			// if Probe ever allocated a fresh client, this transport would not be hit.
+			counting := &countingRoundTripper{}
+			prober.client = &http.Client{
+				Transport: counting,
+				CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+					return http.ErrUseLastResponse
+				},
+			}
+
+			accessStrategy.Spec.AccessStartupProbe = &workspacev1alpha1.AccessStartupProbe{
+				HTTPGet: &workspacev1alpha1.AccessHTTPGetProbe{
+					URLTemplate: "http://probe.test.invalid/",
+				},
+				TimeoutSeconds: 5,
+			}
+
+			const probes = 3
+			for i := 0; i < probes; i++ {
+				ready, err := prober.Probe(context.Background(), workspace, accessStrategy, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ready).To(BeTrue())
+			}
+
+			Expect(counting.calls).To(Equal(probes),
+				"every Probe must go through the prober's long-lived client; "+
+					"got %d transport calls for %d probes", counting.calls, probes)
 		})
 
 		It("should resolve URL templates", func() {
