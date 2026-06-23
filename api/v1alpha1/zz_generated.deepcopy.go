@@ -751,6 +751,11 @@ func (in *WorkspaceSpec) DeepCopyInto(out *WorkspaceSpec) {
 		*out = new(v1.Lifecycle)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ReadinessProbe != nil {
+		in, out := &in.ReadinessProbe, &out.ReadinessProbe
+		*out = new(v1.Probe)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.AccessStrategy != nil {
 		in, out := &in.AccessStrategy, &out.AccessStrategy
 		*out = new(AccessStrategyRef)
@@ -996,6 +1001,11 @@ func (in *WorkspaceTemplateSpec) DeepCopyInto(out *WorkspaceTemplateSpec) {
 	if in.DefaultLifecycle != nil {
 		in, out := &in.DefaultLifecycle, &out.DefaultLifecycle
 		*out = new(v1.Lifecycle)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.DefaultReadinessProbe != nil {
+		in, out := &in.DefaultReadinessProbe, &out.DefaultReadinessProbe
+		*out = new(v1.Probe)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.DefaultPodSecurityContext != nil {
