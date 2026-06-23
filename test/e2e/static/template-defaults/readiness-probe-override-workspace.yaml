@@ -1,0 +1,15 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: readiness-probe-override-workspace
+spec:
+  displayName: "Readiness Probe Override Test"
+  templateRef:
+    name: readiness-probe-template
+    namespace: jupyter-k8s-shared
+  readinessProbe:
+    tcpSocket:
+      port: 8888
+    initialDelaySeconds: 2
+    periodSeconds: 3
+    failureThreshold: 7

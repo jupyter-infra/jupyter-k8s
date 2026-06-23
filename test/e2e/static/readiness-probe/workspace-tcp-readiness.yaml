@@ -1,0 +1,14 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-tcp-readiness
+spec:
+  displayName: "TCP Readiness Probe Workspace"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  readinessProbe:
+    tcpSocket:
+      port: 8888
+    initialDelaySeconds: 2
+    periodSeconds: 3
+    failureThreshold: 30
