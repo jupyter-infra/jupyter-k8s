@@ -190,6 +190,10 @@ type WorkspaceSpec struct {
 	// in response to container lifecycle events (for instance, lifecycle hooks)
 	Lifecycle *corev1.Lifecycle `json:"lifecycle,omitempty"`
 
+	// ReadinessProbe specifies the readiness probe for the main workspace container.
+	// +optional
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
+
 	// AccessStrategy specifies the WorkspaceAccessStrategy to use
 	// +optional
 	AccessStrategy *AccessStrategyRef `json:"accessStrategy,omitempty"`

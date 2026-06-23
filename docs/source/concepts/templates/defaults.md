@@ -26,6 +26,7 @@ For example, if a `workspace.spec` specifies a `containerSecurityContext`, the t
 | `defaultAccessStrategy` | `spec.accessStrategy` |
 | `defaultIdleShutdown` | `spec.idleShutdown` |
 | `defaultLifecycle` | `spec.lifecycle` |
+| `defaultReadinessProbe` | `spec.readinessProbe` |
 | `defaultPodSecurityContext` | `spec.podSecurityContext` |
 | `defaultContainerSecurityContext` | `spec.containerSecurityContext` |
 

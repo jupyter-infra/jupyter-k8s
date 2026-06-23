@@ -215,6 +215,7 @@ _Appears in:_
 | `affinity` _[Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#affinity-v1-core)_ | Affinity specifies node affinity and anti-affinity rules for the workspace pod |  |  |
 | `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#toleration-v1-core) array_ | Tolerations specifies tolerations for the workspace pod to schedule on nodes with matching taints |  |  |
 | `lifecycle` _[Lifecycle](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#lifecycle-v1-core)_ | Lifecycle specifies actions that the management system should take<br />in response to container lifecycle events (for instance, lifecycle hooks) |  |  |
+| `readinessProbe` _[Probe](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#probe-v1-core)_ | ReadinessProbe specifies the readiness probe for the main workspace container. |  | Optional: \{\} <br /> |
 | `accessStrategy` _[AccessStrategyRef](#accessstrategyref)_ | AccessStrategy specifies the WorkspaceAccessStrategy to use |  | Optional: \{\} <br /> |
 | `templateRef` _[TemplateRef](#templateref)_ | TemplateRef references a WorkspaceTemplate to use as base configuration<br />When set, template provides defaults and workspace spec fields act as overrides |  | Optional: \{\} <br /> |
 | `idleShutdown` _[IdleShutdownSpec](#idleshutdownspec)_ | IdleShutdown specifies idle shutdown configuration |  | Optional: \{\} <br /> |

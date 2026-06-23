@@ -39,6 +39,7 @@ var defaultApplicators = []DefaultApplicator{
 	applyMetadataDefaults,
 	applyAccessStrategyDefaults,
 	applyLifecycleDefaults,
+	applyReadinessProbeDefaults,
 	applySecurityDefaults,
 	applyEnvDefaults,
 	applyInitContainerDefaults,
