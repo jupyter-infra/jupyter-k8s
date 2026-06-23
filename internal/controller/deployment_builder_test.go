@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
@@ -543,6 +544,84 @@ var _ = Describe("DeploymentBuilder", func() {
 		})
 	})
 
+	Context("Readiness Probe", func() {
+		It("should set a TCP readiness probe on the primary container when specified", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-readiness",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					ReadinessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							TCPSocket: &corev1.TCPSocketAction{
+								Port: intstr.FromInt(JupyterPort),
+							},
+						},
+						InitialDelaySeconds: 2,
+						PeriodSeconds:       3,
+						FailureThreshold:    30,
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deployment).NotTo(BeNil())
+
+			container := deployment.Spec.Template.Spec.Containers[0]
+			Expect(container.Name).To(Equal("workspace"))
+			Expect(container.ReadinessProbe).NotTo(BeNil())
+			Expect(container.ReadinessProbe.TCPSocket).NotTo(BeNil())
+			Expect(container.ReadinessProbe.TCPSocket.Port).To(Equal(intstr.FromInt(JupyterPort)))
+			Expect(container.ReadinessProbe.FailureThreshold).To(Equal(int32(30)))
+		})
+
+		It("should not set a readiness probe when none is specified", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-no-readiness",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := deployment.Spec.Template.Spec.Containers[0]
+			Expect(container.ReadinessProbe).To(BeNil())
+		})
+
+		It("should propagate an HTTP readiness probe unchanged", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-http-readiness",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					ReadinessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path: "/api/status",
+								Port: intstr.FromInt(JupyterPort),
+							},
+						},
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			container := deployment.Spec.Template.Spec.Containers[0]
+			Expect(container.ReadinessProbe).NotTo(BeNil())
+			Expect(container.ReadinessProbe.HTTPGet).NotTo(BeNil())
+			Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/api/status"))
+			Expect(container.ReadinessProbe.HTTPGet.Port).To(Equal(intstr.FromInt(JupyterPort)))
+		})
+	})
+
 	Context("Deployment Updates", func() {
 		var (
 			workspace          *workspacev1alpha1.Workspace
@@ -599,6 +678,67 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(needsUpdate).To(BeFalse())
 		})
+
+		It("should detect update when a readiness probe is added", func() {
+			workspace.Spec.ReadinessProbe = &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					TCPSocket: &corev1.TCPSocketAction{
+						Port: intstr.FromInt(JupyterPort),
+					},
+				},
+				FailureThreshold: 30,
+			}
+
+			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(needsUpdate).To(BeTrue())
+		})
+
+		It("should detect update when the readiness probe changes", func() {
+			probe := &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					TCPSocket: &corev1.TCPSocketAction{
+						Port: intstr.FromInt(JupyterPort),
+					},
+				},
+				FailureThreshold: 30,
+			}
+			workspace.Spec.ReadinessProbe = probe
+
+			// Rebuild existing deployment so it already carries the original probe.
+			var err error
+			existingDeployment, err = deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Change a probe field on the desired workspace.
+			workspace.Spec.ReadinessProbe = probe.DeepCopy()
+			workspace.Spec.ReadinessProbe.FailureThreshold = 10
+
+			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(needsUpdate).To(BeTrue())
+		})
+
+		It("should not detect update when the readiness probe is unchanged", func() {
+			workspace.Spec.ReadinessProbe = &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					TCPSocket: &corev1.TCPSocketAction{
+						Port: intstr.FromInt(JupyterPort),
+					},
+				},
+				FailureThreshold: 30,
+			}
+
+			// Rebuild existing deployment so both desired and existing carry the same probe.
+			var err error
+			existingDeployment, err = deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			needsUpdate, err := deploymentBuilder.NeedsUpdate(ctx, existingDeployment, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(needsUpdate).To(BeFalse())
+		})
+
 		It("should apply pod security context when specified", func() {
 			fsGroup := int64(1000)
 			workspace := &workspacev1alpha1.Workspace{
