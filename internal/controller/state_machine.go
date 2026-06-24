@@ -33,6 +33,10 @@ type StateMachine struct {
 	recorder            record.EventRecorder
 	idleChecker         *WorkspaceIdleChecker
 	accessStartupProber AccessStartupProberInterface
+	// integrationManager is always wired by SetupWorkspaceController. It is a pointer (and the
+	// reconcile path nil-guards it) only so unit tests can construct a StateMachine without the
+	// integration machinery; production code must never leave it nil.
+	integrationManager *WorkspaceIntegrationManager
 }
 
 // NewStateMachine creates a new StateMachine
@@ -42,6 +46,7 @@ func NewStateMachine(
 	recorder record.EventRecorder,
 	idleChecker *WorkspaceIdleChecker,
 	accessStartupProber AccessStartupProberInterface,
+	integrationManager *WorkspaceIntegrationManager,
 ) *StateMachine {
 	return &StateMachine{
 		resourceManager:     resourceManager,
@@ -49,6 +54,7 @@ func NewStateMachine(
 		recorder:            recorder,
 		idleChecker:         idleChecker,
 		accessStartupProber: accessStartupProber,
+		integrationManager:  integrationManager,
 	}
 }
 
@@ -211,6 +217,22 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 	logger.Info("Attempting to bring Workspace status to 'Running'")
+
+	// Ensure the WorkspaceIntegration child shells exist (one per integrationRefs entry) before
+	// building the deployment. The shells are resolved (spec output fields frozen) by the
+	// WorkspaceIntegration mutating webhook at their own admission; the controller does NOT resolve
+	// here. The deployment builder reads the frozen children. Failing to create a shell fails the
+	// reconcile so we don't build a deployment missing its integration.
+	if sm.integrationManager != nil {
+		if _, err := sm.integrationManager.EnsureForWorkspace(ctx, workspace); err != nil {
+			integErr := fmt.Errorf("failed to ensure workspace integrations: %w", err)
+			if statusErr := sm.statusManager.UpdateErrorStatus(
+				ctx, workspace, ReasonDeploymentError, integErr.Error(), snapshotStatus); statusErr != nil {
+				logger.Error(statusErr, "Failed to update error status")
+			}
+			return ctrl.Result{}, integErr
+		}
+	}
 
 	// Ensure PVC exists first (if storage is configured)
 	_, err := sm.resourceManager.EnsurePVCExists(ctx, workspace)
