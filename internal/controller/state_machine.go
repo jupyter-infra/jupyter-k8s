@@ -8,6 +8,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 
@@ -33,6 +34,11 @@ type StateMachine struct {
 	recorder            record.EventRecorder
 	idleChecker         *WorkspaceIdleChecker
 	accessStartupProber AccessStartupProberInterface
+	// integrationManager is always wired by SetupWorkspaceController. It is a pointer (and the
+	// reconcile path nil-guards it) only so unit tests can construct a StateMachine without the
+	// integration machinery; production code must never leave it nil.
+	integrationManager *WorkspaceIntegrationManager
+	integrationProber  IntegrationProberInterface
 }
 
 // NewStateMachine creates a new StateMachine
@@ -42,6 +48,8 @@ func NewStateMachine(
 	recorder record.EventRecorder,
 	idleChecker *WorkspaceIdleChecker,
 	accessStartupProber AccessStartupProberInterface,
+	integrationManager *WorkspaceIntegrationManager,
+	integrationProber IntegrationProberInterface,
 ) *StateMachine {
 	return &StateMachine{
 		resourceManager:     resourceManager,
@@ -49,6 +57,8 @@ func NewStateMachine(
 		recorder:            recorder,
 		idleChecker:         idleChecker,
 		accessStartupProber: accessStartupProber,
+		integrationManager:  integrationManager,
+		integrationProber:   integrationProber,
 	}
 }
 
@@ -212,6 +222,22 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	logger := logf.FromContext(ctx)
 	logger.Info("Attempting to bring Workspace status to 'Running'")
 
+	// Ensure the WorkspaceIntegration child shells exist (one per integrationRefs entry) before
+	// building the deployment. The shells are resolved (spec output fields frozen) by the
+	// WorkspaceIntegration mutating webhook at their own admission; the controller does NOT resolve
+	// here. The deployment builder reads the frozen children. Failing to create a shell fails the
+	// reconcile so we don't build a deployment missing its integration.
+	if sm.integrationManager != nil {
+		if _, err := sm.integrationManager.EnsureForWorkspace(ctx, workspace); err != nil {
+			integErr := fmt.Errorf("failed to ensure workspace integrations: %w", err)
+			if statusErr := sm.statusManager.UpdateErrorStatus(
+				ctx, workspace, ReasonDeploymentError, integErr.Error(), snapshotStatus); statusErr != nil {
+				logger.Error(statusErr, "Failed to update error status")
+			}
+			return ctrl.Result{}, integErr
+		}
+	}
+
 	// Ensure PVC exists first (if storage is configured)
 	_, err := sm.resourceManager.EnsurePVCExists(ctx, workspace)
 	if err != nil {
@@ -297,12 +323,36 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		logger.Info("Deployment and Service are both ready, updating to Running status")
 		sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceRunning", "Workspace is now running")
 
+		// Run the integration status probe (non-gating: it reports health into
+		// status.integrations[] but does not block Available or restart the pod).
+		//
+		// Expected first-cycle behavior: a workspace reaches Running as soon as the Deployment is
+		// rollout-ready, which can be before an integration-injected sidecar has finished starting.
+		// The first probe of a freshly-started workspace may therefore briefly report ProbeFailed in
+		// status.integrations[]; this is by design (report-only) and self-corrects on the next probe
+		// cycle once the sidecar is up. We deliberately do NOT suppress it with a startup grace window,
+		// because that would also hide genuine early failures -- the entry reflects the actual
+		// observation at probe time, nothing more.
+		integrationProbeInterval := sm.probeIntegrationStatus(ctx, workspace)
+
 		if err := sm.statusManager.UpdateRunningStatus(ctx, workspace, snapshotStatus); err != nil {
 			return ctrl.Result{}, err
 		}
 
-		// Handle idle shutdown for running workspaces
-		return sm.handleIdleShutdownForRunningWorkspace(ctx, workspace, service)
+		// Handle idle shutdown for running workspaces.
+		idleResult, err := sm.handleIdleShutdownForRunningWorkspace(ctx, workspace, service)
+		if err != nil {
+			return idleResult, err
+		}
+
+		// When an integration defines a statusProbe, keep requeuing the Running workspace on the
+		// probe cadence so the probe re-runs and status.integrations[] tracks staleness (there is
+		// no watch driving re-probes). Honor the sooner of the idle-shutdown requeue (if any) and
+		// the probe interval.
+		if integrationProbeInterval > 0 {
+			idleResult.RequeueAfter = soonerRequeue(idleResult.RequeueAfter, integrationProbeInterval)
+		}
+		return idleResult, nil
 	}
 
 	// Resources are being created/started but not fully ready yet
@@ -324,6 +374,90 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 
 	// Requeue to check resource readiness again later
 	return ctrl.Result{RequeueAfter: requeueDelay}, nil
+}
+
+// probeIntegrationStatus runs each integration's status probe (if defined) and writes one verdict
+// per integration to workspace.Status.Integrations. It is non-gating and best-effort: a resolved
+// integration only contributes a probe verdict when its frozen child declares spec.statusProbe (an
+// unresolved child contributes a "Resolving" entry instead). With no integrations at all,
+// status.integrations[] is cleared so a removed integration does not leave a stale entry behind.
+//
+// Crucially, it reads the statusProbe off the FROZEN WorkspaceIntegration child
+// (wi.spec.statusProbe), which the webhook resolved at the child's admission. The controller
+// therefore never reads the WorkspaceIntegrationTemplate at reconcile time -- not even for
+// liveness. The probe itself is a live, report-only exec in the workspace pod (it does NOT
+// re-resolve the referenced resources). A child that is missing or not yet baked contributes no
+// status entry and never fails the reconcile.
+//
+// Returns the soonest interval after which any probe should run again, or 0 when no integration
+// defines a probe (so the caller knows whether to keep requeuing the Running workspace on the
+// probe cadence).
+func (sm *StateMachine) probeIntegrationStatus(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+) time.Duration {
+	if sm.integrationProber == nil || sm.integrationManager == nil {
+		workspace.Status.Integrations = nil
+		return 0
+	}
+
+	logger := logf.FromContext(ctx)
+
+	// Index the frozen children by name so each integrationRef finds its baked child.
+	children, err := sm.integrationManager.ListForWorkspace(ctx, workspace)
+	if err != nil {
+		// Best-effort: if we can't list children we contribute no status this cycle and never
+		// fail the reconcile (the Deployment already runs from whatever was baked).
+		logger.Error(err, "Failed to list WorkspaceIntegrations for status probe")
+		return 0
+	}
+	childByName := make(map[string]*workspacev1alpha1.WorkspaceIntegration, len(children))
+	for i := range children {
+		childByName[children[i].Name] = &children[i]
+	}
+
+	var statuses []workspacev1alpha1.IntegrationStatus
+	var soonest time.Duration
+	for i := range workspace.Spec.IntegrationRefs {
+		ref := &workspace.Spec.IntegrationRefs[i]
+		name := GenerateWorkspaceIntegrationName(workspace.Name, ref.Name)
+		wi, ok := childByName[name]
+		if !ok || !workspaceIntegrationResolved(wi) {
+			// Child not created/resolved yet. Surface it as a not-ready "Resolving" entry rather
+			// than omitting it -- otherwise a partially-resolved integration would silently vanish
+			// from status.integrations[] during the resolve window. Requeue soon to re-check.
+			statuses = append(statuses, workspacev1alpha1.IntegrationStatus{
+				Name:   ref.Name,
+				Ready:  false,
+				Reason: IntegrationReasonResolving,
+			})
+			soonest = soonerRequeue(soonest, ResolveIntegrationProbePeriod(nil))
+			continue
+		}
+		if wi.Spec.StatusProbe == nil {
+			// Resolved, but this integration defines no status probe -> nothing to report.
+			continue
+		}
+		statuses = append(statuses, sm.integrationProber.Probe(ctx, workspace, ref.Name, wi))
+		soonest = soonerRequeue(soonest, ResolveIntegrationProbePeriod(wi.Spec.StatusProbe))
+	}
+
+	// Assign (possibly nil) so a removed or probe-less integration leaves no stale entry.
+	workspace.Status.Integrations = statuses
+	return soonest
+}
+
+// soonerRequeue returns the smaller of two positive requeue durations, treating a non-positive
+// value as "unset". Used to honor the sooner of the idle-shutdown requeue and the integration
+// probe cadence.
+func soonerRequeue(existing, candidate time.Duration) time.Duration {
+	if existing <= 0 {
+		return candidate
+	}
+	if candidate > 0 && candidate < existing {
+		return candidate
+	}
+	return existing
 }
 
 // handleIdleShutdownForRunningWorkspace handles idle shutdown logic for running workspaces
