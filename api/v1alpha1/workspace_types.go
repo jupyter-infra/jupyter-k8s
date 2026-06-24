@@ -232,6 +232,63 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:MaxItems=10
 	// +optional
 	InitContainers []corev1.Container `json:"initContainers,omitempty"`
+
+	// IntegrationRefs attaches one or more WorkspaceIntegrationTemplates that inject runtime
+	// capabilities (sidecars, volumes, env vars) into the workspace pod with template-based
+	// dynamic resolution. Each entry is the user's REQUEST only — never the resolved sidecars.
+	//
+	// At reconcile time the controller creates one WorkspaceIntegration child object per entry
+	// (ownerRef'd to this workspace, labeled workspace.jupyter.org/workspace=<name>). A mutating
+	// webhook then resolves each WorkspaceIntegration against its live referenced resources at the
+	// child's admission and freezes the literal result onto the child's own spec output fields
+	// (deploymentModifications/statusProbe/shareProcessNamespace). The workspace Deployment is built
+	// solely from those frozen children; the workspace controller never reads the
+	// WorkspaceIntegrationTemplate or the referenced resources at reconcile time.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=1
+	IntegrationRefs []IntegrationTemplateRef `json:"integrationRefs,omitempty"`
+}
+
+// IntegrationParameter is a single user-provided input for template expression resolution.
+type IntegrationParameter struct {
+	// Name of the parameter, referenced in template expressions as {{ .Parameters.<Name> }}
+	Name string `json:"name"`
+
+	// Value of the parameter (substituted into template expression fields at resolution time)
+	// +optional
+	Value string `json:"value,omitempty"`
+}
+
+// IntegrationTemplateRef defines a reference to a WorkspaceIntegrationTemplate.
+type IntegrationTemplateRef struct {
+	// Name of the WorkspaceIntegrationTemplate
+	Name string `json:"name"`
+
+	// Namespace where the WorkspaceIntegrationTemplate is located
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// Parameters provided by the user for template expression resolution.
+	// Each parameter is referenced in template expressions as {{ .Parameters.<Name> }}.
+	// Names must be unique.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	Parameters []IntegrationParameter `json:"parameters,omitempty"`
+}
+
+// ParametersMap flattens the extensible name/value parameter list into a map keyed
+// by name for {{ .Parameters.<name> }} expression access. Duplicate names are rejected
+// at admission by the +listMapKey=name marker (the API server enforces set semantics
+// on the name key), so a simple last-write assignment is safe here.
+func (r *IntegrationTemplateRef) ParametersMap() map[string]string {
+	m := make(map[string]string, len(r.Parameters))
+	for _, p := range r.Parameters {
+		m[p.Name] = p.Value
+	}
+	return m
 }
 
 // AccessResourceStatus defines the status of a resource created from a template
@@ -309,6 +366,16 @@ type WorkspaceStatus struct {
 	// +optional
 	EarliestNextProbeTime *metav1.Time `json:"earliestNextProbeTime,omitempty"`
 
+	// Integrations reports the readiness of each integration applied to the workspace,
+	// as observed by the operator's periodic status probe. One entry per integration
+	// (keyed by name); modeled on containerStatuses[] — N independent health verdicts,
+	// not the identity-only accessResources[] list. Empty when no integration defines a
+	// statusProbe.
+	// +listType=map
+	// +listMapKey=name
+	// +optional
+	Integrations []IntegrationStatus `json:"integrations,omitempty"`
+
 	// Conditions represent the current state of the Workspace resource.
 	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
 	//
@@ -325,6 +392,36 @@ type WorkspaceStatus struct {
 	// +patchMergeKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+}
+
+// IntegrationStatus reports the operator-observed readiness of a single integration.
+// Follows the k8s condition idiom (ready + reason + message) rather than a phase enum.
+type IntegrationStatus struct {
+	// Name is the name of the WorkspaceIntegrationTemplate this status reports on.
+	Name string `json:"name"`
+
+	// Ready is true when the integration's status probe last succeeded.
+	//
+	// Semantics of absence vs. false: there is no "unknown" state encoded in this bool. The
+	// operator's contract is positional instead -- the ABSENCE of an entry for an integration
+	// means "not yet probed" (e.g. the WorkspaceIntegration child is not yet resolved, or the
+	// integration defines no statusProbe), while a PRESENT entry always reflects an actual
+	// observation. Therefore ready=false is never ambiguous: it is always accompanied by a
+	// Reason explaining the failure (ProbeFailed/PodNotFound/ProbeError/Resolving), and the Go
+	// zero value (false with empty Reason) is never written. Consumers that need to distinguish
+	// "not yet probed" from "probed and failed" must check for entry presence, not the bool.
+	Ready bool `json:"ready"`
+
+	// Reason is a machine-readable, CamelCase explanation of the current readiness state
+	// (e.g. "Ready", "ProbeFailed", "PodNotFound", "Resolving"). Operator-set and always present
+	// on a not-ready entry, so it disambiguates a false Ready.
+	// +optional
+	Reason string `json:"reason,omitempty"`
+
+	// Message is a human-readable detail for the current state — typically the probe's
+	// stderr/stdout on failure. Operator-set.
+	// +optional
+	Message string `json:"message,omitempty"`
 }
 
 // +kubebuilder:object:root=true

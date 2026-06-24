@@ -1,6 +1,7 @@
 ## Append samples of your project ##
 resources:
 - workspace_v1alpha1_workspace.yaml
+- workspace_integration_template_ray.yaml
 # - workspace_v1alpha1_workspace_stopped.yaml
 # - workspace_v1alpha1_workspace_with_storage.yaml
 # - workspace_v1alpha1_workspace_with_template.yaml

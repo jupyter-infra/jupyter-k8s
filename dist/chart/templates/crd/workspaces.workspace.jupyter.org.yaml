@@ -3006,6 +3006,61 @@ spec:
                   type: object
                 maxItems: 10
                 type: array
+              integrationRefs:
+                description: |-
+                  IntegrationRefs attaches one or more WorkspaceIntegrationTemplates that inject runtime
+                  capabilities (sidecars, volumes, env vars) into the workspace pod with template-based
+                  dynamic resolution. Each entry is the user's REQUEST only — never the resolved sidecars.
+
+                  At reconcile time the controller creates one WorkspaceIntegration child object per entry
+                  (ownerRef'd to this workspace, labeled workspace.jupyter.org/workspace=<name>). A mutating
+                  webhook then resolves each WorkspaceIntegration against its live referenced resources at the
+                  child's admission and freezes the literal result onto the child's own spec output fields
+                  (deploymentModifications/statusProbe/shareProcessNamespace). The workspace Deployment is built
+                  solely from those frozen children; the workspace controller never reads the
+                  WorkspaceIntegrationTemplate or the referenced resources at reconcile time.
+                items:
+                  description: IntegrationTemplateRef defines a reference to a WorkspaceIntegrationTemplate.
+                  properties:
+                    name:
+                      description: Name of the WorkspaceIntegrationTemplate
+                      type: string
+                    namespace:
+                      description: Namespace where the WorkspaceIntegrationTemplate
+                        is located
+                      type: string
+                    parameters:
+                      description: |-
+                        Parameters provided by the user for template expression resolution.
+                        Each parameter is referenced in template expressions as {{ "{{ .Parameters.<Name> }}" }}.
+                        Names must be unique.
+                      items:
+                        description: IntegrationParameter is a single user-provided
+                          input for template expression resolution.
+                        properties:
+                          name:
+                            description: Name of the parameter, referenced in template
+                              expressions as {{ "{{ .Parameters.<Name> }}" }}
+                            type: string
+                          value:
+                            description: Value of the parameter (substituted into
+                              template expression fields at resolution time)
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - name
+                      x-kubernetes-list-type: map
+                  required:
+                  - name
+                  type: object
+                maxItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               lifecycle:
                 description: |-
                   Lifecycle specifies actions that the management system should take
@@ -3948,6 +4003,54 @@ spec:
                   attempt to enforce spacing; survives watch-triggered re-reconciliations.
                 format: date-time
                 type: string
+              integrations:
+                description: |-
+                  Integrations reports the readiness of each integration applied to the workspace,
+                  as observed by the operator's periodic status probe. One entry per integration
+                  (keyed by name); modeled on containerStatuses[] — N independent health verdicts,
+                  not the identity-only accessResources[] list. Empty when no integration defines a
+                  statusProbe.
+                items:
+                  description: |-
+                    IntegrationStatus reports the operator-observed readiness of a single integration.
+                    Follows the k8s condition idiom (ready + reason + message) rather than a phase enum.
+                  properties:
+                    message:
+                      description: |-
+                        Message is a human-readable detail for the current state — typically the probe's
+                        stderr/stdout on failure. Operator-set.
+                      type: string
+                    name:
+                      description: Name is the name of the WorkspaceIntegrationTemplate
+                        this status reports on.
+                      type: string
+                    ready:
+                      description: |-
+                        Ready is true when the integration's status probe last succeeded.
+
+                        Semantics of absence vs. false: there is no "unknown" state encoded in this bool. The
+                        operator's contract is positional instead -- the ABSENCE of an entry for an integration
+                        means "not yet probed" (e.g. the WorkspaceIntegration child is not yet resolved, or the
+                        integration defines no statusProbe), while a PRESENT entry always reflects an actual
+                        observation. Therefore ready=false is never ambiguous: it is always accompanied by a
+                        Reason explaining the failure (ProbeFailed/PodNotFound/ProbeError/Resolving), and the Go
+                        zero value (false with empty Reason) is never written. Consumers that need to distinguish
+                        "not yet probed" from "probed and failed" must check for entry presence, not the bool.
+                      type: boolean
+                    reason:
+                      description: |-
+                        Reason is a machine-readable, CamelCase explanation of the current readiness state
+                        (e.g. "Ready", "ProbeFailed", "PodNotFound", "Resolving"). Operator-set and always present
+                        on a not-ready entry, so it disambiguates a false Ready.
+                      type: string
+                  required:
+                  - name
+                  - ready
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               observedAccessStrategyVersion:
                 description: |-
                   ObservedAccessStrategyVersion is a token capturing the identity and
