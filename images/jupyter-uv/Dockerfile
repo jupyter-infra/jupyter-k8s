@@ -2,6 +2,11 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 USER root
 
+# Install curl so E2E tests can exercise the legacy podExec idle-detection path,
+# which execs "curl" inside the workspace container. The recommended transport for
+# production is "network" (direct HTTP from operator), which does not require curl.
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 # 1/ Create a non-root user "jovyan" with a home dir
 RUN useradd -m -s /bin/bash jovyan
 
