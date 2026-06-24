@@ -154,7 +154,10 @@ func (db *DeploymentBuilder) ApplyAccessStrategyToDeployment(
 	return nil
 }
 
-// applyDeploymentSpecModifications applies deployment modifications from access strategy
+// applyDeploymentSpecModifications applies deployment modifications from an access strategy.
+// The structural merge (volumes, primary-container volume mounts, init + additional containers) is
+// delegated to applyPodModificationsToDeployment, which both AccessStrategy and Integration share.
+// AccessStrategy env is applied separately (live-resolved) via addAccessStrategyEnvToContainer.
 func (db *DeploymentBuilder) applyDeploymentSpecModifications(
 	deployment *appsv1.Deployment,
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
@@ -166,93 +169,59 @@ func (db *DeploymentBuilder) applyDeploymentSpecModifications(
 		return nil // Nothing to do
 	}
 
-	mods := accessStrategy.Spec.DeploymentModifications
-
-	// Add volumes
-	if mods.PodModifications != nil && len(mods.PodModifications.Volumes) > 0 {
-		logf.Log.V(1).Info("Adding volumes from deployment modifications",
-			"accessStrategy", accessStrategy.Name,
-			"volumeCount", len(mods.PodModifications.Volumes))
-
-		deployment.Spec.Template.Spec.Volumes = append(
-			deployment.Spec.Template.Spec.Volumes,
-			mods.PodModifications.Volumes...,
-		)
-
-		for _, volume := range mods.PodModifications.Volumes {
-			logf.Log.V(1).Info("Added volume",
-				"accessStrategy", accessStrategy.Name,
-				"volumeName", volume.Name)
-		}
+	pm := accessStrategy.Spec.DeploymentModifications.PodModifications
+	if pm != nil &&
+		pm.PrimaryContainerModifications != nil &&
+		len(pm.PrimaryContainerModifications.VolumeMounts) > 0 &&
+		len(deployment.Spec.Template.Spec.Containers) == 0 {
+		return fmt.Errorf("no containers found in deployment to add volume mounts")
 	}
 
-	// Add volume mounts to primary container
-	if mods.PodModifications != nil &&
-		mods.PodModifications.PrimaryContainerModifications != nil &&
-		len(mods.PodModifications.PrimaryContainerModifications.VolumeMounts) > 0 {
-
-		if len(deployment.Spec.Template.Spec.Containers) == 0 {
-			return fmt.Errorf("no containers found in deployment to add volume mounts")
-		}
-
-		logf.Log.V(1).Info("Adding volume mounts to primary container",
-			"accessStrategy", accessStrategy.Name,
-			"mountCount", len(mods.PodModifications.PrimaryContainerModifications.VolumeMounts))
-
-		primaryContainer := &deployment.Spec.Template.Spec.Containers[0]
-		primaryContainer.VolumeMounts = append(
-			primaryContainer.VolumeMounts,
-			mods.PodModifications.PrimaryContainerModifications.VolumeMounts...,
-		)
-
-		for _, mount := range mods.PodModifications.PrimaryContainerModifications.VolumeMounts {
-			logf.Log.V(1).Info("Added volume mount to primary container",
-				"accessStrategy", accessStrategy.Name,
-				"volumeName", mount.Name,
-				"mountPath", mount.MountPath)
-		}
-	}
-
-	// Add init containers
-	if mods.PodModifications != nil && len(mods.PodModifications.InitContainers) > 0 {
-		logf.Log.V(1).Info("Adding init containers",
-			"accessStrategy", accessStrategy.Name,
-			"containerCount", len(mods.PodModifications.InitContainers))
-
-		deployment.Spec.Template.Spec.InitContainers = append(
-			deployment.Spec.Template.Spec.InitContainers,
-			mods.PodModifications.InitContainers...,
-		)
-
-		for _, container := range mods.PodModifications.InitContainers {
-			logf.Log.V(1).Info("Added init container",
-				"accessStrategy", accessStrategy.Name,
-				"containerName", container.Name,
-				"image", container.Image)
-		}
-	}
-
-	// Add additional containers
-	if mods.PodModifications != nil && len(mods.PodModifications.AdditionalContainers) > 0 {
-		logf.Log.V(1).Info("Adding additional containers",
-			"accessStrategy", accessStrategy.Name,
-			"containerCount", len(mods.PodModifications.AdditionalContainers))
-
-		deployment.Spec.Template.Spec.Containers = append(
-			deployment.Spec.Template.Spec.Containers,
-			mods.PodModifications.AdditionalContainers...,
-		)
-
-		for _, container := range mods.PodModifications.AdditionalContainers {
-			logf.Log.V(1).Info("Added additional container",
-				"accessStrategy", accessStrategy.Name,
-				"containerName", container.Name,
-				"image", container.Image)
-		}
-	}
+	applyPodModificationsToDeployment(deployment, pm)
 
 	logf.Log.V(1).Info("Successfully applied deployment modifications",
 		"accessStrategy", accessStrategy.Name)
 
 	return nil
+}
+
+// applyPodModificationsToDeployment appends the structural pod modifications (volumes,
+// primary-container volume mounts, init containers, additional containers) onto the deployment's pod
+// template. It is the shared merge used by both AccessStrategy and WorkspaceIntegration -- both are
+// producers of the same PodModifications shape. Primary-container ENV is intentionally NOT handled
+// here: AccessStrategy resolves env live (template execution per workspace) while Integration env is
+// already resolved to literals at admission, so each caller merges env in its own way.
+//
+// Volume mounts are applied to the primary (first) container only when one exists; callers that
+// require a primary container should validate that before calling.
+func applyPodModificationsToDeployment(
+	deployment *appsv1.Deployment,
+	pm *workspacev1alpha1.PodModifications,
+) {
+	if pm == nil {
+		return
+	}
+
+	if len(pm.Volumes) > 0 {
+		deployment.Spec.Template.Spec.Volumes = append(
+			deployment.Spec.Template.Spec.Volumes, pm.Volumes...)
+	}
+
+	if pm.PrimaryContainerModifications != nil &&
+		len(pm.PrimaryContainerModifications.VolumeMounts) > 0 &&
+		len(deployment.Spec.Template.Spec.Containers) > 0 {
+		primaryContainer := &deployment.Spec.Template.Spec.Containers[0]
+		primaryContainer.VolumeMounts = append(
+			primaryContainer.VolumeMounts, pm.PrimaryContainerModifications.VolumeMounts...)
+	}
+
+	if len(pm.InitContainers) > 0 {
+		deployment.Spec.Template.Spec.InitContainers = append(
+			deployment.Spec.Template.Spec.InitContainers, pm.InitContainers...)
+	}
+
+	if len(pm.AdditionalContainers) > 0 {
+		deployment.Spec.Template.Spec.Containers = append(
+			deployment.Spec.Template.Spec.Containers, pm.AdditionalContainers...)
+	}
 }
