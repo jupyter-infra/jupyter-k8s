@@ -1,0 +1,41 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceIntegrationTemplate
+metadata:
+  name: ray-integration
+  namespace: default
+spec:
+  displayName: Ray Cluster Integration
+  # shareProcessNamespace is a static pod-level toggle (no resolution). The webhook carries it
+  # verbatim onto the child's spec, and the deployment builder OR-reduces it onto the pod. The e2e
+  # asserts the pod ends up with spec.shareProcessNamespace: true.
+  shareProcessNamespace: true
+  resourceRefs:
+    - id: rayCluster
+      apiVersion: ray.io/v1
+      kind: RayCluster
+      name: "{{ .Parameters.rayClusterName }}"
+      namespace: "{{ .Workspace.Namespace }}"
+  # statusProbe is baked into the WorkspaceIntegration child at admission and run by the operator
+  # against the workspace pod. The Kind workspace image has no `ray` binary, so we use `true`
+  # (always exits 0) to exercise the ready path deterministically.
+  statusProbe:
+    exec:
+      command: ["true"]
+    periodSeconds: 5
+  deploymentModifications:
+    podModifications:
+      additionalContainers:
+        - name: ray-sidecar
+          image: '{{ resource "rayCluster" "{.spec.headGroupSpec.template.spec.containers[0].image}" }}'
+          # command wraps args in a shell so the resolved args string is interpreted (matching
+          # the production sample). The e2e asserts the RESOLVED args value, not a live Ray join,
+          # so the sidecar just needs to stay running: echo the resolved address, then sleep.
+          command: ["/bin/sh", "-c"]
+          args:
+            - "echo ray start --address={{ resource \"rayCluster\" \"{.status.head.serviceName}\" }}:6379 --block && sleep infinity"
+      primaryContainerModifications:
+        mergeEnv:
+          - name: RAY_HEAD_SERVICE
+            valueTemplate: '{{ resource "rayCluster" "{.status.head.serviceName}" }}'
+          - name: RAY_CLUSTER_NAME
+            valueTemplate: "{{ .Parameters.rayClusterName }}"
