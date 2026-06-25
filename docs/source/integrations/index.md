@@ -34,10 +34,17 @@ The operator chart deploys the core controller, **Extension API** and CRDs, but 
 - **Integrate with cloud providers** — deploy cloud-specific plugins and resources (e.g. ALB ingress, SSM activations).
 - **Define access strategies** —integrate workspaces with the routing layer by creating access strategies.
 
+## Deployment templates
+
+For deployments that start from scratch — provisioning the cluster and surrounding cloud resources
+in addition to installing the operator — [`jupyter-deploy`](deployment-templates/index) offers
+turnkey templates that bundle **Jupyter K8s** with a routing and identity layer.
+
 ```{toctree}
 :hidden:
 
 web-ui/index
 plugins/index
 guided-charts/index
+deployment-templates/index
 ```

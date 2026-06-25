@@ -23,6 +23,11 @@ A full web-access stack for EKS clusters. Users access the applications running 
 | Package | `oci://ghcr.io/jupyter-infra/charts/jupyter-k8s-aws-oidc` |
 | Source | [charts/aws-oidc](https://github.com/jupyter-infra/jupyter-k8s-aws/tree/main/charts/aws-oidc) |
 
+```{tip}
+For a turnkey deployment that provisions an EKS cluster and installs this chart for you, see the
+{ref}`AWS EKS OIDC deployment template <template-aws-eks-oidc>`.
+```
+
 (chart-aws-hyperpod)=
 ## AWS-HyperPod
 
