@@ -352,3 +352,72 @@ func TestExecInPod_WithStdin(t *testing.T) {
 		t.Errorf("Expected stdin data '%s', got '%s'", expectedData, stdinData)
 	}
 }
+
+func TestExecInPodWithStderr_ReturnsStderr(t *testing.T) {
+	util, err := NewPodExecUtil()
+	if err != nil {
+		t.Skipf("Skipping integration test - requires valid Kubernetes config: %v", err)
+		return
+	}
+
+	original := newSPDYExecutor
+	defer func() { newSPDYExecutor = original }()
+
+	// Command fails: stdout empty, diagnostic on stderr, non-nil error — the case the
+	// integration readiness prober relies on to populate status.message.
+	mockExec := &mockExecutor{
+		stdout:    "  ",
+		stderr:    "  Ray runtime not started  ",
+		streamErr: errors.New("command terminated with exit code 1"),
+	}
+	newSPDYExecutor = func(config *rest.Config, method string, url *url.URL) (remotecommand.Executor, error) {
+		return mockExec, nil
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "test-namespace"},
+	}
+
+	stdout, stderr, err := util.ExecInPodWithStderr(
+		context.Background(), pod, "workspace", []string{"ray", "status"}, "")
+
+	if err == nil {
+		t.Fatal("Expected error when command exits non-zero")
+	}
+	if stdout != "" {
+		t.Errorf("Expected empty trimmed stdout, got: %q", stdout)
+	}
+	// stderr must be returned (and trimmed) so the prober can surface it in status.
+	if stderr != "Ray runtime not started" {
+		t.Errorf("Expected trimmed stderr 'Ray runtime not started', got: %q", stderr)
+	}
+}
+
+func TestExecInPod_DelegatesAndDropsStderr(t *testing.T) {
+	util, err := NewPodExecUtil()
+	if err != nil {
+		t.Skipf("Skipping integration test - requires valid Kubernetes config: %v", err)
+		return
+	}
+
+	original := newSPDYExecutor
+	defer func() { newSPDYExecutor = original }()
+
+	mockExec := &mockExecutor{stdout: "ready", stderr: "noise"}
+	newSPDYExecutor = func(config *rest.Config, method string, url *url.URL) (remotecommand.Executor, error) {
+		return mockExec, nil
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "test-namespace"},
+	}
+
+	// ExecInPod delegates to ExecInPodWithStderr and returns only stdout.
+	output, err := util.ExecInPod(context.Background(), pod, "workspace", []string{"echo", "ready"}, "")
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if output != "ready" {
+		t.Errorf("Expected 'ready', got: %q", output)
+	}
+}

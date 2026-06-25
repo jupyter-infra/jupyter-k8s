@@ -51,8 +51,19 @@ func NewPodExecUtil() (*PodExecUtil, error) {
 	}, nil
 }
 
-// ExecInPod executes a command in a specific container of a pod with optional stdin input
+// ExecInPod executes a command in a specific container of a pod with optional stdin input.
+// It returns trimmed stdout only; callers needing stderr (e.g. surfacing failure detail in
+// status) should use ExecInPodWithStderr.
 func (p *PodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string, stdin string) (string, error) {
+	stdout, _, err := p.ExecInPodWithStderr(ctx, pod, containerName, cmd, stdin)
+	return stdout, err
+}
+
+// ExecInPodWithStderr executes a command in a specific container of a pod with optional stdin
+// input and returns trimmed stdout AND trimmed stderr alongside the error. The integration
+// readiness prober uses stderr to populate status.integrations[].message on failure, since
+// a failing command's diagnostic output typically lands on stderr.
+func (p *PodExecUtil) ExecInPodWithStderr(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string, stdin string) (stdoutStr, stderrStr string, err error) {
 	logger := logf.FromContext(ctx).WithValues("pod", pod.Name, "container", containerName, "cmd", cmd)
 
 	// Create exec request
@@ -75,7 +86,7 @@ func (p *PodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, containerN
 	// Execute command
 	exec, err := newSPDYExecutor(p.config, "POST", req.URL())
 	if err != nil {
-		return "", fmt.Errorf("failed to create executor: %w", err)
+		return "", "", fmt.Errorf("failed to create executor: %w", err)
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -91,12 +102,13 @@ func (p *PodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, containerN
 
 	err = exec.StreamWithContext(ctx, streamOptions)
 
-	output := strings.TrimSpace(stdout.String())
+	stdoutStr = strings.TrimSpace(stdout.String())
+	stderrStr = strings.TrimSpace(stderr.String())
 	if err != nil {
-		logger.V(1).Info("Command execution failed", "hasStdin", hasStdin, "error", err, "stderr", stderr.String())
-		return output, err
+		logger.V(1).Info("Command execution failed", "hasStdin", hasStdin, "error", err, "stderr", stderrStr)
+		return stdoutStr, stderrStr, err
 	}
 
-	logger.V(1).Info("Command executed successfully", "hasStdin", hasStdin, "output", output)
-	return output, nil
+	logger.V(1).Info("Command executed successfully", "hasStdin", hasStdin, "output", stdoutStr)
+	return stdoutStr, stderrStr, nil
 }
