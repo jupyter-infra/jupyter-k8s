@@ -169,6 +169,14 @@ func GeneratePVCName(workspaceName string) string {
 	return fmt.Sprintf("%s-%s-pvc", ResourcePrefix, workspaceName)
 }
 
+// GenerateWorkspaceIntegrationName creates a deterministic WorkspaceIntegration child name for a
+// given workspace + integrationRef. The 1:1 <workspace>-<ref> mapping makes the child name
+// predictable; identification at deployment-build time uses the LabelWorkspaceName label selector
+// (option B), with this name only ensuring a stable, collision-free child per ref.
+func GenerateWorkspaceIntegrationName(workspaceName, integrationRefName string) string {
+	return fmt.Sprintf("%s-%s-%s", ResourcePrefix, workspaceName, integrationRefName)
+}
+
 // GenerateLabels creates consistent labels for resources
 func GenerateLabels(workspaceName string) map[string]string {
 	return map[string]string{

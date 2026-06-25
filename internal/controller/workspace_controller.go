@@ -249,7 +249,10 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Watch for standard Kubernetes resources
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
-		Owns(&corev1.PersistentVolumeClaim{})
+		Owns(&corev1.PersistentVolumeClaim{}).
+		// Watch owned WorkspaceIntegration children so a re-resolve (webhook updating the child's
+		// spec output) re-triggers the workspace reconcile and the deployment picks up the new values.
+		Owns(&workspacev1alpha1.WorkspaceIntegration{})
 
 	// Watch for changes to AccessStrategy resources to trigger reconciliation
 	// of Workspaces that reference them
@@ -346,7 +349,8 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
 	idleChecker := NewWorkspaceIdleChecker(k8sClient, options.IdleCheckInterval)
 	accessStartupProber := NewAccessStartupProber(NewAccessResourcesBuilder())
-	stateMachine := NewStateMachine(resourceManager, statusManager, eventRecorder, idleChecker, accessStartupProber)
+	integrationManager := NewWorkspaceIntegrationManager(k8sClient, scheme)
+	stateMachine := NewStateMachine(resourceManager, statusManager, eventRecorder, idleChecker, accessStartupProber, integrationManager)
 
 	// Create plugin clients for pod event handling (if configured)
 	pluginClients := map[string]plugin.RemoteAccessPluginApis{}
