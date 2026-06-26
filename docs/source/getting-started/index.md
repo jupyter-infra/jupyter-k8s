@@ -1,5 +1,9 @@
 # Getting Started
 
+```{tip}
+Want a turnkey path? Use a [`jupyter-deploy`](../integrations/deployment-templates/index) template to provision your Kubernetes cluster, install the **Jupyter K8s** operator and the routing infrastructure.
+```
+
 Install **Jupyter K8s** into an existing Kubernetes cluster using Helm.
 
 ## Prerequisites
