@@ -11,11 +11,11 @@
 # comment and set statuses, so a prompt-injected review of a malicious diff can at
 # worst spend model tokens and post a misleading comment.
 #
-# Inert until these repo variables are set (after the tf-aws-review-ci template is
-# deployed and the review image is published):
+# Inert until these repo variables are set (after tf-aws-iam-ci is deployed with
+# create_review_resources = true and the review image is published):
 #   REVIEW_RUN_ROLE_ARN   IAM role ARN (review_run_iam_role_arn output)
 #   REVIEW_IMAGE          ECR image ref, e.g. <repo-url>:latest
-#   REVIEW_BEDROCK_MODEL  Bedrock model / inference-profile ID
+#   REVIEW_BEDROCK_MODEL  Bedrock model / inference-profile ID (e.g. us.anthropic.claude-opus-4-8)
 #   REVIEW_AWS_REGION     optional, defaults to us-west-2
 
 name: roborev review
