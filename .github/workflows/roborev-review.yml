@@ -106,6 +106,31 @@ jobs:
           role-to-assume: ${{ vars.REVIEW_RUN_ROLE_ARN }}
           aws-region: ${{ vars.REVIEW_AWS_REGION || 'us-west-2' }}
 
+      # Keep secrets out of the container env: write the OIDC session creds and the
+      # gh token to files the smoke/review containers read via read-only mounts, so
+      # nothing sensitive is passed with -e.
+      - name: Stage credentials for mounting
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/aws" "$RUNNER_TEMP/gh"
+          {
+            echo "[default]"
+            echo "aws_access_key_id=$AWS_ACCESS_KEY_ID"
+            echo "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY"
+            echo "aws_session_token=$AWS_SESSION_TOKEN"
+          } > "$RUNNER_TEMP/aws/credentials"
+          {
+            echo "github.com:"
+            echo "    oauth_token: $GH_TOKEN"
+            echo "    git_protocol: https"
+          } > "$RUNNER_TEMP/gh/hosts.yml"
+          # The container runs as uid 1000 (node), a different uid than the runner,
+          # so the mounted files must be readable by others for the container to read.
+          chmod 644 "$RUNNER_TEMP/aws/credentials" "$RUNNER_TEMP/gh/hosts.yml"
+
       - name: Pull review image
         if: steps.pr.outputs.skip != 'true'
         env:
@@ -134,7 +159,7 @@ jobs:
         run: |
           set -euo pipefail
           out=$(docker run --rm \
-            -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
+            -v "$RUNNER_TEMP/aws:/home/node/.aws:ro" \
             -e AWS_REGION -e AWS_DEFAULT_REGION \
             -e CLAUDE_CODE_USE_BEDROCK=1 \
             -e ANTHROPIC_MODEL="${{ vars.REVIEW_BEDROCK_MODEL }}" \
@@ -151,7 +176,6 @@ jobs:
           PR: ${{ steps.pr.outputs.pr }}
           HEAD_SHA: ${{ steps.pr.outputs.head }}
           BASE_SHA: ${{ steps.pr.outputs.base }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           # Fetch the PR head as git objects only. Never checked out, never executed.
@@ -160,11 +184,11 @@ jobs:
           base_sha=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
 
           docker run --rm \
-            -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
+            -v "$RUNNER_TEMP/aws:/home/node/.aws:ro" \
+            -v "$RUNNER_TEMP/gh:/home/node/.config/gh:ro" \
             -e AWS_REGION -e AWS_DEFAULT_REGION \
             -e CLAUDE_CODE_USE_BEDROCK=1 \
             -e ANTHROPIC_MODEL="${{ vars.REVIEW_BEDROCK_MODEL }}" \
-            -e GH_TOKEN \
             -v "$PWD:/workspace" -w /workspace \
             "$REVIEW_IMAGE" \
             sh -c "git config --global --add safe.directory /workspace \
