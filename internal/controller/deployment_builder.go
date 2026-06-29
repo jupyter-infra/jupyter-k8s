@@ -26,6 +26,7 @@ type DeploymentBuilder struct {
 	scheme        *runtime.Scheme
 	options       WorkspaceControllerOptions
 	imageResolver *ImageResolver
+	client        client.Client
 }
 
 // NewDeploymentBuilder creates a new DeploymentBuilder
@@ -34,6 +35,7 @@ func NewDeploymentBuilder(scheme *runtime.Scheme, options WorkspaceControllerOpt
 		scheme:        scheme,
 		options:       options,
 		imageResolver: NewImageResolver(options.ApplicationImagesRegistry),
+		client:        k8sClient,
 	}
 }
 
@@ -70,6 +72,13 @@ func (db *DeploymentBuilder) BuildDeploymentWithAccessStrategy(
 		if err := db.ApplyAccessStrategyToDeployment(deployment, workspace, accessStrategy); err != nil {
 			return nil, fmt.Errorf("failed to apply access strategy to deployment: %w", err)
 		}
+	}
+
+	// Apply the workspace's frozen integrations (sidecars/env/volumes baked into the
+	// WorkspaceIntegration children at their own admission). This reads ONLY the frozen children
+	// -- never the WorkspaceIntegrationTemplate or the referenced resources.
+	if err := db.applyIntegrationsToDeployment(ctx, deployment, workspace); err != nil {
+		return nil, fmt.Errorf("failed to apply integrations to deployment: %w", err)
 	}
 
 	return deployment, nil
