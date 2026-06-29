@@ -1,0 +1,15 @@
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: demo-cluster
+  namespace: default
+spec:
+  headGroupSpec:
+    template:
+      spec:
+        containers:
+          - name: ray-head
+            image: rayproject/ray:2.9.0
+status:
+  head:
+    serviceName: demo-cluster-head-svc

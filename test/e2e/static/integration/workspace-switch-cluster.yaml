@@ -1,0 +1,23 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-with-integration
+  namespace: default
+spec:
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  integrationRefs:
+    - name: ray-integration
+      parameters:
+        # Same workspace as workspace-with-integration.yaml, re-applied pointing at a different
+        # RayCluster. Re-applying re-runs the WorkspaceIntegration shell update -> webhook re-bake,
+        # freezing the new cluster's resolved values.
+        - name: rayClusterName
+          value: other-cluster
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
