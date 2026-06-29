@@ -5,6 +5,8 @@ resources:
 - bases/workspace.jupyter.org_workspaces.yaml
 - bases/workspace.jupyter.org_workspacetemplates.yaml
 - bases/workspace.jupyter.org_workspaceaccessstrategies.yaml
+- bases/workspace.jupyter.org_workspaceintegrationtemplates.yaml
+- bases/workspace.jupyter.org_workspaceintegrations.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
