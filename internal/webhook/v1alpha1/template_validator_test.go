@@ -179,4 +179,91 @@ var _ = Describe("TemplateValidator", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
+
+	// ValidateNamespaceScope is the namespace-only gate the mutating webhook calls before stamping a
+	// protection finalizer. Unlike ValidateCreateWorkspace it must NOT fetch the template, so it
+	// enforces scope even when the template does not exist and never reports a missing-template error.
+	Context("ValidateNamespaceScope", func() {
+		It("should reject a disallowed namespace without fetching the template", func() {
+			// No template objects are seeded: the gate must reject on scope alone, never on existence.
+			validator := buildValidator("jupyter-k8s-shared")
+
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					TemplateRef: &workspacev1alpha1.TemplateRef{
+						Name:      "missing-template",
+						Namespace: "team-b",
+					},
+				},
+			}
+
+			err := validator.ValidateNamespaceScope(workspace)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("templateRef.namespace"))
+			Expect(err.Error()).To(ContainSubstring("team-b"))
+			// The error is about scope, not a missing template.
+			Expect(err.Error()).NotTo(ContainSubstring("not found"))
+		})
+
+		It("should allow an in-scope reference even when the template does not exist", func() {
+			// No template objects are seeded: an in-scope reference passes the gate; existence is the
+			// validating webhook's concern, not this gate's.
+			validator := buildValidator("jupyter-k8s-shared")
+
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					TemplateRef: &workspacev1alpha1.TemplateRef{
+						Name:      "missing-template",
+						Namespace: "team-a",
+					},
+				},
+			}
+
+			Expect(validator.ValidateNamespaceScope(workspace)).To(Succeed())
+		})
+
+		It("should allow the shared namespace", func() {
+			validator := buildValidator("jupyter-k8s-shared")
+
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					TemplateRef: &workspacev1alpha1.TemplateRef{
+						Name:      "shared-template",
+						Namespace: "jupyter-k8s-shared",
+					},
+				},
+			}
+
+			Expect(validator.ValidateNamespaceScope(workspace)).To(Succeed())
+		})
+
+		It("should allow an empty templateRef namespace", func() {
+			validator := buildValidator("jupyter-k8s-shared")
+
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					TemplateRef: &workspacev1alpha1.TemplateRef{
+						Name: "some-template",
+					},
+				},
+			}
+
+			Expect(validator.ValidateNamespaceScope(workspace)).To(Succeed())
+		})
+
+		It("should skip validation when workspace has no templateRef", func() {
+			validator := buildValidator("jupyter-k8s-shared")
+
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				Spec:       workspacev1alpha1.WorkspaceSpec{},
+			}
+
+			Expect(validator.ValidateNamespaceScope(workspace)).To(Succeed())
+		})
+	})
 })
