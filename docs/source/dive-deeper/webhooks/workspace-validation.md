@@ -7,7 +7,7 @@ The validating webhook enforces constraints on workspace create, update, and del
 | Check | Description |
 |-------|-------------|
 | Template constraints | Validates resources, images, storage size, and idle shutdown bounds against the template's constraint fields |
-| Access strategy namespace | Rejects references to access strategies outside the workspace's own namespace or the configured shared namespace |
+| Reference namespace scope | Rejects references to templates or access strategies outside the workspace's own namespace or the configured shared namespace |
 | Volume ownership | Rejects references to other workspaces' primary storage PVCs (secondary storage can be shared freely) |
 
 ## Bypassed for controller/admins
@@ -31,6 +31,12 @@ On `DELETE`, the webhook only checks ownership permission for `OwnerOnly` worksp
 
 ## Lazy constraint enforcement
 
-The webhook enforces template constraints at **admission time** — when a user creates or updates a workspace.
+The webhook enforces template constraints at **admission time**, when a user creates or updates a workspace.
 
 Changing constraints on a template does not immediately impact running workspaces. Instead, the template controller marks affected workspaces for compliance checking.
+
+## Protection finalizers on referenced resources
+
+The mutating webhook protects the resources a workspace depends on from being deleted while still in use. When a workspace references a template, the webhook stamps a `workspace.jupyter.org/template-protection` finalizer on that template; when it references an access strategy, it stamps a `workspace.jupyter.org/accessstrategy-protection` finalizer on that access strategy. These are added **lazily**, only once a referencing workspace exists. The webhook also rejects the workspace if the referenced resource does not exist.
+
+The webhook only adds finalizers; it never removes them. Removal stays with the template and access strategy controllers, which strip a protection finalizer once the last referring workspace (and, for access strategies, the last referring template) is gone.

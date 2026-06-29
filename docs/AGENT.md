@@ -34,6 +34,10 @@ Prefer active voice over passive. For example:
 - "The operator creates a Pod for each workspace" — correct
 - "A Pod is created for each workspace by the operator" — avoid
 
+### Style
+
+Do not use em-dashes (or spaced hyphens) as sentence punctuation in body text; rewrite with a comma, period, or parentheses.
+
 ### Headings
 
 Never embed bold (`**`), backticks (`` ` ``), or other inline formatting in
