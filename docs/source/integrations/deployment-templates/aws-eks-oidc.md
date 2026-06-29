@@ -50,8 +50,8 @@ jd config
 jd up
 ```
 
-`jd config` walks you through the template's variables and installs any missing tools. Once the
-cluster is up, you create and manage workspaces as in any **Jupyter K8s** deployment — see
+`jd config` walks you through the template's variables and how to install any missing tools. Once the
+cluster is up, you create and manage workspaces as in any **Jupyter K8s** deployment. See
 [Run Workspaces](../../getting-started/run-workspaces).
 
 ## Learn more
