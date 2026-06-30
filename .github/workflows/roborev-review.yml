@@ -105,6 +105,10 @@ jobs:
         with:
           role-to-assume: ${{ vars.REVIEW_RUN_ROLE_ARN }}
           aws-region: ${{ vars.REVIEW_AWS_REGION || 'us-west-2' }}
+          # Pin the session to 1h: long enough for the 30-min job with margin, short
+          # enough to keep the leaked-credential window small. Keep this above the job
+          # timeout; a longer job means raising both.
+          role-duration-seconds: 3600
 
       # Keep secrets out of the container env: write the OIDC session creds and the
       # gh token to files the smoke/review containers read via read-only mounts, so
