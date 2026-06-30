@@ -79,6 +79,13 @@ rules:
   - update
   - watch
 - apiGroups:
+  - ray.io
+  resources:
+  - rayclusters
+  verbs:
+  - get
+  - list
+- apiGroups:
   - traefik.io
   resources:
   - ingressroutes

@@ -381,6 +381,18 @@ func main() {
 		}
 	}
 
+	// Set up WorkspaceIntegration webhook (enabled by default, controlled by
+	// ENABLE_WORKSPACE_INTEGRATION_WEBHOOK). This mutating webhook resolves the child's spec output
+	// fields at the WorkspaceIntegration's own admission, so the workspace controller never resolves
+	// integration templates or reads referenced resources at reconcile time.
+	// nolint:goconst
+	if os.Getenv("ENABLE_WORKSPACE_INTEGRATION_WEBHOOK") != "false" {
+		if err := webhookv1alpha1.SetupWorkspaceIntegrationWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "WorkspaceIntegration")
+			os.Exit(1)
+		}
+	}
+
 	// nolint:goconst
 	if enableExtensionAPI {
 		setupLog.Info("Setting up extension API server")
