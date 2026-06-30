@@ -6,10 +6,12 @@
 #
 # SECURITY: pull_request_target runs with repository credentials. This job must
 # never execute code from the PR. It checks out the trusted base branch, fetches
-# the PR head as git objects only, and hands roborev a ref range. The assumed IAM
-# role can only pull the review image and invoke Bedrock, and GITHUB_TOKEN can only
-# comment and set statuses, so a prompt-injected review of a malicious diff can at
-# worst spend model tokens and post a misleading comment.
+# the PR head as git objects only, and hands roborev a ref range. The review
+# container holds only the Bedrock creds (mounted, not env), never the GITHUB_TOKEN:
+# roborev prints the review and the runner posts it. The IAM role can only pull the
+# image and invoke Bedrock, and the token can only comment and set statuses, so a
+# prompt-injected review of a malicious diff can at worst spend model tokens and
+# produce a misleading comment.
 #
 # Inert until these repo variables are set (after tf-aws-iam-ci is deployed with
 # create_review_resources = true and the review image is published):
