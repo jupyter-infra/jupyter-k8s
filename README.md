@@ -40,7 +40,8 @@ For cloud-specific guided charts, see [jupyter-k8s-aws](https://github.com/jupyt
 
 ## Contributing
 
-Refer to the [Contributing guide](./CONTRIBUTING.md).
+Refer to the [Contributing guide](./CONTRIBUTING.md). Pull requests get an automated AI code
+review, and you can run the same review locally before pushing with `make review`.
 
 ## License
 
