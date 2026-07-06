@@ -48,4 +48,4 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## Roborev CI 
 
-Runs automatically
+Roborev runs automatically
