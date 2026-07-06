@@ -164,6 +164,23 @@ func (b *AccessResourcesBuilder) ResolveAccessURL(
 	return b.ResolveTemplateURL(accessStrategy.Spec.AccessURLTemplate, workspace, accessStrategy, service)
 }
 
+// ResolveApplicationBasePath resolves the access strategy's applicationBasePathTemplate.
+// Returns "" when the field is absent or on template error (resolveIdlePath treats "" as no prefix).
+func (b *AccessResourcesBuilder) ResolveApplicationBasePath(
+	workspace *workspacev1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
+	service *corev1.Service,
+) (string, error) {
+	if accessStrategy.Spec.ApplicationBasePathTemplate == "" {
+		return "", nil
+	}
+	resolved, err := b.ResolveTemplateURL(accessStrategy.Spec.ApplicationBasePathTemplate, workspace, accessStrategy, service)
+	if err != nil {
+		return "", err
+	}
+	return resolved, nil
+}
+
 // ResolveAccessResourceSelector creates a label selector string for finding access resources
 // associated with a specific workspace and access strategy
 func (b *AccessResourcesBuilder) ResolveAccessResourceSelector(

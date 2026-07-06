@@ -252,7 +252,10 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 			},
 		},
 		Resources: resources,
-		// TODO: Add probes
+		// ReadinessProbe gates the pod from Service endpoints until the IDE is
+		// actually accepting connections, preventing transient 502s on startup.
+		// nil when neither workspace nor template configures one (opt-in via config).
+		ReadinessProbe: workspace.Spec.ReadinessProbe,
 	}
 
 	storageConfig := ResolveStorageConfig(workspace)

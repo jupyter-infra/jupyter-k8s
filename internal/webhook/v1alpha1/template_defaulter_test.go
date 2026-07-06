@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
@@ -53,6 +54,14 @@ var _ = Describe("TemplateDefaulter", func() {
 				},
 				DefaultNodeSelector: map[string]string{
 					"node-type": "compute",
+				},
+				DefaultReadinessProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						TCPSocket: &corev1.TCPSocketAction{
+							Port: intstr.FromInt(8888),
+						},
+					},
+					FailureThreshold: 30,
 				},
 			},
 		}
@@ -98,6 +107,11 @@ var _ = Describe("TemplateDefaulter", func() {
 
 			// Check metadata defaults
 			Expect(workspace.Labels).To(HaveKeyWithValue(controller.LabelWorkspaceTemplate, "test-template"))
+
+			// Check readiness probe default (verifies applyReadinessProbeDefaults is registered)
+			Expect(workspace.Spec.ReadinessProbe).NotTo(BeNil())
+			Expect(workspace.Spec.ReadinessProbe.TCPSocket).NotTo(BeNil())
+			Expect(workspace.Spec.ReadinessProbe.TCPSocket.Port).To(Equal(intstr.FromInt(8888)))
 		})
 
 		It("should not override existing values", func() {

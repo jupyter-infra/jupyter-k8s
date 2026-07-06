@@ -206,6 +206,18 @@ lint-fix-e2e: golangci-lint ## Run golangci-lint linter on e2e tests and perform
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
 
+##@ Code Review
+
+.PHONY: review
+review: ## AI review of the current branch vs main (roborev, runs locally, no daemon)
+	@command -v roborev >/dev/null 2>&1 || { echo "roborev not found. Install it from https://roborev.io, then optionally run 'make review-setup'."; exit 1; }
+	roborev review --branch --local --wait
+
+.PHONY: review-setup
+review-setup: ## Opt-in: install the roborev post-commit hook for continuous local review
+	@command -v roborev >/dev/null 2>&1 || { echo "roborev not found. Install it from https://roborev.io first."; exit 1; }
+	roborev init --agent claude-code
+
 ##@ Build
 
 .PHONY: build
@@ -461,7 +473,7 @@ load-images-e2e: build-rotator ## Build and load all images into the e2e test Ki
 .PHONY: kubectl-kind
 kubectl-kind: ## Configure kubectl to use kind cluster
 	@echo "Setting kubectl context to kind-$(DEV_KIND_CLUSTER)..."
-	@if kubectl config get-contexts | grep -q "kind-$(DEV_KIND_CLUSTER)"; then \
+	@if kubectl config get-contexts -o name | grep "kind-$(DEV_KIND_CLUSTER)" > /dev/null 2>&1; then \
 		kubectl config use-context kind-$(DEV_KIND_CLUSTER); \
 		echo "✅ kubectl configured to use kind cluster. Current context: $$(kubectl config current-context)"; \
 	else \
@@ -605,7 +617,7 @@ setup-aws:
 
 kubectl-aws-internal: ## Configure kubectl to use remote cluster
 	@echo "Setting up kubectl to use remote cluster..."
-	@if kubectl config get-contexts | grep -q "$(EKS_CLUSTER_NAME)"; then \
+	@if kubectl config get-contexts -o name | grep "$(EKS_CLUSTER_NAME)" > /dev/null 2>&1; then \
 		echo "Switching to EKS cluster context..."; \
 		kubectl config use-context "$(EKS_CONTEXT)"; \
 		echo "✅ kubectl configured to use remote cluster. Current context: $$(kubectl config current-context)"; \

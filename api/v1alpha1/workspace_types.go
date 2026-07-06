@@ -89,7 +89,43 @@ type IdleShutdownSpec struct {
 type IdleDetectionSpec struct {
 	// HTTPGet specifies the HTTP request to perform for idle detection
 	// +optional
-	HTTPGet *corev1.HTTPGetAction `json:"httpGet,omitempty"`
+	HTTPGet *IdleHTTPGetAction `json:"httpGet,omitempty"`
+}
+
+// IdleHTTPGetAction extends corev1.HTTPGetAction with transport and response parsing options.
+type IdleHTTPGetAction struct {
+	corev1.HTTPGetAction `json:",inline"`
+
+	// Transport selects how the operator reaches the endpoint.
+	// "podExec" executes curl inside the workspace container (legacy).
+	// "network" makes a direct HTTP call from the operator to the workspace Service's ClusterIP.
+	// +kubebuilder:validation:Enum=podExec;network
+	// +kubebuilder:default=podExec
+	// +optional
+	Transport string `json:"transport,omitempty"`
+
+	// LastActivityTimestamp describes how to extract and parse the last-activity
+	// timestamp from the JSON response body.
+	// +optional
+	LastActivityTimestamp *IdleLastActivityTimestampSpec `json:"lastActivityTimestamp,omitempty"`
+}
+
+// IdleLastActivityTimestampSpec configures extraction and parsing of a last-activity
+// timestamp value from an idle-detection HTTP response body.
+type IdleLastActivityTimestampSpec struct {
+	// ResponseBodyPath is a dot-separated path to the timestamp value in the
+	// JSON response body (e.g. "last_activity" or "status.lastActive").
+	// Default: "lastActiveTimestamp"
+	// +optional
+	ResponseBodyPath string `json:"responseBodyPath,omitempty"`
+
+	// Format specifies how to parse the extracted value.
+	// "RFC3339" expects an RFC 3339 timestamp string.
+	// "unix" expects epoch seconds (numeric or string).
+	// +kubebuilder:validation:Enum=RFC3339;unix
+	// +kubebuilder:default=RFC3339
+	// +optional
+	Format string `json:"format,omitempty"`
 }
 
 // WorkspaceSpec defines the desired state of Workspace
@@ -153,6 +189,10 @@ type WorkspaceSpec struct {
 	// Lifecycle specifies actions that the management system should take
 	// in response to container lifecycle events (for instance, lifecycle hooks)
 	Lifecycle *corev1.Lifecycle `json:"lifecycle,omitempty"`
+
+	// ReadinessProbe specifies the readiness probe for the main workspace container.
+	// +optional
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 
 	// AccessStrategy specifies the WorkspaceAccessStrategy to use
 	// +optional
@@ -228,6 +268,12 @@ type WorkspaceStatus struct {
 	// AccessURL is the URL at which the workspace can be accessed
 	// +optional
 	AccessURL string `json:"accessURL,omitempty"`
+
+	// ApplicationBasePath is the resolved routing prefix for the workspace application.
+	// Set during access-resources reconciliation; used by idle detection to construct
+	// the full endpoint path.
+	// +optional
+	ApplicationBasePath string `json:"applicationBasePath,omitempty"`
 
 	// AccessResourceSelector is a label selector that can be used to find all resources
 	// created from the workspace's AccessStrategy templates

@@ -121,6 +121,25 @@ var _ = Describe("reconcileDesiredStoppedStatus access resources", func() {
 	// accessError is nil. We skip a direct integration test for this path and
 	// instead test the AccessNotStopped reason through the access-error path
 	// below, which keeps entries in the list.
+	Context("applicationBasePath cleared on stop", func() {
+		It("should clear ApplicationBasePath when workspace is stopped", func() {
+			workspace := newStoppedWorkspace()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			// Simulate a previously-set base path
+			workspace.Status.ApplicationBasePath = "/workspaces/default/my-ws/"
+			Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+
+			sm := buildStateMachine()
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+			Expect(workspace.Status.ApplicationBasePath).To(Equal(""))
+		})
+	})
+
 	Context("access resource deletion error", func() {
 		It("should propagate access error when deployment and service are gone", func() {
 			workspace := newStoppedWorkspace()

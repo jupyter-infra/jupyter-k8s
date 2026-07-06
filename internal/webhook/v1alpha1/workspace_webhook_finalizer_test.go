@@ -11,6 +11,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -78,6 +79,7 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 		ctx = context.Background()
 		scheme = runtime.NewScheme()
 		Expect(workspacev1alpha1.AddToScheme(scheme)).To(Succeed())
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
 	})
 
 	Context("ensureTemplateFinalizer", func() {
@@ -794,6 +796,171 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to add finalizer to AccessStrategy"))
 			Expect(err.Error()).To(ContainSubstring("update failed"))
+		})
+	})
+
+	// The mutating webhook must namespace-check a reference before stamping a protection finalizer,
+	// so it never finalizes a template or access strategy the workspace is not allowed to reference
+	// (the validating webhook would reject such a workspace anyway). sharedNamespace is empty here,
+	// so any cross-namespace reference is out of scope.
+	Context("Default namespace-scope gate before finalizing", func() {
+		var defaulter WorkspaceCustomDefaulter
+
+		newDefaulter := func(k8sClient client.Client) WorkspaceCustomDefaulter {
+			return WorkspaceCustomDefaulter{
+				templateDefaulter:       NewTemplateDefaulter(k8sClient, ""),
+				serviceAccountDefaulter: NewServiceAccountDefaulter(k8sClient),
+				templateGetter:          NewTemplateGetter(k8sClient, ""),
+				templateValidator:       NewTemplateValidator(k8sClient, ""),
+				accessStrategyValidator: NewAccessStrategyValidator(""),
+				client:                  k8sClient,
+			}
+		}
+
+		It("should reject and not finalize a template in a disallowed namespace", func() {
+			template := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-template",
+					Namespace: "other-ns",
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Test Template",
+					DefaultImage: "test:latest",
+				},
+			}
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					DisplayName:   "Test Workspace",
+					Image:         "test:latest",
+					DesiredStatus: "Running",
+					TemplateRef: &workspacev1alpha1.TemplateRef{
+						Name:      "test-template",
+						Namespace: "other-ns",
+					},
+				},
+			}
+
+			k8sClient = fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(template, workspace).
+				Build()
+			defaulter = newDefaulter(k8sClient)
+
+			err := defaulter.Default(ctx, workspace)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("templateRef.namespace"))
+
+			// Verify the finalizer was NOT stamped on the out-of-scope template
+			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "other-ns"}, updatedTemplate)).To(Succeed())
+			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeFalse())
+		})
+
+		It("should reject and not finalize an access strategy in a disallowed namespace", func() {
+			accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-strategy",
+					Namespace: "other-ns",
+				},
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					DisplayName: "Test Strategy",
+				},
+			}
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					DisplayName:   "Test Workspace",
+					Image:         "test:latest",
+					DesiredStatus: "Running",
+					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
+						Name:      "test-strategy",
+						Namespace: "other-ns",
+					},
+				},
+			}
+
+			k8sClient = fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(accessStrategy, workspace).
+				Build()
+			defaulter = newDefaulter(k8sClient)
+
+			err := defaulter.Default(ctx, workspace)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("accessStrategy.namespace"))
+
+			// Verify the finalizer was NOT stamped on the out-of-scope access strategy
+			updatedStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-strategy", Namespace: "other-ns"}, updatedStrategy)).To(Succeed())
+			Expect(controllerutil.ContainsFinalizer(updatedStrategy, workspaceutil.AccessStrategyFinalizerName)).To(BeFalse())
+		})
+
+		It("should not finalize an in-scope template when the access strategy namespace is disallowed", func() {
+			// Both references are present: the template is in-scope (workspace's own namespace) but
+			// the access strategy is out of scope. Because both namespace checks run before any
+			// finalizer is stamped, the rejected access strategy must not leave a finalizer behind
+			// on the otherwise-valid template.
+			template := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-template",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DisplayName:  "Test Template",
+					DefaultImage: "test:latest",
+				},
+			}
+			accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-strategy",
+					Namespace: "other-ns",
+				},
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					DisplayName: "Test Strategy",
+				},
+			}
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: "default",
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					DisplayName:   "Test Workspace",
+					Image:         "test:latest",
+					DesiredStatus: "Running",
+					TemplateRef: &workspacev1alpha1.TemplateRef{
+						Name:      "test-template",
+						Namespace: "default",
+					},
+					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
+						Name:      "test-strategy",
+						Namespace: "other-ns",
+					},
+				},
+			}
+
+			k8sClient = fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(template, accessStrategy, workspace).
+				Build()
+			defaulter = newDefaulter(k8sClient)
+
+			err := defaulter.Default(ctx, workspace)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("accessStrategy.namespace"))
+
+			// The in-scope template must NOT carry a protection finalizer: the access strategy
+			// namespace check runs before any finalizer is stamped.
+			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "default"}, updatedTemplate)).To(Succeed())
+			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeFalse())
 		})
 	})
 })

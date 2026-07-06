@@ -183,6 +183,12 @@ var _ = Describe("Workspace Access Strategy", Ordered, func() {
 				"{.status.accessURL}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(accessURL).To(Equal(fmt.Sprintf("https://example.com/workspaces/default/%s/", workspaceName)))
+
+			By("verifying workspace.status contains correctly resolved applicationBasePath")
+			basePath, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.status.applicationBasePath}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(basePath).To(Equal(fmt.Sprintf("/workspaces/default/%s/", workspaceName)))
 		})
 	})
 
@@ -232,6 +238,11 @@ var _ = Describe("Workspace Access Strategy", Ordered, func() {
 			accessURL, _ := kubectlGet("workspace", workspaceName, workspaceNamespace,
 				"{.status.accessURL}")
 			Expect(accessURL).To(BeEmpty())
+
+			By("verifying Workspace status does not contain applicationBasePath")
+			basePath, _ := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.status.applicationBasePath}")
+			Expect(basePath).To(BeEmpty())
 		})
 	})
 

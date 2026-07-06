@@ -14,7 +14,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -303,7 +302,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		}
 
 		// Handle idle shutdown for running workspaces
-		return sm.handleIdleShutdownForRunningWorkspace(ctx, workspace)
+		return sm.handleIdleShutdownForRunningWorkspace(ctx, workspace, service)
 	}
 
 	// Resources are being created/started but not fully ready yet
@@ -330,7 +329,8 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 // handleIdleShutdownForRunningWorkspace handles idle shutdown logic for running workspaces
 func (sm *StateMachine) handleIdleShutdownForRunningWorkspace(
 	ctx context.Context,
-	workspace *workspacev1alpha1.Workspace) (ctrl.Result, error) {
+	workspace *workspacev1alpha1.Workspace,
+	service *corev1.Service) (ctrl.Result, error) {
 
 	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name, "resourceVersion", workspace.ResourceVersion)
 
@@ -349,19 +349,11 @@ func (sm *StateMachine) handleIdleShutdownForRunningWorkspace(
 		"workspace", workspace.Name,
 		"namespace", workspace.Namespace)
 
-	// Check if pods are actually ready for idle checking
-	podsReady, err := sm.isAtLeastOneWorkspacePodReady(ctx, workspace)
-	if err != nil {
-		logger.Error(err, "Failed to check pod readiness")
-		return ctrl.Result{RequeueAfter: IdleCheckInterval}, nil
-	}
-
-	if !podsReady {
-		logger.Info("Workspace pods not ready yet, skipping idle check")
-		return ctrl.Result{RequeueAfter: IdleCheckInterval}, nil
-	}
-
-	result, err := sm.idleChecker.CheckWorkspaceIdle(ctx, workspace, idleConfig)
+	// No explicit pod-readiness check needed here: this code only runs after
+	// IsDeploymentAvailable()==true, which guarantees at least one ready pod.
+	// If a pod crashes between the deployment check and the idle probe, the
+	// probe returns ShouldRetry=true and we retry next cycle.
+	result, err := sm.idleChecker.CheckWorkspaceIdle(ctx, workspace, service, idleConfig)
 	if err != nil {
 		if !result.ShouldRetry {
 			logger.Error(err, "Permanent failure checking idle status, disabling idle shutdown for this workspace")
@@ -379,8 +371,8 @@ func (sm *StateMachine) handleIdleShutdownForRunningWorkspace(
 	}
 
 	// Requeue for next idle check
-	logger.V(1).Info("Scheduling next idle check", "interval", IdleCheckInterval)
-	return ctrl.Result{RequeueAfter: IdleCheckInterval}, nil
+	logger.V(1).Info("Scheduling next idle check", "interval", sm.idleChecker.CheckInterval())
+	return ctrl.Result{RequeueAfter: sm.idleChecker.CheckInterval()}, nil
 }
 
 // stopWorkspaceDueToIdle stops the workspace due to idle timeout
@@ -402,36 +394,6 @@ func (sm *StateMachine) stopWorkspaceDueToIdle(ctx context.Context, workspace *w
 
 	// Requeue after a minimal wait
 	return ctrl.Result{RequeueAfter: MinimalRequeueDelay}, nil
-}
-
-// isAtLeastOneWorkspacePodReady checks if workspace pods are ready for idle checking
-func (sm *StateMachine) isAtLeastOneWorkspacePodReady(ctx context.Context, workspace *workspacev1alpha1.Workspace) (bool, error) {
-	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name)
-
-	// List pods with the workspace labels
-	podList := &corev1.PodList{}
-	labels := GenerateLabels(workspace.Name)
-
-	if err := sm.resourceManager.client.List(ctx, podList, client.InNamespace(workspace.Namespace), client.MatchingLabels(labels)); err != nil {
-		return false, fmt.Errorf("failed to list pods: %w", err)
-	}
-
-	// Check if we have any running and ready pods
-	for _, pod := range podList.Items {
-		if pod.Status.Phase == corev1.PodRunning {
-			// Check if pod is ready (all readiness probes passed)
-			for _, condition := range pod.Status.Conditions {
-				if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
-					logger.V(1).Info("Found ready workspace pod", "pod", pod.Name)
-					return true, nil
-				}
-			}
-			logger.V(1).Info("Found running but not ready pod", "pod", pod.Name)
-		}
-	}
-
-	logger.V(1).Info("No ready workspace pods found")
-	return false, nil
 }
 
 // ReconcileDeletion handles workspace deletion with finalizer management

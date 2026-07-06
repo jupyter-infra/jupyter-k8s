@@ -329,4 +329,39 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			Expect(selector).To(Equal(expectedSelector))
 		})
 	})
+
+	Context("ResolveApplicationBasePath", func() {
+		It("Should return empty string when applicationBasePath is not set", func() {
+			result, err := accessBuilder.ResolveApplicationBasePath(testWorkspace, testAccessStrategy, testService)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(""))
+		})
+
+		It("Should resolve a static applicationBasePath", func() {
+			strategy := testAccessStrategy.DeepCopy()
+			strategy.Spec.ApplicationBasePathTemplate = "/workspaces/"
+
+			result, err := accessBuilder.ResolveApplicationBasePath(testWorkspace, strategy, testService)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal("/workspaces/"))
+		})
+
+		It("Should resolve a templated applicationBasePath", func() {
+			strategy := testAccessStrategy.DeepCopy()
+			strategy.Spec.ApplicationBasePathTemplate = "/workspaces/{{.Workspace.Namespace}}/{{.Workspace.Name}}/"
+
+			result, err := accessBuilder.ResolveApplicationBasePath(testWorkspace, strategy, testService)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal("/workspaces/test-namespace/test-workspace/"))
+		})
+
+		It("Should return empty string and error on invalid template", func() {
+			strategy := testAccessStrategy.DeepCopy()
+			strategy.Spec.ApplicationBasePathTemplate = "/workspaces/{{.Invalid}/"
+
+			result, err := accessBuilder.ResolveApplicationBasePath(testWorkspace, strategy, testService)
+			Expect(err).To(HaveOccurred())
+			Expect(result).To(Equal(""))
+		})
+	})
 })
