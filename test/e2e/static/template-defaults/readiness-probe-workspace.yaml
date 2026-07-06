@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: readiness-probe-workspace
+spec:
+  displayName: "Readiness Probe Test"
+  templateRef:
+    name: readiness-probe-template
+    namespace: jupyter-k8s-shared

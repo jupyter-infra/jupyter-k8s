@@ -134,6 +134,36 @@ Ask user before running.
 - Run end-to-end tests (creates a separate kind cluster): `make test-e2e`
 - Run focused e2e tests: `make test-e2e-focus FOCUS="<selector name>"` (e.g., `FOCUS="Workspace Access Strategy"`)
 
+## Automated code review
+
+Open PRs are reviewed automatically by [roborev](https://roborev.io)
+in CI (`.github/workflows/roborev-review.yml`): each revision gets one review comment,
+backed by Claude on Bedrock. The review is informational, maintainers still approve and merge.
+
+You can run the same review locally before pushing. Install roborev from
+[roborev.io](https://roborev.io), then:
+
+```bash
+make review        # review the current branch vs main, on demand
+```
+
+`make review` runs `roborev review --branch --local --wait`: no daemon, no background
+process, using whatever coding agent you have installed (claude-code, codex, gemini, ...).
+It shares the policy file [`.roborev.toml`](.roborev.toml) with CI. CI runs the full matrix
+defined there (the `default` and `security` review types); a local run does a single review,
+so push to get the complete CI review.
+
+For a continuous loop where every commit is reviewed automatically (opt-in):
+
+```bash
+make review-setup  # one-time: installs the roborev post-commit hook
+# then, after any commit:
+roborev show HEAD  # see the latest review
+roborev refine     # iterate: review, fix, repeat until clean
+```
+
+Local review is optional; CI reviews every PR regardless.
+
 ## Documentation
 
 Refer to [`docs/AGENT.md`](docs/AGENT.md)

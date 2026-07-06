@@ -79,7 +79,45 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `httpGet` _[HTTPGetAction](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#httpgetaction-v1-core)_ | HTTPGet specifies the HTTP request to perform for idle detection |  | Optional: \{\} <br /> |
+| `httpGet` _[IdleHTTPGetAction](#idlehttpgetaction)_ | HTTPGet specifies the HTTP request to perform for idle detection |  | Optional: \{\} <br /> |
+
+
+
+## IdleHTTPGetAction
+
+
+
+IdleHTTPGetAction extends corev1.HTTPGetAction with transport and response parsing options.
+
+_Appears in:_
+- [IdleDetectionSpec](#idledetectionspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `path` _string_ | Path to access on the HTTP server. |  | Optional: \{\} <br /> |
+| `port` _[IntOrString](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#intorstring-intstr-util)_ | Name or number of the port to access on the container.<br />Number must be in the range 1 to 65535.<br />Name must be an IANA_SVC_NAME. |  |  |
+| `host` _string_ | Host name to connect to, defaults to the pod IP. You probably want to set<br />"Host" in httpHeaders instead. |  | Optional: \{\} <br /> |
+| `scheme` _[URIScheme](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#urischeme-v1-core)_ | Scheme to use for connecting to the host.<br />Defaults to HTTP. |  | Optional: \{\} <br /> |
+| `httpHeaders` _[HTTPHeader](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#httpheader-v1-core) array_ | Custom headers to set in the request. HTTP allows repeated headers. |  | Optional: \{\} <br /> |
+| `transport` _string_ | Transport selects how the operator reaches the endpoint.<br />"podExec" executes curl inside the workspace container (legacy).<br />"network" makes a direct HTTP call from the operator to the workspace Service's ClusterIP. | podExec | Enum: [podExec network] <br />Optional: \{\} <br /> |
+| `lastActivityTimestamp` _[IdleLastActivityTimestampSpec](#idlelastactivitytimestampspec)_ | LastActivityTimestamp describes how to extract and parse the last-activity<br />timestamp from the JSON response body. |  | Optional: \{\} <br /> |
+
+
+
+## IdleLastActivityTimestampSpec
+
+
+
+IdleLastActivityTimestampSpec configures extraction and parsing of a last-activity
+timestamp value from an idle-detection HTTP response body.
+
+_Appears in:_
+- [IdleHTTPGetAction](#idlehttpgetaction)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `responseBodyPath` _string_ | ResponseBodyPath is a dot-separated path to the timestamp value in the<br />JSON response body (e.g. "last_activity" or "status.lastActive").<br />Default: "lastActiveTimestamp" |  | Optional: \{\} <br /> |
+| `format` _string_ | Format specifies how to parse the extracted value.<br />"RFC3339" expects an RFC 3339 timestamp string.<br />"unix" expects epoch seconds (numeric or string). | RFC3339 | Enum: [RFC3339 unix] <br />Optional: \{\} <br /> |
 
 
 
@@ -177,6 +215,7 @@ _Appears in:_
 | `affinity` _[Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#affinity-v1-core)_ | Affinity specifies node affinity and anti-affinity rules for the workspace pod |  |  |
 | `tolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#toleration-v1-core) array_ | Tolerations specifies tolerations for the workspace pod to schedule on nodes with matching taints |  |  |
 | `lifecycle` _[Lifecycle](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#lifecycle-v1-core)_ | Lifecycle specifies actions that the management system should take<br />in response to container lifecycle events (for instance, lifecycle hooks) |  |  |
+| `readinessProbe` _[Probe](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#probe-v1-core)_ | ReadinessProbe specifies the readiness probe for the main workspace container. |  | Optional: \{\} <br /> |
 | `accessStrategy` _[AccessStrategyRef](#accessstrategyref)_ | AccessStrategy specifies the WorkspaceAccessStrategy to use |  | Optional: \{\} <br /> |
 | `templateRef` _[TemplateRef](#templateref)_ | TemplateRef references a WorkspaceTemplate to use as base configuration<br />When set, template provides defaults and workspace spec fields act as overrides |  | Optional: \{\} <br /> |
 | `idleShutdown` _[IdleShutdownSpec](#idleshutdownspec)_ | IdleShutdown specifies idle shutdown configuration |  | Optional: \{\} <br /> |
@@ -202,6 +241,7 @@ _Appears in:_
 | `deploymentName` _string_ | DeploymentName is the name of the deployment managing the Workspace pods |  | Optional: \{\} <br /> |
 | `serviceName` _string_ | ServiceName is the name of the service exposing the Workspace |  | Optional: \{\} <br /> |
 | `accessURL` _string_ | AccessURL is the URL at which the workspace can be accessed |  | Optional: \{\} <br /> |
+| `applicationBasePath` _string_ | ApplicationBasePath is the resolved routing prefix for the workspace application.<br />Set during access-resources reconciliation; used by idle detection to construct<br />the full endpoint path. |  | Optional: \{\} <br /> |
 | `accessResourceSelector` _string_ | AccessResourceSelector is a label selector that can be used to find all resources<br />created from the workspace's AccessStrategy templates |  | Optional: \{\} <br /> |
 | `accessResources` _[AccessResourceStatus](#accessresourcestatus) array_ | AccessResources provides status details of individual resources created from<br />the workspace's AccessStrategy templates |  | Optional: \{\} <br /> |
 | `observedAccessStrategyVersion` _string_ | ObservedAccessStrategyVersion is a token capturing the identity and<br />version of the AccessStrategy last evaluated during workspace<br />reconciliation. The controller resets probe state when this value changes. |  | Optional: \{\} <br /> |

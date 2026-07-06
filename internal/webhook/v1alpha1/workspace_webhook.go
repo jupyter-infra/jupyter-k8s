@@ -230,6 +230,8 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace
 			templateDefaulter:       templateDefaulter,
 			serviceAccountDefaulter: serviceAccountDefaulter,
 			templateGetter:          templateGetter,
+			templateValidator:       templateValidator,
+			accessStrategyValidator: accessStrategyValidator,
 			client:                  mgr.GetClient(),
 		}).
 		Complete()
@@ -246,6 +248,8 @@ type WorkspaceCustomDefaulter struct {
 	templateDefaulter       *TemplateDefaulter
 	serviceAccountDefaulter *ServiceAccountDefaulter
 	templateGetter          *TemplateGetter
+	templateValidator       *TemplateValidator
+	accessStrategyValidator *AccessStrategyValidator
 	client                  client.Client
 }
 
@@ -313,7 +317,21 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 	// Set workspace defaults for OwnershipType and AccessType
 	setWorkspaceSharingDefaults(workspace)
 
-	// Ensure template has finalizer to prevent deletion while in use
+	// Validate the namespace scope of BOTH referenced resources before stamping ANY protection
+	// finalizer. Stamping a finalizer is a side effect on another object that the API server will
+	// not roll back when this admission is later rejected. Reordering to validate-all then act-all
+	// ensures an out-of-scope access strategy reference can never leave a finalizer behind on the
+	// template (and vice versa). Existence and constraint checks still run in the validating webhook.
+	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
+		if err := d.templateValidator.ValidateNamespaceScope(workspace); err != nil {
+			return err
+		}
+	}
+	if err := d.accessStrategyValidator.ValidateCreateWorkspace(workspace); err != nil {
+		return err
+	}
+
+	// Ensure template has finalizer to prevent deletion while in use.
 	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
 		templateNamespace := workspaceutil.GetTemplateRefNamespace(workspace)
 		if err := ensureTemplateFinalizer(ctx, d.client, workspace.Spec.TemplateRef.Name, templateNamespace); err != nil {
@@ -322,7 +340,7 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Obje
 		}
 	}
 
-	// Ensure AccessStrategy has finalizer to prevent deletion while in use
+	// Ensure AccessStrategy has finalizer to prevent deletion while in use.
 	if err := ensureAccessStrategyFinalizer(ctx, d.client, workspace); err != nil {
 		workspacelog.Error(err, "Failed to add finalizer to AccessStrategy", "workspace", workspace.GetName())
 		return fmt.Errorf("failed to add finalizer to AccessStrategy: %w", err)

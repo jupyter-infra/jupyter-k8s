@@ -1,0 +1,29 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  labels:
+    app.kubernetes.io/name: jupyter-k8s
+    app.kubernetes.io/managed-by: kustomize
+  name: workspace-sample-idle-shutdown
+spec:
+  displayName: sample-running
+  image: uv
+  desiredStatus: Running
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  idleShutdown:
+    enabled: true
+    idleTimeoutInMinutes: 1
+    detection:
+      httpGet:
+        path: /api/status
+        port: 8888
+        transport: network
+        lastActivityTimestamp:
+          responseBodyPath: last_activity
+          format: RFC3339

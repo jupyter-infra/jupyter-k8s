@@ -802,6 +802,98 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			)
 		})
 
+		It("should inherit readiness probe from template", func() {
+			templateFilename := "readiness-probe-template"
+			workspaceName := "readiness-probe-workspace"
+			workspaceFilename := "readiness-probe-workspace"
+
+			By("creating template with default readiness probe")
+			createTemplateForTest(templateFilename, groupDir, subgroupDefaults)
+
+			By("creating workspace without a readiness probe")
+			createWorkspaceForTest(workspaceFilename, groupDir, subgroupDefaults)
+
+			By("verifying workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			testTemplateFeaturesInheritance(
+				workspaceName,
+				workspaceNamespace,
+				[]valueTestCaseForTemplateTest{
+					{
+						description: "verifying workspace inherited readiness probe port",
+						jsonPath:    "{.spec.readinessProbe.tcpSocket.port}",
+						expected:    "8888",
+					},
+					{
+						description: "verifying workspace inherited readiness probe failureThreshold",
+						jsonPath:    "{.spec.readinessProbe.failureThreshold}",
+						expected:    "30",
+					},
+				},
+			)
+
+			By("verifying the readiness probe reached the deployment's primary container")
+			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.status.deploymentName}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deploymentName).NotTo(BeEmpty())
+
+			probePort, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
+				"{.spec.template.spec.containers[0].readinessProbe.tcpSocket.port}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(probePort).To(Equal("8888"))
+		})
+
+		It("should let workspace readiness probe take precedence over the template default", func() {
+			templateFilename := "readiness-probe-template"
+			workspaceName := "readiness-probe-override-workspace"
+			workspaceFilename := "readiness-probe-override-workspace"
+
+			By("creating template with a default readiness probe (failureThreshold 30)")
+			createTemplateForTest(templateFilename, groupDir, subgroupDefaults)
+
+			By("creating workspace that specifies its own readiness probe (failureThreshold 7)")
+			createWorkspaceForTest(workspaceFilename, groupDir, subgroupDefaults)
+
+			By("verifying workspace becomes available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				controller.ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("verifying the workspace probe was NOT overwritten by the template default")
+			testTemplateFeaturesInheritance(
+				workspaceName,
+				workspaceNamespace,
+				[]valueTestCaseForTemplateTest{
+					{
+						description: "verifying workspace readiness probe failureThreshold is preserved",
+						jsonPath:    "{.spec.readinessProbe.failureThreshold}",
+						expected:    "7",
+					},
+				},
+			)
+
+			By("verifying the workspace probe reached the deployment's primary container")
+			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.status.deploymentName}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deploymentName).NotTo(BeEmpty())
+
+			probeThreshold, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
+				"{.spec.template.spec.containers[0].readinessProbe.failureThreshold}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(probeThreshold).To(Equal("7"))
+		})
+
 		It("should inherit container config with env variables from template", func() {
 			templateFilename := "env-template"
 			workspaceName := "workspace-no-config"

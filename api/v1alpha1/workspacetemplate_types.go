@@ -137,6 +137,12 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultLifecycle *corev1.Lifecycle `json:"defaultLifecycle,omitempty"`
 
+	// DefaultReadinessProbe specifies the default readiness probe for the main workspace
+	// container for workspaces using this template.
+	// Applied only if the workspace does not specify its own readiness probe.
+	// +optional
+	DefaultReadinessProbe *corev1.Probe `json:"defaultReadinessProbe,omitempty"`
+
 	// DefaultPodSecurityContext specifies default pod-level security context
 	// +optional
 	DefaultPodSecurityContext *corev1.PodSecurityContext `json:"defaultPodSecurityContext,omitempty"`

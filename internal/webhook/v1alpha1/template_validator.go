@@ -62,6 +62,18 @@ func (tv *TemplateValidator) validateTemplateNamespace(workspace *workspacev1alp
 	)
 }
 
+// ValidateNamespaceScope checks only that the workspace's templateRef targets an allowed
+// namespace, without fetching the template or evaluating its constraints. The mutating webhook
+// uses this to confirm the reference is in scope before stamping a protection finalizer on the
+// template, so a finalizer is never added to a template the workspace may not reference. This
+// mirrors how the template webhook namespace-checks an access strategy before finalizing it.
+func (tv *TemplateValidator) ValidateNamespaceScope(workspace *workspacev1alpha1.Workspace) error {
+	if workspace.Spec.TemplateRef == nil {
+		return nil
+	}
+	return tv.validateTemplateNamespace(workspace)
+}
+
 // ValidateCreateWorkspace validates workspace against template constraints
 func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
 	if workspace.Spec.TemplateRef == nil {

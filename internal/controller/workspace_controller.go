@@ -8,6 +8,7 @@ package controller
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/jupyter-infra/jupyter-k8s-plugin/plugin"
 	"github.com/jupyter-infra/jupyter-k8s-plugin/pluginclient"
@@ -63,6 +64,10 @@ type WorkspaceControllerOptions struct {
 	// (e.g. {"aws": "http://localhost:8080"}).
 	// When set, remote access operations are delegated to the named plugin.
 	PluginEndpoints map[string]string
+
+	// IdleCheckInterval is the interval between idle status checks for running workspaces.
+	// Zero means use the default (5m).
+	IdleCheckInterval time.Duration
 }
 
 // WorkspaceReconciler reconciles a Workspace object
@@ -339,7 +344,7 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 
 	// Create state machine
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
-	idleChecker := NewWorkspaceIdleChecker(k8sClient)
+	idleChecker := NewWorkspaceIdleChecker(k8sClient, options.IdleCheckInterval)
 	accessStartupProber := NewAccessStartupProber(NewAccessResourcesBuilder())
 	stateMachine := NewStateMachine(resourceManager, statusManager, eventRecorder, idleChecker, accessStartupProber)
 

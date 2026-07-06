@@ -71,6 +71,8 @@ var _ = Describe("Workspace Webhook", func() {
 			templateDefaulter:       NewTemplateDefaulter(mockClient, ""),
 			serviceAccountDefaulter: NewServiceAccountDefaulter(mockClient),
 			templateGetter:          NewTemplateGetter(mockClient, ""),
+			templateValidator:       NewTemplateValidator(mockClient, ""),
+			accessStrategyValidator: NewAccessStrategyValidator(""),
 			client:                  mockClient, // Add client field for testing
 		}
 		validator = WorkspaceCustomValidator{
