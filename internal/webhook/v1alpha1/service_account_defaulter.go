@@ -32,7 +32,7 @@ func NewServiceAccountDefaulter(k8sClient client.Client) *ServiceAccountDefaulte
 func GetDefaultServiceAccount(ctx context.Context, k8sClient client.Client, namespace string) (string, error) {
 	serviceAccounts := &corev1.ServiceAccountList{}
 	if err := k8sClient.List(ctx, serviceAccounts, client.InNamespace(namespace), client.MatchingLabels{
-		webhookconst.DefaultServiceAccountLabel: "true",
+		webhookconst.DefaultServiceAccountLabel: labelValueTrue,
 	}); err != nil {
 		return "", fmt.Errorf("failed to list service accounts: %w", err)
 	}

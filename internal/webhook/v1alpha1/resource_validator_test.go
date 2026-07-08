@@ -21,8 +21,8 @@ var _ = Describe("Resource Validator", func() {
 	BeforeEach(func() {
 		template = &workspacev1alpha1.WorkspaceTemplate{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-template",
-				Namespace: "default",
+				Name:      testTemplateName,
+				Namespace: testDefaultNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 				ResourceBounds: &workspacev1alpha1.ResourceBounds{
@@ -69,7 +69,7 @@ var _ = Describe("Resource Validator", func() {
 			Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 			Expect(violations[0].Field).To(Equal("spec.resources.requests.cpu"))
 			Expect(violations[0].Message).To(ContainSubstring("below minimum"))
-			Expect(violations[0].Message).To(ContainSubstring("test-template"))
+			Expect(violations[0].Message).To(ContainSubstring(testTemplateName))
 		})
 
 		It("should reject CPU above maximum", func() {
@@ -83,7 +83,7 @@ var _ = Describe("Resource Validator", func() {
 			Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 			Expect(violations[0].Field).To(Equal("spec.resources.requests.cpu"))
 			Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
-			Expect(violations[0].Message).To(ContainSubstring("test-template"))
+			Expect(violations[0].Message).To(ContainSubstring(testTemplateName))
 		})
 
 		It("should reject memory below minimum", func() {
@@ -154,7 +154,7 @@ var _ = Describe("Resource Validator", func() {
 			Expect(violations[0].Field).To(Equal("spec.resources.limits.cpu"))
 			Expect(violations[0].Message).To(ContainSubstring("limit"))
 			Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
-			Expect(violations[0].Message).To(ContainSubstring("test-template"))
+			Expect(violations[0].Message).To(ContainSubstring(testTemplateName))
 		})
 
 		It("should reject memory limit below minimum", func() {
@@ -291,7 +291,7 @@ var _ = Describe("Resource Validator", func() {
 			Expect(violations).To(HaveLen(1))
 			Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 			Expect(violations[0].Message).To(ContainSubstring("below minimum"))
-			Expect(violations[0].Message).To(ContainSubstring("test-template"))
+			Expect(violations[0].Message).To(ContainSubstring(testTemplateName))
 		})
 
 		It("should reject GPU above maximum", func() {
@@ -304,7 +304,7 @@ var _ = Describe("Resource Validator", func() {
 			Expect(violations).To(HaveLen(1))
 			Expect(violations[0].Type).To(Equal(ViolationTypeResourceExceeded))
 			Expect(violations[0].Message).To(ContainSubstring("exceeds maximum"))
-			Expect(violations[0].Message).To(ContainSubstring("test-template"))
+			Expect(violations[0].Message).To(ContainSubstring(testTemplateName))
 		})
 
 		It("should allow GPU when no GPU bounds specified", func() {

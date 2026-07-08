@@ -21,7 +21,7 @@ import (
 
 // Constants for common test values
 const (
-	testAppPath = "/workspaces/ns1/app1"
+	testAppPath = testPathValue
 	testLabPath = "/workspaces/ns1/app1/lab" // Path with lab suffix
 )
 
@@ -187,9 +187,9 @@ func TestServerStarts_RetrievesKeySetFromOIDCProvider_WhenOauthIsEnabled(t *test
 			ShutdownTimeout:  1 * time.Second,
 			PathRegexPattern: DefaultPathRegexPattern,
 			EnableOAuth:      true,
-			OIDCIssuerURL:    "https://test-issuer.example.com",
-			OIDCClientID:     "test-client-id",
-			OidcGroupsPrefix: "test-prefix:",
+			OIDCIssuerURL:    testIssuerURL,
+			OIDCClientID:     testClientID,
+			OidcGroupsPrefix: testPrefixValue,
 		}
 
 		// Track if Start() was called on the OIDC verifier
@@ -272,9 +272,9 @@ func TestServerStarts_RetrievesKeySetFromOIDCProvider_WhenOauthIsEnabled(t *test
 			ShutdownTimeout:  1 * time.Second,
 			PathRegexPattern: DefaultPathRegexPattern,
 			EnableOAuth:      true,
-			OIDCIssuerURL:    "https://test-issuer.example.com",
-			OIDCClientID:     "test-client-id",
-			OidcGroupsPrefix: "test-prefix:",
+			OIDCIssuerURL:    testIssuerURL,
+			OIDCClientID:     testClientID,
+			OidcGroupsPrefix: testPrefixValue,
 		}
 
 		// Create a mock OIDC verifier that returns an error from Start()
@@ -318,10 +318,10 @@ func TestServerStarts_DoesNotCallOIDCProvier_WhenOauthIsDisabled(t *testing.T) {
 		WriteTimeout:     1 * time.Second,
 		ShutdownTimeout:  1 * time.Second,
 		PathRegexPattern: DefaultPathRegexPattern,
-		EnableOAuth:      false,                             // This is the important part - OAuth is disabled
-		OIDCIssuerURL:    "https://test-issuer.example.com", // Still has OIDC config
-		OIDCClientID:     "test-client-id",
-		OidcGroupsPrefix: "test-prefix:",
+		EnableOAuth:      false,         // This is the important part - OAuth is disabled
+		OIDCIssuerURL:    testIssuerURL, // Still has OIDC config
+		OIDCClientID:     testClientID,
+		OidcGroupsPrefix: testPrefixValue,
 	}
 
 	// Track if Start() was incorrectly called on the OIDC verifier
@@ -469,10 +469,10 @@ func TestServerLogsAnErrorIfClientInstantiationFails(t *testing.T) {
 	// For a handler that uses k8sClient, test that it handles nil client
 	// by creating a test request to /auth which tries to use the client
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
-	req.Header.Set("X-Auth-Request-User", "test-user")
-	req.Header.Set("X-Auth-Request-Groups", "group1")
+	req.Header.Set("X-Auth-Request-User", testUserValue)
+	req.Header.Set("X-Auth-Request-Groups", testGroup1)
 	req.Header.Set("X-Forwarded-Uri", testAppPath)
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	req.Header.Set("Authorization", "Bearer mock-token") // Add Authorization header for OIDC
 	w := httptest.NewRecorder()
 
@@ -480,9 +480,9 @@ func TestServerLogsAnErrorIfClientInstantiationFails(t *testing.T) {
 	server.oidcVerifier = &MockOIDCVerifier{
 		VerifyTokenFunc: func(ctx context.Context, tokenString string, logger *slog.Logger) (*OIDCClaims, bool, error) {
 			claims := &OIDCClaims{
-				Subject:  "test-user",
-				Username: "test-user",
-				Groups:   []string{"group1"},
+				Subject:  testUserValue,
+				Username: testUserValue,
+				Groups:   []string{testGroup1},
 			}
 			return claims, false, nil
 		},
@@ -522,7 +522,7 @@ func TestNewServer_OIDCVerifierCreationFails(t *testing.T) {
 		JWTRefreshWindow: 5 * time.Minute,
 		EnableOAuth:      true,
 		OIDCIssuerURL:    "", // Missing - will cause NewOIDCVerifier to fail
-		OIDCClientID:     "test-client",
+		OIDCClientID:     testClientValue,
 	}
 
 	jwtHandler := &MockJWTHandler{}

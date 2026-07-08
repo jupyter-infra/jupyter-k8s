@@ -27,7 +27,7 @@ func setupPVCBuilder() *PVCBuilder {
 func TestPVCBuilder_ExplicitStorage(t *testing.T) {
 	builder := setupPVCBuilder()
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespace},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			Storage: &workspacev1alpha1.StorageSpec{Size: resource.MustParse("5Gi")},
 		},
@@ -52,7 +52,7 @@ func TestPVCBuilder_TemplateStorage(t *testing.T) {
 	// This test verifies workspace storage spec is respected
 	builder := setupPVCBuilder()
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespace},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			Storage: &workspacev1alpha1.StorageSpec{Size: resource.MustParse("50Gi")},
 		},
@@ -75,7 +75,7 @@ func TestPVCBuilder_TemplateStorage(t *testing.T) {
 func TestPVCBuilder_NoStorage(t *testing.T) {
 	builder := setupPVCBuilder()
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespace},
 		Spec:       workspacev1alpha1.WorkspaceSpec{},
 	}
 
@@ -91,7 +91,7 @@ func TestPVCBuilder_NoStorage(t *testing.T) {
 func TestPVCBuilder_DefaultSize(t *testing.T) {
 	builder := setupPVCBuilder()
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespace},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			Storage: &workspacev1alpha1.StorageSpec{Size: resource.Quantity{}},
 		},
@@ -115,7 +115,7 @@ func TestPVCBuilder_StorageClass(t *testing.T) {
 	builder := setupPVCBuilder()
 	storageClassName := "fast-ssd"
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespace},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			Storage: &workspacev1alpha1.StorageSpec{
 				Size:             resource.MustParse("10Gi"),
@@ -140,7 +140,7 @@ func TestPVCBuilder_StorageClass(t *testing.T) {
 func TestPVCBuilder_Metadata(t *testing.T) {
 	builder := setupPVCBuilder()
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "test-namespace"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			Storage: &workspacev1alpha1.StorageSpec{Size: resource.MustParse("5Gi")},
 		},
@@ -155,11 +155,11 @@ func TestPVCBuilder_Metadata(t *testing.T) {
 		return
 	}
 
-	expectedName := GeneratePVCName("test-workspace")
+	expectedName := GeneratePVCName(testWorkspaceName)
 	if pvc.Name != expectedName {
 		t.Errorf("Expected PVC name %s, got %s", expectedName, pvc.Name)
 	}
-	if pvc.Namespace != "test-namespace" {
+	if pvc.Namespace != testNamespaceName {
 		t.Errorf("Expected namespace test-namespace, got %s", pvc.Namespace)
 	}
 }
@@ -167,7 +167,7 @@ func TestPVCBuilder_Metadata(t *testing.T) {
 func TestPVCBuilder_OwnerReference(t *testing.T) {
 	builder := setupPVCBuilder()
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default", UID: "test-uid"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespace, UID: "test-uid"},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			Storage: &workspacev1alpha1.StorageSpec{Size: resource.MustParse("5Gi")},
 		},
@@ -200,7 +200,7 @@ func TestPVCBuilder_UpdateDetection(t *testing.T) {
 	builder := NewPVCBuilder(s)
 
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespace},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			Storage: &workspacev1alpha1.StorageSpec{Size: resource.MustParse("10Gi")},
 		},

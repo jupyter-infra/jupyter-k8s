@@ -122,7 +122,7 @@ func TestHandleBearerAuth_BearerTokenReview_ExtractWorkspaceInfoFailure(t *testi
 
 	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
 	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/?token=some-token")
-	req.Header.Set(HeaderForwardedHost, "example.com")
+	req.Header.Set(HeaderForwardedHost, testDomainValue)
 	w := httptest.NewRecorder()
 
 	server.handleBearerAuth(w, req)
@@ -154,7 +154,7 @@ func TestHandleBearerAuth_BearerTokenReview_CreateReviewError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
 	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/?token=some-token")
-	req.Header.Set(HeaderForwardedHost, "example.com")
+	req.Header.Set(HeaderForwardedHost, testDomainValue)
 	w := httptest.NewRecorder()
 
 	server.handleBearerAuth(w, req)
@@ -193,7 +193,7 @@ func TestHandleBearerAuth_BearerTokenReview_Unauthenticated(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
 	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/?token=expired-token")
-	req.Header.Set(HeaderForwardedHost, "example.com")
+	req.Header.Set(HeaderForwardedHost, testDomainValue)
 	w := httptest.NewRecorder()
 
 	server.handleBearerAuth(w, req)
@@ -210,7 +210,7 @@ func TestHandleBearerAuth_BearerTokenReview_PathMismatch(t *testing.T) {
 		TestDefaultNamespace,
 		true,
 		"/workspaces/default/different-workspace", // path doesn't match request
-		testUserValue, testUIDValue, []string{"users"}, nil,
+		testUserValue, testUIDValue, []string{testUsersValue}, nil,
 		"",
 	)
 	mockServer.SetupServerBearerTokenReview200OK(response)
@@ -232,7 +232,7 @@ func TestHandleBearerAuth_BearerTokenReview_PathMismatch(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
 	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/?token=valid-token")
-	req.Header.Set(HeaderForwardedHost, "example.com")
+	req.Header.Set(HeaderForwardedHost, testDomainValue)
 	w := httptest.NewRecorder()
 
 	server.handleBearerAuth(w, req)
@@ -249,7 +249,7 @@ func TestHandleBearerAuth_BearerTokenReview_Success(t *testing.T) {
 		TestDefaultNamespace,
 		true,
 		"/workspaces/default/myworkspace", // matches appPath extracted from forwarded URI
-		testUserValue, testUIDValue, []string{"users"}, nil,
+		testUserValue, testUIDValue, []string{testUsersValue}, nil,
 		"",
 	)
 	mockServer.SetupServerBearerTokenReview200OK(response)
@@ -262,9 +262,9 @@ func TestHandleBearerAuth_BearerTokenReview_Success(t *testing.T) {
 		GenerateTokenFunc: func(user string, groups []string, uid string, extra map[string][]string, path string, domain string, tokenType string) (string, error) {
 			assert.Equal(t, testUserValue, user)
 			assert.Equal(t, testUIDValue, uid)
-			assert.Equal(t, []string{"users"}, groups)
+			assert.Equal(t, []string{testUsersValue}, groups)
 			assert.Equal(t, "/workspaces/default/myworkspace", path)
-			assert.Equal(t, "example.com", domain)
+			assert.Equal(t, testDomainValue, domain)
 			assert.Equal(t, jwt.TokenTypeSession, tokenType)
 			return "session-token", nil
 		},
@@ -274,7 +274,7 @@ func TestHandleBearerAuth_BearerTokenReview_Success(t *testing.T) {
 		SetCookieFunc: func(w http.ResponseWriter, token string, path string, domain string) {
 			assert.Equal(t, "session-token", token)
 			assert.Equal(t, "/workspaces/default/myworkspace", path)
-			assert.Equal(t, "example.com", domain)
+			assert.Equal(t, testDomainValue, domain)
 			cookieSet = true
 		},
 	}
@@ -293,7 +293,7 @@ func TestHandleBearerAuth_BearerTokenReview_Success(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
 	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/?token=valid-token")
-	req.Header.Set(HeaderForwardedHost, "example.com")
+	req.Header.Set(HeaderForwardedHost, testDomainValue)
 	w := httptest.NewRecorder()
 
 	server.handleBearerAuth(w, req)
@@ -315,7 +315,7 @@ func TestHandleBearerAuth_BearerTokenReview_GenerateTokenError(t *testing.T) {
 		TestDefaultNamespace,
 		true,
 		"/workspaces/default/myworkspace",
-		testUserValue, testUIDValue, []string{"users"}, nil,
+		testUserValue, testUIDValue, []string{testUsersValue}, nil,
 		"",
 	)
 	mockServer.SetupServerBearerTokenReview200OK(response)
@@ -343,7 +343,7 @@ func TestHandleBearerAuth_BearerTokenReview_GenerateTokenError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
 	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/?token=valid-token")
-	req.Header.Set(HeaderForwardedHost, "example.com")
+	req.Header.Set(HeaderForwardedHost, testDomainValue)
 	w := httptest.NewRecorder()
 
 	server.handleBearerAuth(w, req)

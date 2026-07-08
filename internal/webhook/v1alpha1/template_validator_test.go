@@ -40,52 +40,52 @@ var _ = Describe("TemplateValidator", func() {
 		It("should reject templateRef targeting another team's namespace", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-template",
-					Namespace: "team-b",
+					Name:      testSomeTemplate,
+					Namespace: testNamespaceTeamB,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DefaultImage: "jupyter/base-notebook:latest",
+					DefaultImage: testValidBaseNotebook,
 					DisplayName:  "Some Template",
 				},
 			}
-			validator := buildValidator("jupyter-k8s-shared", template)
+			validator := buildValidator(testSharedNamespace, template)
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name:      "some-template",
-						Namespace: "team-b",
+						Name:      testSomeTemplate,
+						Namespace: testNamespaceTeamB,
 					},
 				},
 			}
 
 			err := validator.ValidateCreateWorkspace(ctx, workspace)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("team-b"))
-			Expect(err.Error()).To(ContainSubstring("team-a"))
-			Expect(err.Error()).To(ContainSubstring("jupyter-k8s-shared"))
+			Expect(err.Error()).To(ContainSubstring(testNamespaceTeamB))
+			Expect(err.Error()).To(ContainSubstring(testNamespaceTeamA))
+			Expect(err.Error()).To(ContainSubstring(testSharedNamespace))
 		})
 
 		It("should allow templateRef targeting the workspace's own namespace", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "local-template",
-					Namespace: "team-a",
+					Namespace: testNamespaceTeamA,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DefaultImage: "jupyter/base-notebook:latest",
+					DefaultImage: testValidBaseNotebook,
 					DisplayName:  "Local Template",
 				},
 			}
-			validator := buildValidator("jupyter-k8s-shared", template)
+			validator := buildValidator(testSharedNamespace, template)
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					TemplateRef: &workspacev1alpha1.TemplateRef{
 						Name:      "local-template",
-						Namespace: "team-a",
+						Namespace: testNamespaceTeamA,
 					},
 				},
 			}
@@ -97,22 +97,22 @@ var _ = Describe("TemplateValidator", func() {
 		It("should allow templateRef targeting the shared namespace", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "shared-template",
-					Namespace: "jupyter-k8s-shared",
+					Name:      testSharedTemplate,
+					Namespace: testSharedNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DefaultImage: "jupyter/base-notebook:latest",
+					DefaultImage: testValidBaseNotebook,
 					DisplayName:  "Shared Template",
 				},
 			}
-			validator := buildValidator("jupyter-k8s-shared", template)
+			validator := buildValidator(testSharedNamespace, template)
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name:      "shared-template",
-						Namespace: "jupyter-k8s-shared",
+						Name:      testSharedTemplate,
+						Namespace: testSharedNamespace,
 					},
 				},
 			}
@@ -124,21 +124,21 @@ var _ = Describe("TemplateValidator", func() {
 		It("should allow templateRef with empty namespace", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-template",
-					Namespace: "team-a",
+					Name:      testSomeTemplate,
+					Namespace: testNamespaceTeamA,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DefaultImage: "jupyter/base-notebook:latest",
+					DefaultImage: testValidBaseNotebook,
 					DisplayName:  "Some Template",
 				},
 			}
-			validator := buildValidator("jupyter-k8s-shared", template)
+			validator := buildValidator(testSharedNamespace, template)
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name: "some-template",
+						Name: testSomeTemplate,
 					},
 				},
 			}
@@ -151,27 +151,27 @@ var _ = Describe("TemplateValidator", func() {
 			validator := buildValidator("")
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name:      "some-template",
-						Namespace: "jupyter-k8s-shared",
+						Name:      testSomeTemplate,
+						Namespace: testSharedNamespace,
 					},
 				},
 			}
 
 			err := validator.ValidateCreateWorkspace(ctx, workspace)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("jupyter-k8s-shared"))
-			Expect(err.Error()).To(ContainSubstring("team-a"))
+			Expect(err.Error()).To(ContainSubstring(testSharedNamespace))
+			Expect(err.Error()).To(ContainSubstring(testNamespaceTeamA))
 			Expect(err.Error()).NotTo(ContainSubstring("shared namespace"))
 		})
 
 		It("should skip validation when workspace has no templateRef", func() {
-			validator := buildValidator("jupyter-k8s-shared")
+			validator := buildValidator(testSharedNamespace)
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec:       workspacev1alpha1.WorkspaceSpec{},
 			}
 
@@ -186,14 +186,14 @@ var _ = Describe("TemplateValidator", func() {
 	Context("ValidateNamespaceScope", func() {
 		It("should reject a disallowed namespace without fetching the template", func() {
 			// No template objects are seeded: the gate must reject on scope alone, never on existence.
-			validator := buildValidator("jupyter-k8s-shared")
+			validator := buildValidator(testSharedNamespace)
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					TemplateRef: &workspacev1alpha1.TemplateRef{
 						Name:      "missing-template",
-						Namespace: "team-b",
+						Namespace: testNamespaceTeamB,
 					},
 				},
 			}
@@ -201,7 +201,7 @@ var _ = Describe("TemplateValidator", func() {
 			err := validator.ValidateNamespaceScope(workspace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("templateRef.namespace"))
-			Expect(err.Error()).To(ContainSubstring("team-b"))
+			Expect(err.Error()).To(ContainSubstring(testNamespaceTeamB))
 			// The error is about scope, not a missing template.
 			Expect(err.Error()).NotTo(ContainSubstring("not found"))
 		})
@@ -209,14 +209,14 @@ var _ = Describe("TemplateValidator", func() {
 		It("should allow an in-scope reference even when the template does not exist", func() {
 			// No template objects are seeded: an in-scope reference passes the gate; existence is the
 			// validating webhook's concern, not this gate's.
-			validator := buildValidator("jupyter-k8s-shared")
+			validator := buildValidator(testSharedNamespace)
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					TemplateRef: &workspacev1alpha1.TemplateRef{
 						Name:      "missing-template",
-						Namespace: "team-a",
+						Namespace: testNamespaceTeamA,
 					},
 				},
 			}
@@ -225,14 +225,14 @@ var _ = Describe("TemplateValidator", func() {
 		})
 
 		It("should allow the shared namespace", func() {
-			validator := buildValidator("jupyter-k8s-shared")
+			validator := buildValidator(testSharedNamespace)
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name:      "shared-template",
-						Namespace: "jupyter-k8s-shared",
+						Name:      testSharedTemplate,
+						Namespace: testSharedNamespace,
 					},
 				},
 			}
@@ -241,13 +241,13 @@ var _ = Describe("TemplateValidator", func() {
 		})
 
 		It("should allow an empty templateRef namespace", func() {
-			validator := buildValidator("jupyter-k8s-shared")
+			validator := buildValidator(testSharedNamespace)
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name: "some-template",
+						Name: testSomeTemplate,
 					},
 				},
 			}
@@ -256,10 +256,10 @@ var _ = Describe("TemplateValidator", func() {
 		})
 
 		It("should skip validation when workspace has no templateRef", func() {
-			validator := buildValidator("jupyter-k8s-shared")
+			validator := buildValidator(testSharedNamespace)
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec:       workspacev1alpha1.WorkspaceSpec{},
 			}
 

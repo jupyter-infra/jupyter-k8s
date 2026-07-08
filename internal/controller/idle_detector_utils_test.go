@@ -23,11 +23,11 @@ func TestResolveIdlePath(t *testing.T) {
 		httpGetPath string
 		expected    string
 	}{
-		{"", "/api/status", "/api/status"},
-		{"/", "/api/status", "/api/status"},
-		{"/workspaces/ns/ws/", "/api/status", "/workspaces/ns/ws/api/status"},
-		{"/workspaces/ns/ws", "/api/status", "/workspaces/ns/ws/api/status"},
-		{"/workspaces/ns/ws/", "api/status", "/workspaces/ns/ws/api/status"},
+		{"", pathAPIStatus, pathAPIStatus},
+		{"/", pathAPIStatus, pathAPIStatus},
+		{"/workspaces/ns/ws/", pathAPIStatus, pathWorkspacesAPIStatus},
+		{"/workspaces/ns/ws", pathAPIStatus, pathWorkspacesAPIStatus},
+		{"/workspaces/ns/ws/", pathAPIStatusNoLeadingSlash, pathWorkspacesAPIStatus},
 	}
 
 	for _, tt := range tests {
@@ -50,16 +50,16 @@ func TestBuildIdleProbeURL(t *testing.T) {
 		{
 			name:     "default scheme when empty",
 			port:     intstr.FromInt(8888),
-			host:     "10.96.0.1",
-			fullPath: "/api/status",
-			expected: "http://10.96.0.1:8888/api/status",
+			host:     testHostIP,
+			fullPath: pathAPIStatus,
+			expected: urlProbeAPIStatus,
 		},
 		{
 			name:     "explicit https scheme",
 			scheme:   corev1.URISchemeHTTPS,
 			port:     intstr.FromInt(8888),
-			host:     "10.96.0.1",
-			fullPath: "/api/status",
+			host:     testHostIP,
+			fullPath: pathAPIStatus,
 			expected: "https://10.96.0.1:8888/api/status",
 		},
 		{
@@ -68,9 +68,9 @@ func TestBuildIdleProbeURL(t *testing.T) {
 			// would silently disable idle shutdown for the workspace).
 			name:     "path without leading slash is normalized",
 			port:     intstr.FromInt(8888),
-			host:     "10.96.0.1",
-			fullPath: "api/status",
-			expected: "http://10.96.0.1:8888/api/status",
+			host:     testHostIP,
+			fullPath: pathAPIStatusNoLeadingSlash,
+			expected: urlProbeAPIStatus,
 		},
 		{
 			// A workspace-controlled path beginning with "@" must NOT be able to
@@ -78,7 +78,7 @@ func TestBuildIdleProbeURL(t *testing.T) {
 			// The host must remain the ClusterIP we were given.
 			name:     "userinfo injection cannot override host",
 			port:     intstr.FromInt(8888),
-			host:     "10.96.0.1",
+			host:     testHostIP,
 			fullPath: "@10.0.0.5/x",
 			expected: "http://10.96.0.1:8888/@10.0.0.5/x",
 		},
@@ -86,7 +86,7 @@ func TestBuildIdleProbeURL(t *testing.T) {
 			name:     "ipv6 host is bracketed",
 			port:     intstr.FromInt(8888),
 			host:     "fd00::1",
-			fullPath: "/api/status",
+			fullPath: pathAPIStatus,
 			expected: "http://[fd00::1]:8888/api/status",
 		},
 		{
@@ -95,31 +95,31 @@ func TestBuildIdleProbeURL(t *testing.T) {
 			name:     "uppercase scheme is lowercased",
 			scheme:   corev1.URIScheme("HTTP"),
 			port:     intstr.FromInt(8888),
-			host:     "10.96.0.1",
-			fullPath: "/api/status",
-			expected: "http://10.96.0.1:8888/api/status",
+			host:     testHostIP,
+			fullPath: pathAPIStatus,
+			expected: urlProbeAPIStatus,
 		},
 		{
 			// Port may be a named service port (intstr string form); it must be
 			// passed through verbatim rather than coerced to a number.
 			name:     "named string port is preserved",
 			port:     intstr.FromString("http-web"),
-			host:     "10.96.0.1",
-			fullPath: "/api/status",
+			host:     testHostIP,
+			fullPath: pathAPIStatus,
 			expected: "http://10.96.0.1:http-web/api/status",
 		},
 		{
 			name:     "localhost host (podExec transport)",
 			port:     intstr.FromInt(8888),
 			host:     "localhost",
-			fullPath: "/api/idle",
+			fullPath: pathAPIIdle,
 			expected: "http://localhost:8888/api/idle",
 		},
 		{
 			// An empty resolved path must still yield a valid root URL.
 			name:     "empty path becomes root",
 			port:     intstr.FromInt(8888),
-			host:     "10.96.0.1",
+			host:     testHostIP,
 			fullPath: "",
 			expected: "http://10.96.0.1:8888/",
 		},
@@ -128,7 +128,7 @@ func TestBuildIdleProbeURL(t *testing.T) {
 			// string into the probe URL; "?" is escaped inside the path segment.
 			name:     "query injection in path is escaped",
 			port:     intstr.FromInt(8888),
-			host:     "10.96.0.1",
+			host:     testHostIP,
 			fullPath: "/api/status?foo=bar",
 			expected: "http://10.96.0.1:8888/api/status%3Ffoo=bar",
 		},
@@ -137,7 +137,7 @@ func TestBuildIdleProbeURL(t *testing.T) {
 			// cannot repoint the request at another host.
 			name:     "double-slash path cannot repoint host",
 			port:     intstr.FromInt(8888),
-			host:     "10.96.0.1",
+			host:     testHostIP,
 			fullPath: "//evil.example.com/x",
 			expected: "http://10.96.0.1:8888//evil.example.com/x",
 		},
@@ -160,12 +160,12 @@ func TestBuildIdleProbeURL(t *testing.T) {
 	// the request actually targets must remain the host we pinned. Parse the
 	// result back and assert net/http would dial the pinned host:port.
 	t.Run("host stays pinned for hostile paths", func(t *testing.T) {
-		const host, port = "10.96.0.1", "8888"
+		const host, port = testHostIP, "8888"
 		hostilePaths := []string{
 			"@10.0.0.5/x",          // userinfo collapse
 			"//evil.example.com/x", // protocol-relative
 			"@evil.example.com",    // userinfo without path
-			"api/status",           // missing leading slash
+			pathAPIStatusNoLeadingSlash,
 		}
 		cfg := &workspacev1alpha1.IdleHTTPGetAction{
 			HTTPGetAction: corev1.HTTPGetAction{Port: intstr.FromString(port)},
@@ -186,13 +186,13 @@ func TestExtractJSONField(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{"simple", `{"last_activity": "2024-01-01T00:00:00Z"}`, "last_activity", "2024-01-01T00:00:00Z", false},
-		{"nested", `{"status": {"ts": "2024-01-01T00:00:00Z"}}`, "status.ts", "2024-01-01T00:00:00Z", false},
+		{"simple", `{"last_activity": "2024-01-01T00:00:00Z"}`, responseBodyPathLastActivity, timestampFixed, false},
+		{"nested", `{"status": {"ts": "2024-01-01T00:00:00Z"}}`, "status.ts", timestampFixed, false},
 		{"deeply_nested", `{"a": {"b": {"c": "val"}}}`, "a.b.c", "val", false},
 		{"numeric", `{"ts": 1704067200}`, "ts", "1704067200", false},
 		{"numeric_float", `{"ts": 1704067200.123}`, "ts", "1704067200.123", false},
-		{"default_field", `{"lastActiveTimestamp": "2024-01-01T00:00:00Z"}`, "lastActiveTimestamp", "2024-01-01T00:00:00Z", false},
-		{"missing_field", `{"other": "value"}`, "last_activity", "", true},
+		{"default_field", `{"lastActiveTimestamp": "2024-01-01T00:00:00Z"}`, "lastActiveTimestamp", timestampFixed, false},
+		{"missing_field", `{"other": "value"}`, responseBodyPathLastActivity, "", true},
 		{"missing_nested", `{"a": {"b": "val"}}`, "a.c", "", true},
 		{"not_object_at_path", `{"a": "string"}`, "a.b", "", true},
 		{"invalid_json", `not json`, "field", "", true},
@@ -219,17 +219,17 @@ func TestParseTimestamp(t *testing.T) {
 		format  string
 		wantErr bool
 	}{
-		{"rfc3339_utc", "2024-01-01T00:00:00Z", "RFC3339", false},
-		{"rfc3339_offset", "2024-01-01T05:30:00+05:30", "RFC3339", false},
-		{"rfc3339_lowercase_z", "2024-01-01t00:00:00z", "RFC3339", false},
-		{"rfc3339_fractional", "2024-01-01T00:00:00.123456Z", "RFC3339", false},
-		{"unix_int", "1704067200", "unix", false},
-		{"unix_float", "1704067200.5", "unix", false},
-		{"unix_string_int", "1704067200", "unix", false},
-		{"invalid_rfc3339", "not-a-date", "RFC3339", true},
-		{"invalid_unix", "abc", "unix", true},
-		{"empty_value_rfc3339", "", "RFC3339", true},
-		{"empty_value_unix", "", "unix", true},
+		{"rfc3339_utc", timestampFixed, defaultTimestampFormat, false},
+		{"rfc3339_offset", "2024-01-01T05:30:00+05:30", defaultTimestampFormat, false},
+		{"rfc3339_lowercase_z", "2024-01-01t00:00:00z", defaultTimestampFormat, false},
+		{"rfc3339_fractional", "2024-01-01T00:00:00.123456Z", defaultTimestampFormat, false},
+		{"unix_int", "1704067200", timestampFormatUnix, false},
+		{"unix_float", "1704067200.5", timestampFormatUnix, false},
+		{"unix_string_int", "1704067200", timestampFormatUnix, false},
+		{"invalid_rfc3339", "not-a-date", defaultTimestampFormat, true},
+		{"invalid_unix", "abc", timestampFormatUnix, true},
+		{"empty_value_rfc3339", "", defaultTimestampFormat, true},
+		{"empty_value_unix", "", timestampFormatUnix, true},
 	}
 
 	for _, tt := range tests {

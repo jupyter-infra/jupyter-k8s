@@ -36,7 +36,7 @@ var _ = Describe("Metadata Validator", func() {
 			BeforeEach(func() {
 				required := true
 				template.Spec.LabelRequirements = []workspacev1alpha1.LabelRequirement{
-					{Key: "env", Required: &required},
+					{Key: testLabelKeyEnv, Required: &required},
 				}
 			})
 
@@ -47,7 +47,7 @@ var _ = Describe("Metadata Validator", func() {
 			})
 
 			It("should pass when required label is present", func() {
-				workspace.Labels["env"] = "anything"
+				workspace.Labels[testLabelKeyEnv] = "anything"
 				violations := validateLabelRequirements(workspace, template)
 				Expect(violations).To(BeEmpty())
 			})
@@ -56,22 +56,22 @@ var _ = Describe("Metadata Validator", func() {
 		Context("regex validation", func() {
 			BeforeEach(func() {
 				template.Spec.LabelRequirements = []workspacev1alpha1.LabelRequirement{
-					{Key: "env", Regex: "^(production|staging)$"},
+					{Key: testLabelKeyEnv, Regex: "^(production|staging)$"},
 				}
 			})
 
 			It("should pass when value matches regex", func() {
-				workspace.Labels["env"] = "production"
+				workspace.Labels[testLabelKeyEnv] = testEnvProduction
 				violations := validateLabelRequirements(workspace, template)
 				Expect(violations).To(BeEmpty())
 			})
 
 			It("should fail when value doesn't match regex", func() {
-				workspace.Labels["env"] = "development"
+				workspace.Labels[testLabelKeyEnv] = testEnvDevelopment
 				violations := validateLabelRequirements(workspace, template)
 				Expect(violations).To(HaveLen(1))
 				Expect(violations[0].Type).To(Equal(ViolationTypeLabelRegexMismatch))
-				Expect(violations[0].Actual).To(Equal("development"))
+				Expect(violations[0].Actual).To(Equal(testEnvDevelopment))
 			})
 
 			It("should skip validation when label is absent", func() {
@@ -84,7 +84,7 @@ var _ = Describe("Metadata Validator", func() {
 			BeforeEach(func() {
 				required := true
 				template.Spec.LabelRequirements = []workspacev1alpha1.LabelRequirement{
-					{Key: "env", Required: &required, Regex: "^(production|staging)$"},
+					{Key: testLabelKeyEnv, Required: &required, Regex: "^(production|staging)$"},
 				}
 			})
 
@@ -95,14 +95,14 @@ var _ = Describe("Metadata Validator", func() {
 			})
 
 			It("should fail when present but doesn't match regex", func() {
-				workspace.Labels["env"] = "development"
+				workspace.Labels[testLabelKeyEnv] = testEnvDevelopment
 				violations := validateLabelRequirements(workspace, template)
 				Expect(violations).To(HaveLen(1))
 				Expect(violations[0].Type).To(Equal(ViolationTypeLabelRegexMismatch))
 			})
 
 			It("should pass when present and matches regex", func() {
-				workspace.Labels["env"] = "staging"
+				workspace.Labels[testLabelKeyEnv] = "staging"
 				violations := validateLabelRequirements(workspace, template)
 				Expect(violations).To(BeEmpty())
 			})

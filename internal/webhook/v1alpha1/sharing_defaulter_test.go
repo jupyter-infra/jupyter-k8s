@@ -16,71 +16,71 @@ var _ = Describe("setWorkspaceSharingDefaults", func() {
 	It("should set Public AccessType when OwnershipType is Public and AccessType is not populated", func() {
 		workspace := &workspacev1alpha1.Workspace{
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				OwnershipType: "Public",
+				OwnershipType: testOwnershipPublic,
 			},
 		}
 		setWorkspaceSharingDefaults(workspace)
-		Expect(workspace.Spec.OwnershipType).To(Equal("Public"))
-		Expect(workspace.Spec.AccessType).To(Equal("Public"))
+		Expect(workspace.Spec.OwnershipType).To(Equal(testOwnershipPublic))
+		Expect(workspace.Spec.AccessType).To(Equal(testOwnershipPublic))
 	})
 
 	It("should keep OwnerOnly AccessType when OwnershipType is Public and AccessType is OwnerOnly", func() {
 		workspace := &workspacev1alpha1.Workspace{
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				OwnershipType: "Public",
-				AccessType:    "OwnerOnly",
+				OwnershipType: testOwnershipPublic,
+				AccessType:    testOwnershipOwnerOnly,
 			},
 		}
 		setWorkspaceSharingDefaults(workspace)
-		Expect(workspace.Spec.OwnershipType).To(Equal("Public"))
-		Expect(workspace.Spec.AccessType).To(Equal("OwnerOnly"))
+		Expect(workspace.Spec.OwnershipType).To(Equal(testOwnershipPublic))
+		Expect(workspace.Spec.AccessType).To(Equal(testOwnershipOwnerOnly))
 	})
 
 	It("should keep Public AccessType when OwnershipType is Public and AccessType is Public", func() {
 		workspace := &workspacev1alpha1.Workspace{
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				OwnershipType: "Public",
-				AccessType:    "Public",
+				OwnershipType: testOwnershipPublic,
+				AccessType:    testOwnershipPublic,
 			},
 		}
 		setWorkspaceSharingDefaults(workspace)
-		Expect(workspace.Spec.OwnershipType).To(Equal("Public"))
-		Expect(workspace.Spec.AccessType).To(Equal("Public"))
+		Expect(workspace.Spec.OwnershipType).To(Equal(testOwnershipPublic))
+		Expect(workspace.Spec.AccessType).To(Equal(testOwnershipPublic))
 	})
 
 	It("should set OwnerOnly AccessType when OwnershipType is OwnerOnly and AccessType is not populated", func() {
 		workspace := &workspacev1alpha1.Workspace{
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				OwnershipType: "OwnerOnly",
+				OwnershipType: testOwnershipOwnerOnly,
 			},
 		}
 		setWorkspaceSharingDefaults(workspace)
-		Expect(workspace.Spec.OwnershipType).To(Equal("OwnerOnly"))
-		Expect(workspace.Spec.AccessType).To(Equal("OwnerOnly"))
+		Expect(workspace.Spec.OwnershipType).To(Equal(testOwnershipOwnerOnly))
+		Expect(workspace.Spec.AccessType).To(Equal(testOwnershipOwnerOnly))
 	})
 
 	It("should keep OwnerOnly AccessType when OwnershipType is OwnerOnly and AccessType is OwnerOnly", func() {
 		workspace := &workspacev1alpha1.Workspace{
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				OwnershipType: "OwnerOnly",
-				AccessType:    "OwnerOnly",
+				OwnershipType: testOwnershipOwnerOnly,
+				AccessType:    testOwnershipOwnerOnly,
 			},
 		}
 		setWorkspaceSharingDefaults(workspace)
-		Expect(workspace.Spec.OwnershipType).To(Equal("OwnerOnly"))
-		Expect(workspace.Spec.AccessType).To(Equal("OwnerOnly"))
+		Expect(workspace.Spec.OwnershipType).To(Equal(testOwnershipOwnerOnly))
+		Expect(workspace.Spec.AccessType).To(Equal(testOwnershipOwnerOnly))
 	})
 
 	It("should keep Public AccessType when OwnershipType is OwnerOnly and AccessType is Public", func() {
 		workspace := &workspacev1alpha1.Workspace{
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				OwnershipType: "OwnerOnly",
-				AccessType:    "Public",
+				OwnershipType: testOwnershipOwnerOnly,
+				AccessType:    testOwnershipPublic,
 			},
 		}
 		setWorkspaceSharingDefaults(workspace)
-		Expect(workspace.Spec.OwnershipType).To(Equal("OwnerOnly"))
-		Expect(workspace.Spec.AccessType).To(Equal("Public"))
+		Expect(workspace.Spec.OwnershipType).To(Equal(testOwnershipOwnerOnly))
+		Expect(workspace.Spec.AccessType).To(Equal(testOwnershipPublic))
 	})
 
 	It("should set Public OwnershipType and AccessType when both are not populated", func() {
@@ -88,29 +88,29 @@ var _ = Describe("setWorkspaceSharingDefaults", func() {
 			Spec: workspacev1alpha1.WorkspaceSpec{},
 		}
 		setWorkspaceSharingDefaults(workspace)
-		Expect(workspace.Spec.OwnershipType).To(Equal("Public"))
-		Expect(workspace.Spec.AccessType).To(Equal("Public"))
+		Expect(workspace.Spec.OwnershipType).To(Equal(testOwnershipPublic))
+		Expect(workspace.Spec.AccessType).To(Equal(testOwnershipPublic))
 	})
 
 	It("should set OwnerOnly AccessType when OwnershipType is not populated and AccessType is OwnerOnly", func() {
 		workspace := &workspacev1alpha1.Workspace{
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				AccessType: "OwnerOnly",
+				AccessType: testOwnershipOwnerOnly,
 			},
 		}
 		setWorkspaceSharingDefaults(workspace)
-		Expect(workspace.Spec.OwnershipType).To(Equal("Public"))
-		Expect(workspace.Spec.AccessType).To(Equal("OwnerOnly"))
+		Expect(workspace.Spec.OwnershipType).To(Equal(testOwnershipPublic))
+		Expect(workspace.Spec.AccessType).To(Equal(testOwnershipOwnerOnly))
 	})
 
 	It("should set Public AccessType when OwnershipType is not populated and AccessType is Public", func() {
 		workspace := &workspacev1alpha1.Workspace{
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				AccessType: "Public",
+				AccessType: testOwnershipPublic,
 			},
 		}
 		setWorkspaceSharingDefaults(workspace)
-		Expect(workspace.Spec.OwnershipType).To(Equal("Public"))
-		Expect(workspace.Spec.AccessType).To(Equal("Public"))
+		Expect(workspace.Spec.OwnershipType).To(Equal(testOwnershipPublic))
+		Expect(workspace.Spec.AccessType).To(Equal(testOwnershipPublic))
 	})
 })

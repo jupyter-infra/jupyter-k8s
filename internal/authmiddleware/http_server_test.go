@@ -84,8 +84,8 @@ func TestNewHTTPServerRunnable(t *testing.T) {
 		logger,
 		k8sClient,
 		signer,
-		"test-secret",
-		"test-namespace",
+		testSecretValue,
+		testNamespaceValue,
 	)
 
 	if runnable == nil {
@@ -97,10 +97,10 @@ func TestNewHTTPServerRunnable(t *testing.T) {
 	if runnable.standardSigner != signer {
 		t.Error("StandardSigner not set correctly")
 	}
-	if runnable.secretName != "test-secret" {
+	if runnable.secretName != testSecretValue {
 		t.Error("Secret name not set correctly")
 	}
-	if runnable.namespace != "test-namespace" {
+	if runnable.namespace != testNamespaceValue {
 		t.Error("Namespace not set correctly")
 	}
 }
@@ -118,8 +118,8 @@ func TestStart_WithStandardSigner_HappyCase(t *testing.T) {
 	// Create test secret with JWT signing keys
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-secret",
-			Namespace: "test-namespace",
+			Name:      testSecretValue,
+			Namespace: testNamespaceValue,
 		},
 		Data: map[string][]byte{
 			"jwt-signing-key-1700000000": []byte("abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLM"),
@@ -143,8 +143,8 @@ func TestStart_WithStandardSigner_HappyCase(t *testing.T) {
 		logger,
 		k8sClient,
 		signer,
-		"test-secret",
-		"test-namespace",
+		testSecretValue,
+		testNamespaceValue,
 	)
 
 	// Start with a cancellable context
@@ -234,7 +234,7 @@ func TestStart_WithStandardSigner_MissingSecret(t *testing.T) {
 		k8sClient,
 		signer,
 		"missing-secret",
-		"test-namespace",
+		testNamespaceValue,
 	)
 
 	ctx := context.Background()
@@ -265,7 +265,7 @@ func TestStart_WithStandardSigner_Unauthorized(t *testing.T) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "forbidden-secret",
-			Namespace: "test-namespace",
+			Namespace: testNamespaceValue,
 		},
 		Data: map[string][]byte{
 			"jwt-signing-key-1700000000": []byte("abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLM"),
@@ -297,7 +297,7 @@ func TestStart_WithStandardSigner_Unauthorized(t *testing.T) {
 		wrappedClient,
 		signer,
 		"forbidden-secret",
-		"test-namespace",
+		testNamespaceValue,
 	)
 
 	ctx := context.Background()

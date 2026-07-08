@@ -187,7 +187,7 @@ var _ = Describe("Server", func() {
 		sarClient = clientSet.AuthorizationV1().SubjectAccessReviews()
 
 		// Create mock JWT manager
-		mockSignerFactory := &mockSignerFactory{signer: &mockSigner{token: "test-token"}}
+		mockSignerFactory := &mockSignerFactory{signer: &mockSigner{token: testToken}}
 
 		// Create the server using NewExtensionServer
 		genericServer := &genericapiserver.GenericAPIServer{
@@ -519,7 +519,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("Should return 404 for paths with insufficient parts", func() {
-			mockSignerFactory := &mockSignerFactory{signer: &mockSigner{token: "test-token"}}
+			mockSignerFactory := &mockSignerFactory{signer: &mockSigner{token: testToken}}
 			genericServer := &genericapiserver.GenericAPIServer{
 				Handler: &genericapiserver.APIServerHandler{
 					NonGoRestfulMux: mux.NewPathRecorderMux("test"),
@@ -596,7 +596,7 @@ var _ = Describe("Server", func() {
 					},
 				}
 
-				server := createExtensionServer(genericServer, config, &logger, k8sClient, sarClient, &mockSignerFactory{signer: &mockSigner{token: "test-token"}}, &mockTokenValidator{}, nil)
+				server := createExtensionServer(genericServer, config, &logger, k8sClient, sarClient, &mockSignerFactory{signer: &mockSigner{token: testToken}}, &mockTokenValidator{}, nil)
 
 				Expect(server).NotTo(BeNil())
 				Expect(server.config).To(Equal(config))

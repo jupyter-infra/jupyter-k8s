@@ -78,14 +78,14 @@ func TestGetForwardedHost(t *testing.T) {
 	}{
 		{
 			name:        "Valid host header",
-			headerValue: "example.com",
-			expected:    "example.com",
+			headerValue: testDomainValue,
+			expected:    testDomainValue,
 			expectError: false,
 		},
 		{
 			name:        "Valid host with subdomain",
-			headerValue: "workspace1.example.com",
-			expected:    "workspace1.example.com",
+			headerValue: testWorkspace1Host,
+			expected:    testWorkspace1Host,
 			expectError: false,
 		},
 		{
@@ -134,7 +134,7 @@ func TestGetForwardedURI(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "Root path",
+			name:        testRootPathLabel,
 			headerValue: "/",
 			expected:    "/",
 			expectError: false,
@@ -179,8 +179,8 @@ func TestExtractSubdomain(t *testing.T) {
 	}{
 		{
 			name:     "Full domain with subdomain",
-			host:     "workspace1.example.com",
-			expected: "workspace1",
+			host:     testWorkspace1Host,
+			expected: testWorkspace1,
 		},
 		{
 			name:     "Multiple subdomains",
@@ -189,7 +189,7 @@ func TestExtractSubdomain(t *testing.T) {
 		},
 		{
 			name:     "No subdomain",
-			host:     "example.com",
+			host:     testDomainValue,
 			expected: "example",
 		},
 		{

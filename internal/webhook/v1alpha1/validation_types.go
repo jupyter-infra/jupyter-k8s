@@ -40,3 +40,6 @@ const (
 	ViolationTypeEnvRegexMismatch               = "EnvRegexMismatch"
 	ViolationTypeInitContainersNotAllowed       = "InitContainersNotAllowed"
 )
+
+// labelValueTrue is the string value used for boolean-style Kubernetes labels.
+const labelValueTrue = "true"

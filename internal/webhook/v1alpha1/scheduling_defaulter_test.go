@@ -22,11 +22,11 @@ var _ = Describe("SchedulingDefaulter", func() {
 
 	BeforeEach(func() {
 		template = &workspacev1alpha1.WorkspaceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+			ObjectMeta: metav1.ObjectMeta{Name: testTemplateName},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 				DefaultNodeSelector: map[string]string{
 					"node-type":   "compute",
-					"environment": "production",
+					"environment": testEnvProduction,
 				},
 				DefaultAffinity: &corev1.Affinity{
 					NodeAffinity: &corev1.NodeAffinity{
@@ -62,8 +62,8 @@ var _ = Describe("SchedulingDefaulter", func() {
 		}
 
 		workspace = &workspacev1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-workspace"},
-			Spec:       workspacev1alpha1.WorkspaceSpec{DisplayName: "Test"},
+			ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName},
+			Spec:       workspacev1alpha1.WorkspaceSpec{DisplayName: testDisplayName},
 		}
 	})
 
@@ -73,17 +73,17 @@ var _ = Describe("SchedulingDefaulter", func() {
 
 			Expect(workspace.Spec.NodeSelector).NotTo(BeNil())
 			Expect(workspace.Spec.NodeSelector).To(HaveKeyWithValue("node-type", "compute"))
-			Expect(workspace.Spec.NodeSelector).To(HaveKeyWithValue("environment", "production"))
+			Expect(workspace.Spec.NodeSelector).To(HaveKeyWithValue("environment", testEnvProduction))
 		})
 
 		It("should not override existing node selector", func() {
 			workspace.Spec.NodeSelector = map[string]string{
-				"existing": "value",
+				testExistingKey: testLabelValue,
 			}
 
 			applySchedulingDefaults(workspace, template)
 
-			Expect(workspace.Spec.NodeSelector).To(HaveKeyWithValue("existing", "value"))
+			Expect(workspace.Spec.NodeSelector).To(HaveKeyWithValue(testExistingKey, testLabelValue))
 			Expect(workspace.Spec.NodeSelector).NotTo(HaveKey("node-type"))
 		})
 
@@ -118,7 +118,7 @@ var _ = Describe("SchedulingDefaulter", func() {
 		It("should not override existing tolerations", func() {
 			workspace.Spec.Tolerations = []corev1.Toleration{
 				{
-					Key:    "existing",
+					Key:    testExistingKey,
 					Effect: corev1.TaintEffectNoSchedule,
 				},
 			}
@@ -126,7 +126,7 @@ var _ = Describe("SchedulingDefaulter", func() {
 			applySchedulingDefaults(workspace, template)
 
 			Expect(workspace.Spec.Tolerations).To(HaveLen(1))
-			Expect(workspace.Spec.Tolerations[0].Key).To(Equal("existing"))
+			Expect(workspace.Spec.Tolerations[0].Key).To(Equal(testExistingKey))
 		})
 
 		It("should create independent copies (deep copy test)", func() {

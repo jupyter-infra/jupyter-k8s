@@ -104,13 +104,13 @@ var _ = Describe("Utils", func() {
 				path:          "/a/lot/of/sub/paths/namespace/ns/workspace/ws1",
 				expected:      "",
 				expectError:   true,
-				errorContains: "cannot find the namespace",
+				errorContains: errCannotFindNamespace,
 			}),
 			Entry("path with empty namespace", testCase{
 				path:          "/a/lot/of/sub/paths/namespace//workspace/ws1",
 				expected:      "",
 				expectError:   true,
-				errorContains: "cannot find the namespace",
+				errorContains: errCannotFindNamespace,
 			}),
 			Entry("standard path with connection resource", testCase{
 				path:        "/a/lot/of/sub/paths/namespaces/ns2/connection",
@@ -121,17 +121,17 @@ var _ = Describe("Utils", func() {
 				path:          "/",
 				expected:      "",
 				expectError:   true,
-				errorContains: "cannot find the namespace",
+				errorContains: errCannotFindNamespace,
 			}),
 			Entry("empty path", testCase{
 				path:          "",
 				expected:      "",
 				expectError:   true,
-				errorContains: "cannot find the namespace",
+				errorContains: errCannotFindNamespace,
 			}),
 			Entry("api path with version and namespace", testCase{
 				path:        "/apis/connection.workspace.jupyter.org/v1alpha1/namespaces/default/connection",
-				expected:    "default",
+				expected:    namespaceDefault,
 				expectError: false,
 			}),
 		)

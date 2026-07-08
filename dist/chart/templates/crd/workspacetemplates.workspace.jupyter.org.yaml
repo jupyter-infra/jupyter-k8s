@@ -6,7 +6,7 @@ metadata:
     {{- if .Values.crd.keep }}
     "helm.sh/resource-policy": keep
     {{- end }}
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   name: workspacetemplates.workspace.jupyter.org
 spec:
   group: workspace.jupyter.org
@@ -1291,7 +1291,6 @@ spec:
                       procMount denotes the type of proc mount to use for the containers.
                       The default value is Default which uses the container runtime defaults for
                       readonly paths and masked paths.
-                      This requires the ProcMountType feature flag to be enabled.
                       Note that this field cannot be set when spec.os.name is windows.
                     type: string
                   readOnlyRootFilesystem:
@@ -2391,7 +2390,9 @@ spec:
                           type: integer
                       type: object
                     resizePolicy:
-                      description: Resources resize policy for the container.
+                      description: |-
+                        Resources resize policy for the container.
+                        This field cannot be set on ephemeral containers.
                       items:
                         description: ContainerResizePolicy represents resource resize
                           policy for the container.
@@ -2620,7 +2621,6 @@ spec:
                             procMount denotes the type of proc mount to use for the containers.
                             The default value is Default which uses the container runtime defaults for
                             readonly paths and masked paths.
-                            This requires the ProcMountType feature flag to be enabled.
                             Note that this field cannot be set when spec.os.name is windows.
                           type: string
                         readOnlyRootFilesystem:
@@ -3752,9 +3752,10 @@ spec:
                     operator:
                       description: |-
                         Operator represents a key's relationship to the value.
-                        Valid operators are Exists and Equal. Defaults to Equal.
+                        Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
                         Exists is equivalent to wildcard for value, so that a pod can
                         tolerate all taints of a particular category.
+                        Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
                       type: string
                     tolerationSeconds:
                       description: |-

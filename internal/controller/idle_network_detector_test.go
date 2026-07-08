@@ -36,17 +36,17 @@ func TestNetworkHTTPGetDetector_NotIdle(t *testing.T) {
 	detector := NewNetworkHTTPGetDetectorWithClient(srv.Client())
 
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "ws1", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceNameWS1, Namespace: testNamespace},
 	}
 	idleConfig := &workspacev1alpha1.IdleShutdownSpec{
 		IdleTimeoutInMinutes: 30,
 		Detection: workspacev1alpha1.IdleDetectionSpec{
 			HTTPGet: &workspacev1alpha1.IdleHTTPGetAction{
 				HTTPGetAction: corev1.HTTPGetAction{
-					Path: "/api/status",
+					Path: pathAPIStatus,
 					Port: intstr.FromString(port),
 				},
-				Transport: "network",
+				Transport: transportNetwork,
 			},
 		},
 	}
@@ -71,17 +71,17 @@ func TestNetworkHTTPGetDetector_IsIdle(t *testing.T) {
 	detector := NewNetworkHTTPGetDetectorWithClient(srv.Client())
 
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "ws1", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceNameWS1, Namespace: testNamespace},
 	}
 	idleConfig := &workspacev1alpha1.IdleShutdownSpec{
 		IdleTimeoutInMinutes: 60,
 		Detection: workspacev1alpha1.IdleDetectionSpec{
 			HTTPGet: &workspacev1alpha1.IdleHTTPGetAction{
 				HTTPGetAction: corev1.HTTPGetAction{
-					Path: "/api/status",
+					Path: pathAPIStatus,
 					Port: intstr.FromString(port),
 				},
-				Transport: "network",
+				Transport: transportNetwork,
 			},
 		},
 	}
@@ -105,20 +105,20 @@ func TestNetworkHTTPGetDetector_CustomFieldPath(t *testing.T) {
 	detector := NewNetworkHTTPGetDetectorWithClient(srv.Client())
 
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "ws1", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceNameWS1, Namespace: testNamespace},
 	}
 	idleConfig := &workspacev1alpha1.IdleShutdownSpec{
 		IdleTimeoutInMinutes: 30,
 		Detection: workspacev1alpha1.IdleDetectionSpec{
 			HTTPGet: &workspacev1alpha1.IdleHTTPGetAction{
 				HTTPGetAction: corev1.HTTPGetAction{
-					Path: "/api/status",
+					Path: pathAPIStatus,
 					Port: intstr.FromString(port),
 				},
-				Transport: "network",
+				Transport: transportNetwork,
 				LastActivityTimestamp: &workspacev1alpha1.IdleLastActivityTimestampSpec{
-					ResponseBodyPath: "last_activity",
-					Format:           "RFC3339",
+					ResponseBodyPath: responseBodyPathLastActivity,
+					Format:           defaultTimestampFormat,
 				},
 			},
 		},
@@ -144,7 +144,7 @@ func TestNetworkHTTPGetDetector_UnixTimestamp(t *testing.T) {
 	detector := NewNetworkHTTPGetDetectorWithClient(srv.Client())
 
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "ws1", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceNameWS1, Namespace: testNamespace},
 	}
 	idleConfig := &workspacev1alpha1.IdleShutdownSpec{
 		IdleTimeoutInMinutes: 30,
@@ -154,10 +154,10 @@ func TestNetworkHTTPGetDetector_UnixTimestamp(t *testing.T) {
 					Path: "/status",
 					Port: intstr.FromString(port),
 				},
-				Transport: "network",
+				Transport: transportNetwork,
 				LastActivityTimestamp: &workspacev1alpha1.IdleLastActivityTimestampSpec{
 					ResponseBodyPath: "ts",
-					Format:           "unix",
+					Format:           timestampFormatUnix,
 				},
 			},
 		},
@@ -178,17 +178,17 @@ func TestNetworkHTTPGetDetector_404_PermanentFailure(t *testing.T) {
 	detector := NewNetworkHTTPGetDetectorWithClient(srv.Client())
 
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "ws1", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceNameWS1, Namespace: testNamespace},
 	}
 	idleConfig := &workspacev1alpha1.IdleShutdownSpec{
 		IdleTimeoutInMinutes: 30,
 		Detection: workspacev1alpha1.IdleDetectionSpec{
 			HTTPGet: &workspacev1alpha1.IdleHTTPGetAction{
 				HTTPGetAction: corev1.HTTPGetAction{
-					Path: "/api/status",
+					Path: pathAPIStatus,
 					Port: intstr.FromString(port),
 				},
-				Transport: "network",
+				Transport: transportNetwork,
 			},
 		},
 	}
@@ -216,7 +216,7 @@ func TestNetworkHTTPGetDetector_ApplicationBasePath(t *testing.T) {
 	detector := NewNetworkHTTPGetDetectorWithClient(srv.Client())
 
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "ws1", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceNameWS1, Namespace: testNamespace},
 		Status: workspacev1alpha1.WorkspaceStatus{
 			ApplicationBasePath: "/workspaces/default/ws1/",
 		},
@@ -226,10 +226,10 @@ func TestNetworkHTTPGetDetector_ApplicationBasePath(t *testing.T) {
 		Detection: workspacev1alpha1.IdleDetectionSpec{
 			HTTPGet: &workspacev1alpha1.IdleHTTPGetAction{
 				HTTPGetAction: corev1.HTTPGetAction{
-					Path: "/api/status",
+					Path: pathAPIStatus,
 					Port: intstr.FromString(port),
 				},
-				Transport: "network",
+				Transport: transportNetwork,
 			},
 		},
 	}

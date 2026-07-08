@@ -59,7 +59,7 @@ func TestStandardSignerFactory_CreateSigner_K8sNativeHandler(t *testing.T) {
 
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			CreateConnectionHandler: "k8s-native",
+			CreateConnectionHandler: handlerK8sNative,
 		},
 	}
 
@@ -106,14 +106,14 @@ func TestStandardSignerFactory_CreateSigner_GenerateValidateRoundTrip(t *testing
 
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			CreateConnectionHandler: "k8s-native",
+			CreateConnectionHandler: handlerK8sNative,
 		},
 	}
 
 	signer, err := factory.CreateSigner(accessStrategy)
 	require.NoError(t, err)
 
-	token, err := signer.GenerateToken("testuser", []string{"group1"}, "uid1", nil, "/path", "example.com", TokenTypeBootstrap, false)
+	token, err := signer.GenerateToken(testUser, []string{testGroup1}, "uid1", nil, "/path", "example.com", TokenTypeBootstrap, false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, token)
 

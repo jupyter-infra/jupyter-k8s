@@ -13,6 +13,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// containerMain is the test main container name, shared across pluginadapters tests.
+const containerMain = "main"
+
 func newTestPod(statuses []corev1.ContainerStatus) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pod"},
@@ -22,16 +25,16 @@ func newTestPod(statuses []corev1.ContainerStatus) *corev1.Pod {
 
 func TestIsContainerRunning_Running(t *testing.T) {
 	pod := newTestPod([]corev1.ContainerStatus{
-		{Name: "main", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+		{Name: containerMain, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
 	})
-	assert.True(t, IsContainerRunning(pod, "main"))
+	assert.True(t, IsContainerRunning(pod, containerMain))
 }
 
 func TestIsContainerRunning_NotRunning(t *testing.T) {
 	pod := newTestPod([]corev1.ContainerStatus{
-		{Name: "main", State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{}}},
+		{Name: containerMain, State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{}}},
 	})
-	assert.False(t, IsContainerRunning(pod, "main"))
+	assert.False(t, IsContainerRunning(pod, containerMain))
 }
 
 func TestIsContainerRunning_NotFound(t *testing.T) {
@@ -48,9 +51,9 @@ func TestGetContainerRestartCount_Found(t *testing.T) {
 
 func TestGetContainerRestartCount_Zero(t *testing.T) {
 	pod := newTestPod([]corev1.ContainerStatus{
-		{Name: "main", RestartCount: 0},
+		{Name: containerMain, RestartCount: 0},
 	})
-	assert.Equal(t, int32(0), GetContainerRestartCount(pod, "main"))
+	assert.Equal(t, int32(0), GetContainerRestartCount(pod, containerMain))
 }
 
 func TestGetContainerRestartCount_NotFound(t *testing.T) {
@@ -61,8 +64,8 @@ func TestGetContainerRestartCount_NotFound(t *testing.T) {
 func TestIsContainerRunning_MultipleContainers(t *testing.T) {
 	pod := newTestPod([]corev1.ContainerStatus{
 		{Name: "sidecar", State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{}}},
-		{Name: "main", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+		{Name: containerMain, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
 	})
 	assert.False(t, IsContainerRunning(pod, "sidecar"))
-	assert.True(t, IsContainerRunning(pod, "main"))
+	assert.True(t, IsContainerRunning(pod, containerMain))
 }

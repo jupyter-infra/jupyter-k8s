@@ -10,11 +10,9 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
@@ -27,7 +25,7 @@ var templatelog = logf.Log.WithName("workspacetemplate-resource")
 // SetupWorkspaceTemplateWebhookWithManager registers the webhook for WorkspaceTemplate in the manager.
 func SetupWorkspaceTemplateWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace string) error {
 	accessStrategyValidator := NewAccessStrategyValidator(defaultTemplateNamespace)
-	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.WorkspaceTemplate{}).
+	return ctrl.NewWebhookManagedBy(mgr, &workspacev1alpha1.WorkspaceTemplate{}).
 		WithValidator(&WorkspaceTemplateCustomValidator{
 			accessStrategyValidator: accessStrategyValidator,
 		}).
@@ -56,14 +54,10 @@ type WorkspaceTemplateCustomDefaulter struct {
 	accessStrategyValidator *AccessStrategyValidator
 }
 
-var _ webhook.CustomDefaulter = &WorkspaceTemplateCustomDefaulter{}
+var _ admission.Defaulter[*workspacev1alpha1.WorkspaceTemplate] = &WorkspaceTemplateCustomDefaulter{}
 
-// Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind WorkspaceTemplate.
-func (d *WorkspaceTemplateCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
-	template, ok := obj.(*workspacev1alpha1.WorkspaceTemplate)
-	if !ok {
-		return fmt.Errorf("expected a WorkspaceTemplate object but got %T", obj)
-	}
+// Default implements admission.Defaulter so a webhook will be registered for the Kind WorkspaceTemplate.
+func (d *WorkspaceTemplateCustomDefaulter) Default(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) error {
 
 	// Skip on delete (defaulters don't run on delete, but guard defensively) and when being deleted.
 	if !template.DeletionTimestamp.IsZero() {
@@ -114,14 +108,10 @@ type WorkspaceTemplateCustomValidator struct {
 	accessStrategyValidator *AccessStrategyValidator
 }
 
-var _ webhook.CustomValidator = &WorkspaceTemplateCustomValidator{}
+var _ admission.Validator[*workspacev1alpha1.WorkspaceTemplate] = &WorkspaceTemplateCustomValidator{}
 
-// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type WorkspaceTemplate.
-func (v *WorkspaceTemplateCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	template, ok := obj.(*workspacev1alpha1.WorkspaceTemplate)
-	if !ok {
-		return nil, fmt.Errorf("expected a WorkspaceTemplate object but got %T", obj)
-	}
+// ValidateCreate implements admission.Validator so a webhook will be registered for the type WorkspaceTemplate.
+func (v *WorkspaceTemplateCustomValidator) ValidateCreate(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) (admission.Warnings, error) {
 	templatelog.Info("Validation for WorkspaceTemplate upon creation", "name", template.GetName())
 
 	// Enforce that the referenced access strategy is in an allowed namespace, so the template
@@ -133,16 +123,8 @@ func (v *WorkspaceTemplateCustomValidator) ValidateCreate(ctx context.Context, o
 	return nil, nil
 }
 
-// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type WorkspaceTemplate.
-func (v *WorkspaceTemplateCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	oldTemplate, ok := oldObj.(*workspacev1alpha1.WorkspaceTemplate)
-	if !ok {
-		return nil, fmt.Errorf("expected a WorkspaceTemplate object for the oldObj but got %T", oldObj)
-	}
-	newTemplate, ok := newObj.(*workspacev1alpha1.WorkspaceTemplate)
-	if !ok {
-		return nil, fmt.Errorf("expected a WorkspaceTemplate object for the newObj but got %T", newObj)
-	}
+// ValidateUpdate implements admission.Validator so a webhook will be registered for the type WorkspaceTemplate.
+func (v *WorkspaceTemplateCustomValidator) ValidateUpdate(ctx context.Context, oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTemplate) (admission.Warnings, error) {
 	templatelog.Info("Validation for WorkspaceTemplate upon update", "name", newTemplate.GetName())
 
 	// Enforce that the referenced access strategy is in an allowed namespace, so the template
@@ -161,12 +143,8 @@ func (v *WorkspaceTemplateCustomValidator) ValidateUpdate(ctx context.Context, o
 	return nil, nil
 }
 
-// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type WorkspaceTemplate.
-func (v *WorkspaceTemplateCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	template, ok := obj.(*workspacev1alpha1.WorkspaceTemplate)
-	if !ok {
-		return nil, fmt.Errorf("expected a WorkspaceTemplate object but got %T", obj)
-	}
+// ValidateDelete implements admission.Validator so a webhook will be registered for the type WorkspaceTemplate.
+func (v *WorkspaceTemplateCustomValidator) ValidateDelete(ctx context.Context, template *workspacev1alpha1.WorkspaceTemplate) (admission.Warnings, error) {
 	templatelog.Info("Validation for WorkspaceTemplate upon deletion", "name", template.GetName())
 
 	// Deletion is handled by finalizers in the controller

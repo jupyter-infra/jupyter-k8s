@@ -130,6 +130,25 @@ const (
 
 	// ReservedMetadataPrefix is the prefix reserved for system-managed labels and annotations
 	ReservedMetadataPrefix = "workspace.jupyter.org/"
+
+	// httpScheme is the HTTP scheme / port name used for workspace networking
+	httpScheme = "http"
+
+	// timestampFormatUnix is the format identifier for unix epoch timestamps
+	timestampFormatUnix = "unix"
+
+	// pluginNameAWS is the plugin name for AWS pod event adapters
+	pluginNameAWS = "aws"
+
+	// volumeNameWorkspaceStorage is the volume name for workspace storage
+	volumeNameWorkspaceStorage = "workspace-storage"
+
+	// kindIngressRoute is the Traefik IngressRoute resource kind
+	kindIngressRoute = "IngressRoute"
+	// kindMiddleware is the Traefik Middleware resource kind
+	kindMiddleware = "Middleware"
+	// traefikAPIVersion is the Traefik CRD API version
+	traefikAPIVersion = "traefik.io/v1alpha1"
 )
 
 // MetadataKeyPolicy defines how a system-managed metadata key behaves across operations
@@ -174,6 +193,6 @@ func GenerateLabels(workspaceName string) map[string]string {
 	return map[string]string{
 		AppLabel:                         AppLabelValue,
 		workspaceutil.LabelWorkspaceName: workspaceName,
-		LabelComponent:                   "workspace",
+		LabelComponent:                   ResourcePrefix,
 	}
 }

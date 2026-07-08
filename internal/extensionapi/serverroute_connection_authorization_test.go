@@ -30,10 +30,10 @@ func TestCheckWorkspaceAuthorization_PublicWorkspace(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "public-workspace",
-			Namespace: "default",
+			Namespace: namespaceDefault,
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessType: "Public",
+			AccessType: AccessTypePublic,
 		},
 	}
 
@@ -43,7 +43,7 @@ func TestCheckWorkspaceAuthorization_PublicWorkspace(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/test", nil)
 	// Set user in Kubernetes authentication context
-	userInfo := &user.DefaultInfo{Name: "test-user"}
+	userInfo := &user.DefaultInfo{Name: testUser}
 	ctx := request.WithUser(req.Context(), userInfo)
 	req = req.WithContext(ctx)
 
@@ -59,13 +59,13 @@ func TestCheckWorkspaceAuthorization_PrivateWorkspace_SameUser(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "private-workspace",
-			Namespace: "default",
+			Namespace: namespaceDefault,
 			Annotations: map[string]string{
-				"workspace.jupyter.org/created-by": "test-user",
+				"workspace.jupyter.org/created-by": testUser,
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessType: "OwnerOnly",
+			AccessType: accessTypeOwnerOnly,
 		},
 	}
 
@@ -75,7 +75,7 @@ func TestCheckWorkspaceAuthorization_PrivateWorkspace_SameUser(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/test", nil)
 	// Set user in Kubernetes authentication context
-	userInfo := &user.DefaultInfo{Name: "test-user"}
+	userInfo := &user.DefaultInfo{Name: testUser}
 	ctx := request.WithUser(req.Context(), userInfo)
 	req = req.WithContext(ctx)
 
@@ -91,13 +91,13 @@ func TestCheckWorkspaceAuthorization_PrivateWorkspace_DifferentUser(t *testing.T
 	workspace := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "private-workspace",
-			Namespace: "default",
+			Namespace: namespaceDefault,
 			Annotations: map[string]string{
 				"workspace.jupyter.org/created-by": "owner-user",
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessType: "OwnerOnly",
+			AccessType: accessTypeOwnerOnly,
 		},
 	}
 
@@ -107,7 +107,7 @@ func TestCheckWorkspaceAuthorization_PrivateWorkspace_DifferentUser(t *testing.T
 
 	req, _ := http.NewRequest("POST", "/test", nil)
 	// Set user in Kubernetes authentication context
-	userInfo := &user.DefaultInfo{Name: "different-user"}
+	userInfo := &user.DefaultInfo{Name: differentUser}
 	ctx := request.WithUser(req.Context(), userInfo)
 	req = req.WithContext(ctx)
 
@@ -126,7 +126,7 @@ func TestCheckWorkspaceAuthorization_WorkspaceNotFound(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/test", nil)
 	// Set user in Kubernetes authentication context
-	userInfo := &user.DefaultInfo{Name: "test-user"}
+	userInfo := &user.DefaultInfo{Name: testUser}
 	ctx := request.WithUser(req.Context(), userInfo)
 	req = req.WithContext(ctx)
 	_, result, err := server.checkWorkspaceAuthorization(req, "non-existent", "default")

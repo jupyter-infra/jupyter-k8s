@@ -41,8 +41,8 @@ func TestMergeConditionsIfChanged(t *testing.T) {
 	ctx := context.Background()
 	workspace := &workspacev1alpha1.Workspace{}
 	workspace.Status.Conditions = []metav1.Condition{
-		{Type: "Existing", Status: metav1.ConditionTrue, Reason: "InitialReason", Message: "Initial message"},
-		{Type: "ToUpdate", Status: metav1.ConditionFalse, Reason: "OldReason", Message: "Old message"},
+		{Type: conditionTypeExisting, Status: metav1.ConditionTrue, Reason: "InitialReason", Message: "Initial message"},
+		{Type: conditionTypeToUpdate, Status: metav1.ConditionFalse, Reason: "OldReason", Message: "Old message"},
 	}
 
 	// Test with completely new conditions
@@ -56,7 +56,7 @@ func TestMergeConditionsIfChanged(t *testing.T) {
 	foundExisting := false
 	foundNew := false
 	for _, cond := range result {
-		if cond.Type == "Existing" {
+		if cond.Type == conditionTypeExisting {
 			foundExisting = true
 		}
 		if cond.Type == "New" {
@@ -68,7 +68,7 @@ func TestMergeConditionsIfChanged(t *testing.T) {
 
 	// Test with updated condition
 	updateConditions := []metav1.Condition{
-		{Type: "ToUpdate", Status: metav1.ConditionTrue, Reason: "NewReason", Message: "Updated message"},
+		{Type: conditionTypeToUpdate, Status: metav1.ConditionTrue, Reason: "NewReason", Message: "Updated message"},
 	}
 	result = MergeConditionsIfChanged(ctx, workspace, &updateConditions)
 	assert.Len(t, result, 2) // Both existing conditions, one updated
@@ -76,7 +76,7 @@ func TestMergeConditionsIfChanged(t *testing.T) {
 	// Find the updated condition
 	var updatedCond *metav1.Condition
 	for i, cond := range result {
-		if cond.Type == "ToUpdate" {
+		if cond.Type == conditionTypeToUpdate {
 			updatedCond = &result[i]
 			break
 		}
@@ -88,7 +88,7 @@ func TestMergeConditionsIfChanged(t *testing.T) {
 
 	// Test with unchanged condition
 	unchangedConditions := []metav1.Condition{
-		{Type: "Existing", Status: metav1.ConditionTrue, Reason: "InitialReason", Message: "Initial message"},
+		{Type: conditionTypeExisting, Status: metav1.ConditionTrue, Reason: "InitialReason", Message: "Initial message"},
 	}
 	result = MergeConditionsIfChanged(ctx, workspace, &unchangedConditions)
 	assert.Empty(t, result, "Should return empty slice when no changes")

@@ -32,8 +32,8 @@ var _ = Describe("ServiceAccount Validator", func() {
 		BeforeEach(func() {
 			sa = &corev1.ServiceAccount{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-sa",
-					Namespace: "default",
+					Name:      testServiceAccountName,
+					Namespace: testDefaultNamespace,
 				},
 			}
 		})
@@ -42,7 +42,7 @@ var _ = Describe("ServiceAccount Validator", func() {
 			sa.Annotations = map[string]string{
 				controller.AnnotationServiceAccountUsers: "- user1\n- user2@example.com",
 			}
-			userInfo := authenticationv1.UserInfo{Username: "user1"}
+			userInfo := authenticationv1.UserInfo{Username: testUser1}
 			sav := NewServiceAccountValidator(nil)
 			Expect(sav.hasServiceAccountAccess(userInfo, sa)).To(BeTrue())
 		})
@@ -74,8 +74,8 @@ var _ = Describe("ServiceAccount Validator", func() {
 		BeforeEach(func() {
 			sa = &corev1.ServiceAccount{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-sa",
-					Namespace: "default",
+					Name:      testServiceAccountName,
+					Namespace: testDefaultNamespace,
 				},
 			}
 			sav = NewServiceAccountValidator(nil)
@@ -92,7 +92,7 @@ var _ = Describe("ServiceAccount Validator", func() {
 			sa.Annotations = map[string]string{
 				controller.AnnotationServiceAccountUserPatterns: "- user?",
 			}
-			Expect(sav.checkUsernamePatternAccess("user1", sa)).To(BeTrue())
+			Expect(sav.checkUsernamePatternAccess(testUser1, sa)).To(BeTrue())
 		})
 
 		It("should not match when pattern does not match", func() {
@@ -135,11 +135,11 @@ var _ = Describe("ServiceAccount Validator", func() {
 			mockClient = &MockClient{}
 			workspace = &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					ServiceAccountName: "test-sa",
+					ServiceAccountName: testServiceAccountName,
 				},
 			}
 		})
@@ -171,8 +171,8 @@ var _ = Describe("ServiceAccount Validator", func() {
 			userCtx := createUserContext(ctx, "CREATE", "allowed-user")
 			mockClient.ServiceAccount = &corev1.ServiceAccount{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-sa",
-					Namespace: "default",
+					Name:      testServiceAccountName,
+					Namespace: testDefaultNamespace,
 					Annotations: map[string]string{
 						controller.AnnotationServiceAccountUsers: "- allowed-user\n- other-user",
 					},

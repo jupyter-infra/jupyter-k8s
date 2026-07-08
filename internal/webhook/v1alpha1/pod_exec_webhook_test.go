@@ -54,10 +54,10 @@ var _ = Describe("PodExec Webhook", func() {
 			// Create a workspace pod
 			workspacePod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "workspace-pod",
-					Namespace: "test-namespace",
+					Name:      testWorkspacePodName,
+					Namespace: testNamespaceName,
 					Labels: map[string]string{
-						workspaceutil.LabelWorkspaceName: "test-workspace",
+						workspaceutil.LabelWorkspaceName: testWorkspaceName,
 					},
 				},
 			}
@@ -71,8 +71,8 @@ var _ = Describe("PodExec Webhook", func() {
 			// Create admission request from controller service account
 			req := admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
-					Name:      "workspace-pod",
-					Namespace: "test-namespace",
+					Name:      testWorkspacePodName,
+					Namespace: testNamespaceName,
 					UserInfo: authenticationv1.UserInfo{
 						Username: expectedControllerUsername,
 					},
@@ -92,7 +92,7 @@ var _ = Describe("PodExec Webhook", func() {
 			nonWorkspacePod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "regular-pod",
-					Namespace: "test-namespace",
+					Namespace: testNamespaceName,
 					Labels:    map[string]string{}, // No workspace label
 				},
 			}
@@ -107,7 +107,7 @@ var _ = Describe("PodExec Webhook", func() {
 			req := admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Name:      "regular-pod",
-					Namespace: "test-namespace",
+					Namespace: testNamespaceName,
 					UserInfo: authenticationv1.UserInfo{
 						Username: expectedControllerUsername,
 					},
@@ -126,10 +126,10 @@ var _ = Describe("PodExec Webhook", func() {
 			// Create a workspace pod
 			workspacePod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "workspace-pod",
-					Namespace: "test-namespace",
+					Name:      testWorkspacePodName,
+					Namespace: testNamespaceName,
 					Labels: map[string]string{
-						workspaceutil.LabelWorkspaceName: "test-workspace",
+						workspaceutil.LabelWorkspaceName: testWorkspaceName,
 					},
 				},
 			}
@@ -143,8 +143,8 @@ var _ = Describe("PodExec Webhook", func() {
 			// Create admission request from regular user (not controller)
 			req := admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
-					Name:      "workspace-pod",
-					Namespace: "test-namespace",
+					Name:      testWorkspacePodName,
+					Namespace: testNamespaceName,
 					UserInfo: authenticationv1.UserInfo{
 						Username: "system:serviceaccount:default:some-other-user",
 					},
@@ -169,7 +169,7 @@ var _ = Describe("PodExec Webhook", func() {
 			req := admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Name:      "non-existent-pod",
-					Namespace: "test-namespace",
+					Namespace: testNamespaceName,
 					UserInfo: authenticationv1.UserInfo{
 						Username: expectedControllerUsername,
 					},

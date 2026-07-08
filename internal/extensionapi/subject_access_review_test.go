@@ -21,7 +21,6 @@ var _ = Describe("SubjectAccessReview", func() {
 			mockClient *MockSarClient
 			testLogger logr.Logger
 			testNS     string
-			testUser   string
 			testGroups []string
 			testUID    string
 		)
@@ -38,8 +37,7 @@ var _ = Describe("SubjectAccessReview", func() {
 			// Set up test data
 			testLogger = logr.Discard()
 			testNS = "test-namespace"
-			testUser = "test-user"
-			testGroups = []string{"system:authenticated", "test-group"}
+			testGroups = []string{systemAuthenticated, "test-group"}
 			testUID = "test-uid"
 		})
 
@@ -136,7 +134,7 @@ var _ = Describe("SubjectAccessReview", func() {
 
 		It("Should properly handle different namespace values", func() {
 			// Test with different namespaces
-			namespaces := []string{"default", "kube-system", "test-workspace-123"}
+			namespaces := []string{namespaceDefault, "kube-system", "test-workspace-123"}
 
 			for _, ns := range namespaces {
 				// Reset the mock

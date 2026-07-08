@@ -20,6 +20,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+// Shared test constants (package-scoped, referenced across the workspace test files).
+const (
+	testAccessStrategyName    = "test-access-strategy"
+	defaultNamespace          = "default"
+	testWorkspaceName         = "test-workspace"
+	testWorkspaceDisplayName  = "Test Workspace"
+	testTemplateName          = "test-template"
+	templateNamespace         = "template-namespace"
+	accessStrategyNamespace   = "access-strategy-namespace"
+	testFinalizerName         = "test-finalizer"
+	testWorkspace1Name        = "test-workspace-1"
+	testWorkspace1DisplayName = "Test Workspace 1"
+	testWorkspace2Name        = "test-workspace-2"
+	testWorkspace2DisplayName = "Test Workspace 2"
+	teamANamespace            = "team-a"
+	webAccessName             = "web-access"
+)
+
 // MockClient is a mock implementation of client.Client for testing error cases
 type MockClient struct {
 	client.Client
@@ -148,49 +166,49 @@ func TestGetTemplateRefNamespace(t *testing.T) {
 			name: "No template ref",
 			workspace: &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: defaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					// No TemplateRef
 				},
 			},
-			expectedResult: "default", // Should return workspace namespace
+			expectedResult: defaultNamespace, // Should return workspace namespace
 		},
 		{
 			name: "Empty namespace in template ref",
 			workspace: &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: defaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name: "test-template",
+						Name: testTemplateName,
 						// No Namespace specified
 					},
 				},
 			},
-			expectedResult: "default", // Should return workspace namespace
+			expectedResult: defaultNamespace, // Should return workspace namespace
 		},
 		{
 			name: "With namespace in template ref",
 			workspace: &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: defaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name:      "test-template",
-						Namespace: "template-namespace",
+						Name:      testTemplateName,
+						Namespace: templateNamespace,
 					},
 				},
 			},
-			expectedResult: "template-namespace", // Should return template namespace
+			expectedResult: templateNamespace, // Should return template namespace
 		},
 	}
 
@@ -219,49 +237,49 @@ func TestGetAccessStrategyRefNamespace(t *testing.T) {
 			name: "No access strategy ref",
 			workspace: &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: defaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					// No AccessStrategy
 				},
 			},
-			expectedResult: "default", // Should return workspace namespace
+			expectedResult: defaultNamespace, // Should return workspace namespace
 		},
 		{
 			name: "Empty namespace in access strategy ref",
 			workspace: &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: defaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name: "test-access-strategy",
+						Name: testAccessStrategyName,
 						// No Namespace specified
 					},
 				},
 			},
-			expectedResult: "default", // Should return workspace namespace
+			expectedResult: defaultNamespace, // Should return workspace namespace
 		},
 		{
 			name: "With namespace in access strategy ref",
 			workspace: &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: defaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "test-access-strategy",
-						Namespace: "access-strategy-namespace",
+						Name:      testAccessStrategyName,
+						Namespace: accessStrategyNamespace,
 					},
 				},
 			},
-			expectedResult: "access-strategy-namespace", // Should return access strategy namespace
+			expectedResult: accessStrategyNamespace, // Should return access strategy namespace
 		},
 	}
 
@@ -284,7 +302,7 @@ func TestHasActiveWorkspacesWithTemplate_UsesLabelMatcher(t *testing.T) {
 	}
 
 	// Call the function
-	_, err := HasActiveWorkspacesWithTemplate(context.Background(), mockClient, "test-template", "template-namespace")
+	_, err := HasActiveWorkspacesWithTemplate(context.Background(), mockClient, testTemplateName, templateNamespace)
 
 	// Assertions
 	assert.NoError(t, err)
@@ -304,8 +322,8 @@ func TestHasActiveWorkspacesWithTemplate_UsesLabelMatcher(t *testing.T) {
 	}
 
 	assert.NotEmpty(t, labels, "List should be called with labels")
-	assert.Equal(t, "test-template", labels[LabelWorkspaceTemplate], "Should filter by template name")
-	assert.Equal(t, "template-namespace", labels[LabelWorkspaceTemplateNamespace], "Should filter by template namespace")
+	assert.Equal(t, testTemplateName, labels[LabelWorkspaceTemplate], "Should filter by template name")
+	assert.Equal(t, templateNamespace, labels[LabelWorkspaceTemplateNamespace], "Should filter by template namespace")
 }
 
 func TestHasActiveWorkspacesWithTemplate_SkipsDeletedWorkspaces(t *testing.T) {
@@ -317,21 +335,21 @@ func TestHasActiveWorkspacesWithTemplate_SkipsDeletedWorkspaces(t *testing.T) {
 	deletionTime := metav1.Now()
 	ws := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:              "test-workspace",
-			Namespace:         "default",
+			Name:              testWorkspaceName,
+			Namespace:         defaultNamespace,
 			DeletionTimestamp: &deletionTime,
 			// Add a finalizer since k8s objects with deletion timestamp must have at least one finalizer
-			Finalizers: []string{"test-finalizer"},
+			Finalizers: []string{testFinalizerName},
 			Labels: map[string]string{
-				LabelWorkspaceTemplate:          "test-template",
-				LabelWorkspaceTemplateNamespace: "template-namespace",
+				LabelWorkspaceTemplate:          testTemplateName,
+				LabelWorkspaceTemplateNamespace: templateNamespace,
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			DisplayName: "Test Workspace",
+			DisplayName: testWorkspaceDisplayName,
 			TemplateRef: &workspacev1alpha1.TemplateRef{
-				Name:      "test-template",
-				Namespace: "template-namespace",
+				Name:      testTemplateName,
+				Namespace: templateNamespace,
 			},
 		},
 	}
@@ -340,7 +358,7 @@ func TestHasActiveWorkspacesWithTemplate_SkipsDeletedWorkspaces(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ws).Build()
 
 	// Call the function
-	result, err := HasActiveWorkspacesWithTemplate(context.Background(), fakeClient, "test-template", "template-namespace")
+	result, err := HasActiveWorkspacesWithTemplate(context.Background(), fakeClient, testTemplateName, templateNamespace)
 
 	// Assertions
 	assert.NoError(t, err)
@@ -355,36 +373,36 @@ func TestHasActiveWorkspacesWithTemplate_ReturnTrueOnFirstMatch(t *testing.T) {
 	// Create multiple workspaces with matching labels and template ref
 	ws1 := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace-1",
-			Namespace: "default",
+			Name:      testWorkspace1Name,
+			Namespace: defaultNamespace,
 			Labels: map[string]string{
-				LabelWorkspaceTemplate:          "test-template",
-				LabelWorkspaceTemplateNamespace: "template-namespace",
+				LabelWorkspaceTemplate:          testTemplateName,
+				LabelWorkspaceTemplateNamespace: templateNamespace,
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			DisplayName: "Test Workspace 1",
+			DisplayName: testWorkspace1DisplayName,
 			TemplateRef: &workspacev1alpha1.TemplateRef{
-				Name:      "test-template",
-				Namespace: "template-namespace",
+				Name:      testTemplateName,
+				Namespace: templateNamespace,
 			},
 		},
 	}
 
 	ws2 := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace-2",
-			Namespace: "default",
+			Name:      testWorkspace2Name,
+			Namespace: defaultNamespace,
 			Labels: map[string]string{
-				LabelWorkspaceTemplate:          "test-template",
-				LabelWorkspaceTemplateNamespace: "template-namespace",
+				LabelWorkspaceTemplate:          testTemplateName,
+				LabelWorkspaceTemplateNamespace: templateNamespace,
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			DisplayName: "Test Workspace 2",
+			DisplayName: testWorkspace2DisplayName,
 			TemplateRef: &workspacev1alpha1.TemplateRef{
-				Name:      "test-template",
-				Namespace: "template-namespace",
+				Name:      testTemplateName,
+				Namespace: templateNamespace,
 			},
 		},
 	}
@@ -393,7 +411,7 @@ func TestHasActiveWorkspacesWithTemplate_ReturnTrueOnFirstMatch(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ws1, ws2).Build()
 
 	// Call the function
-	result, err := HasActiveWorkspacesWithTemplate(context.Background(), fakeClient, "test-template", "template-namespace")
+	result, err := HasActiveWorkspacesWithTemplate(context.Background(), fakeClient, testTemplateName, templateNamespace)
 
 	// Assertions
 	assert.NoError(t, err)
@@ -408,18 +426,18 @@ func TestHasActiveWorkspacesWithTemplate_ReturnFalseOnNoMatch(t *testing.T) {
 	// Create a workspace with different template
 	ws := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace",
-			Namespace: "default",
+			Name:      testWorkspaceName,
+			Namespace: defaultNamespace,
 			Labels: map[string]string{
 				LabelWorkspaceTemplate:          "different-template",
-				LabelWorkspaceTemplateNamespace: "template-namespace",
+				LabelWorkspaceTemplateNamespace: templateNamespace,
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			DisplayName: "Test Workspace",
+			DisplayName: testWorkspaceDisplayName,
 			TemplateRef: &workspacev1alpha1.TemplateRef{
 				Name:      "different-template",
-				Namespace: "template-namespace",
+				Namespace: templateNamespace,
 			},
 		},
 	}
@@ -428,7 +446,7 @@ func TestHasActiveWorkspacesWithTemplate_ReturnFalseOnNoMatch(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ws).Build()
 
 	// Call the function
-	result, err := HasActiveWorkspacesWithTemplate(context.Background(), fakeClient, "test-template", "template-namespace")
+	result, err := HasActiveWorkspacesWithTemplate(context.Background(), fakeClient, testTemplateName, templateNamespace)
 
 	// Assertions
 	assert.NoError(t, err)
@@ -442,7 +460,7 @@ func TestHasActiveWorkspacesWithTemplate_OnListError_ReturnError(t *testing.T) {
 	}
 
 	// Call the function
-	result, err := HasActiveWorkspacesWithTemplate(context.Background(), mockClient, "test-template", "template-namespace")
+	result, err := HasActiveWorkspacesWithTemplate(context.Background(), mockClient, testTemplateName, templateNamespace)
 
 	// Assertions
 	assert.Error(t, err)
@@ -464,8 +482,8 @@ func TestHasActiveWorkspacesWithAccessStrategy_UsesLabelMatcher(t *testing.T) {
 	_, err := HasActiveWorkspacesWithAccessStrategy(
 		context.Background(),
 		mockClient,
-		"test-access-strategy",
-		"access-strategy-namespace")
+		testAccessStrategyName,
+		accessStrategyNamespace)
 
 	// Assertions
 	assert.NoError(t, err)
@@ -485,8 +503,8 @@ func TestHasActiveWorkspacesWithAccessStrategy_UsesLabelMatcher(t *testing.T) {
 	}
 
 	assert.NotEmpty(t, labels, "List should be called with labels")
-	assert.Equal(t, "test-access-strategy", labels[LabelAccessStrategyName], "Should filter by access strategy name")
-	assert.Equal(t, "access-strategy-namespace", labels[LabelAccessStrategyNamespace], "Should filter by access strategy namespace")
+	assert.Equal(t, testAccessStrategyName, labels[LabelAccessStrategyName], "Should filter by access strategy name")
+	assert.Equal(t, accessStrategyNamespace, labels[LabelAccessStrategyNamespace], "Should filter by access strategy namespace")
 }
 
 func TestHasActiveWorkspacesWithAccessStrategy_SkipsDeletedWorkspaces(t *testing.T) {
@@ -498,21 +516,21 @@ func TestHasActiveWorkspacesWithAccessStrategy_SkipsDeletedWorkspaces(t *testing
 	deletionTime := metav1.Now()
 	ws := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:              "test-workspace",
-			Namespace:         "default",
+			Name:              testWorkspaceName,
+			Namespace:         defaultNamespace,
 			DeletionTimestamp: &deletionTime,
 			// Add a finalizer since k8s objects with deletion timestamp must have at least one finalizer
-			Finalizers: []string{"test-finalizer"},
+			Finalizers: []string{testFinalizerName},
 			Labels: map[string]string{
-				LabelAccessStrategyName:      "test-access-strategy",
-				LabelAccessStrategyNamespace: "access-strategy-namespace",
+				LabelAccessStrategyName:      testAccessStrategyName,
+				LabelAccessStrategyNamespace: accessStrategyNamespace,
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			DisplayName: "Test Workspace",
+			DisplayName: testWorkspaceDisplayName,
 			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name:      "test-access-strategy",
-				Namespace: "access-strategy-namespace",
+				Name:      testAccessStrategyName,
+				Namespace: accessStrategyNamespace,
 			},
 		},
 	}
@@ -524,8 +542,8 @@ func TestHasActiveWorkspacesWithAccessStrategy_SkipsDeletedWorkspaces(t *testing
 	result, err := HasActiveWorkspacesWithAccessStrategy(
 		context.Background(),
 		fakeClient,
-		"test-access-strategy",
-		"access-strategy-namespace")
+		testAccessStrategyName,
+		accessStrategyNamespace)
 
 	// Assertions
 	assert.NoError(t, err)
@@ -540,36 +558,36 @@ func TestHasActiveWorkspacesWithAccessStrategy_ReturnTrueOnFirstMatch(t *testing
 	// Create multiple workspaces with matching labels and access strategy ref
 	ws1 := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace-1",
-			Namespace: "default",
+			Name:      testWorkspace1Name,
+			Namespace: defaultNamespace,
 			Labels: map[string]string{
-				LabelAccessStrategyName:      "test-access-strategy",
-				LabelAccessStrategyNamespace: "access-strategy-namespace",
+				LabelAccessStrategyName:      testAccessStrategyName,
+				LabelAccessStrategyNamespace: accessStrategyNamespace,
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			DisplayName: "Test Workspace 1",
+			DisplayName: testWorkspace1DisplayName,
 			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name:      "test-access-strategy",
-				Namespace: "access-strategy-namespace",
+				Name:      testAccessStrategyName,
+				Namespace: accessStrategyNamespace,
 			},
 		},
 	}
 
 	ws2 := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace-2",
-			Namespace: "default",
+			Name:      testWorkspace2Name,
+			Namespace: defaultNamespace,
 			Labels: map[string]string{
-				LabelAccessStrategyName:      "test-access-strategy",
-				LabelAccessStrategyNamespace: "access-strategy-namespace",
+				LabelAccessStrategyName:      testAccessStrategyName,
+				LabelAccessStrategyNamespace: accessStrategyNamespace,
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			DisplayName: "Test Workspace 2",
+			DisplayName: testWorkspace2DisplayName,
 			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name:      "test-access-strategy",
-				Namespace: "access-strategy-namespace",
+				Name:      testAccessStrategyName,
+				Namespace: accessStrategyNamespace,
 			},
 		},
 	}
@@ -581,8 +599,8 @@ func TestHasActiveWorkspacesWithAccessStrategy_ReturnTrueOnFirstMatch(t *testing
 	result, err := HasActiveWorkspacesWithAccessStrategy(
 		context.Background(),
 		fakeClient,
-		"test-access-strategy",
-		"access-strategy-namespace")
+		testAccessStrategyName,
+		accessStrategyNamespace)
 
 	// Assertions
 	assert.NoError(t, err)
@@ -597,18 +615,18 @@ func TestHasActiveWorkspacesWithAccessStrategy_ReturnFalseOnNoMatch(t *testing.T
 	// Create a workspace with different access strategy
 	ws := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace",
-			Namespace: "default",
+			Name:      testWorkspaceName,
+			Namespace: defaultNamespace,
 			Labels: map[string]string{
 				LabelAccessStrategyName:      "different-access-strategy",
-				LabelAccessStrategyNamespace: "access-strategy-namespace",
+				LabelAccessStrategyNamespace: accessStrategyNamespace,
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			DisplayName: "Test Workspace",
+			DisplayName: testWorkspaceDisplayName,
 			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
 				Name:      "different-access-strategy",
-				Namespace: "access-strategy-namespace",
+				Namespace: accessStrategyNamespace,
 			},
 		},
 	}
@@ -620,8 +638,8 @@ func TestHasActiveWorkspacesWithAccessStrategy_ReturnFalseOnNoMatch(t *testing.T
 	result, err := HasActiveWorkspacesWithAccessStrategy(
 		context.Background(),
 		fakeClient,
-		"test-access-strategy",
-		"access-strategy-namespace")
+		testAccessStrategyName,
+		accessStrategyNamespace)
 
 	// Assertions
 	assert.NoError(t, err)
@@ -638,8 +656,8 @@ func TestHasActiveWorkspacesWithAccessStrategy_OnListError_ReturnError(t *testin
 	result, err := HasActiveWorkspacesWithAccessStrategy(
 		context.Background(),
 		mockClient,
-		"test-access-strategy",
-		"access-strategy-namespace")
+		testAccessStrategyName,
+		accessStrategyNamespace)
 
 	// Assertions
 	assert.Error(t, err)
@@ -655,36 +673,36 @@ func TestListActiveWorkspacesByAccessStrategy_CallsListWithMatchLabels_ReturnWor
 	// Create workspaces with matching labels and access strategy refs
 	ws1 := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace-1",
-			Namespace: "default",
+			Name:      testWorkspace1Name,
+			Namespace: defaultNamespace,
 			Labels: map[string]string{
-				LabelAccessStrategyName:      "test-access-strategy",
-				LabelAccessStrategyNamespace: "access-strategy-namespace",
+				LabelAccessStrategyName:      testAccessStrategyName,
+				LabelAccessStrategyNamespace: accessStrategyNamespace,
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			DisplayName: "Test Workspace 1",
+			DisplayName: testWorkspace1DisplayName,
 			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name:      "test-access-strategy",
-				Namespace: "access-strategy-namespace",
+				Name:      testAccessStrategyName,
+				Namespace: accessStrategyNamespace,
 			},
 		},
 	}
 
 	ws2 := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace-2",
-			Namespace: "default",
+			Name:      testWorkspace2Name,
+			Namespace: defaultNamespace,
 			Labels: map[string]string{
-				LabelAccessStrategyName:      "test-access-strategy",
-				LabelAccessStrategyNamespace: "access-strategy-namespace",
+				LabelAccessStrategyName:      testAccessStrategyName,
+				LabelAccessStrategyNamespace: accessStrategyNamespace,
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			DisplayName: "Test Workspace 2",
+			DisplayName: testWorkspace2DisplayName,
 			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name:      "test-access-strategy",
-				Namespace: "access-strategy-namespace",
+				Name:      testAccessStrategyName,
+				Namespace: accessStrategyNamespace,
 			},
 		},
 	}
@@ -694,20 +712,20 @@ func TestListActiveWorkspacesByAccessStrategy_CallsListWithMatchLabels_ReturnWor
 	wsDeleted := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "test-workspace-deleted",
-			Namespace:         "default",
+			Namespace:         defaultNamespace,
 			DeletionTimestamp: &deletionTime,
 			// Add a finalizer since k8s objects with deletion timestamp must have at least one finalizer
-			Finalizers: []string{"test-finalizer"},
+			Finalizers: []string{testFinalizerName},
 			Labels: map[string]string{
-				LabelAccessStrategyName:      "test-access-strategy",
-				LabelAccessStrategyNamespace: "access-strategy-namespace",
+				LabelAccessStrategyName:      testAccessStrategyName,
+				LabelAccessStrategyNamespace: accessStrategyNamespace,
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			DisplayName: "Test Workspace Deleted",
 			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name:      "test-access-strategy",
-				Namespace: "access-strategy-namespace",
+				Name:      testAccessStrategyName,
+				Namespace: accessStrategyNamespace,
 			},
 		},
 	}
@@ -725,8 +743,8 @@ func TestListActiveWorkspacesByAccessStrategy_CallsListWithMatchLabels_ReturnWor
 	_, _, err := ListActiveWorkspacesByAccessStrategy(
 		context.Background(),
 		mockClient,
-		"test-access-strategy",
-		"access-strategy-namespace",
+		testAccessStrategyName,
+		accessStrategyNamespace,
 		"token-123", // Add a token to verify it's passed correctly
 		10)          // Add a limit to verify it's passed correctly
 
@@ -765,8 +783,8 @@ func TestListActiveWorkspacesByAccessStrategy_CallsListWithMatchLabels_ReturnWor
 
 	// Verify the labels
 	assert.NotEmpty(t, labels, "List should be called with labels")
-	assert.Equal(t, "test-access-strategy", labels[LabelAccessStrategyName], "Should filter by access strategy name")
-	assert.Equal(t, "access-strategy-namespace", labels[LabelAccessStrategyNamespace], "Should filter by access strategy namespace")
+	assert.Equal(t, testAccessStrategyName, labels[LabelAccessStrategyName], "Should filter by access strategy name")
+	assert.Equal(t, accessStrategyNamespace, labels[LabelAccessStrategyNamespace], "Should filter by access strategy namespace")
 
 	// Verify limit and continue token
 	assert.Equal(t, int64(10), limitValue, "Limit should be 10")
@@ -776,8 +794,8 @@ func TestListActiveWorkspacesByAccessStrategy_CallsListWithMatchLabels_ReturnWor
 	workspaces, nextToken, err := ListActiveWorkspacesByAccessStrategy(
 		context.Background(),
 		fakeClient,
-		"test-access-strategy",
-		"access-strategy-namespace",
+		testAccessStrategyName,
+		accessStrategyNamespace,
 		"", // No continuation token
 		0)  // No limit
 
@@ -788,8 +806,8 @@ func TestListActiveWorkspacesByAccessStrategy_CallsListWithMatchLabels_ReturnWor
 
 	// Check that we got the expected workspaces and not the deleted one
 	workspaceNames := []string{workspaces[0].Name, workspaces[1].Name}
-	assert.Contains(t, workspaceNames, "test-workspace-1")
-	assert.Contains(t, workspaceNames, "test-workspace-2")
+	assert.Contains(t, workspaceNames, testWorkspace1Name)
+	assert.Contains(t, workspaceNames, testWorkspace2Name)
 	assert.NotContains(t, workspaceNames, "test-workspace-deleted")
 }
 
@@ -803,8 +821,8 @@ func TestListActiveWorkspacesByAccessStrategy_OnListError_ReturnErrors(t *testin
 	workspaces, nextToken, err := ListActiveWorkspacesByAccessStrategy(
 		context.Background(),
 		mockClient,
-		"test-access-strategy",
-		"access-strategy-namespace",
+		testAccessStrategyName,
+		accessStrategyNamespace,
 		"",
 		0)
 
@@ -823,36 +841,36 @@ func TestGetWorkspaceReconciliationRequestsForAccessStrategy_CallsListWithMatchL
 	// Create workspaces with matching labels and access strategy refs
 	ws1 := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace-1",
-			Namespace: "default",
+			Name:      testWorkspace1Name,
+			Namespace: defaultNamespace,
 			Labels: map[string]string{
-				LabelAccessStrategyName:      "test-access-strategy",
-				LabelAccessStrategyNamespace: "access-strategy-namespace",
+				LabelAccessStrategyName:      testAccessStrategyName,
+				LabelAccessStrategyNamespace: accessStrategyNamespace,
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			DisplayName: "Test Workspace 1",
+			DisplayName: testWorkspace1DisplayName,
 			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name:      "test-access-strategy",
-				Namespace: "access-strategy-namespace",
+				Name:      testAccessStrategyName,
+				Namespace: accessStrategyNamespace,
 			},
 		},
 	}
 
 	ws2 := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace-2",
+			Name:      testWorkspace2Name,
 			Namespace: "another-namespace",
 			Labels: map[string]string{
-				LabelAccessStrategyName:      "test-access-strategy",
-				LabelAccessStrategyNamespace: "access-strategy-namespace",
+				LabelAccessStrategyName:      testAccessStrategyName,
+				LabelAccessStrategyNamespace: accessStrategyNamespace,
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			DisplayName: "Test Workspace 2",
+			DisplayName: testWorkspace2DisplayName,
 			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name:      "test-access-strategy",
-				Namespace: "access-strategy-namespace",
+				Name:      testAccessStrategyName,
+				Namespace: accessStrategyNamespace,
 			},
 		},
 	}
@@ -862,20 +880,20 @@ func TestGetWorkspaceReconciliationRequestsForAccessStrategy_CallsListWithMatchL
 	wsDeleted := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "test-workspace-deleted",
-			Namespace:         "default",
+			Namespace:         defaultNamespace,
 			DeletionTimestamp: &deletionTime,
 			// Add a finalizer since k8s objects with deletion timestamp must have at least one finalizer
-			Finalizers: []string{"test-finalizer"},
+			Finalizers: []string{testFinalizerName},
 			Labels: map[string]string{
-				LabelAccessStrategyName:      "test-access-strategy",
-				LabelAccessStrategyNamespace: "access-strategy-namespace",
+				LabelAccessStrategyName:      testAccessStrategyName,
+				LabelAccessStrategyNamespace: accessStrategyNamespace,
 			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			DisplayName: "Test Workspace Deleted",
 			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-				Name:      "test-access-strategy",
-				Namespace: "access-strategy-namespace",
+				Name:      testAccessStrategyName,
+				Namespace: accessStrategyNamespace,
 			},
 		},
 	}
@@ -893,8 +911,8 @@ func TestGetWorkspaceReconciliationRequestsForAccessStrategy_CallsListWithMatchL
 	_, err := GetWorkspaceReconciliationRequestsForAccessStrategy(
 		context.Background(),
 		mockClient,
-		"test-access-strategy",
-		"access-strategy-namespace")
+		testAccessStrategyName,
+		accessStrategyNamespace)
 
 	// Assertions for the mock client
 	assert.NoError(t, err)
@@ -915,15 +933,15 @@ func TestGetWorkspaceReconciliationRequestsForAccessStrategy_CallsListWithMatchL
 
 	// Verify the labels
 	assert.NotEmpty(t, labels, "List should be called with labels")
-	assert.Equal(t, "test-access-strategy", labels[LabelAccessStrategyName], "Should filter by access strategy name")
-	assert.Equal(t, "access-strategy-namespace", labels[LabelAccessStrategyNamespace], "Should filter by access strategy namespace")
+	assert.Equal(t, testAccessStrategyName, labels[LabelAccessStrategyName], "Should filter by access strategy name")
+	assert.Equal(t, accessStrategyNamespace, labels[LabelAccessStrategyNamespace], "Should filter by access strategy namespace")
 
 	// Now call the function with the real client to test the actual functionality
 	requests, err := GetWorkspaceReconciliationRequestsForAccessStrategy(
 		context.Background(),
 		fakeClient,
-		"test-access-strategy",
-		"access-strategy-namespace")
+		testAccessStrategyName,
+		accessStrategyNamespace)
 
 	// Assertions for the real client
 	assert.NoError(t, err)
@@ -952,8 +970,8 @@ func TestGetWorkspaceReconciliationRequestsForAccessStrategy_OnListError_ReturnE
 	requests, err := GetWorkspaceReconciliationRequestsForAccessStrategy(
 		context.Background(),
 		mockClient,
-		"test-access-strategy",
-		"access-strategy-namespace")
+		testAccessStrategyName,
+		accessStrategyNamespace)
 
 	// Assertions
 	assert.Error(t, err)
@@ -974,40 +992,40 @@ func TestApplyAccessStrategyLabels(t *testing.T) {
 	}{
 		{
 			name:          "explicit ref namespace is honored",
-			templateNs:    "team-a",
-			ref:           &workspacev1alpha1.AccessStrategyRef{Name: "web-access", Namespace: "shared-ns"},
+			templateNs:    teamANamespace,
+			ref:           &workspacev1alpha1.AccessStrategyRef{Name: webAccessName, Namespace: "shared-ns"},
 			wantChanged:   true,
-			wantName:      "web-access",
+			wantName:      webAccessName,
 			wantNamespace: "shared-ns",
 		},
 		{
 			name:          "empty ref namespace defaults to template namespace",
-			templateNs:    "team-a",
-			ref:           &workspacev1alpha1.AccessStrategyRef{Name: "web-access"},
+			templateNs:    teamANamespace,
+			ref:           &workspacev1alpha1.AccessStrategyRef{Name: webAccessName},
 			wantChanged:   true,
-			wantName:      "web-access",
-			wantNamespace: "team-a",
+			wantName:      webAccessName,
+			wantNamespace: teamANamespace,
 		},
 		{
 			name:        "no ref clears existing labels",
-			templateNs:  "team-a",
+			templateNs:  teamANamespace,
 			ref:         nil,
-			startLabels: map[string]string{LabelAccessStrategyName: "web-access", LabelAccessStrategyNamespace: "team-a"},
+			startLabels: map[string]string{LabelAccessStrategyName: webAccessName, LabelAccessStrategyNamespace: teamANamespace},
 			wantChanged: true,
 			wantAbsent:  true,
 		},
 		{
 			name:          "already-correct labels report no change",
-			templateNs:    "team-a",
-			ref:           &workspacev1alpha1.AccessStrategyRef{Name: "web-access", Namespace: "team-a"},
-			startLabels:   map[string]string{LabelAccessStrategyName: "web-access", LabelAccessStrategyNamespace: "team-a"},
+			templateNs:    teamANamespace,
+			ref:           &workspacev1alpha1.AccessStrategyRef{Name: webAccessName, Namespace: teamANamespace},
+			startLabels:   map[string]string{LabelAccessStrategyName: webAccessName, LabelAccessStrategyNamespace: teamANamespace},
 			wantChanged:   false,
-			wantName:      "web-access",
-			wantNamespace: "team-a",
+			wantName:      webAccessName,
+			wantNamespace: teamANamespace,
 		},
 		{
 			name:        "no ref and no labels reports no change",
-			templateNs:  "team-a",
+			templateNs:  teamANamespace,
 			ref:         nil,
 			wantChanged: false,
 			wantAbsent:  true,
@@ -1037,7 +1055,7 @@ func TestApplyAccessStrategyLabels(t *testing.T) {
 
 func TestHasActiveTemplatesWithAccessStrategy(t *testing.T) {
 	const (
-		asName = "web-access"
+		asName = webAccessName
 		asNs   = "team-notebooks"
 	)
 

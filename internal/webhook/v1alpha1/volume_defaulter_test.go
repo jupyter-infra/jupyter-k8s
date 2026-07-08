@@ -21,18 +21,18 @@ var _ = Describe("VolumeDefaulter", func() {
 
 	BeforeEach(func() {
 		template = &workspacev1alpha1.WorkspaceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+			ObjectMeta: metav1.ObjectMeta{Name: testTemplateName},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 				DefaultVolumes: []workspacev1alpha1.VolumeSpec{
-					{Name: "shared-data", PersistentVolumeClaimName: "fsx-shared-pvc", MountPath: "/data"},
+					{Name: "shared-data", PersistentVolumeClaimName: "fsx-shared-pvc", MountPath: testDataMountPath},
 					{Name: "models", PersistentVolumeClaimName: "ml-models-pvc", MountPath: "/models"},
 				},
 			},
 		}
 
 		workspace = &workspacev1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-workspace"},
-			Spec:       workspacev1alpha1.WorkspaceSpec{DisplayName: "Test"},
+			ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName},
+			Spec:       workspacev1alpha1.WorkspaceSpec{DisplayName: testDisplayName},
 		}
 	})
 
@@ -43,7 +43,7 @@ var _ = Describe("VolumeDefaulter", func() {
 			Expect(workspace.Spec.Volumes).To(HaveLen(2))
 			Expect(workspace.Spec.Volumes[0].Name).To(Equal("shared-data"))
 			Expect(workspace.Spec.Volumes[0].PersistentVolumeClaimName).To(Equal("fsx-shared-pvc"))
-			Expect(workspace.Spec.Volumes[0].MountPath).To(Equal("/data"))
+			Expect(workspace.Spec.Volumes[0].MountPath).To(Equal(testDataMountPath))
 			Expect(workspace.Spec.Volumes[1].Name).To(Equal("models"))
 			Expect(workspace.Spec.Volumes[1].PersistentVolumeClaimName).To(Equal("ml-models-pvc"))
 			Expect(workspace.Spec.Volumes[1].MountPath).To(Equal("/models"))

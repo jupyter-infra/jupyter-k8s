@@ -83,8 +83,8 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 			// Set up test values
 			testNamespace = "test-namespace1"
 			testWorkspaceName = "test-workspace1"
-			testUsername = "test-user1"
-			testGroups = []string{"system:authenticated", "github:test-group1"}
+			testUsername = testUser1
+			testGroups = []string{systemAuthenticated, "github:test-group1"}
 			testUID = "test-uid1"
 		})
 
@@ -110,7 +110,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessType: "OwnerOnly",
+					AccessType: accessTypeOwnerOnly,
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -141,7 +141,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessType: "OwnerOnly",
+					AccessType: accessTypeOwnerOnly,
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -190,7 +190,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessType: "OwnerOnly",
+					AccessType: accessTypeOwnerOnly,
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -234,7 +234,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessType: "OwnerOnly",
+					AccessType: accessTypeOwnerOnly,
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -300,7 +300,7 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessType: "OwnerOnly",
+					AccessType: accessTypeOwnerOnly,
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -335,11 +335,11 @@ var _ = Describe("ServerRouteConnectionAccessReview", func() {
 					Name:      testWorkspaceName,
 					Namespace: testNamespace,
 					Annotations: map[string]string{
-						OwnerAnnotation: "different-user",
+						OwnerAnnotation: differentUser,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessType: "OwnerOnly",
+					AccessType: accessTypeOwnerOnly,
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())

@@ -86,12 +86,12 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 		It("should not add finalizer when no active workspaces exist", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-template",
-					Namespace: "default",
+					Name:      testTemplateName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName:  "Test Template",
-					DefaultImage: "test:latest",
+					DisplayName:  testTemplateDisplayName,
+					DefaultImage: testImageTestLatest,
 				},
 			}
 
@@ -100,12 +100,12 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 				WithObjects(template).
 				Build()
 
-			err := ensureTemplateFinalizer(ctx, k8sClient, "test-template", "default")
+			err := ensureTemplateFinalizer(ctx, k8sClient, testTemplateName, testDefaultNamespace)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify finalizer was NOT added
 			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
-			err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "default"}, updatedTemplate)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: testTemplateName, Namespace: testDefaultNamespace}, updatedTemplate)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeFalse())
 		})
@@ -113,29 +113,29 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 		It("should add finalizer when active workspace exists", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-template",
-					Namespace: "default",
+					Name:      testTemplateName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName:  "Test Template",
-					DefaultImage: "test:latest",
+					DisplayName:  testTemplateDisplayName,
+					DefaultImage: testImageTestLatest,
 				},
 			}
 
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testDefaultNamespace,
 					Labels: map[string]string{
-						controller.LabelWorkspaceTemplate:          "test-template",
-						controller.LabelWorkspaceTemplateNamespace: "default",
+						controller.LabelWorkspaceTemplate:          testTemplateName,
+						controller.LabelWorkspaceTemplateNamespace: testDefaultNamespace,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name:      "test-template",
-						Namespace: "default",
+						Name:      testTemplateName,
+						Namespace: testDefaultNamespace,
 					},
 				},
 			}
@@ -145,12 +145,12 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 				WithObjects(template, workspace).
 				Build()
 
-			err := ensureTemplateFinalizer(ctx, k8sClient, "test-template", "default")
+			err := ensureTemplateFinalizer(ctx, k8sClient, testTemplateName, testDefaultNamespace)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify finalizer WAS added
 			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
-			err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "default"}, updatedTemplate)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: testTemplateName, Namespace: testDefaultNamespace}, updatedTemplate)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeTrue())
 		})
@@ -159,12 +159,12 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			now := metav1.Now()
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-template",
-					Namespace: "default",
+					Name:      testTemplateName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName:  "Test Template",
-					DefaultImage: "test:latest",
+					DisplayName:  testTemplateDisplayName,
+					DefaultImage: testImageTestLatest,
 				},
 			}
 
@@ -172,20 +172,20 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// This represents a workspace that is being deleted but blocked by finalizers
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:              "test-workspace",
-					Namespace:         "default",
+					Name:              testWorkspaceName,
+					Namespace:         testDefaultNamespace,
 					DeletionTimestamp: &now,
 					Finalizers:        []string{"test-finalizer"}, // Required to set DeletionTimestamp
 					Labels: map[string]string{
-						controller.LabelWorkspaceTemplate:          "test-template",
-						controller.LabelWorkspaceTemplateNamespace: "default",
+						controller.LabelWorkspaceTemplate:          testTemplateName,
+						controller.LabelWorkspaceTemplateNamespace: testDefaultNamespace,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name:      "test-template",
-						Namespace: "default",
+						Name:      testTemplateName,
+						Namespace: testDefaultNamespace,
 					},
 				},
 			}
@@ -195,13 +195,13 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 				WithObjects(template, workspace).
 				Build()
 
-			err := ensureTemplateFinalizer(ctx, k8sClient, "test-template", "default")
+			err := ensureTemplateFinalizer(ctx, k8sClient, testTemplateName, testDefaultNamespace)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify finalizer was NOT added (workspace is being deleted)
 			// ListActiveWorkspacesByTemplate filters out workspaces with DeletionTimestamp
 			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
-			err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "default"}, updatedTemplate)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: testTemplateName, Namespace: testDefaultNamespace}, updatedTemplate)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeFalse())
 		})
@@ -209,29 +209,29 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 		It("should handle namespace filtering correctly", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-template",
-					Namespace: "default",
+					Name:      testTemplateName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName:  "Test Template",
-					DefaultImage: "test:latest",
+					DisplayName:  testTemplateDisplayName,
+					DefaultImage: testImageTestLatest,
 				},
 			}
 
 			// Workspace in different namespace
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testDefaultNamespace,
 					Labels: map[string]string{
-						controller.LabelWorkspaceTemplate:          "test-template",
+						controller.LabelWorkspaceTemplate:          testTemplateName,
 						controller.LabelWorkspaceTemplateNamespace: "other-namespace",
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name:      "test-template",
+						Name:      testTemplateName,
 						Namespace: "other-namespace",
 					},
 				},
@@ -243,12 +243,12 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 				Build()
 
 			// Query for template in "default" namespace - should not find workspace
-			err := ensureTemplateFinalizer(ctx, k8sClient, "test-template", "default")
+			err := ensureTemplateFinalizer(ctx, k8sClient, testTemplateName, testDefaultNamespace)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify finalizer was NOT added (workspace references different namespace)
 			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
-			err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "default"}, updatedTemplate)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: testTemplateName, Namespace: testDefaultNamespace}, updatedTemplate)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeFalse())
 		})
@@ -259,37 +259,37 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 				Build()
 
 			// Should not error when template doesn't exist
-			err := ensureTemplateFinalizer(ctx, k8sClient, "nonexistent-template", "default")
+			err := ensureTemplateFinalizer(ctx, k8sClient, "nonexistent-template", testDefaultNamespace)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should not re-add finalizer if already present", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-template",
-					Namespace:  "default",
+					Name:       testTemplateName,
+					Namespace:  testDefaultNamespace,
 					Finalizers: []string{workspaceutil.TemplateFinalizerName},
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName:  "Test Template",
-					DefaultImage: "test:latest",
+					DisplayName:  testTemplateDisplayName,
+					DefaultImage: testImageTestLatest,
 				},
 			}
 
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testDefaultNamespace,
 					Labels: map[string]string{
-						controller.LabelWorkspaceTemplate:          "test-template",
-						controller.LabelWorkspaceTemplateNamespace: "default",
+						controller.LabelWorkspaceTemplate:          testTemplateName,
+						controller.LabelWorkspaceTemplateNamespace: testDefaultNamespace,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name:      "test-template",
-						Namespace: "default",
+						Name:      testTemplateName,
+						Namespace: testDefaultNamespace,
 					},
 				},
 			}
@@ -299,12 +299,12 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 				WithObjects(template, workspace).
 				Build()
 
-			err := ensureTemplateFinalizer(ctx, k8sClient, "test-template", "default")
+			err := ensureTemplateFinalizer(ctx, k8sClient, testTemplateName, testDefaultNamespace)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify finalizer still present (only one)
 			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
-			err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "default"}, updatedTemplate)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: testTemplateName, Namespace: testDefaultNamespace}, updatedTemplate)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeTrue())
 			Expect(updatedTemplate.Finalizers).To(HaveLen(1))
@@ -313,12 +313,12 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 		It("should use limit=1 optimization by returning early", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-template",
-					Namespace: "default",
+					Name:      testTemplateName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName:  "Test Template",
-					DefaultImage: "test:latest",
+					DisplayName:  testTemplateDisplayName,
+					DefaultImage: testImageTestLatest,
 				},
 			}
 
@@ -326,17 +326,17 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			workspace1 := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-1",
-					Namespace: "default",
+					Namespace: testDefaultNamespace,
 					Labels: map[string]string{
-						controller.LabelWorkspaceTemplate:          "test-template",
-						controller.LabelWorkspaceTemplateNamespace: "default",
+						controller.LabelWorkspaceTemplate:          testTemplateName,
+						controller.LabelWorkspaceTemplateNamespace: testDefaultNamespace,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Test Workspace 1",
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name:      "test-template",
-						Namespace: "default",
+						Name:      testTemplateName,
+						Namespace: testDefaultNamespace,
 					},
 				},
 			}
@@ -344,17 +344,17 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			workspace2 := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-2",
-					Namespace: "default",
+					Namespace: testDefaultNamespace,
 					Labels: map[string]string{
-						controller.LabelWorkspaceTemplate:          "test-template",
-						controller.LabelWorkspaceTemplateNamespace: "default",
+						controller.LabelWorkspaceTemplate:          testTemplateName,
+						controller.LabelWorkspaceTemplateNamespace: testDefaultNamespace,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Test Workspace 2",
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name:      "test-template",
-						Namespace: "default",
+						Name:      testTemplateName,
+						Namespace: testDefaultNamespace,
 					},
 				},
 			}
@@ -365,12 +365,12 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 				Build()
 
 			// Should add finalizer after finding first workspace (limit=1 optimization)
-			err := ensureTemplateFinalizer(ctx, k8sClient, "test-template", "default")
+			err := ensureTemplateFinalizer(ctx, k8sClient, testTemplateName, testDefaultNamespace)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify finalizer was added
 			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
-			err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "default"}, updatedTemplate)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: testTemplateName, Namespace: testDefaultNamespace}, updatedTemplate)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeTrue())
 		})
@@ -381,11 +381,11 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// Create a workspace without an access strategy reference
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					// No AccessStrategy field
 				},
 			}
@@ -427,16 +427,16 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// Create a workspace that is being deleted
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:              "test-workspace",
-					Namespace:         "default",
+					Name:              testWorkspaceName,
+					Namespace:         testDefaultNamespace,
 					DeletionTimestamp: &now,
 					Finalizers:        []string{"test-finalizer"}, // Required to set DeletionTimestamp
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "test-strategy",
-						Namespace: "default",
+						Name:      testStrategyName,
+						Namespace: testDefaultNamespace,
 					},
 				},
 			}
@@ -454,11 +454,11 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// Create an access strategy - to make sure it exists but won't be fetched
 			accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-strategy",
-					Namespace: "default",
+					Name:      testStrategyName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					DisplayName: "Test Strategy",
+					DisplayName: testStrategyDisplayName,
 				},
 			}
 
@@ -501,14 +501,14 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// Create a workspace that references a non-existent access strategy
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
 						Name:      "nonexistent-strategy",
-						Namespace: "default",
+						Namespace: testDefaultNamespace,
 					},
 				},
 			}
@@ -530,14 +530,14 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// Create a workspace with a reference to an access strategy
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "test-strategy",
-						Namespace: "default",
+						Name:      testStrategyName,
+						Namespace: testDefaultNamespace,
 					},
 				},
 			}
@@ -568,14 +568,14 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// Create a workspace with a reference to an access strategy
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "test-strategy",
-						Namespace: "default",
+						Name:      testStrategyName,
+						Namespace: testDefaultNamespace,
 					},
 				},
 			}
@@ -583,12 +583,12 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// Create an access strategy that already has the finalizer
 			accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-strategy",
-					Namespace:  "default",
+					Name:       testStrategyName,
+					Namespace:  testDefaultNamespace,
 					Finalizers: []string{workspaceutil.AccessStrategyFinalizerName},
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					DisplayName: "Test Strategy",
+					DisplayName: testStrategyDisplayName,
 				},
 			}
 
@@ -623,15 +623,15 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// Create a workspace with a reference to an access strategy
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName:   "Test Workspace",
+					DisplayName:   testWorkspaceDisplayName,
 					DesiredStatus: controller.DesiredStateRunning,
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "test-strategy",
-						Namespace: "default",
+						Name:      testStrategyName,
+						Namespace: testDefaultNamespace,
 					},
 				},
 			}
@@ -639,12 +639,12 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// Create an access strategy without the finalizer
 			accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-strategy",
-					Namespace: "default",
+					Name:      testStrategyName,
+					Namespace: testDefaultNamespace,
 					// No finalizers
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					DisplayName: "Test Strategy",
+					DisplayName: testStrategyDisplayName,
 				},
 			}
 
@@ -687,15 +687,15 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// Create a workspace with a reference to an access strategy
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName:   "Test Workspace",
+					DisplayName:   testWorkspaceDisplayName,
 					DesiredStatus: controller.DesiredStateStopped,
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "test-strategy",
-						Namespace: "default",
+						Name:      testStrategyName,
+						Namespace: testDefaultNamespace,
 					},
 				},
 			}
@@ -703,12 +703,12 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// Create an access strategy without the finalizer
 			accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-strategy",
-					Namespace: "default",
+					Name:      testStrategyName,
+					Namespace: testDefaultNamespace,
 					// No finalizers
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					DisplayName: "Test Strategy",
+					DisplayName: testStrategyDisplayName,
 				},
 			}
 
@@ -751,14 +751,14 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// Create a workspace with a reference to an access strategy
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "test-strategy",
-						Namespace: "default",
+						Name:      testStrategyName,
+						Namespace: testDefaultNamespace,
 					},
 				},
 			}
@@ -766,12 +766,12 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// Create an access strategy without the finalizer
 			accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-strategy",
-					Namespace: "default",
+					Name:      testStrategyName,
+					Namespace: testDefaultNamespace,
 					// No finalizers
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					DisplayName: "Test Strategy",
+					DisplayName: testStrategyDisplayName,
 				},
 			}
 
@@ -820,26 +820,26 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 		It("should reject and not finalize a template in a disallowed namespace", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-template",
-					Namespace: "other-ns",
+					Name:      testTemplateName,
+					Namespace: testOtherNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName:  "Test Template",
-					DefaultImage: "test:latest",
+					DisplayName:  testTemplateDisplayName,
+					DefaultImage: testImageTestLatest,
 				},
 			}
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName:   "Test Workspace",
-					Image:         "test:latest",
-					DesiredStatus: "Running",
+					DisplayName:   testWorkspaceDisplayName,
+					Image:         testImageTestLatest,
+					DesiredStatus: testStatusRunning,
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name:      "test-template",
-						Namespace: "other-ns",
+						Name:      testTemplateName,
+						Namespace: testOtherNamespace,
 					},
 				},
 			}
@@ -856,32 +856,32 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 
 			// Verify the finalizer was NOT stamped on the out-of-scope template
 			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
-			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "other-ns"}, updatedTemplate)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: testTemplateName, Namespace: testOtherNamespace}, updatedTemplate)).To(Succeed())
 			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeFalse())
 		})
 
 		It("should reject and not finalize an access strategy in a disallowed namespace", func() {
 			accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-strategy",
-					Namespace: "other-ns",
+					Name:      testStrategyName,
+					Namespace: testOtherNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					DisplayName: "Test Strategy",
+					DisplayName: testStrategyDisplayName,
 				},
 			}
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName:   "Test Workspace",
-					Image:         "test:latest",
-					DesiredStatus: "Running",
+					DisplayName:   testWorkspaceDisplayName,
+					Image:         testImageTestLatest,
+					DesiredStatus: testStatusRunning,
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "test-strategy",
-						Namespace: "other-ns",
+						Name:      testStrategyName,
+						Namespace: testOtherNamespace,
 					},
 				},
 			}
@@ -898,7 +898,7 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 
 			// Verify the finalizer was NOT stamped on the out-of-scope access strategy
 			updatedStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{}
-			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-strategy", Namespace: "other-ns"}, updatedStrategy)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: testStrategyName, Namespace: testOtherNamespace}, updatedStrategy)).To(Succeed())
 			Expect(controllerutil.ContainsFinalizer(updatedStrategy, workspaceutil.AccessStrategyFinalizerName)).To(BeFalse())
 		})
 
@@ -909,39 +909,39 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// on the otherwise-valid template.
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-template",
-					Namespace: "default",
+					Name:      testTemplateName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName:  "Test Template",
-					DefaultImage: "test:latest",
+					DisplayName:  testTemplateDisplayName,
+					DefaultImage: testImageTestLatest,
 				},
 			}
 			accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-strategy",
-					Namespace: "other-ns",
+					Name:      testStrategyName,
+					Namespace: testOtherNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					DisplayName: "Test Strategy",
+					DisplayName: testStrategyDisplayName,
 				},
 			}
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName:   "Test Workspace",
-					Image:         "test:latest",
-					DesiredStatus: "Running",
+					DisplayName:   testWorkspaceDisplayName,
+					Image:         testImageTestLatest,
+					DesiredStatus: testStatusRunning,
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name:      "test-template",
-						Namespace: "default",
+						Name:      testTemplateName,
+						Namespace: testDefaultNamespace,
 					},
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "test-strategy",
-						Namespace: "other-ns",
+						Name:      testStrategyName,
+						Namespace: testOtherNamespace,
 					},
 				},
 			}
@@ -959,7 +959,7 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			// The in-scope template must NOT carry a protection finalizer: the access strategy
 			// namespace check runs before any finalizer is stamped.
 			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
-			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-template", Namespace: "default"}, updatedTemplate)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: testTemplateName, Namespace: testDefaultNamespace}, updatedTemplate)).To(Succeed())
 			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeFalse())
 		})
 	})

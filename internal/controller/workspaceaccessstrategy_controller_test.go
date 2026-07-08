@@ -61,7 +61,7 @@ var _ = Describe("AccessStrategy controller", func() {
 			accessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-accessstrategy",
-					Namespace: "test-namespace",
+					Namespace: testNamespaceName,
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 					DisplayName: "Test AccessStrategy",
@@ -172,8 +172,8 @@ var _ = Describe("AccessStrategy controller", func() {
 				workspaceList.Items = []workspacev1alpha1.Workspace{
 					{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "test-workspace",
-							Namespace: "test-namespace",
+							Name:      testWorkspaceName,
+							Namespace: testNamespaceName,
 						},
 						Spec: workspacev1alpha1.WorkspaceSpec{
 							AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
@@ -221,7 +221,7 @@ var _ = Describe("AccessStrategy controller", func() {
 			mockClient.listFunc = func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 				if templateList, ok := list.(*workspacev1alpha1.WorkspaceTemplateList); ok {
 					templateList.Items = []workspacev1alpha1.WorkspaceTemplate{
-						{ObjectMeta: metav1.ObjectMeta{Name: "tmpl", Namespace: "test-namespace"}},
+						{ObjectMeta: metav1.ObjectMeta{Name: templateNameTmpl, Namespace: testNamespaceName}},
 					}
 				}
 				// WorkspaceList left empty
@@ -263,7 +263,7 @@ var _ = Describe("AccessStrategy controller", func() {
 			mockClient.listFunc = func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 				if templateList, ok := list.(*workspacev1alpha1.WorkspaceTemplateList); ok {
 					templateList.Items = []workspacev1alpha1.WorkspaceTemplate{
-						{ObjectMeta: metav1.ObjectMeta{Name: "tmpl", Namespace: "test-namespace"}},
+						{ObjectMeta: metav1.ObjectMeta{Name: templateNameTmpl, Namespace: testNamespaceName}},
 					}
 				}
 				return nil
@@ -300,7 +300,7 @@ var _ = Describe("AccessStrategy controller", func() {
 			mockClient.listFunc = func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 				if templateList, ok := list.(*workspacev1alpha1.WorkspaceTemplateList); ok {
 					templateList.Items = []workspacev1alpha1.WorkspaceTemplate{
-						{ObjectMeta: metav1.ObjectMeta{Name: "tmpl", Namespace: "test-namespace"}},
+						{ObjectMeta: metav1.ObjectMeta{Name: templateNameTmpl, Namespace: testNamespaceName}},
 					}
 				}
 				return nil
@@ -385,8 +385,8 @@ var _ = Describe("AccessStrategy controller", func() {
 				workspaceList.Items = []workspacev1alpha1.Workspace{
 					{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "test-workspace",
-							Namespace: "test-namespace",
+							Name:      testWorkspaceName,
+							Namespace: testNamespaceName,
 						},
 						Spec: workspacev1alpha1.WorkspaceSpec{
 							AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
@@ -495,8 +495,8 @@ var _ = Describe("AccessStrategy controller", func() {
 				workspaceList.Items = []workspacev1alpha1.Workspace{
 					{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "test-workspace",
-							Namespace: "test-namespace",
+							Name:      testWorkspaceName,
+							Namespace: testNamespaceName,
 						},
 						Spec: workspacev1alpha1.WorkspaceSpec{
 							AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
@@ -574,7 +574,7 @@ var _ = Describe("AccessStrategy controller", func() {
 			notWorkspace := &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "not-a-workspace",
-					Namespace: "test-namespace",
+					Namespace: testNamespaceName,
 				},
 			}
 
@@ -589,11 +589,11 @@ var _ = Describe("AccessStrategy controller", func() {
 			// Create a workspace with access strategy labels
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "test-namespace",
+					Name:      testWorkspaceName,
+					Namespace: testNamespaceName,
 					Labels: map[string]string{
-						workspace.LabelAccessStrategyName:      "test-strategy",
-						workspace.LabelAccessStrategyNamespace: "strategy-namespace",
+						workspace.LabelAccessStrategyName:      testStrategyName,
+						workspace.LabelAccessStrategyNamespace: accessStrategyNamespaceConst,
 					},
 				},
 			}
@@ -603,19 +603,19 @@ var _ = Describe("AccessStrategy controller", func() {
 
 			// Verify result
 			Expect(result).To(HaveLen(1))
-			Expect(result[0].Name).To(Equal("test-strategy"))
-			Expect(result[0].Namespace).To(Equal("strategy-namespace"))
+			Expect(result[0].Name).To(Equal(testStrategyName))
+			Expect(result[0].Namespace).To(Equal(accessStrategyNamespaceConst))
 		})
 
 		It("should return nil if the label of the AccessStrategy name is missing on the Workspace", func() {
 			// Create a workspace with missing name label
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "test-namespace",
+					Name:      testWorkspaceName,
+					Namespace: testNamespaceName,
 					Labels: map[string]string{
 						// Missing LabelAccessStrategyName
-						workspace.LabelAccessStrategyNamespace: "strategy-namespace",
+						workspace.LabelAccessStrategyNamespace: accessStrategyNamespaceConst,
 					},
 				},
 			}
@@ -631,11 +631,10 @@ var _ = Describe("AccessStrategy controller", func() {
 			// Create a workspace with missing namespace label
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "test-namespace",
+					Name:      testWorkspaceName,
+					Namespace: testNamespaceName,
 					Labels: map[string]string{
-						workspace.LabelAccessStrategyName: "test-strategy",
-						// Missing LabelAccessStrategyNamespace
+						workspace.LabelAccessStrategyName: testStrategyName,
 					},
 				},
 			}

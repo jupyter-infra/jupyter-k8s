@@ -38,7 +38,7 @@ func (tg *TemplateGetter) ApplyTemplateName(ctx context.Context, workspace *work
 		return nil
 	}
 
-	defaultLabel := client.MatchingLabels{webhookconst.DefaultTemplateLabel: "true"}
+	defaultLabel := client.MatchingLabels{webhookconst.DefaultTemplateLabel: labelValueTrue}
 
 	// Search the workspace's own namespace first
 	template, err := tg.findDefaultTemplate(ctx, workspace.Namespace, defaultLabel)

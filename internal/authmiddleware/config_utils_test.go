@@ -173,7 +173,7 @@ func TestExtractAppPath(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:     "Root path",
+			name:     testRootPathLabel,
 			path:     "/",
 			expected: "/",
 		},
@@ -189,23 +189,23 @@ func TestExtractAppPath(t *testing.T) {
 		},
 		{
 			name:     "Workspace path without trailing slash",
-			path:     "/workspaces/ns1/app1",
-			expected: "/workspaces/ns1/app1",
+			path:     testPathValue,
+			expected: testPathValue,
 		},
 		{
 			name:     "Workspace path with trailing slash",
 			path:     "/workspaces/ns1/app1/",
-			expected: "/workspaces/ns1/app1",
+			expected: testPathValue,
 		},
 		{
 			name:     "Workspace path with subpath",
 			path:     "/workspaces/ns1/app1/lab",
-			expected: "/workspaces/ns1/app1",
+			expected: testPathValue,
 		},
 		{
 			name:     "Workspace path with complex subpath",
 			path:     "/workspaces/ns1/app1/some/addl/path/elements",
-			expected: "/workspaces/ns1/app1",
+			expected: testPathValue,
 		},
 	}
 

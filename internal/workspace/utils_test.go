@@ -23,17 +23,17 @@ func TestGetPodUIDFromWorkspaceName_Success(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod",
-			Namespace: "default",
+			Namespace: defaultNamespace,
 			UID:       types.UID("test-pod-uid-123"),
 			Labels: map[string]string{
-				"workspace.jupyter.org/workspace-name": "test-workspace",
+				"workspace.jupyter.org/workspace-name": testWorkspaceName,
 			},
 		},
 	}
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
 
-	uid, err := GetPodUIDFromWorkspaceName(fakeClient, "test-workspace")
+	uid, err := GetPodUIDFromWorkspaceName(fakeClient, testWorkspaceName)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "test-pod-uid-123", uid)

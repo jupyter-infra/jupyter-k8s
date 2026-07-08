@@ -31,11 +31,11 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 
 		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "default",
+				Name:      testWorkspaceName,
+				Namespace: testDefaultNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				DisplayName: "Test Workspace",
+				DisplayName: testWorkspaceDisplayName,
 			},
 		}
 	})
@@ -53,7 +53,7 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 
 			err := defaulter.ApplyServiceAccountDefaults(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(workspace.Spec.ServiceAccountName).To(Equal("default"))
+			Expect(workspace.Spec.ServiceAccountName).To(Equal(testDefaultNamespace))
 		})
 
 		It("should not override existing service account name", func() {
@@ -80,9 +80,9 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 			sa := &corev1.ServiceAccount{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "custom-default-sa",
-					Namespace: "default",
+					Namespace: testDefaultNamespace,
 					Labels: map[string]string{
-						webhookconst.DefaultServiceAccountLabel: "true",
+						webhookconst.DefaultServiceAccountLabel: labelValueTrue,
 					},
 				},
 			}
@@ -109,9 +109,9 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 				WithScheme(scheme).
 				Build()
 
-			result, err := GetDefaultServiceAccount(ctx, fakeClient, "default")
+			result, err := GetDefaultServiceAccount(ctx, fakeClient, testDefaultNamespace)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result).To(Equal("default"))
+			Expect(result).To(Equal(testDefaultNamespace))
 		})
 
 		It("should return the service account name when exactly one has the label", func() {
@@ -121,9 +121,9 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 			sa := &corev1.ServiceAccount{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "custom-sa",
-					Namespace: "default",
+					Namespace: testDefaultNamespace,
 					Labels: map[string]string{
-						webhookconst.DefaultServiceAccountLabel: "true",
+						webhookconst.DefaultServiceAccountLabel: labelValueTrue,
 					},
 				},
 			}
@@ -133,7 +133,7 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 				WithObjects(sa).
 				Build()
 
-			result, err := GetDefaultServiceAccount(ctx, fakeClient, "default")
+			result, err := GetDefaultServiceAccount(ctx, fakeClient, testDefaultNamespace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(Equal("custom-sa"))
 		})
@@ -145,9 +145,9 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 			sa1 := &corev1.ServiceAccount{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "sa1",
-					Namespace: "default",
+					Namespace: testDefaultNamespace,
 					Labels: map[string]string{
-						webhookconst.DefaultServiceAccountLabel: "true",
+						webhookconst.DefaultServiceAccountLabel: labelValueTrue,
 					},
 				},
 			}
@@ -155,9 +155,9 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 			sa2 := &corev1.ServiceAccount{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "sa2",
-					Namespace: "default",
+					Namespace: testDefaultNamespace,
 					Labels: map[string]string{
-						webhookconst.DefaultServiceAccountLabel: "true",
+						webhookconst.DefaultServiceAccountLabel: labelValueTrue,
 					},
 				},
 			}
@@ -167,7 +167,7 @@ var _ = Describe("ServiceAccountDefaulter", func() {
 				WithObjects(sa1, sa2).
 				Build()
 
-			result, err := GetDefaultServiceAccount(ctx, fakeClient, "default")
+			result, err := GetDefaultServiceAccount(ctx, fakeClient, testDefaultNamespace)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("multiple service accounts found"))
 			Expect(result).To(BeEmpty())
