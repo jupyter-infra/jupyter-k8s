@@ -197,7 +197,8 @@ jobs:
           # writable: for diffs over roborev's inline prompt cap it writes a
           # snapshot file under the repo (.roborev/) and an entry in
           # .git/info/exclude, which fail with EACCES under the image's default
-          # uid.
+          # uid. On failure roborev's stdout holds the failure summary, so print
+          # it instead of leaving it captured and unseen.
           docker run --rm \
             --user "$(id -u):$(id -g)" \
             -e HOME=/home/node \
@@ -212,7 +213,9 @@ jobs:
               && roborev ci review --ref ${base_sha}..${HEAD_SHA} \
                    --pr ${PR} --gh-repo ${REPO} \
                    --min-severity medium --reasoning standard" \
-            > "$RUNNER_TEMP/review.md"
+            > "$RUNNER_TEMP/review.md" \
+            || { rc=$?; echo "roborev failed (exit $rc); container stdout:"; \
+                 cat "$RUNNER_TEMP/review.md"; exit "$rc"; }
 
           [ -s "$RUNNER_TEMP/review.md" ] || { echo "review produced no output"; exit 1; }
           gh pr comment "$PR" --repo "$REPO" --body-file "$RUNNER_TEMP/review.md"
