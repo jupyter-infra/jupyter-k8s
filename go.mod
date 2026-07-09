@@ -1,6 +1,6 @@
 module github.com/jupyter-infra/jupyter-k8s
 
-go 1.26.0
+go 1.26.5
 
 require (
 	github.com/coreos/go-oidc/v3 v3.20.0
