@@ -65,6 +65,11 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
           fetch-depth: 0
+          # The checkout is bind-mounted into the review container, which must
+          # never hold the gh token, so do not persist it into .git/config.
+          # The PR-head fetch later works anonymously (public repo); the
+          # runner's gh calls use the env token.
+          persist-credentials: false
 
       - name: Resolve PR and head SHA
         id: pr
