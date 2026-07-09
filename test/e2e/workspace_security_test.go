@@ -55,7 +55,7 @@ var _ = Describe("Workspace Security", Ordered, func() {
 		runAsNonRoot, err := kubectlGet("pod", podName, workspaceNamespace,
 			"{.spec.containers[0].securityContext.runAsNonRoot}")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(runAsNonRoot).To(Equal("true"))
+		Expect(runAsNonRoot).To(Equal(valueTrue))
 
 		runAsUser, err := kubectlGet("pod", podName, workspaceNamespace,
 			"{.spec.containers[0].securityContext.runAsUser}")

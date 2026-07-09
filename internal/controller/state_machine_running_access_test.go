@@ -40,14 +40,14 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Spec: appsv1.DeploymentSpec{
 				Replicas: &replicas,
 				Selector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{"app": "test"},
+					MatchLabels: map[string]string{AppLabel: literalTest},
 				},
 				Template: corev1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "test"}},
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{AppLabel: literalTest}},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{
-							Name:  "main",
-							Image: "jupyter/base-notebook:latest",
+							Name:  containerNameMain,
+							Image: imageBaseNotebook,
 						}},
 					},
 				},
@@ -77,7 +77,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 					Port:       8888,
 					TargetPort: intstr.FromInt32(8888),
 				}},
-				Selector: map[string]string{"app": "test"},
+				Selector: map[string]string{AppLabel: literalTest},
 			},
 		}
 		Expect(k8sClient.Create(ctx, svc)).To(Succeed())
@@ -123,10 +123,10 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("sm-test-%d", time.Now().UnixNano()),
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					Image:         "jupyter/base-notebook:latest",
+					Image:         imageBaseNotebook,
 					DesiredStatus: DesiredStateRunning,
 				},
 			}
@@ -156,13 +156,13 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			ws := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("sm-test-%d", time.Now().UnixNano()),
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					Image:         "jupyter/base-notebook:latest",
+					Image:         imageBaseNotebook,
 					DesiredStatus: DesiredStateRunning,
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name: "test-strategy",
+						Name: testStrategyName,
 					},
 				},
 			}
@@ -173,17 +173,17 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 		BeforeEach(func() {
 			accessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-strategy",
-					Namespace:  "default",
+					Name:       testStrategyName,
+					Namespace:  testNamespace,
 					UID:        types.UID("test-uid"),
 					Generation: 1,
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					DisplayName:             "Test Strategy",
+					DisplayName:             testStrategyDisplayName,
 					AccessResourceTemplates: []workspacev1alpha1.AccessResourceTemplate{},
 					AccessStartupProbe: &workspacev1alpha1.AccessStartupProbe{
 						HTTPGet: &workspacev1alpha1.AccessHTTPGetProbe{
-							URLTemplate: "http://example.com/test",
+							URLTemplate: exampleURLTemplate,
 						},
 						PeriodSeconds:    2,
 						FailureThreshold: 3,
@@ -455,13 +455,13 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			ws := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("sm-basepath-%d", time.Now().UnixNano()),
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					Image:         "jupyter/base-notebook:latest",
+					Image:         imageBaseNotebook,
 					DesiredStatus: DesiredStateRunning,
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name: "test-strategy",
+						Name: testStrategyName,
 					},
 				},
 			}
@@ -472,13 +472,13 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 		BeforeEach(func() {
 			accessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-strategy",
-					Namespace:  "default",
+					Name:       testStrategyName,
+					Namespace:  testNamespace,
 					UID:        types.UID("test-uid"),
 					Generation: 1,
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					DisplayName:             "Test Strategy",
+					DisplayName:             testStrategyDisplayName,
 					AccessResourceTemplates: []workspacev1alpha1.AccessResourceTemplate{},
 				},
 			}
@@ -527,10 +527,10 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			ws := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("sm-basepath-clear-%d", time.Now().UnixNano()),
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					Image:         "jupyter/base-notebook:latest",
+					Image:         imageBaseNotebook,
 					DesiredStatus: DesiredStateRunning,
 				},
 			}
@@ -563,13 +563,13 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			ws := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("sm-err-%d", time.Now().UnixNano()),
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					Image:         "jupyter/base-notebook:latest",
+					Image:         imageBaseNotebook,
 					DesiredStatus: DesiredStateRunning,
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name: "test-strategy",
+						Name: testStrategyName,
 					},
 				},
 			}
@@ -587,17 +587,17 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 		BeforeEach(func() {
 			accessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-strategy",
-					Namespace:  "default",
+					Name:       testStrategyName,
+					Namespace:  testNamespace,
 					UID:        types.UID("test-uid"),
 					Generation: 1,
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					DisplayName:             "Test Strategy",
+					DisplayName:             testStrategyDisplayName,
 					AccessResourceTemplates: []workspacev1alpha1.AccessResourceTemplate{},
 					AccessStartupProbe: &workspacev1alpha1.AccessStartupProbe{
 						HTTPGet: &workspacev1alpha1.AccessHTTPGetProbe{
-							URLTemplate: "http://example.com/test",
+							URLTemplate: exampleURLTemplate,
 						},
 						PeriodSeconds:    2,
 						FailureThreshold: 3,

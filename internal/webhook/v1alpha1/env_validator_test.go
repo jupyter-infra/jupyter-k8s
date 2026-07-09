@@ -55,18 +55,18 @@ var _ = Describe("EnvValidator", func() {
 	Context("regex validation", func() {
 		BeforeEach(func() {
 			template.Spec.EnvRequirements = []workspacev1alpha1.EnvRequirement{
-				{Name: "ENV", Regex: "^(prod|staging)$"},
+				{Name: testEnvNameEnv, Regex: "^(prod|staging)$"},
 			}
 		})
 
 		It("should pass when value matches regex", func() {
-			workspace.Spec.Env = []corev1.EnvVar{{Name: "ENV", Value: "prod"}}
+			workspace.Spec.Env = []corev1.EnvVar{{Name: testEnvNameEnv, Value: testEnvValueProd}}
 			violations := validateEnvRequirements(workspace, template)
 			Expect(violations).To(BeEmpty())
 		})
 
 		It("should fail when value doesn't match regex", func() {
-			workspace.Spec.Env = []corev1.EnvVar{{Name: "ENV", Value: "dev"}}
+			workspace.Spec.Env = []corev1.EnvVar{{Name: testEnvNameEnv, Value: "dev"}}
 			violations := validateEnvRequirements(workspace, template)
 			Expect(violations).To(HaveLen(1))
 			Expect(violations[0].Type).To(Equal(ViolationTypeEnvRegexMismatch))
@@ -83,7 +83,7 @@ var _ = Describe("EnvValidator", func() {
 		BeforeEach(func() {
 			required := true
 			template.Spec.EnvRequirements = []workspacev1alpha1.EnvRequirement{
-				{Name: "REGION", Required: &required, Regex: "^us-"},
+				{Name: testEnvNameRegion, Required: &required, Regex: "^us-"},
 			}
 		})
 
@@ -94,20 +94,20 @@ var _ = Describe("EnvValidator", func() {
 		})
 
 		It("should fail when present but doesn't match regex", func() {
-			workspace.Spec.Env = []corev1.EnvVar{{Name: "REGION", Value: "eu-west-1"}}
+			workspace.Spec.Env = []corev1.EnvVar{{Name: testEnvNameRegion, Value: "eu-west-1"}}
 			violations := validateEnvRequirements(workspace, template)
 			Expect(violations).To(HaveLen(1))
 			Expect(violations[0].Type).To(Equal(ViolationTypeEnvRegexMismatch))
 		})
 
 		It("should pass when present and matches regex", func() {
-			workspace.Spec.Env = []corev1.EnvVar{{Name: "REGION", Value: "us-east-1"}}
+			workspace.Spec.Env = []corev1.EnvVar{{Name: testEnvNameRegion, Value: "us-east-1"}}
 			violations := validateEnvRequirements(workspace, template)
 			Expect(violations).To(BeEmpty())
 		})
 
 		It("should reject value that contains match but isn't exact match", func() {
-			workspace.Spec.Env = []corev1.EnvVar{{Name: "REGION", Value: "eu-us-west-2"}}
+			workspace.Spec.Env = []corev1.EnvVar{{Name: testEnvNameRegion, Value: "eu-us-west-2"}}
 			violations := validateEnvRequirements(workspace, template)
 			Expect(violations).To(HaveLen(1))
 			Expect(violations[0].Type).To(Equal(ViolationTypeEnvRegexMismatch))

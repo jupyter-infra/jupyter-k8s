@@ -168,7 +168,7 @@ var _ = Describe("Workspace Environment Variables", Ordered, func() {
 			workspaceFilename := "workspace-env-valuefrom"
 
 			By("creating a ConfigMap for testing")
-			cmd := exec.Command("kubectl", "create", "configmap", "test-config",
+			cmd := exec.Command("kubectl", verbCreate, "configmap", "test-config",
 				"-n", workspaceNamespace,
 				"--from-literal=config-key=config-value",
 				"--from-literal=another-key=another-value")

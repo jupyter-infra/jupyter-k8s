@@ -19,6 +19,13 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const (
+	// catCommand is the shell command used to read state files in the sidecar.
+	catCommand = "cat"
+	// bashCommand is the shell used to run registration and state-write commands.
+	bashCommand = "bash"
+)
+
 // RegistrationState tracks SSM registration state across container restarts
 type RegistrationState struct {
 	SidecarRestartCount   int32     `json:"sidecarRestartCount"`
@@ -208,7 +215,7 @@ func (s *AwsSsmPodEventAdapter) HandlePodDeleted(ctx context.Context, pod *corev
 func (s *AwsSsmPodEventAdapter) readRegistrationState(ctx context.Context, pod *corev1.Pod, sidecarContainer, stateFile string) (*RegistrationState, error) {
 	logger := logf.FromContext(ctx).WithValues("pod", pod.Name, "namespace", pod.Namespace)
 
-	cmd := []string{"cat", stateFile}
+	cmd := []string{catCommand, stateFile}
 	output, err := s.podExecUtil.ExecInPod(ctx, pod, sidecarContainer, cmd, "")
 	if err != nil {
 		// File doesn't exist - this is first time setup
@@ -239,7 +246,7 @@ func (s *AwsSsmPodEventAdapter) writeRegistrationState(ctx context.Context, pod 
 	}
 
 	// Write to temp file then move (atomic operation)
-	cmd := []string{"bash", "-c", fmt.Sprintf("echo '%s' > %s.tmp && mv %s.tmp %s",
+	cmd := []string{bashCommand, "-c", fmt.Sprintf("echo '%s' > %s.tmp && mv %s.tmp %s",
 		string(stateJSON), stateFile, stateFile, stateFile)}
 
 	if _, err := s.podExecUtil.ExecInPod(ctx, pod, sidecarContainer, cmd, ""); err != nil {
@@ -281,7 +288,7 @@ func (s *AwsSsmPodEventAdapter) setupSidecarContainer(ctx context.Context, pod *
 	logger.V(1).Info("Running SSM registration script in sidecar")
 	// Use stdin to pass only sensitive values securely
 	region := ContextKeyRegion.ResolveStr(podEventsContext)
-	cmd := []string{"bash", "-c", fmt.Sprintf("read ACTIVATION_ID && read ACTIVATION_CODE && env ACTIVATION_ID=\"$ACTIVATION_ID\" ACTIVATION_CODE=\"$ACTIVATION_CODE\" REGION=%s %s", region, registrationScript)}
+	cmd := []string{bashCommand, "-c", fmt.Sprintf("read ACTIVATION_ID && read ACTIVATION_CODE && env ACTIVATION_ID=\"$ACTIVATION_ID\" ACTIVATION_CODE=\"$ACTIVATION_CODE\" REGION=%s %s", region, registrationScript)}
 	stdinData := fmt.Sprintf("%s\n%s\n", resp.ActivationID, resp.ActivationCode)
 
 	if _, err := s.podExecUtil.ExecInPod(ctx, pod, sidecarContainer, cmd, stdinData); err != nil {

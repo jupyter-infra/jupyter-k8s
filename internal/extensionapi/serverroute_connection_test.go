@@ -88,14 +88,14 @@ func (e *badReader) Close() error {
 
 func TestGenerateBearerTokenURL(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspace, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "test-strategy"},
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: testStrategy},
 		},
 	}
 
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-strategy", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testStrategy, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 			BearerAuthURLTemplate: "https://test.com/workspaces/{{.Workspace.Namespace}}/{{.Workspace.Name}}/bearer-auth",
 		},
@@ -107,7 +107,7 @@ func TestGenerateBearerTokenURL(t *testing.T) {
 
 	server := &ExtensionServer{
 		config:        &ExtensionConfig{},
-		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: testToken}},
 		k8sClient:     fakeClient,
 	}
 
@@ -128,14 +128,14 @@ func TestGenerateBearerTokenURL(t *testing.T) {
 
 func TestGenerateBearerTokenURL_SubdomainRouting(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "myworkspace", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "myworkspace", Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "subdomain-strategy"},
 		},
 	}
 
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{Name: "subdomain-strategy", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "subdomain-strategy", Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 			BearerAuthURLTemplate: "https://{{.Workspace.Name}}-{{b32encode .Workspace.Namespace}}.example.com/bearer-auth",
 		},
@@ -147,7 +147,7 @@ func TestGenerateBearerTokenURL_SubdomainRouting(t *testing.T) {
 
 	server := &ExtensionServer{
 		config:        &ExtensionConfig{},
-		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: testToken}},
 		k8sClient:     fakeClient,
 	}
 
@@ -167,14 +167,14 @@ func TestGenerateBearerTokenURL_SubdomainRouting(t *testing.T) {
 
 func TestGenerateBearerTokenURL_PassesGroupsAndExtra(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspace, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "test-strategy"},
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: testStrategy},
 		},
 	}
 
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-strategy", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testStrategy, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 			BearerAuthURLTemplate: "https://test.com/bearer-auth",
 		},
@@ -184,7 +184,7 @@ func TestGenerateBearerTokenURL_PassesGroupsAndExtra(t *testing.T) {
 	_ = workspacev1alpha1.AddToScheme(scheme)
 	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace, accessStrategy).Build()
 
-	signer := &mockSigner{token: "test-token"}
+	signer := &mockSigner{token: testToken}
 	server := &ExtensionServer{
 		config:        &ExtensionConfig{},
 		signerFactory: &mockSignerFactory{signer: signer},
@@ -230,14 +230,14 @@ func TestGenerateBearerTokenURL_PassesGroupsAndExtra(t *testing.T) {
 
 func TestGenerateBearerTokenURL_NoContextFallsBackToEmptyGroupsAndExtra(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspace, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "test-strategy"},
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: testStrategy},
 		},
 	}
 
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-strategy", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testStrategy, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 			BearerAuthURLTemplate: "https://test.com/bearer-auth",
 		},
@@ -247,7 +247,7 @@ func TestGenerateBearerTokenURL_NoContextFallsBackToEmptyGroupsAndExtra(t *testi
 	_ = workspacev1alpha1.AddToScheme(scheme)
 	fakeClient := ctrlclient.NewClientBuilder().WithScheme(scheme).WithObjects(workspace, accessStrategy).Build()
 
-	signer := &mockSigner{token: "test-token"}
+	signer := &mockSigner{token: testToken}
 	server := &ExtensionServer{
 		config:        &ExtensionConfig{},
 		signerFactory: &mockSignerFactory{signer: signer},
@@ -275,7 +275,7 @@ func TestGenerateBearerTokenURL_NoContextFallsBackToEmptyGroupsAndExtra(t *testi
 func TestGenerateBearerTokenURL_NoAccessStrategy(t *testing.T) {
 	server := &ExtensionServer{
 		config:        &ExtensionConfig{},
-		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: testToken}},
 	}
 
 	req := httptest.NewRequest("POST", "/test", nil)
@@ -300,7 +300,7 @@ func TestGenerateBearerTokenURL_MissingTemplate(t *testing.T) {
 
 	server := &ExtensionServer{
 		config:        &ExtensionConfig{},
-		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: testToken}},
 	}
 
 	req := httptest.NewRequest("POST", "/test", nil)
@@ -320,7 +320,7 @@ func TestGenerateBearerTokenURL_MissingTemplate(t *testing.T) {
 
 func TestGeneratePluginConnectionURL_Success(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspace, Namespace: namespaceDefault},
 	}
 
 	// Create httptest server simulating the plugin
@@ -336,7 +336,7 @@ func TestGeneratePluginConnectionURL_Success(t *testing.T) {
 		if req.ConnectionContext["ssmDocumentName"] != "test-document" {
 			t.Errorf("expected ssmDocumentName test-document, got %s", req.ConnectionContext["ssmDocumentName"])
 		}
-		if req.ConnectionType != "vscode-remote" {
+		if req.ConnectionType != connectionTypeVSCodeRemote {
 			t.Errorf("expected connectionType vscode-remote, got %s", req.ConnectionType)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -349,7 +349,7 @@ func TestGeneratePluginConnectionURL_Success(t *testing.T) {
 	server := &ExtensionServer{
 		config: &ExtensionConfig{},
 		pluginClients: map[string]*pluginclient.PluginClient{
-			"aws": pluginclient.NewPluginClient(pluginSrv.URL, logr.Discard()),
+			pluginNameAWS: pluginclient.NewPluginClient(pluginSrv.URL, logr.Discard()),
 		},
 	}
 
@@ -359,7 +359,7 @@ func TestGeneratePluginConnectionURL_Success(t *testing.T) {
 	}
 
 	req := httptest.NewRequest("POST", "/test", nil)
-	url, err := server.generatePluginConnectionURL(req, workspace, "aws", "createSession", "vscode-remote", resolvedContext, "default")
+	url, err := server.generatePluginConnectionURL(req, workspace, pluginNameAWS, "createSession", connectionTypeVSCodeRemote, resolvedContext, namespaceDefault)
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -371,7 +371,7 @@ func TestGeneratePluginConnectionURL_Success(t *testing.T) {
 
 func TestGeneratePluginConnectionURL_PluginError(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspace, Namespace: namespaceDefault},
 	}
 
 	pluginSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -384,12 +384,12 @@ func TestGeneratePluginConnectionURL_PluginError(t *testing.T) {
 	server := &ExtensionServer{
 		config: &ExtensionConfig{},
 		pluginClients: map[string]*pluginclient.PluginClient{
-			"aws": pluginclient.NewPluginClient(pluginSrv.URL, logr.Discard()),
+			pluginNameAWS: pluginclient.NewPluginClient(pluginSrv.URL, logr.Discard()),
 		},
 	}
 
 	req := httptest.NewRequest("POST", "/test", nil)
-	_, err := server.generatePluginConnectionURL(req, workspace, "aws", "createSession", "vscode-remote", map[string]string{}, "default")
+	_, err := server.generatePluginConnectionURL(req, workspace, pluginNameAWS, "createSession", connectionTypeVSCodeRemote, map[string]string{}, namespaceDefault)
 
 	if err == nil {
 		t.Error("expected error from plugin client")
@@ -403,7 +403,7 @@ func TestGeneratePluginConnectionURL_NoPlugin(t *testing.T) {
 	}
 
 	req := httptest.NewRequest("POST", "/test", nil)
-	_, err := server.generatePluginConnectionURL(req, &workspacev1alpha1.Workspace{}, "aws", "createSession", "vscode-remote", map[string]string{}, "default")
+	_, err := server.generatePluginConnectionURL(req, &workspacev1alpha1.Workspace{}, pluginNameAWS, "createSession", connectionTypeVSCodeRemote, map[string]string{}, namespaceDefault)
 
 	if err == nil {
 		t.Error("expected error for missing plugin")
@@ -416,11 +416,11 @@ func TestGeneratePluginConnectionURL_NoPlugin(t *testing.T) {
 func TestGeneratePluginConnectionURL_UnsupportedAction(t *testing.T) {
 	server := &ExtensionServer{
 		config:        &ExtensionConfig{},
-		pluginClients: map[string]*pluginclient.PluginClient{"aws": pluginclient.NewPluginClient("http://localhost:8080", logr.Discard())},
+		pluginClients: map[string]*pluginclient.PluginClient{pluginNameAWS: pluginclient.NewPluginClient("http://localhost:8080", logr.Discard())},
 	}
 
 	req := httptest.NewRequest("POST", "/test", nil)
-	_, err := server.generatePluginConnectionURL(req, &workspacev1alpha1.Workspace{}, "aws", "unknownAction", "vscode-remote", map[string]string{}, "default")
+	_, err := server.generatePluginConnectionURL(req, &workspacev1alpha1.Workspace{}, pluginNameAWS, "unknownAction", connectionTypeVSCodeRemote, map[string]string{}, namespaceDefault)
 
 	if err == nil {
 		t.Error("expected error for unsupported action")
@@ -444,7 +444,7 @@ func TestResolveConnectionHandler(t *testing.T) {
 		{
 			name:           "nil access strategy",
 			accessStrategy: nil,
-			connectionType: "web-ui",
+			connectionType: connectionTypeWebUI,
 			expectedFound:  false,
 		},
 		{
@@ -452,13 +452,13 @@ func TestResolveConnectionHandler(t *testing.T) {
 			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 					CreateConnectionHandlerMap: map[string]string{
-						"vscode-remote": "aws:createSession",
+						connectionTypeVSCodeRemote: "aws:createSession",
 					},
-					CreateConnectionHandler: "k8s-native",
+					CreateConnectionHandler: handlerK8sNative,
 				},
 			},
-			connectionType: "vscode-remote",
-			expectedPlugin: "aws",
+			connectionType: connectionTypeVSCodeRemote,
+			expectedPlugin: pluginNameAWS,
 			expectedAction: "createSession",
 			expectedFound:  true,
 		},
@@ -467,13 +467,13 @@ func TestResolveConnectionHandler(t *testing.T) {
 			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 					CreateConnectionHandlerMap: map[string]string{
-						"vscode-remote": "aws:createSession",
+						connectionTypeVSCodeRemote: "aws:createSession",
 					},
-					CreateConnectionHandler: "k8s-native",
+					CreateConnectionHandler: handlerK8sNative,
 				},
 			},
-			connectionType: "web-ui",
-			expectedPlugin: "k8s-native",
+			connectionType: connectionTypeWebUI,
+			expectedPlugin: handlerK8sNative,
 			expectedAction: "",
 			expectedFound:  true,
 		},
@@ -482,7 +482,7 @@ func TestResolveConnectionHandler(t *testing.T) {
 			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{},
 			},
-			connectionType: "web-ui",
+			connectionType: connectionTypeWebUI,
 			expectedFound:  false,
 		},
 	}
@@ -520,18 +520,18 @@ func TestValidateConnection(t *testing.T) {
 		{
 			name: "workspace not available",
 			workspace: &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: namespaceDefault},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "as"},
 				},
 				Status: workspacev1alpha1.WorkspaceStatus{
-					Conditions: []metav1.Condition{{Type: "Available", Status: metav1.ConditionFalse}},
+					Conditions: []metav1.Condition{{Type: conditionTypeAvailable, Status: metav1.ConditionFalse}},
 				},
 			},
 			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
-				ObjectMeta: metav1.ObjectMeta{Name: "as", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "as", Namespace: namespaceDefault},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					CreateConnectionHandler: "k8s-native",
+					CreateConnectionHandler: handlerK8sNative,
 					BearerAuthURLTemplate:   "https://example.com",
 				},
 			},
@@ -541,18 +541,18 @@ func TestValidateConnection(t *testing.T) {
 		{
 			name: "validation passes",
 			workspace: &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: namespaceDefault},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "as"},
 				},
 				Status: workspacev1alpha1.WorkspaceStatus{
-					Conditions: []metav1.Condition{{Type: "Available", Status: metav1.ConditionTrue}},
+					Conditions: []metav1.Condition{{Type: conditionTypeAvailable, Status: metav1.ConditionTrue}},
 				},
 			},
 			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
-				ObjectMeta: metav1.ObjectMeta{Name: "as", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "as", Namespace: namespaceDefault},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					CreateConnectionHandler: "k8s-native",
+					CreateConnectionHandler: handlerK8sNative,
 					BearerAuthURLTemplate:   "https://example.com",
 					CreateConnectionContext: map[string]string{
 						"staticKey": "staticValue",
@@ -623,31 +623,31 @@ func TestHandleConnectionCreateValidation(t *testing.T) {
 		{
 			name:           "wrong method",
 			method:         "GET",
-			path:           "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections",
+			path:           connectionsPath,
 			body:           nil,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:           "invalid path",
-			method:         "POST",
+			method:         http.MethodPost,
 			path:           "/invalid/path",
 			body:           nil,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:           "invalid JSON",
-			method:         "POST",
-			path:           "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections",
+			method:         http.MethodPost,
+			path:           connectionsPath,
 			body:           "invalid json",
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:   "missing workspace name",
-			method: "POST",
-			path:   "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections",
+			method: http.MethodPost,
+			path:   connectionsPath,
 			body: connectionv1alpha1.WorkspaceConnectionRequest{
 				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-					WorkspaceConnectionType: "vscode-remote",
+					WorkspaceConnectionType: connectionTypeVSCodeRemote,
 				},
 			},
 			expectedStatus: http.StatusBadRequest,
@@ -682,7 +682,7 @@ func TestHandleConnectionCreateReadBodyError(t *testing.T) {
 		config: &ExtensionConfig{},
 	}
 
-	req := httptest.NewRequest("POST", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", nil)
+	req := httptest.NewRequest("POST", connectionsPath, nil)
 	req.Body = &badReader{}
 	w := httptest.NewRecorder()
 
@@ -700,13 +700,13 @@ func TestHandleConnectionCreateInvalidConnectionType(t *testing.T) {
 
 	reqBody := connectionv1alpha1.WorkspaceConnectionRequest{
 		Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-			WorkspaceName:           "test-workspace",
-			WorkspaceConnectionType: "invalid-type",
+			WorkspaceName:           testWorkspace,
+			WorkspaceConnectionType: invalidConnectionType,
 		},
 	}
 
 	bodyBytes, _ := json.Marshal(reqBody)
-	httpReq := httptest.NewRequest("POST", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", bytes.NewReader(bodyBytes))
+	httpReq := httptest.NewRequest("POST", connectionsPath, bytes.NewReader(bodyBytes))
 	w := httptest.NewRecorder()
 
 	server.HandleConnectionCreate(w, httpReq)
@@ -723,13 +723,13 @@ func TestHandleConnectionCreateAuthorizationError(t *testing.T) {
 
 	reqBody := connectionv1alpha1.WorkspaceConnectionRequest{
 		Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-			WorkspaceName:           "test-workspace",
+			WorkspaceName:           testWorkspace,
 			WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeWebUI,
 		},
 	}
 
 	bodyBytes, _ := json.Marshal(reqBody)
-	httpReq := httptest.NewRequest("POST", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", bytes.NewReader(bodyBytes))
+	httpReq := httptest.NewRequest("POST", connectionsPath, bytes.NewReader(bodyBytes))
 	w := httptest.NewRecorder()
 
 	server.HandleConnectionCreate(w, httpReq)
@@ -744,7 +744,7 @@ func TestHandleConnectionCreateInvalidMethod(t *testing.T) {
 		config: &ExtensionConfig{},
 	}
 
-	httpReq := httptest.NewRequest("GET", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", nil)
+	httpReq := httptest.NewRequest("GET", connectionsPath, nil)
 	w := httptest.NewRecorder()
 
 	server.HandleConnectionCreate(w, httpReq)
@@ -773,7 +773,7 @@ func TestHandleConnectionCreateWebUIPath(t *testing.T) {
 	}
 
 	bodyBytes, _ := json.Marshal(reqBody)
-	httpReq := httptest.NewRequest("POST", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", bytes.NewReader(bodyBytes))
+	httpReq := httptest.NewRequest("POST", connectionsPath, bytes.NewReader(bodyBytes))
 	httpReq.Header.Set("X-User", "test")
 	w := httptest.NewRecorder()
 
@@ -787,7 +787,7 @@ func TestHandleConnectionCreateWithWorkspace(t *testing.T) {
 	_ = workspacev1alpha1.AddToScheme(scheme)
 
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-workspace", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspace, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			AccessType: "Public",
 		},
@@ -800,18 +800,18 @@ func TestHandleConnectionCreateWithWorkspace(t *testing.T) {
 		config:        &ExtensionConfig{},
 		k8sClient:     fakeClient,
 		logger:        &logger,
-		signerFactory: &mockSignerFactory{signer: &mockSigner{token: "test-token"}},
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: testToken}},
 	}
 
 	reqBody := connectionv1alpha1.WorkspaceConnectionRequest{
 		Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-			WorkspaceName:           "test-workspace",
+			WorkspaceName:           testWorkspace,
 			WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeWebUI,
 		},
 	}
 
 	bodyBytes, _ := json.Marshal(reqBody)
-	httpReq := httptest.NewRequest("POST", "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections", bytes.NewReader(bodyBytes))
+	httpReq := httptest.NewRequest("POST", connectionsPath, bytes.NewReader(bodyBytes))
 	httpReq.Header.Set("X-User", "test-user")
 	w := httptest.NewRecorder()
 
@@ -832,8 +832,8 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 			name: "valid vscode request",
 			req: &connectionv1alpha1.WorkspaceConnectionRequest{
 				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-					WorkspaceName:           "test-workspace",
-					WorkspaceConnectionType: "vscode-remote",
+					WorkspaceName:           testWorkspace,
+					WorkspaceConnectionType: connectionTypeVSCodeRemote,
 				},
 			},
 		},
@@ -841,7 +841,7 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 			name: "valid web-ui request",
 			req: &connectionv1alpha1.WorkspaceConnectionRequest{
 				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-					WorkspaceName:           "test-workspace",
+					WorkspaceName:           testWorkspace,
 					WorkspaceConnectionType: connectionv1alpha1.ConnectionTypeWebUI,
 				},
 			},
@@ -850,7 +850,7 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 			name: "valid kiro-remote request",
 			req: &connectionv1alpha1.WorkspaceConnectionRequest{
 				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-					WorkspaceName:           "test-workspace",
+					WorkspaceName:           testWorkspace,
 					WorkspaceConnectionType: "kiro-remote",
 				},
 			},
@@ -859,7 +859,7 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 			name: "valid cursor-remote request",
 			req: &connectionv1alpha1.WorkspaceConnectionRequest{
 				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-					WorkspaceName:           "test-workspace",
+					WorkspaceName:           testWorkspace,
 					WorkspaceConnectionType: "cursor-remote",
 				},
 			},
@@ -868,7 +868,7 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 			name: "valid unknown *-remote request",
 			req: &connectionv1alpha1.WorkspaceConnectionRequest{
 				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-					WorkspaceName:           "test-workspace",
+					WorkspaceName:           testWorkspace,
 					WorkspaceConnectionType: "windsurf-remote",
 				},
 			},
@@ -877,7 +877,7 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 			name: "missing workspace name",
 			req: &connectionv1alpha1.WorkspaceConnectionRequest{
 				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-					WorkspaceConnectionType: "vscode-remote",
+					WorkspaceConnectionType: connectionTypeVSCodeRemote,
 				},
 			},
 			expectError: true,
@@ -887,7 +887,7 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 			name: "missing connection type",
 			req: &connectionv1alpha1.WorkspaceConnectionRequest{
 				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-					WorkspaceName: "test-workspace",
+					WorkspaceName: testWorkspace,
 				},
 			},
 			expectError: true,
@@ -897,8 +897,8 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 			name: "invalid connection type - no -remote suffix",
 			req: &connectionv1alpha1.WorkspaceConnectionRequest{
 				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-					WorkspaceName:           "test-workspace",
-					WorkspaceConnectionType: "invalid-type",
+					WorkspaceName:           testWorkspace,
+					WorkspaceConnectionType: invalidConnectionType,
 				},
 			},
 			expectError: true,
@@ -908,7 +908,7 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 			name: "invalid connection type - bare remote",
 			req: &connectionv1alpha1.WorkspaceConnectionRequest{
 				Spec: connectionv1alpha1.WorkspaceConnectionRequestSpec{
-					WorkspaceName:           "test-workspace",
+					WorkspaceName:           testWorkspace,
 					WorkspaceConnectionType: "-remote",
 				},
 			},
@@ -943,7 +943,7 @@ func TestCheckWorkspaceAuthorizationMissingUser(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/test", nil)
 
-	_, result, err := server.checkWorkspaceAuthorization(req, "test-workspace", "default")
+	_, result, err := server.checkWorkspaceAuthorization(req, testWorkspace, namespaceDefault)
 
 	if err == nil {
 		t.Error("expected error when user headers are missing")
@@ -1028,7 +1028,7 @@ func TestIsWorkspaceAvailable(t *testing.T) {
 			workspace: &workspacev1alpha1.Workspace{
 				Status: workspacev1alpha1.WorkspaceStatus{
 					Conditions: []metav1.Condition{
-						{Type: "Available", Status: metav1.ConditionTrue},
+						{Type: conditionTypeAvailable, Status: metav1.ConditionTrue},
 					},
 				},
 			},
@@ -1039,7 +1039,7 @@ func TestIsWorkspaceAvailable(t *testing.T) {
 			workspace: &workspacev1alpha1.Workspace{
 				Status: workspacev1alpha1.WorkspaceStatus{
 					Conditions: []metav1.Condition{
-						{Type: "Available", Status: metav1.ConditionFalse},
+						{Type: conditionTypeAvailable, Status: metav1.ConditionFalse},
 					},
 				},
 			},
@@ -1062,13 +1062,13 @@ func TestIsRemoteConnectionType(t *testing.T) {
 		connectionType string
 		expected       bool
 	}{
-		{"vscode-remote", true},
+		{connectionTypeVSCodeRemote, true},
 		{"kiro-remote", true},
 		{"cursor-remote", true},
 		{"windsurf-remote", true},
 		{"my-vscode-remote", true},
-		{"web-ui", false},
-		{"invalid-type", false},
+		{connectionTypeWebUI, false},
+		{invalidConnectionType, false},
 		{"-remote", false},
 		{"remote", false},
 		{"", false},

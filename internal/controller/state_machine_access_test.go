@@ -55,26 +55,26 @@ var _ = Describe("ProbeAccessStartup", func() {
 		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("probe-test-%d", time.Now().UnixNano()),
-				Namespace: "default",
+				Namespace: testNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				Image: "jupyter/base-notebook:latest",
+				Image: imageBaseNotebook,
 			},
 		}
 
 		accessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:       "test-strategy",
-				Namespace:  "default",
+				Name:       testStrategyName,
+				Namespace:  testNamespace,
 				UID:        types.UID("test-uid"),
 				Generation: 1,
 			},
 			Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-				DisplayName:             "Test Strategy",
+				DisplayName:             testStrategyDisplayName,
 				AccessResourceTemplates: []workspacev1alpha1.AccessResourceTemplate{},
 				AccessStartupProbe: &workspacev1alpha1.AccessStartupProbe{
 					HTTPGet: &workspacev1alpha1.AccessHTTPGetProbe{
-						URLTemplate: "http://example.com/test",
+						URLTemplate: exampleURLTemplate,
 					},
 					PeriodSeconds:    1,
 					FailureThreshold: 3,

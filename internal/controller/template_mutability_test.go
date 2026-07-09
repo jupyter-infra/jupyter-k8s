@@ -35,11 +35,11 @@ var _ = Describe("Template Mutability", func() {
 			template1 = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "mutable-template-1",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Template 1",
-					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
+					DefaultImage: imageQuayMinimalNotebook,
 				},
 			}
 			Expect(k8sClient.Create(ctx, template1)).To(Succeed())
@@ -47,7 +47,7 @@ var _ = Describe("Template Mutability", func() {
 			template2 = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "mutable-template-2",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Template 2",
@@ -59,9 +59,9 @@ var _ = Describe("Template Mutability", func() {
 			workspace = &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "mutability-test-workspace",
-					Namespace: "default",
+					Namespace: testNamespace,
 					Labels: map[string]string{
-						"workspace.jupyter.org/template-name": template1.Name,
+						LabelWorkspaceTemplate: template1.Name,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
@@ -128,11 +128,11 @@ var _ = Describe("Template Mutability", func() {
 			template = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "protected-template",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Protected Template",
-					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
+					DefaultImage: imageQuayMinimalNotebook,
 				},
 			}
 			Expect(k8sClient.Create(ctx, template)).To(Succeed())
@@ -140,9 +140,9 @@ var _ = Describe("Template Mutability", func() {
 			workspace = &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "protection-test-workspace",
-					Namespace: "default",
+					Namespace: testNamespace,
 					Labels: map[string]string{
-						"workspace.jupyter.org/template-name":      template.Name,
+						LabelWorkspaceTemplate:                     template.Name,
 						"workspace.jupyter.org/template-namespace": template.Namespace,
 					},
 				},
@@ -179,7 +179,7 @@ var _ = Describe("Template Mutability", func() {
 		})
 
 		It("should return empty list when no workspaces use template", func() {
-			workspaces, _, err := workspacequery.ListActiveWorkspacesByTemplate(ctx, k8sClient, "nonexistent-template", "default", "", 0)
+			workspaces, _, err := workspacequery.ListActiveWorkspacesByTemplate(ctx, k8sClient, "nonexistent-template", testNamespace, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(BeEmpty())
 		})
@@ -203,11 +203,11 @@ var _ = Describe("Template Mutability", func() {
 			unusedTemplate := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "unused-template",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Unused Template",
-					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
+					DefaultImage: imageQuayMinimalNotebook,
 				},
 			}
 			Expect(k8sClient.Create(ctx, unusedTemplate)).To(Succeed())
@@ -238,11 +238,11 @@ var _ = Describe("Template Mutability", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "cross-ns-template",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Cross-NS Template",
-					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
+					DefaultImage: imageQuayMinimalNotebook,
 				},
 			}
 			Expect(k8sClient.Create(ctx, template)).To(Succeed())
@@ -254,7 +254,7 @@ var _ = Describe("Template Mutability", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "cross-ns-workspace",
-					Namespace: "default",
+					Namespace: testNamespace,
 					Labels: map[string]string{
 						LabelWorkspaceTemplate:          template.Name,
 						LabelWorkspaceTemplateNamespace: "other-namespace",
@@ -280,7 +280,7 @@ var _ = Describe("Template Mutability", func() {
 			Expect(workspaces[0].Name).To(Equal("cross-ns-workspace"))
 
 			// Query with different namespace - should not find workspace
-			workspaces, _, err = workspacequery.ListActiveWorkspacesByTemplate(ctx, k8sClient, template.Name, "default", "", 0)
+			workspaces, _, err = workspacequery.ListActiveWorkspacesByTemplate(ctx, k8sClient, template.Name, testNamespace, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(BeEmpty())
 		})
@@ -291,11 +291,11 @@ var _ = Describe("Template Mutability", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "default-ns-template",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Default NS Template",
-					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
+					DefaultImage: imageQuayMinimalNotebook,
 				},
 			}
 			Expect(k8sClient.Create(ctx, template)).To(Succeed())
@@ -307,10 +307,10 @@ var _ = Describe("Template Mutability", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "default-ns-workspace",
-					Namespace: "default",
+					Namespace: testNamespace,
 					Labels: map[string]string{
 						LabelWorkspaceTemplate:          template.Name,
-						LabelWorkspaceTemplateNamespace: "default", // Should be set to workspace namespace
+						LabelWorkspaceTemplateNamespace: testNamespace,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
@@ -327,10 +327,10 @@ var _ = Describe("Template Mutability", func() {
 			}()
 
 			// Query with workspace namespace - should find it
-			workspaces, _, err := workspacequery.ListActiveWorkspacesByTemplate(ctx, k8sClient, template.Name, "default", "", 0)
+			workspaces, _, err := workspacequery.ListActiveWorkspacesByTemplate(ctx, k8sClient, template.Name, testNamespace, "", 0)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspaces).To(HaveLen(1))
-			Expect(workspaces[0].Labels[LabelWorkspaceTemplateNamespace]).To(Equal("default"))
+			Expect(workspaces[0].Labels[LabelWorkspaceTemplateNamespace]).To(Equal(testNamespace))
 		})
 	})
 
@@ -340,11 +340,11 @@ var _ = Describe("Template Mutability", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "mutable-template",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Original Display Name",
-					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
+					DefaultImage: imageQuayMinimalNotebook,
 					ResourceBounds: &workspacev1alpha1.ResourceBounds{
 						Resources: map[corev1.ResourceName]workspacev1alpha1.ResourceRange{
 							corev1.ResourceCPU: {
@@ -378,11 +378,11 @@ var _ = Describe("Template Mutability", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "metadata-mutable-template",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Metadata Test",
-					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
+					DefaultImage: imageQuayMinimalNotebook,
 				},
 			}
 			Expect(k8sClient.Create(ctx, template)).To(Succeed())
@@ -396,13 +396,13 @@ var _ = Describe("Template Mutability", func() {
 			if updatedTemplate.Labels == nil {
 				updatedTemplate.Labels = make(map[string]string)
 			}
-			updatedTemplate.Labels["new-label"] = "test"
+			updatedTemplate.Labels["new-label"] = literalTest
 			Expect(k8sClient.Update(ctx, updatedTemplate)).To(Succeed())
 
 			// Verify label was added
 			verifyTemplate := &workspacev1alpha1.WorkspaceTemplate{}
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), verifyTemplate)).To(Succeed())
-			Expect(verifyTemplate.Labels["new-label"]).To(Equal("test"))
+			Expect(verifyTemplate.Labels["new-label"]).To(Equal(literalTest))
 		})
 	})
 })

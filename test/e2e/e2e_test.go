@@ -40,7 +40,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 
 			By("Fetching Kubernetes events")
-			cmd = exec.Command("kubectl", "get", "events", "-n", OperatorNamespace, "--sort-by=.lastTimestamp")
+			cmd = exec.Command("kubectl", verbGet, "events", "-n", OperatorNamespace, "--sort-by=.lastTimestamp")
 			eventsOutput, err := utils.Run(cmd)
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Kubernetes events:\n%s", eventsOutput)
@@ -76,7 +76,7 @@ var _ = Describe("Manager", Ordered, func() {
 			By("validating that the controller-manager pod is running as expected")
 			verifyControllerUp := func(g Gomega) {
 				// Get the name of the controller-manager pod
-				cmd := exec.Command("kubectl", "get",
+				cmd := exec.Command("kubectl", verbGet,
 					"pods", "-l", "control-plane=controller-manager",
 					"-o", "go-template={{ range .items }}"+
 						"{{ if not .metadata.deletionTimestamp }}"+
@@ -93,7 +93,7 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(controllerPodName).To(ContainSubstring("controller-manager"))
 
 				// Validate the pod's status
-				cmd = exec.Command("kubectl", "get",
+				cmd = exec.Command("kubectl", verbGet,
 					"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
 					"-n", OperatorNamespace,
 				)
@@ -110,7 +110,7 @@ var _ = Describe("Manager", Ordered, func() {
 			cmd := exec.Command("kubectl", "delete", "clusterrolebinding", MetricsRoleBindingName, "--ignore-not-found")
 			_, _ = utils.Run(cmd) // Ignore errors if it doesn't exist
 
-			cmd = exec.Command("kubectl", "create", "clusterrolebinding", MetricsRoleBindingName,
+			cmd = exec.Command("kubectl", verbCreate, "clusterrolebinding", MetricsRoleBindingName,
 				"--clusterrole=jupyter-k8s-metrics-reader",
 				fmt.Sprintf("--serviceaccount=%s:%s", OperatorNamespace, ServiceAccountName),
 			)
@@ -118,7 +118,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
 
 			By("validating that the metrics service is available")
-			cmd = exec.Command("kubectl", "get", "service", MetricsServiceName, "-n", OperatorNamespace)
+			cmd = exec.Command("kubectl", verbGet, "service", MetricsServiceName, "-n", OperatorNamespace)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Metrics service should exist")
 
@@ -129,7 +129,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("waiting for the metrics endpoint to be ready")
 			verifyMetricsEndpointReady := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "endpoints", MetricsServiceName, "-n", OperatorNamespace)
+				cmd := exec.Command("kubectl", verbGet, "endpoints", MetricsServiceName, "-n", OperatorNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(ContainSubstring("8443"), "Metrics endpoint is not ready")
@@ -193,7 +193,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("waiting for the curl-metrics pod to complete.")
 			verifyCurlUp := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "pods", "curl-metrics",
+				cmd := exec.Command("kubectl", verbGet, "pods", "curl-metrics",
 					"-o", "jsonpath={.status.phase}",
 					"-n", OperatorNamespace)
 				output, err := utils.Run(cmd)
@@ -212,7 +212,7 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should provisioned cert-manager", func() {
 			By("validating that cert-manager has the certificate Secret")
 			verifyCertManager := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "secrets", "webhook-server-cert", "-n", OperatorNamespace)
+				cmd := exec.Command("kubectl", verbGet, "secrets", "webhook-server-cert", "-n", OperatorNamespace)
 				_, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 			}
@@ -222,7 +222,7 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should have CA injection for mutating webhooks", func() {
 			By("checking CA injection for mutating webhooks")
 			verifyCAInjection := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get",
+				cmd := exec.Command("kubectl", verbGet,
 					"mutatingwebhookconfigurations.admissionregistration.k8s.io",
 					"jupyter-k8s-mutating-webhook-configuration",
 					"-o", "go-template={{ range .webhooks }}{{ .clientConfig.caBundle }}{{ end }}")
@@ -236,7 +236,7 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should have CA injection for validating webhooks", func() {
 			By("checking CA injection for validating webhooks")
 			verifyCAInjection := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get",
+				cmd := exec.Command("kubectl", verbGet,
 					"validatingwebhookconfigurations.admissionregistration.k8s.io",
 					"jupyter-k8s-validating-webhook-configuration",
 					"-o", "go-template={{ range .webhooks }}{{ .clientConfig.caBundle }}{{ end }}")
@@ -280,7 +280,7 @@ func serviceAccountToken() (string, error) {
 	var out string
 	verifyTokenCreation := func(g Gomega) {
 		// Execute kubectl command to create the token
-		cmd := exec.Command("kubectl", "create", "--raw", fmt.Sprintf(
+		cmd := exec.Command("kubectl", verbCreate, "--raw", fmt.Sprintf(
 			"/api/v1/namespaces/%s/serviceaccounts/%s/token",
 			OperatorNamespace,
 			ServiceAccountName,

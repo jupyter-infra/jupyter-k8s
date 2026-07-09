@@ -103,7 +103,7 @@ var _ = Describe("ExtensionConfig", func() {
 		})
 
 		It("Should allow to override DefaultAllowedOrigin", func() {
-			customOrigin := "https://example.com"
+			customOrigin := exampleURL
 			config := NewConfig(WithAllowedOrigin(customOrigin))
 
 			Expect(config.AllowedOrigin).To(Equal(customOrigin))

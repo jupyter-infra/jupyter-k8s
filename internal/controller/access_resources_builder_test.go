@@ -34,15 +34,15 @@ var _ = Describe("AccessResourcesBuilder", func() {
 		testAccessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "sample-access-strategy",
-				Namespace: "default",
+				Namespace: testNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 				DisplayName: "JupyterLab Routing Strategy",
 				AccessResourceTemplates: []workspacev1alpha1.AccessResourceTemplate{
 					{
-						Kind:       "IngressRoute",
-						ApiVersion: "traefik.io/v1alpha1",
-						NamePrefix: "test-route",
+						Kind:       kindIngressRoute,
+						ApiVersion: traefikAPIVersion,
+						NamePrefix: testRouteName,
 						Template:   "spec:\n  entryPoints:\n    - websecure\n  routes:\n    - match: \"Host(`example.com`) && PathPrefix(`/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}`)\"\n      kind: Rule\n      services:\n        - name: \"{{ .Service.Name }}\"\n          namespace: \"{{ .Service.Namespace }}\"\n          port: 8888",
 					},
 				},
@@ -52,13 +52,13 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 		testWorkspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "test-namespace",
+				Name:      testWorkspaceName,
+				Namespace: testNamespaceName,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				DisplayName:    "Test Workspace",
-				Image:          "jupyter/minimal-notebook:latest",
-				DesiredStatus:  "Running",
+				DisplayName:    testWorkspaceDisplayName,
+				Image:          imageMinimalNotebook,
+				DesiredStatus:  DesiredStateRunning,
 				AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "sample-access-strategy"},
 			},
 		}
@@ -66,13 +66,13 @@ var _ = Describe("AccessResourcesBuilder", func() {
 		// Create test service for each test
 		testService = &corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-service",
-				Namespace: "test-namespace",
+				Name:      testServiceName,
+				Namespace: testNamespaceName,
 			},
 			Spec: corev1.ServiceSpec{
 				Ports: []corev1.ServicePort{
 					{
-						Name:     "http",
+						Name:     httpScheme,
 						Port:     8888,
 						Protocol: "TCP",
 					},
@@ -94,7 +94,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resource).NotTo(BeNil())
-			Expect(resource.GetName()).To(Equal(fmt.Sprintf("%s-%s", "test-route", testWorkspace.Name)))
+			Expect(resource.GetName()).To(Equal(fmt.Sprintf("%s-%s", testRouteName, testWorkspace.Name)))
 		})
 
 		It("Should use the namespace of the Workspace", func() {
@@ -131,9 +131,9 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 			// Check the GVK is set correctly (traefik.io/v1alpha1)
 			gvk := resource.GroupVersionKind()
-			Expect(gvk.Group).To(Equal("traefik.io"))
+			Expect(gvk.Group).To(Equal(traefikGroup))
 			Expect(gvk.Version).To(Equal("v1alpha1"))
-			Expect(gvk.Kind).To(Equal("IngressRoute"))
+			Expect(gvk.Kind).To(Equal(kindIngressRoute))
 
 			// Test with a core API version (no group)
 			coreApiTemplate := workspacev1alpha1.AccessResourceTemplate{
@@ -227,7 +227,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 		It("Should return en error if the resource template is not parsable", func() {
 			invalidTemplate := testAccessStrategy.Spec.AccessResourceTemplates[0]
-			invalidTemplate.Template = "{{ .InvalidSyntax }"
+			invalidTemplate.Template = invalidSyntaxTemplate
 
 			_, err := accessBuilder.BuildUnstructuredResource(
 				invalidTemplate,
@@ -277,7 +277,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 		It("Should return en error if the accessUrl is not parsable", func() {
 			// Create a copy of the access strategy with an invalid URL template
 			strategyWithInvalidURL := testAccessStrategy.DeepCopy()
-			strategyWithInvalidURL.Spec.AccessURLTemplate = "{{ .InvalidSyntax }"
+			strategyWithInvalidURL.Spec.AccessURLTemplate = invalidSyntaxTemplate
 
 			_, err := accessBuilder.ResolveAccessURL(
 				testWorkspace,

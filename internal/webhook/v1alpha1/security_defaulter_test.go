@@ -23,20 +23,20 @@ var _ = Describe("SecurityDefaulter", func() {
 	BeforeEach(func() {
 		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "default",
+				Name:      testWorkspaceName,
+				Namespace: testDefaultNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				DisplayName: "Test Workspace",
+				DisplayName: testWorkspaceDisplayName,
 			},
 		}
 
 		template = &workspacev1alpha1.WorkspaceTemplate{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-template",
+				Name: testTemplateName,
 			},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-				DisplayName:  "Test Template",
+				DisplayName:  testTemplateDisplayName,
 				DefaultImage: "test-image",
 				DefaultPodSecurityContext: &corev1.PodSecurityContext{
 					FSGroup: int64Ptr(1000),

@@ -47,16 +47,16 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 		// Create test workspace
 		testWorkspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "test-namespace",
+				Name:      testWorkspaceName,
+				Namespace: testNamespaceName,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				DisplayName:   "Test Workspace",
-				Image:         "jupyter/minimal-notebook:latest",
-				DesiredStatus: "Running",
+				DisplayName:   testWorkspaceDisplayName,
+				Image:         imageMinimalNotebook,
+				DesiredStatus: DesiredStateRunning,
 				AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
 					Name:      "test-access-strategy",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
@@ -75,7 +75,7 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 		testAccessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-access-strategy",
-				Namespace: "default",
+				Namespace: testNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 				DisplayName: "Test Routing Strategy",
@@ -84,7 +84,7 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 						PrimaryContainerModifications: &workspacev1alpha1.PrimaryContainerModifications{
 							MergeEnv: []workspacev1alpha1.AccessEnvTemplate{
 								{
-									Name:          "JUPYTER_BASE_URL",
+									Name:          envJupyterBaseURL,
 									ValueTemplate: "/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/",
 								},
 								{
@@ -106,29 +106,29 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 		// Create a test deployment
 		testDeployment = &appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "workspace-test-workspace",
-				Namespace: "test-namespace",
+				Name:      deploymentLabelTestWorkspace,
+				Namespace: testNamespaceName,
 			},
 			Spec: appsv1.DeploymentSpec{
 				Selector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
-						"app": "workspace-test-workspace",
+						AppLabel: deploymentLabelTestWorkspace,
 					},
 				},
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							"app": "workspace-test-workspace",
+							AppLabel: deploymentLabelTestWorkspace,
 						},
 					},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  "workspace",
-								Image: "jupyter/minimal-notebook:latest",
+								Name:  ResourcePrefix,
+								Image: imageMinimalNotebook,
 								Env: []corev1.EnvVar{
 									{
-										Name:  "EXISTING_VAR",
+										Name:  envExistingVar,
 										Value: "original-value",
 									},
 								},
@@ -156,8 +156,8 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 				envMap[env["name"]] = env["value"]
 			}
 
-			Expect(envMap["JUPYTER_BASE_URL"]).To(Equal("/workspaces/test-namespace/test-workspace/"))
-			Expect(envMap["WORKSPACE_NAME"]).To(Equal("test-workspace"))
+			Expect(envMap[envJupyterBaseURL]).To(Equal("/workspaces/test-namespace/test-workspace/"))
+			Expect(envMap["WORKSPACE_NAME"]).To(Equal(testWorkspaceName))
 			Expect(envMap["STRATEGY_NAME"]).To(Equal("test-access-strategy"))
 		})
 
@@ -193,8 +193,8 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 	Context("addAccessStrategyEnvToContainer", func() {
 		It("Should add resolved env variables from PrimaryContainerModifications.MergeEnv", func() {
 			container := &corev1.Container{
-				Name:  "workspace",
-				Image: "jupyter/minimal-notebook:latest",
+				Name:  ResourcePrefix,
+				Image: imageMinimalNotebook,
 				Env:   []corev1.EnvVar{},
 			}
 
@@ -213,18 +213,18 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 				envMap[env.Name] = env.Value
 			}
 
-			Expect(envMap["JUPYTER_BASE_URL"]).To(Equal("/workspaces/test-namespace/test-workspace/"))
-			Expect(envMap["WORKSPACE_NAME"]).To(Equal("test-workspace"))
+			Expect(envMap[envJupyterBaseURL]).To(Equal("/workspaces/test-namespace/test-workspace/"))
+			Expect(envMap["WORKSPACE_NAME"]).To(Equal(testWorkspaceName))
 			Expect(envMap["STRATEGY_NAME"]).To(Equal("test-access-strategy"))
 		})
 
 		It("Should override resolved env variables that conflict", func() {
 			container := &corev1.Container{
-				Name:  "workspace",
-				Image: "jupyter/minimal-notebook:latest",
+				Name:  ResourcePrefix,
+				Image: imageMinimalNotebook,
 				Env: []corev1.EnvVar{
 					{
-						Name:  "JUPYTER_BASE_URL",
+						Name:  envJupyterBaseURL,
 						Value: "/original/path/",
 					},
 				},
@@ -241,7 +241,7 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 
 			// Check that the existing variable was overridden
 			for _, env := range container.Env {
-				if env.Name == "JUPYTER_BASE_URL" {
+				if env.Name == envJupyterBaseURL {
 					Expect(env.Value).To(Equal("/workspaces/test-namespace/test-workspace/"))
 				}
 			}
@@ -249,11 +249,11 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 
 		It("Should not affect env variables not specified in PrimaryContainerModifications.MergeEnv", func() {
 			container := &corev1.Container{
-				Name:  "workspace",
-				Image: "jupyter/minimal-notebook:latest",
+				Name:  ResourcePrefix,
+				Image: imageMinimalNotebook,
 				Env: []corev1.EnvVar{
 					{
-						Name:  "EXISTING_VAR",
+						Name:  envExistingVar,
 						Value: "original-value",
 					},
 				},
@@ -270,7 +270,7 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 
 			// Check that the existing variable is unchanged
 			for _, env := range container.Env {
-				if env.Name == "EXISTING_VAR" {
+				if env.Name == envExistingVar {
 					Expect(env.Value).To(Equal("original-value"))
 				}
 			}
@@ -278,8 +278,8 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 
 		It("Should return an error if an env var template string fails to parse", func() {
 			container := &corev1.Container{
-				Name:  "workspace",
-				Image: "jupyter/minimal-notebook:latest",
+				Name:  ResourcePrefix,
+				Image: imageMinimalNotebook,
 				Env:   []corev1.EnvVar{},
 			}
 
@@ -299,8 +299,8 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 
 		It("Should return an error if an env var template has invalid substitution", func() {
 			container := &corev1.Container{
-				Name:  "workspace",
-				Image: "jupyter/minimal-notebook:latest",
+				Name:  ResourcePrefix,
+				Image: imageMinimalNotebook,
 				Env:   []corev1.EnvVar{},
 			}
 
@@ -339,10 +339,10 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 				envMap[env.Name] = env.Value
 			}
 
-			Expect(envMap["JUPYTER_BASE_URL"]).To(Equal("/workspaces/test-namespace/test-workspace/"))
-			Expect(envMap["WORKSPACE_NAME"]).To(Equal("test-workspace"))
+			Expect(envMap[envJupyterBaseURL]).To(Equal("/workspaces/test-namespace/test-workspace/"))
+			Expect(envMap["WORKSPACE_NAME"]).To(Equal(testWorkspaceName))
 			Expect(envMap["STRATEGY_NAME"]).To(Equal("test-access-strategy"))
-			Expect(envMap["EXISTING_VAR"]).To(Equal("original-value"))
+			Expect(envMap[envExistingVar]).To(Equal("original-value"))
 		})
 
 		It("Should be a no-op when PrimaryContainerModifications is nil", func() {
@@ -417,15 +417,15 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 								{
 									Name:    "setup-init",
 									Image:   "alpine:3.18",
-									Command: []string{"/bin/sh"},
+									Command: []string{shellBinSh},
 									Args: []string{
 										"-c",
 										"echo 'Initializing shared storage' && mkdir -p /shared-data && touch /shared-data/initialized",
 									},
 									VolumeMounts: []corev1.VolumeMount{
 										{
-											Name:      "shared-storage",
-											MountPath: "/shared-data",
+											Name:      volumeNameSharedStorage,
+											MountPath: mountPathSharedData,
 										},
 									},
 								},
@@ -434,7 +434,7 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 								{
 									Name:    "helper-sidecar",
 									Image:   "busybox:1.35",
-									Command: []string{"/bin/sh"},
+									Command: []string{shellBinSh},
 									Args: []string{
 										"-c",
 										"echo 'Setting up shared resources' && cp /usr/bin/helper /shared-data/ && sleep infinity",
@@ -451,14 +451,14 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 									},
 									VolumeMounts: []corev1.VolumeMount{
 										{
-											Name:      "shared-storage",
-											MountPath: "/shared-data",
+											Name:      volumeNameSharedStorage,
+											MountPath: mountPathSharedData,
 										},
 									},
 									ReadinessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{
 											Exec: &corev1.ExecAction{
-												Command: []string{"test", "-f", "/shared-data/ready"},
+												Command: []string{literalTest, "-f", "/shared-data/ready"},
 											},
 										},
 										InitialDelaySeconds: 5,
@@ -468,7 +468,7 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 							},
 							Volumes: []corev1.Volume{
 								{
-									Name: "shared-storage",
+									Name: volumeNameSharedStorage,
 									VolumeSource: corev1.VolumeSource{
 										EmptyDir: &corev1.EmptyDirVolumeSource{
 											SizeLimit: func() *resource.Quantity {
@@ -482,8 +482,8 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 							PrimaryContainerModifications: &workspacev1alpha1.PrimaryContainerModifications{
 								VolumeMounts: []corev1.VolumeMount{
 									{
-										Name:      "shared-storage",
-										MountPath: "/shared-data",
+										Name:      volumeNameSharedStorage,
+										MountPath: mountPathSharedData,
 									},
 								},
 							},
@@ -502,11 +502,11 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 			initContainer := testDeployment.Spec.Template.Spec.InitContainers[0]
 			Expect(initContainer.Name).To(Equal("setup-init"))
 			Expect(initContainer.Image).To(Equal("alpine:3.18"))
-			Expect(initContainer.Command).To(Equal([]string{"/bin/sh"}))
+			Expect(initContainer.Command).To(Equal([]string{shellBinSh}))
 			Expect(initContainer.Args).To(HaveLen(2))
 			Expect(initContainer.Args[1]).To(ContainSubstring("Initializing shared storage"))
 			Expect(initContainer.VolumeMounts).To(HaveLen(1))
-			Expect(initContainer.VolumeMounts[0].Name).To(Equal("shared-storage"))
+			Expect(initContainer.VolumeMounts[0].Name).To(Equal(volumeNameSharedStorage))
 
 			// Validate additional container was added
 			Expect(testDeployment.Spec.Template.Spec.Containers).To(HaveLen(2))
@@ -519,7 +519,7 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 			additionalContainer := testDeployment.Spec.Template.Spec.Containers[1]
 			Expect(additionalContainer.Name).To(Equal("helper-sidecar"))
 			Expect(additionalContainer.Image).To(Equal("busybox:1.35"))
-			Expect(additionalContainer.Command).To(Equal([]string{"/bin/sh"}))
+			Expect(additionalContainer.Command).To(Equal([]string{shellBinSh}))
 			Expect(additionalContainer.Args).To(HaveLen(2))
 			Expect(additionalContainer.Args[0]).To(Equal("-c"))
 			Expect(additionalContainer.Args[1]).To(ContainSubstring("Setting up shared resources"))
@@ -536,26 +536,26 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 			// Validate additional container readiness probe
 			Expect(additionalContainer.ReadinessProbe).NotTo(BeNil())
 			Expect(additionalContainer.ReadinessProbe.Exec).NotTo(BeNil())
-			Expect(additionalContainer.ReadinessProbe.Exec.Command).To(Equal([]string{"test", "-f", "/shared-data/ready"}))
+			Expect(additionalContainer.ReadinessProbe.Exec.Command).To(Equal([]string{literalTest, "-f", "/shared-data/ready"}))
 			Expect(additionalContainer.ReadinessProbe.InitialDelaySeconds).To(Equal(int32(5)))
 			Expect(additionalContainer.ReadinessProbe.PeriodSeconds).To(Equal(int32(10)))
 
 			// Validate shared volume was created
 			Expect(testDeployment.Spec.Template.Spec.Volumes).To(HaveLen(1))
 			sharedVolume := testDeployment.Spec.Template.Spec.Volumes[0]
-			Expect(sharedVolume.Name).To(Equal("shared-storage"))
+			Expect(sharedVolume.Name).To(Equal(volumeNameSharedStorage))
 			Expect(sharedVolume.EmptyDir).NotTo(BeNil())
 			Expect(sharedVolume.EmptyDir.SizeLimit.String()).To(Equal("2Gi"))
 
 			// Validate volume mounts on primary container
 			Expect(primaryContainer.VolumeMounts).To(HaveLen(1))
-			Expect(primaryContainer.VolumeMounts[0].Name).To(Equal("shared-storage"))
-			Expect(primaryContainer.VolumeMounts[0].MountPath).To(Equal("/shared-data"))
+			Expect(primaryContainer.VolumeMounts[0].Name).To(Equal(volumeNameSharedStorage))
+			Expect(primaryContainer.VolumeMounts[0].MountPath).To(Equal(mountPathSharedData))
 
 			// Validate volume mounts on additional container
 			Expect(additionalContainer.VolumeMounts).To(HaveLen(1))
-			Expect(additionalContainer.VolumeMounts[0].Name).To(Equal("shared-storage"))
-			Expect(additionalContainer.VolumeMounts[0].MountPath).To(Equal("/shared-data"))
+			Expect(additionalContainer.VolumeMounts[0].Name).To(Equal(volumeNameSharedStorage))
+			Expect(additionalContainer.VolumeMounts[0].MountPath).To(Equal(mountPathSharedData))
 		})
 	})
 })

@@ -19,7 +19,7 @@ var _ = Describe("InitContainerValidator", func() {
 
 	BeforeEach(func() {
 		template = &workspacev1alpha1.WorkspaceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+			ObjectMeta: metav1.ObjectMeta{Name: testTemplateName},
 			Spec:       workspacev1alpha1.WorkspaceTemplateSpec{},
 		}
 	})
@@ -29,7 +29,7 @@ var _ = Describe("InitContainerValidator", func() {
 			allow := true
 			template.Spec.AllowCustomInitContainers = &allow
 			initContainers := []corev1.Container{
-				{Name: "setup", Image: "busybox:latest"},
+				{Name: testInitContainerSetup, Image: testImageBusybox},
 			}
 			violation := validateInitContainers(initContainers, template)
 			Expect(violation).To(BeNil())
@@ -38,7 +38,7 @@ var _ = Describe("InitContainerValidator", func() {
 		It("should reject init containers when AllowCustomInitContainers is nil (default false)", func() {
 			template.Spec.AllowCustomInitContainers = nil
 			initContainers := []corev1.Container{
-				{Name: "setup", Image: "busybox:latest"},
+				{Name: testInitContainerSetup, Image: testImageBusybox},
 			}
 			violation := validateInitContainers(initContainers, template)
 			Expect(violation).NotTo(BeNil())
@@ -49,7 +49,7 @@ var _ = Describe("InitContainerValidator", func() {
 			allow := false
 			template.Spec.AllowCustomInitContainers = &allow
 			initContainers := []corev1.Container{
-				{Name: "setup", Image: "busybox:latest"},
+				{Name: testInitContainerSetup, Image: testImageBusybox},
 			}
 			violation := validateInitContainers(initContainers, template)
 			Expect(violation).NotTo(BeNil())
@@ -65,11 +65,11 @@ var _ = Describe("InitContainerValidator", func() {
 
 		It("should allow template default init containers even when custom not allowed", func() {
 			template.Spec.DefaultInitContainers = []corev1.Container{
-				{Name: "template-init", Image: "busybox:latest", Command: []string{"sh", "-c", "echo hi"}},
+				{Name: testTemplateInitContainer, Image: testImageBusybox, Command: []string{"sh", "-c", testEchoHiCmd}},
 			}
 			template.Spec.AllowCustomInitContainers = nil
 			initContainers := []corev1.Container{
-				{Name: "template-init", Image: "busybox:latest", Command: []string{"sh", "-c", "echo hi"}},
+				{Name: testTemplateInitContainer, Image: testImageBusybox, Command: []string{"sh", "-c", testEchoHiCmd}},
 			}
 			violation := validateInitContainers(initContainers, template)
 			Expect(violation).To(BeNil())
@@ -77,11 +77,11 @@ var _ = Describe("InitContainerValidator", func() {
 
 		It("should reject when name matches but command differs from template default", func() {
 			template.Spec.DefaultInitContainers = []corev1.Container{
-				{Name: "template-init", Image: "busybox:latest", Command: []string{"sh", "-c", "echo hi"}},
+				{Name: testTemplateInitContainer, Image: testImageBusybox, Command: []string{"sh", "-c", testEchoHiCmd}},
 			}
 			template.Spec.AllowCustomInitContainers = nil
 			initContainers := []corev1.Container{
-				{Name: "template-init", Image: "busybox:latest", Command: []string{"sh", "-c", "echo HACKED"}},
+				{Name: testTemplateInitContainer, Image: testImageBusybox, Command: []string{"sh", "-c", "echo HACKED"}},
 			}
 			violation := validateInitContainers(initContainers, template)
 			Expect(violation).NotTo(BeNil())
@@ -90,11 +90,11 @@ var _ = Describe("InitContainerValidator", func() {
 
 		It("should reject when name matches but image differs from template default", func() {
 			template.Spec.DefaultInitContainers = []corev1.Container{
-				{Name: "template-init", Image: "busybox:latest", Command: []string{"echo"}},
+				{Name: testTemplateInitContainer, Image: testImageBusybox, Command: []string{"echo"}},
 			}
 			template.Spec.AllowCustomInitContainers = nil
 			initContainers := []corev1.Container{
-				{Name: "template-init", Image: "evil:latest", Command: []string{"echo"}},
+				{Name: testTemplateInitContainer, Image: "evil:latest", Command: []string{"echo"}},
 			}
 			violation := validateInitContainers(initContainers, template)
 			Expect(violation).NotTo(BeNil())
@@ -102,13 +102,13 @@ var _ = Describe("InitContainerValidator", func() {
 
 		It("should reject when init containers are reordered from template defaults", func() {
 			template.Spec.DefaultInitContainers = []corev1.Container{
-				{Name: "init-a", Image: "busybox:latest"},
-				{Name: "init-b", Image: "alpine:latest"},
+				{Name: "init-a", Image: testImageBusybox},
+				{Name: "init-b", Image: testImageAlpine},
 			}
 			template.Spec.AllowCustomInitContainers = nil
 			initContainers := []corev1.Container{
-				{Name: "init-b", Image: "alpine:latest"},
-				{Name: "init-a", Image: "busybox:latest"},
+				{Name: "init-b", Image: testImageAlpine},
+				{Name: "init-a", Image: testImageBusybox},
 			}
 			violation := validateInitContainers(initContainers, template)
 			Expect(violation).NotTo(BeNil())
@@ -117,11 +117,11 @@ var _ = Describe("InitContainerValidator", func() {
 
 		It("should reject when extra init containers are added beyond defaults", func() {
 			template.Spec.DefaultInitContainers = []corev1.Container{
-				{Name: "template-init", Image: "busybox:latest"},
+				{Name: testTemplateInitContainer, Image: testImageBusybox},
 			}
 			template.Spec.AllowCustomInitContainers = nil
 			initContainers := []corev1.Container{
-				{Name: "template-init", Image: "busybox:latest"},
+				{Name: testTemplateInitContainer, Image: testImageBusybox},
 				{Name: "extra", Image: "evil:latest"},
 			}
 			violation := validateInitContainers(initContainers, template)

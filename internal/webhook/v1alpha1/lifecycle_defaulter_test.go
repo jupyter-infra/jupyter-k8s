@@ -23,14 +23,14 @@ var _ = Describe("LifecycleDefaulter", func() {
 	BeforeEach(func() {
 		template = &workspacev1alpha1.WorkspaceTemplate{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-template",
-				Namespace: "default",
+				Name:      testTemplateName,
+				Namespace: testDefaultNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{},
 		}
 		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-workspace",
+				Name: testWorkspaceName,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{},
 		}
@@ -41,7 +41,7 @@ var _ = Describe("LifecycleDefaulter", func() {
 			template.Spec.DefaultLifecycle = &corev1.Lifecycle{
 				PostStart: &corev1.LifecycleHandler{
 					Exec: &corev1.ExecAction{
-						Command: []string{"/bin/sh", "-c", "echo started"},
+						Command: []string{testBinSh, "-c", "echo started"},
 					},
 				},
 			}
@@ -49,28 +49,28 @@ var _ = Describe("LifecycleDefaulter", func() {
 			applyLifecycleDefaults(workspace, template)
 
 			Expect(workspace.Spec.Lifecycle).ToNot(BeNil())
-			Expect(workspace.Spec.Lifecycle.PostStart.Exec.Command).To(Equal([]string{"/bin/sh", "-c", "echo started"}))
+			Expect(workspace.Spec.Lifecycle.PostStart.Exec.Command).To(Equal([]string{testBinSh, "-c", "echo started"}))
 		})
 
 		It("should not override existing lifecycle", func() {
 			workspace.Spec.Lifecycle = &corev1.Lifecycle{
 				PostStart: &corev1.LifecycleHandler{
 					Exec: &corev1.ExecAction{
-						Command: []string{"/bin/bash"},
+						Command: []string{testBinBash},
 					},
 				},
 			}
 			template.Spec.DefaultLifecycle = &corev1.Lifecycle{
 				PostStart: &corev1.LifecycleHandler{
 					Exec: &corev1.ExecAction{
-						Command: []string{"/bin/sh"},
+						Command: []string{testBinSh},
 					},
 				},
 			}
 
 			applyLifecycleDefaults(workspace, template)
 
-			Expect(workspace.Spec.Lifecycle.PostStart.Exec.Command).To(Equal([]string{"/bin/bash"}))
+			Expect(workspace.Spec.Lifecycle.PostStart.Exec.Command).To(Equal([]string{testBinBash}))
 		})
 
 		It("should apply idle shutdown defaults", func() {

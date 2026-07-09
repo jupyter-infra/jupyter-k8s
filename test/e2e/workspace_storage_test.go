@@ -74,24 +74,24 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 				workspaceNamespace,
 				[]valueTestCaseForStorageTest{
 					{
-						description: "verifying pvc size",
-						jsonPath:    "{.spec.resources.requests.storage}",
+						description: descVerifyingPVCSize,
+						jsonPath:    jsonPathPVCStorage,
 						expected:    "2Gi",
 					},
 					{
-						description: "verifying pvc access mode",
-						jsonPath:    "{.spec.accessModes[0]}",
-						expected:    "ReadWriteOnce",
+						description: descVerifyingPVCAccessMode,
+						jsonPath:    jsonPathAccessMode,
+						expected:    accessModeRWO,
 					},
 					{
-						description: "verifying owner reference",
-						jsonPath:    "{.metadata.ownerReferences[0].name}",
+						description: descVerifyingOwnerRef,
+						jsonPath:    jsonPathOwnerRefName,
 						expected:    workspaceName,
 					},
 					{
-						description: "verifying binding status",
-						jsonPath:    "{.status.phase}",
-						expected:    "Bound",
+						description: descVerifyingBindingStatus,
+						jsonPath:    jsonPathStatusPhase,
+						expected:    phaseBound,
 					},
 				},
 			)
@@ -120,8 +120,8 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 				workspaceNamespace,
 				[]valueTestCaseForStorageTest{
 					{
-						description: "verifying pvc size",
-						jsonPath:    "{.spec.resources.requests.storage}",
+						description: descVerifyingPVCSize,
+						jsonPath:    jsonPathPVCStorage,
 						expected:    "10Gi",
 					},
 				},
@@ -339,24 +339,24 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 				workspaceNamespace,
 				[]valueTestCaseForStorageTest{
 					{
-						description: "verifying pvc size",
-						jsonPath:    "{.spec.resources.requests.storage}",
+						description: descVerifyingPVCSize,
+						jsonPath:    jsonPathPVCStorage,
 						expected:    "2Gi",
 					},
 					{
-						description: "verifying pvc access mode",
-						jsonPath:    "{.spec.accessModes[0]}",
-						expected:    "ReadWriteOnce",
+						description: descVerifyingPVCAccessMode,
+						jsonPath:    jsonPathAccessMode,
+						expected:    accessModeRWO,
 					},
 					{
-						description: "verifying owner reference",
-						jsonPath:    "{.metadata.ownerReferences[0].name}",
+						description: descVerifyingOwnerRef,
+						jsonPath:    jsonPathOwnerRefName,
 						expected:    workspaceName,
 					},
 					{
-						description: "verifying binding status",
-						jsonPath:    "{.status.phase}",
-						expected:    "Bound",
+						description: descVerifyingBindingStatus,
+						jsonPath:    jsonPathStatusPhase,
+						expected:    phaseBound,
 					},
 				},
 			)
@@ -387,24 +387,24 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 				workspaceNamespace,
 				[]valueTestCaseForStorageTest{
 					{
-						description: "verifying pvc size",
-						jsonPath:    "{.spec.resources.requests.storage}",
+						description: descVerifyingPVCSize,
+						jsonPath:    jsonPathPVCStorage,
 						expected:    "1Gi",
 					},
 					{
-						description: "verifying pvc access mode",
-						jsonPath:    "{.spec.accessModes[0]}",
-						expected:    "ReadWriteOnce",
+						description: descVerifyingPVCAccessMode,
+						jsonPath:    jsonPathAccessMode,
+						expected:    accessModeRWO,
 					},
 					{
-						description: "verifying owner reference",
-						jsonPath:    "{.metadata.ownerReferences[0].name}",
+						description: descVerifyingOwnerRef,
+						jsonPath:    jsonPathOwnerRefName,
 						expected:    workspaceName,
 					},
 					{
-						description: "verifying binding status",
-						jsonPath:    "{.status.phase}",
-						expected:    "Bound",
+						description: descVerifyingBindingStatus,
+						jsonPath:    jsonPathStatusPhase,
+						expected:    phaseBound,
 					},
 				},
 			)

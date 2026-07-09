@@ -27,10 +27,10 @@ var _ = Describe("reconcileDesiredStoppedStatus access resources", func() {
 		ws := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("sm-stop-acc-%d", time.Now().UnixNano()),
-				Namespace: "default",
+				Namespace: testNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				Image:         "jupyter/base-notebook:latest",
+				Image:         imageBaseNotebook,
 				DesiredStatus: DesiredStateStopped,
 			},
 		}
@@ -46,7 +46,7 @@ var _ = Describe("reconcileDesiredStoppedStatus access resources", func() {
 			Kind:       "BogusKind",
 			APIVersion: "bogus.test/v1",
 			Name:       "does-not-matter",
-			Namespace:  "default",
+			Namespace:  testNamespace,
 		}}
 	}
 

@@ -56,7 +56,7 @@ func NewPodEventHandler(k8sClient client.Client, resourceManager *ResourceManage
 	podEventAdapters := map[string]pluginadapters.PodEventPluginAdapter{}
 	for name, pluginClient := range pluginClients {
 		switch name {
-		case "aws":
+		case pluginNameAWS:
 			adapter, err := awsadapter.NewAwsSsmPodEventAdapter(pluginClient, podExecUtil)
 			if err != nil {
 				logf.Log.Error(err, "Failed to initialize AWS SSM pod event adapter", "plugin", name)

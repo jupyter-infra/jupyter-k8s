@@ -203,8 +203,8 @@ func TestExecInPod_Success(t *testing.T) {
 	// Create test pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "test-namespace",
+			Name:      testPodName,
+			Namespace: testNamespaceName,
 		},
 	}
 
@@ -239,8 +239,8 @@ func TestExecInPod_ExecutorCreationFailure(t *testing.T) {
 	// Create test pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "test-namespace",
+			Name:      testPodName,
+			Namespace: testNamespaceName,
 		},
 	}
 
@@ -282,8 +282,8 @@ func TestExecInPod_StreamExecutionFailure(t *testing.T) {
 	// Create test pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "test-namespace",
+			Name:      testPodName,
+			Namespace: testNamespaceName,
 		},
 	}
 
@@ -329,8 +329,8 @@ func TestExecInPod_WithStdin(t *testing.T) {
 	// Create test pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "test-namespace",
+			Name:      testPodName,
+			Namespace: testNamespaceName,
 		},
 	}
 

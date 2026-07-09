@@ -33,7 +33,7 @@ func createTestPod() *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      testPodName,
-			Namespace: "default",
+			Namespace: testNamespace,
 		},
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
@@ -45,7 +45,7 @@ func createTestWorkspaceForDetector() *workspacev1alpha1.Workspace {
 	return &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      testWorkspaceName,
-			Namespace: "default",
+			Namespace: testNamespace,
 		},
 	}
 }
@@ -56,7 +56,7 @@ func createTestIdleConfig() *workspacev1alpha1.IdleShutdownSpec {
 		Detection: workspacev1alpha1.IdleDetectionSpec{
 			HTTPGet: &workspacev1alpha1.IdleHTTPGetAction{
 				HTTPGetAction: corev1.HTTPGetAction{
-					Path:   "/api/idle",
+					Path:   pathAPIIdle,
 					Port:   intstr.FromInt(8888),
 					Scheme: corev1.URISchemeHTTP,
 				},
@@ -70,7 +70,7 @@ func TestCreateIdleDetector_HTTPGet_Success(t *testing.T) {
 	detection := &workspacev1alpha1.IdleDetectionSpec{
 		HTTPGet: &workspacev1alpha1.IdleHTTPGetAction{
 			HTTPGetAction: corev1.HTTPGetAction{
-				Path: "/api/idle",
+				Path: pathAPIIdle,
 				Port: intstr.FromInt(8888),
 			},
 		},

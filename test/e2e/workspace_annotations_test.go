@@ -102,7 +102,7 @@ var _ = Describe("Workspace Annotations", Ordered, func() {
 			prometheusAnnotation, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
 				"{.metadata.annotations['prometheus\\.io/scrape']}")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(prometheusAnnotation).To(Equal("true"))
+			Expect(prometheusAnnotation).To(Equal(valueTrue))
 
 			By("verifying automatic annotations still exist")
 			createdBy, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
@@ -126,7 +126,7 @@ var _ = Describe("Workspace Annotations", Ordered, func() {
 			podPrometheusAnnotation, err := kubectlGet("pod", podName, workspaceNamespace,
 				"{.metadata.annotations.prometheus\\.io/scrape}")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(podPrometheusAnnotation).To(Equal("true"))
+			Expect(podPrometheusAnnotation).To(Equal(valueTrue))
 
 			podCreatedBy, err := kubectlGet("pod", podName, workspaceNamespace,
 				"{.metadata.annotations.workspace\\.jupyter\\.org/created-by}")

@@ -47,18 +47,18 @@ var _ = Describe("AccessStartupProber", func() {
 
 		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "test-namespace",
+				Name:      testWorkspaceName,
+				Namespace: testNamespaceName,
 			},
 		}
 
 		accessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-strategy",
-				Namespace: "test-namespace",
+				Name:      testStrategyName,
+				Namespace: testNamespaceName,
 			},
 			Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-				DisplayName:             "Test Strategy",
+				DisplayName:             testStrategyDisplayName,
 				AccessResourceTemplates: []workspacev1alpha1.AccessResourceTemplate{},
 			},
 		}
@@ -318,7 +318,7 @@ var _ = Describe("AccessStartupProber", func() {
 		It("should return error for invalid URL template", func() {
 			accessStrategy.Spec.AccessStartupProbe = &workspacev1alpha1.AccessStartupProbe{
 				HTTPGet: &workspacev1alpha1.AccessHTTPGetProbe{
-					URLTemplate: "{{ .InvalidSyntax }",
+					URLTemplate: invalidSyntaxTemplate,
 				},
 				TimeoutSeconds: 5,
 			}

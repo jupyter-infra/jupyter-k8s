@@ -33,10 +33,10 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 		ws := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("sm-simple-%d", time.Now().UnixNano()),
-				Namespace: "default",
+				Namespace: testNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				Image:         "jupyter/base-notebook:latest",
+				Image:         imageBaseNotebook,
 				DesiredStatus: DesiredStateRunning,
 			},
 		}
@@ -54,14 +54,14 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			Spec: appsv1.DeploymentSpec{
 				Replicas: &replicas,
 				Selector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{"app": "test"},
+					MatchLabels: map[string]string{AppLabel: literalTest},
 				},
 				Template: corev1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "test"}},
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{AppLabel: literalTest}},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{
-							Name:  "main",
-							Image: "jupyter/base-notebook:latest",
+							Name:  containerNameMain,
+							Image: imageBaseNotebook,
 						}},
 					},
 				},
@@ -95,7 +95,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 					Port:       8888,
 					TargetPort: intstr.FromInt32(8888),
 				}},
-				Selector: map[string]string{"app": "test"},
+				Selector: map[string]string{AppLabel: literalTest},
 			},
 		}
 		Expect(k8sClient.Create(ctx, svc)).To(Succeed())
@@ -114,7 +114,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 					Port:       8888,
 					TargetPort: intstr.FromInt32(8888),
 				}},
-				Selector: map[string]string{"app": "test"},
+				Selector: map[string]string{AppLabel: literalTest},
 			},
 		}
 		Expect(k8sClient.Create(ctx, svc)).To(Succeed())
@@ -239,10 +239,10 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("sm-simple-%d", time.Now().UnixNano()),
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					Image:         "jupyter/base-notebook:latest",
+					Image:         imageBaseNotebook,
 					DesiredStatus: DesiredStateRunning,
 				},
 			}
@@ -258,10 +258,10 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("sm-simple-%d", time.Now().UnixNano()),
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					Image:         "jupyter/base-notebook:latest",
+					Image:         imageBaseNotebook,
 					DesiredStatus: DesiredStateRunning,
 				},
 			}

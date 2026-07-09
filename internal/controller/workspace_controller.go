@@ -282,7 +282,7 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 				// Handle both workload preemption events and pod stopped events due to preemption
 				return (event.InvolvedObject.Kind == KindPod &&
-					event.Reason == "Stopped" &&
+					event.Reason == ConditionTypeStopped &&
 					strings.Contains(event.Message, "Preempted")) ||
 					(event.Reason == "Preempted")
 			})),
@@ -293,13 +293,13 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.options.WatchTraefik {
 		// Create an IngressRoute unstructured object for watching
 		ingressRouteGVK := &unstructured.Unstructured{}
-		ingressRouteGVK.SetAPIVersion("traefik.io/v1alpha1")
-		ingressRouteGVK.SetKind("IngressRoute")
+		ingressRouteGVK.SetAPIVersion(traefikAPIVersion)
+		ingressRouteGVK.SetKind(kindIngressRoute)
 
 		// Create a Middleware unstructured object for watching
 		middlewareGVK := &unstructured.Unstructured{}
-		middlewareGVK.SetAPIVersion("traefik.io/v1alpha1")
-		middlewareGVK.SetKind("Middleware")
+		middlewareGVK.SetAPIVersion(traefikAPIVersion)
+		middlewareGVK.SetKind(kindMiddleware)
 
 		// Watch NetworkPolicy resources using typed API
 		builder.Owns(&networkingv1.NetworkPolicy{}).Owns(ingressRouteGVK).Owns(middlewareGVK)

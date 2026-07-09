@@ -21,18 +21,18 @@ var _ = Describe("Reserved Prefix Validator", func() {
 	BeforeEach(func() {
 		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "default",
+				Name:      testWorkspaceName,
+				Namespace: testDefaultNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				Image: "jupyter/base-notebook:latest",
+				Image: testValidBaseNotebook,
 			},
 		}
 	})
 
 	Context("validateReservedPrefixOnCreate", func() {
 		It("should allow workspace with no reserved prefix labels or annotations", func() {
-			workspace.Labels = map[string]string{"team": "data-science"}
+			workspace.Labels = map[string]string{testLabelKeyTeam: testDataScience}
 			workspace.Annotations = map[string]string{"note": "test"}
 			Expect(validateReservedPrefixOnCreate(workspace)).To(Succeed())
 		})
@@ -40,22 +40,22 @@ var _ = Describe("Reserved Prefix Validator", func() {
 		It("should allow workspace with system-managed labels", func() {
 			workspace.Labels = map[string]string{
 				controller.LabelWorkspaceTemplate:          "my-template",
-				controller.LabelWorkspaceTemplateNamespace: "default",
+				controller.LabelWorkspaceTemplateNamespace: testDefaultNamespace,
 			}
 			Expect(validateReservedPrefixOnCreate(workspace)).To(Succeed())
 		})
 
 		It("should allow workspace with system-managed annotations", func() {
 			workspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy:     "user1",
-				controller.AnnotationLastUpdatedBy: "user1",
+				controller.AnnotationCreatedBy:     testUser1,
+				controller.AnnotationLastUpdatedBy: testUser1,
 			}
 			Expect(validateReservedPrefixOnCreate(workspace)).To(Succeed())
 		})
 
 		It("should reject workspace with unknown reserved prefix label", func() {
 			workspace.Labels = map[string]string{
-				"workspace.jupyter.org/custom-label": "value",
+				"workspace.jupyter.org/custom-label": testLabelValue,
 			}
 			err := validateReservedPrefixOnCreate(workspace)
 			Expect(err).To(HaveOccurred())
@@ -64,7 +64,7 @@ var _ = Describe("Reserved Prefix Validator", func() {
 
 		It("should reject workspace with unknown reserved prefix annotation", func() {
 			workspace.Annotations = map[string]string{
-				"workspace.jupyter.org/custom-annotation": "value",
+				"workspace.jupyter.org/custom-annotation": testLabelValue,
 			}
 			err := validateReservedPrefixOnCreate(workspace)
 			Expect(err).To(HaveOccurred())
@@ -84,15 +84,15 @@ var _ = Describe("Reserved Prefix Validator", func() {
 		})
 
 		It("should allow update with no reserved prefix changes", func() {
-			oldWorkspace.Labels = map[string]string{"team": "a"}
-			workspace.Labels = map[string]string{"team": "b"}
+			oldWorkspace.Labels = map[string]string{testLabelKeyTeam: "a"}
+			workspace.Labels = map[string]string{testLabelKeyTeam: "b"}
 			Expect(validateReservedPrefixOnUpdate(oldWorkspace, workspace)).To(Succeed())
 		})
 
 		It("should reject adding unknown reserved prefix label", func() {
 			oldWorkspace.Labels = map[string]string{}
 			workspace.Labels = map[string]string{
-				"workspace.jupyter.org/custom": "value",
+				"workspace.jupyter.org/custom": testLabelValue,
 			}
 			err := validateReservedPrefixOnUpdate(oldWorkspace, workspace)
 			Expect(err).To(HaveOccurred())
@@ -102,7 +102,7 @@ var _ = Describe("Reserved Prefix Validator", func() {
 		It("should reject adding unknown reserved prefix annotation", func() {
 			oldWorkspace.Annotations = map[string]string{}
 			workspace.Annotations = map[string]string{
-				"workspace.jupyter.org/custom": "value",
+				"workspace.jupyter.org/custom": testLabelValue,
 			}
 			err := validateReservedPrefixOnUpdate(oldWorkspace, workspace)
 			Expect(err).To(HaveOccurred())
@@ -111,7 +111,7 @@ var _ = Describe("Reserved Prefix Validator", func() {
 
 		It("should reject changing SetOnCreateOnly annotation", func() {
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "original-user",
+				controller.AnnotationCreatedBy: testOriginalUser,
 			}
 			workspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "malicious-user",
@@ -123,7 +123,7 @@ var _ = Describe("Reserved Prefix Validator", func() {
 
 		It("should reject removing SetOnCreateOnly annotation", func() {
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "original-user",
+				controller.AnnotationCreatedBy: testOriginalUser,
 			}
 			workspace.Annotations = map[string]string{}
 			err := validateReservedPrefixOnUpdate(oldWorkspace, workspace)
@@ -133,7 +133,7 @@ var _ = Describe("Reserved Prefix Validator", func() {
 
 		It("should reject removing SetOnCreateOnly annotation when annotations are nil", func() {
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "original-user",
+				controller.AnnotationCreatedBy: testOriginalUser,
 			}
 			workspace.Annotations = nil
 			err := validateReservedPrefixOnUpdate(oldWorkspace, workspace)
@@ -143,7 +143,7 @@ var _ = Describe("Reserved Prefix Validator", func() {
 
 		It("should allow changing SetAlways annotation", func() {
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationLastUpdatedBy: "user1",
+				controller.AnnotationLastUpdatedBy: testUser1,
 			}
 			workspace.Annotations = map[string]string{
 				controller.AnnotationLastUpdatedBy: "user2",
@@ -171,7 +171,7 @@ var _ = Describe("Reserved Prefix Validator", func() {
 
 		It("should reject setting created-by to empty string", func() {
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "original-user",
+				controller.AnnotationCreatedBy: testOriginalUser,
 			}
 			workspace.Annotations = map[string]string{
 				controller.AnnotationCreatedBy: "",
@@ -183,11 +183,11 @@ var _ = Describe("Reserved Prefix Validator", func() {
 
 		It("should allow update when preemption-reason annotation is unchanged", func() {
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy:        "user1",
+				controller.AnnotationCreatedBy:        testUser1,
 				controller.PreemptionReasonAnnotation: controller.PreemptedReason,
 			}
 			workspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy:        "user1",
+				controller.AnnotationCreatedBy:        testUser1,
 				controller.PreemptionReasonAnnotation: controller.PreemptedReason,
 			}
 			Expect(validateReservedPrefixOnUpdate(oldWorkspace, workspace)).To(Succeed())

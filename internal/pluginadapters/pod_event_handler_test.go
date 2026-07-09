@@ -14,6 +14,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+const (
+	// controllerPodUIDExpr is the dynamic context expression resolved to the pod UID.
+	controllerPodUIDExpr = "controller::PodUid()"
+	// podUIDKey is the context map key holding the resolved pod UID.
+	podUIDKey = "podUid"
+)
+
 func newPodWithUID(uid string) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -26,22 +33,22 @@ func newPodWithUID(uid string) *corev1.Pod {
 func TestResolvePodContext_StaticValues(t *testing.T) {
 	ctx := map[string]string{
 		"region":    "us-east-1",
-		"container": "main",
+		"container": containerMain,
 	}
 	resolved, err := ResolvePodContext(ctx, newPodWithUID("abc-123"))
 	assert.NoError(t, err)
 	assert.Equal(t, "us-east-1", resolved["region"])
-	assert.Equal(t, "main", resolved["container"])
+	assert.Equal(t, containerMain, resolved["container"])
 }
 
 func TestResolvePodContext_ResolvesPodUid(t *testing.T) {
 	ctx := map[string]string{
-		"podUid": "controller::PodUid()",
-		"region": "us-west-2",
+		podUIDKey: controllerPodUIDExpr,
+		"region":  "us-west-2",
 	}
 	resolved, err := ResolvePodContext(ctx, newPodWithUID("pod-uid-456"))
 	assert.NoError(t, err)
-	assert.Equal(t, "pod-uid-456", resolved["podUid"])
+	assert.Equal(t, "pod-uid-456", resolved[podUIDKey])
 	assert.Equal(t, "us-west-2", resolved["region"])
 }
 
@@ -59,7 +66,7 @@ func TestResolvePodContext_NilMap(t *testing.T) {
 
 func TestResolvePodContext_NilPod_ErrorsOnDynamicValue(t *testing.T) {
 	ctx := map[string]string{
-		"podUid": "controller::PodUid()",
+		podUIDKey: controllerPodUIDExpr,
 	}
 	_, err := ResolvePodContext(ctx, nil)
 	assert.Error(t, err)
@@ -77,9 +84,9 @@ func TestResolvePodContext_UnknownFunction(t *testing.T) {
 
 func TestResolvePodContext_DoesNotMutateInput(t *testing.T) {
 	ctx := map[string]string{
-		"podUid": "controller::PodUid()",
+		podUIDKey: controllerPodUIDExpr,
 	}
 	_, err := ResolvePodContext(ctx, newPodWithUID("xyz"))
 	assert.NoError(t, err)
-	assert.Equal(t, "controller::PodUid()", ctx["podUid"])
+	assert.Equal(t, controllerPodUIDExpr, ctx[podUIDKey])
 }

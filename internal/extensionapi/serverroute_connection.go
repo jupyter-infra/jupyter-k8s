@@ -30,12 +30,15 @@ import (
 const (
 	// handlerK8sNative is the reserved handler name for core k8s-native functionality.
 	handlerK8sNative = "k8s-native"
+
+	// conditionTypeAvailable is the condition type indicating a workspace is available.
+	conditionTypeAvailable = "Available"
 )
 
 // isWorkspaceAvailable checks if the workspace has the Available condition set to True.
 func isWorkspaceAvailable(ws *workspacev1alpha1.Workspace) bool {
 	for _, condition := range ws.Status.Conditions {
-		if condition.Type == "Available" && condition.Status == metav1.ConditionTrue {
+		if condition.Type == conditionTypeAvailable && condition.Status == metav1.ConditionTrue {
 			return true
 		}
 	}

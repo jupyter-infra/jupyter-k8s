@@ -37,12 +37,12 @@ var _ = Describe("TemplateDefaulter", func() {
 
 		template = &workspacev1alpha1.WorkspaceTemplate{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-template",
-				Namespace: "default",
+				Name:      testTemplateName,
+				Namespace: testDefaultNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-				DefaultImage:         "jupyter/base-notebook:latest",
-				DefaultOwnershipType: "Public",
+				DefaultImage:         testValidBaseNotebook,
+				DefaultOwnershipType: testOwnershipPublic,
 				DefaultResources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("100m"),
@@ -68,11 +68,11 @@ var _ = Describe("TemplateDefaulter", func() {
 
 		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "default",
+				Name:      testWorkspaceName,
+				Namespace: testDefaultNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				DisplayName: "Test Workspace",
+				DisplayName: testWorkspaceDisplayName,
 				TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name},
 			},
 		}
@@ -91,8 +91,8 @@ var _ = Describe("TemplateDefaulter", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Check core defaults
-			Expect(workspace.Spec.Image).To(Equal("jupyter/base-notebook:latest"))
-			Expect(workspace.Spec.OwnershipType).To(Equal("Public"))
+			Expect(workspace.Spec.Image).To(Equal(testValidBaseNotebook))
+			Expect(workspace.Spec.OwnershipType).To(Equal(testOwnershipPublic))
 
 			// Check resource defaults
 			Expect(workspace.Spec.Resources).NotTo(BeNil())
@@ -106,7 +106,7 @@ var _ = Describe("TemplateDefaulter", func() {
 			Expect(workspace.Spec.NodeSelector).To(HaveKeyWithValue("node-type", "compute"))
 
 			// Check metadata defaults
-			Expect(workspace.Labels).To(HaveKeyWithValue(controller.LabelWorkspaceTemplate, "test-template"))
+			Expect(workspace.Labels).To(HaveKeyWithValue(controller.LabelWorkspaceTemplate, testTemplateName))
 
 			// Check readiness probe default (verifies applyReadinessProbeDefaults is registered)
 			Expect(workspace.Spec.ReadinessProbe).NotTo(BeNil())
@@ -130,8 +130,8 @@ var _ = Describe("TemplateDefaulter", func() {
 			Expect(workspace.Spec.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("200m")))
 
 			// Should still apply other defaults
-			Expect(workspace.Spec.OwnershipType).To(Equal("Public"))
-			Expect(workspace.Labels).To(HaveKeyWithValue(controller.LabelWorkspaceTemplate, "test-template"))
+			Expect(workspace.Spec.OwnershipType).To(Equal(testOwnershipPublic))
+			Expect(workspace.Labels).To(HaveKeyWithValue(controller.LabelWorkspaceTemplate, testTemplateName))
 		})
 
 		It("should do nothing when no template reference", func() {

@@ -133,7 +133,7 @@ func VerifyCreateWorkspaceRejectedByWebhook(
 
 	ginkgo.By(fmt.Sprintf("verifying workspace %s was not created", wsName))
 	// Note: We don't use kubectlGet() here because we need --ignore-not-found flag
-	cmd = exec.Command("kubectl", "get", "workspace", wsName, "-n", wsNamespace, "--ignore-not-found")
+	cmd = exec.Command("kubectl", verbGet, "workspace", wsName, "-n", wsNamespace, "--ignore-not-found")
 	output, err := utils.Run(cmd)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	gomega.Expect(output).To(gomega.BeEmpty(), "Workspace should not exist after webhook rejection")
@@ -169,7 +169,7 @@ func RestartWorkspacePod(workspaceName, namespace string) {
 
 	ginkgo.By("waiting for pod to be running")
 	gomega.Eventually(func(g gomega.Gomega) error {
-		phase, err := kubectlGet("pod", podName, namespace, "{.status.phase}")
+		phase, err := kubectlGet("pod", podName, namespace, jsonPathStatusPhase)
 		if err != nil {
 			return err
 		}
@@ -187,7 +187,7 @@ func WaitForWorkspacePodToBeReady(podName, namespace string) {
 
 	ginkgo.By(fmt.Sprintf("waiting for pod %s to be ready", podName))
 	gomega.Eventually(func() error {
-		phase, err := kubectlGet("pod", podName, namespace, "{.status.phase}")
+		phase, err := kubectlGet("pod", podName, namespace, jsonPathStatusPhase)
 		if err != nil {
 			return err
 		}
@@ -201,7 +201,7 @@ func WaitForWorkspacePodToBeReady(podName, namespace string) {
 		if err != nil {
 			return err
 		}
-		if ready != "true" {
+		if ready != valueTrue {
 			return fmt.Errorf("pod %s container not ready yet", podName)
 		}
 		return nil
@@ -225,7 +225,7 @@ func WaitForWorkspaceDeletion(workspaceName, namespace string) {
 	ginkgo.GinkgoHelper()
 
 	gomega.Eventually(func(g gomega.Gomega) {
-		cmd := exec.Command("kubectl", "get", "workspace", workspaceName,
+		cmd := exec.Command("kubectl", verbGet, "workspace", workspaceName,
 			"-n", namespace, "--ignore-not-found", "-o", "name")
 		output, err := utils.Run(cmd)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -236,7 +236,8 @@ func WaitForWorkspaceDeletion(workspaceName, namespace string) {
 // deleteWorkspaceAsUser deletes a workspace with kubectl impersonation
 func deleteWorkspaceAsUser(name, user string, groups []string) error {
 	ginkgo.GinkgoHelper()
-	args := []string{"delete", "workspace", name, "-n", "default", "--as=" + user}
+	args := make([]string, 0, 6+len(groups))
+	args = append(args, "delete", "workspace", name, "-n", "default", "--as="+user)
 	for _, group := range groups {
 		args = append(args, "--as-group="+group)
 	}

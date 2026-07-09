@@ -25,7 +25,7 @@ func newTestFactory(label string) *StandardSignerFactory {
 func TestCompositeSignerFactory_NilAccessStrategy(t *testing.T) {
 	defaultFactory := newTestFactory("default")
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		"k8s-native": defaultFactory,
+		handlerK8sNative: defaultFactory,
 	}, defaultFactory)
 
 	signer, err := composite.CreateSigner(nil)
@@ -37,7 +37,7 @@ func TestCompositeSignerFactory_NilAccessStrategy(t *testing.T) {
 func TestCompositeSignerFactory_EmptyHandler(t *testing.T) {
 	defaultFactory := newTestFactory("default")
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		"k8s-native": defaultFactory,
+		handlerK8sNative: defaultFactory,
 	}, defaultFactory)
 
 	signer, err := composite.CreateSigner(&workspacev1alpha1.WorkspaceAccessStrategy{
@@ -53,12 +53,12 @@ func TestCompositeSignerFactory_EmptyHandler(t *testing.T) {
 func TestCompositeSignerFactory_RoutesToRegisteredFactory(t *testing.T) {
 	nativeFactory := newTestFactory("native")
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		"k8s-native": nativeFactory,
+		handlerK8sNative: nativeFactory,
 	}, nativeFactory)
 
 	signer, err := composite.CreateSigner(&workspacev1alpha1.WorkspaceAccessStrategy{
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			CreateConnectionHandler: "k8s-native",
+			CreateConnectionHandler: handlerK8sNative,
 		},
 	})
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestCompositeSignerFactory_DefaultFactoryUsedForEmptyHandler(t *testing.T) 
 	defaultFactory := newTestFactory("default")
 	otherFactory := newTestFactory("other")
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		"k8s-native": otherFactory,
+		handlerK8sNative: otherFactory,
 	}, defaultFactory)
 
 	// Empty handler uses defaultFactory, not the map
@@ -84,7 +84,7 @@ func TestCompositeSignerFactory_DefaultFactoryUsedForEmptyHandler(t *testing.T) 
 
 func TestCompositeSignerFactory_UnsupportedHandler(t *testing.T) {
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		"k8s-native": newTestFactory("native"),
+		handlerK8sNative: newTestFactory("native"),
 	}, newTestFactory("default"))
 
 	signer, err := composite.CreateSigner(&workspacev1alpha1.WorkspaceAccessStrategy{
@@ -102,7 +102,7 @@ func TestCompositeSignerFactory_UnsupportedHandler(t *testing.T) {
 func TestCompositeSignerFactory_ValidateToken_Success(t *testing.T) {
 	factory := newTestFactory("native")
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		"k8s-native": factory,
+		handlerK8sNative: factory,
 	}, factory)
 
 	// Generate a token using the signer
@@ -121,7 +121,7 @@ func TestCompositeSignerFactory_ValidateToken_Success(t *testing.T) {
 func TestCompositeSignerFactory_ValidateToken_InvalidToken(t *testing.T) {
 	factory := newTestFactory("native")
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		"k8s-native": factory,
+		handlerK8sNative: factory,
 	}, factory)
 
 	_, err := composite.ValidateToken("invalid.token.string")
@@ -192,10 +192,10 @@ func TestCompositeSignerFactory_ValidateToken_AllCreateSignerError(t *testing.T)
 func TestCompositeSignerFactory_GetFactory(t *testing.T) {
 	nativeFactory := newTestFactory("native")
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		"k8s-native": nativeFactory,
+		handlerK8sNative: nativeFactory,
 	}, nativeFactory)
 
-	f, ok := composite.GetFactory("k8s-native")
+	f, ok := composite.GetFactory(handlerK8sNative)
 	assert.True(t, ok)
 	assert.Equal(t, nativeFactory, f)
 

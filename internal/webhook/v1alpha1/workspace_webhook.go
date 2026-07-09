@@ -11,13 +11,11 @@ import (
 	"os"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
@@ -219,7 +217,7 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace
 	serviceAccountDefaulter := NewServiceAccountDefaulter(mgr.GetClient())
 	volumeValidator := NewVolumeValidator(mgr.GetClient())
 
-	return ctrl.NewWebhookManagedBy(mgr).For(&workspacev1alpha1.Workspace{}).
+	return ctrl.NewWebhookManagedBy(mgr, &workspacev1alpha1.Workspace{}).
 		WithValidator(&WorkspaceCustomValidator{
 			templateValidator:       templateValidator,
 			accessStrategyValidator: accessStrategyValidator,
@@ -253,15 +251,10 @@ type WorkspaceCustomDefaulter struct {
 	client                  client.Client
 }
 
-var _ webhook.CustomDefaulter = &WorkspaceCustomDefaulter{}
+var _ admission.Defaulter[*workspacev1alpha1.Workspace] = &WorkspaceCustomDefaulter{}
 
-// Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind Workspace.
-func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
-	workspace, ok := obj.(*workspacev1alpha1.Workspace)
-
-	if !ok {
-		return fmt.Errorf("expected an Workspace object but got %T", obj)
-	}
+// Default implements admission.Defaulter so a webhook will be registered for the Kind Workspace.
+func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
 	workspacelog.Info("Defaulting for Workspace", "name", workspace.GetName(), "namespace", workspace.GetNamespace())
 
 	// Skip template defaulting if workspace is being deleted
@@ -365,14 +358,10 @@ type WorkspaceCustomValidator struct {
 	volumeValidator         *VolumeValidator
 }
 
-var _ webhook.CustomValidator = &WorkspaceCustomValidator{}
+var _ admission.Validator[*workspacev1alpha1.Workspace] = &WorkspaceCustomValidator{}
 
-// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type Workspace.
-func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	workspace, ok := obj.(*workspacev1alpha1.Workspace)
-	if !ok {
-		return nil, fmt.Errorf("expected a Workspace object but got %T", obj)
-	}
+// ValidateCreate implements admission.Validator so a webhook will be registered for the type Workspace.
+func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, workspace *workspacev1alpha1.Workspace) (admission.Warnings, error) {
 	workspacelog.Info("Validation for Workspace upon creation", "name", workspace.GetName(), "namespace", workspace.GetNamespace())
 
 	// Validate template constraints
@@ -408,16 +397,8 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, obj runti
 	return nil, nil
 }
 
-// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type Workspace.
-func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	oldWorkspace, ok := oldObj.(*workspacev1alpha1.Workspace)
-	if !ok {
-		return nil, fmt.Errorf("expected a Workspace object for the oldObj but got %T", oldObj)
-	}
-	newWorkspace, ok := newObj.(*workspacev1alpha1.Workspace)
-	if !ok {
-		return nil, fmt.Errorf("expected a Workspace object for the newObj but got %T", newObj)
-	}
+// ValidateUpdate implements admission.Validator so a webhook will be registered for the type Workspace.
+func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldWorkspace, newWorkspace *workspacev1alpha1.Workspace) (admission.Warnings, error) {
 	workspacelog.Info("Validation for Workspace upon update", "name", newWorkspace.GetName(), "namespace", newWorkspace.GetNamespace())
 
 	// Skip validation if workspace is being deleted (has deletionTimestamp)
@@ -481,12 +462,8 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldObj, n
 	return nil, nil
 }
 
-// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type Workspace.
-func (v *WorkspaceCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	workspace, ok := obj.(*workspacev1alpha1.Workspace)
-	if !ok {
-		return nil, fmt.Errorf("expected a Workspace object but got %T", obj)
-	}
+// ValidateDelete implements admission.Validator so a webhook will be registered for the type Workspace.
+func (v *WorkspaceCustomValidator) ValidateDelete(ctx context.Context, workspace *workspacev1alpha1.Workspace) (admission.Warnings, error) {
 	workspacelog.Info("Validation for Workspace upon deletion", "name", workspace.GetName(), "namespace", workspace.GetNamespace())
 
 	// Controller or admin users bypass validation

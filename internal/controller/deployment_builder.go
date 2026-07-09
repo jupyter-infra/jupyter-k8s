@@ -167,7 +167,7 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 	if storageConfig != nil {
 		podSpec.Volumes = []corev1.Volume{
 			{
-				Name: "workspace-storage",
+				Name: volumeNameWorkspaceStorage,
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: GeneratePVCName(workspace.Name),
@@ -179,7 +179,7 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 
 	// Add additional volumes from spec
 	for _, vol := range workspace.Spec.Volumes {
-		if vol.Name == "workspace-storage" {
+		if vol.Name == volumeNameWorkspaceStorage {
 			// Skip if name conflicts with primary storage
 			continue
 		}
@@ -236,7 +236,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 	}
 
 	container := corev1.Container{
-		Name:            "workspace",
+		Name:            ResourcePrefix,
 		Image:           image,
 		ImagePullPolicy: db.options.ApplicationImagesPullPolicy,
 		SecurityContext: workspace.Spec.ContainerSecurityContext,
@@ -246,7 +246,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 		Env:             workspace.Spec.Env,
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          "http",
+				Name:          httpScheme,
 				ContainerPort: JupyterPort,
 				Protocol:      corev1.ProtocolTCP,
 			},
@@ -262,7 +262,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 	if storageConfig != nil {
 		container.VolumeMounts = []corev1.VolumeMount{
 			{
-				Name:      "workspace-storage",
+				Name:      volumeNameWorkspaceStorage,
 				MountPath: storageConfig.MountPath,
 			},
 		}
@@ -270,7 +270,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 
 	// Add additional volume mounts from spec
 	for _, vol := range workspace.Spec.Volumes {
-		if vol.Name == "workspace-storage" {
+		if vol.Name == volumeNameWorkspaceStorage {
 			// Skip if name conflicts with primary storage
 			continue
 		}

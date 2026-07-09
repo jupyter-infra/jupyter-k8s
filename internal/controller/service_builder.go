@@ -62,7 +62,7 @@ func (sb *ServiceBuilder) buildServiceSpec(workspace *workspacev1alpha1.Workspac
 		Selector: GenerateLabels(workspace.Name),
 		Ports: []corev1.ServicePort{
 			{
-				Name:       "http",
+				Name:       httpScheme,
 				Port:       JupyterPort,
 				TargetPort: intstr.FromInt(JupyterPort),
 				Protocol:   corev1.ProtocolTCP,

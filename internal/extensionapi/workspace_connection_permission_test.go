@@ -55,8 +55,8 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 			// Set up test values
 			testNamespace = "test-namespace1"
 			testWorkspaceName = "test-workspace1"
-			testUsername = "test-user1"
-			testGroups = []string{"system:authenticated", "github:test-group1"}
+			testUsername = testUser1
+			testGroups = []string{systemAuthenticated, "github:test-group1"}
 			testUID = "test-uid"
 		})
 
@@ -154,7 +154,7 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessType: "Public",
+					AccessType: AccessTypePublic,
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -197,7 +197,7 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessType: "OwnerOnly",
+					AccessType: accessTypeOwnerOnly,
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -222,11 +222,11 @@ var _ = Describe("CheckWorkspaceConnectionPermission", func() {
 					Name:      testWorkspaceName,
 					Namespace: testNamespace,
 					Annotations: map[string]string{
-						OwnerAnnotation: "test-user1",
+						OwnerAnnotation: testUser1,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessType: "OwnerOnly",
+					AccessType: accessTypeOwnerOnly,
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())

@@ -21,12 +21,18 @@ import (
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
 
+const (
+	workspaceNamespaceName = "workspace-ns"
+	customNamespaceName    = "custom-ns"
+	defaultTemplateNsName  = "default-ns"
+)
+
 func TestNewTemplateResolver(t *testing.T) {
 	k8sClient := fake.NewClientBuilder().Build()
-	resolver := NewTemplateResolver(k8sClient, "default-ns")
+	resolver := NewTemplateResolver(k8sClient, defaultTemplateNsName)
 
 	assert.NotNil(t, resolver)
-	assert.Equal(t, "default-ns", resolver.defaultTemplateNamespace)
+	assert.Equal(t, defaultTemplateNsName, resolver.defaultTemplateNamespace)
 	assert.Equal(t, k8sClient, resolver.client)
 }
 
@@ -54,83 +60,83 @@ func TestResolveTemplate(t *testing.T) {
 		{
 			name: "template found in specified namespace",
 			templateRef: &workspacev1alpha1.TemplateRef{
-				Name:      "test-template",
-				Namespace: "custom-ns",
+				Name:      testTemplateName,
+				Namespace: customNamespaceName,
 			},
-			workspaceNamespace: "workspace-ns",
+			workspaceNamespace: workspaceNamespaceName,
 			existingTemplates: []client.Object{
 				&workspacev1alpha1.WorkspaceTemplate{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-template",
-						Namespace: "custom-ns",
+						Name:      testTemplateName,
+						Namespace: customNamespaceName,
 					},
 				},
 			},
-			expectedNamespace: "custom-ns",
+			expectedNamespace: customNamespaceName,
 		},
 		{
 			name: "template found in workspace namespace when templateRef namespace empty",
 			templateRef: &workspacev1alpha1.TemplateRef{
-				Name: "test-template",
+				Name: testTemplateName,
 			},
-			workspaceNamespace: "workspace-ns",
+			workspaceNamespace: workspaceNamespaceName,
 			existingTemplates: []client.Object{
 				&workspacev1alpha1.WorkspaceTemplate{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-template",
-						Namespace: "workspace-ns",
+						Name:      testTemplateName,
+						Namespace: workspaceNamespaceName,
 					},
 				},
 			},
-			expectedNamespace: "workspace-ns",
+			expectedNamespace: workspaceNamespaceName,
 		},
 		{
 			name: "template found in default namespace via fallback",
 			templateRef: &workspacev1alpha1.TemplateRef{
-				Name: "test-template",
+				Name: testTemplateName,
 			},
-			workspaceNamespace:       "workspace-ns",
-			defaultTemplateNamespace: "default-ns",
+			workspaceNamespace:       workspaceNamespaceName,
+			defaultTemplateNamespace: defaultTemplateNsName,
 			existingTemplates: []client.Object{
 				&workspacev1alpha1.WorkspaceTemplate{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-template",
-						Namespace: "default-ns",
+						Name:      testTemplateName,
+						Namespace: defaultTemplateNsName,
 					},
 				},
 			},
-			expectedNamespace: "default-ns",
+			expectedNamespace: defaultTemplateNsName,
 		},
 		{
 			name: "template found in primary namespace, fallback not used even when default exists",
 			templateRef: &workspacev1alpha1.TemplateRef{
-				Name: "test-template",
+				Name: testTemplateName,
 			},
-			workspaceNamespace:       "workspace-ns",
-			defaultTemplateNamespace: "default-ns",
+			workspaceNamespace:       workspaceNamespaceName,
+			defaultTemplateNamespace: defaultTemplateNsName,
 			existingTemplates: []client.Object{
 				&workspacev1alpha1.WorkspaceTemplate{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-template",
-						Namespace: "workspace-ns",
+						Name:      testTemplateName,
+						Namespace: workspaceNamespaceName,
 					},
 				},
 				&workspacev1alpha1.WorkspaceTemplate{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-template",
-						Namespace: "default-ns",
+						Name:      testTemplateName,
+						Namespace: defaultTemplateNsName,
 					},
 				},
 			},
-			expectedNamespace: "workspace-ns",
+			expectedNamespace: workspaceNamespaceName,
 		},
 		{
 			name: "template not found anywhere",
 			templateRef: &workspacev1alpha1.TemplateRef{
 				Name: "missing-template",
 			},
-			workspaceNamespace:       "workspace-ns",
-			defaultTemplateNamespace: "default-ns",
+			workspaceNamespace:       workspaceNamespaceName,
+			defaultTemplateNamespace: defaultTemplateNsName,
 			existingTemplates:        []client.Object{},
 			expectError:              true,
 			errorContains:            "failed to get template missing-template",
@@ -138,9 +144,9 @@ func TestResolveTemplate(t *testing.T) {
 		{
 			name: "no fallback when no default namespace configured",
 			templateRef: &workspacev1alpha1.TemplateRef{
-				Name: "test-template",
+				Name: testTemplateName,
 			},
-			workspaceNamespace: "workspace-ns",
+			workspaceNamespace: workspaceNamespaceName,
 			existingTemplates:  []client.Object{},
 			expectError:        true,
 			errorContains:      "failed to get template test-template",
@@ -148,11 +154,11 @@ func TestResolveTemplate(t *testing.T) {
 		{
 			name: "non-NotFound error should be lifted up without fallback",
 			templateRef: &workspacev1alpha1.TemplateRef{
-				Name: "test-template",
+				Name: testTemplateName,
 			},
-			workspaceNamespace:       "workspace-ns",
-			defaultTemplateNamespace: "default-ns",
-			mockError:                apierrors.NewForbidden(schema.GroupResource{}, "test-template", nil),
+			workspaceNamespace:       workspaceNamespaceName,
+			defaultTemplateNamespace: defaultTemplateNsName,
+			mockError:                apierrors.NewForbidden(schema.GroupResource{}, testTemplateName, nil),
 			expectError:              true,
 			errorContains:            "failed to get template test-template",
 		},
@@ -207,10 +213,10 @@ func TestResolveTemplate_NonNotFoundError(t *testing.T) {
 		},
 	}
 
-	resolver := NewTemplateResolver(k8sClient, "default-ns")
-	templateRef := &workspacev1alpha1.TemplateRef{Name: "test-template"}
+	resolver := NewTemplateResolver(k8sClient, defaultTemplateNsName)
+	templateRef := &workspacev1alpha1.TemplateRef{Name: testTemplateName}
 
-	template, err := resolver.ResolveTemplate(context.Background(), templateRef, "workspace-ns")
+	template, err := resolver.ResolveTemplate(context.Background(), templateRef, workspaceNamespaceName)
 
 	// Should return the original error, not attempt fallback
 	assert.Error(t, err)
@@ -232,12 +238,12 @@ func TestResolveTemplateForWorkspace(t *testing.T) {
 			name: "workspace with valid templateRef",
 			workspace: &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "workspace-ns",
+					Name:      testWorkspaceName,
+					Namespace: workspaceNamespaceName,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					TemplateRef: &workspacev1alpha1.TemplateRef{
-						Name: "test-template",
+						Name: testTemplateName,
 					},
 				},
 			},
@@ -246,8 +252,8 @@ func TestResolveTemplateForWorkspace(t *testing.T) {
 			name: "workspace with nil templateRef",
 			workspace: &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "workspace-ns",
+					Name:      testWorkspaceName,
+					Namespace: workspaceNamespaceName,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					TemplateRef: nil,
@@ -263,8 +269,8 @@ func TestResolveTemplateForWorkspace(t *testing.T) {
 			existingTemplates := []client.Object{
 				&workspacev1alpha1.WorkspaceTemplate{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-template",
-						Namespace: "workspace-ns",
+						Name:      testTemplateName,
+						Namespace: workspaceNamespaceName,
 					},
 				},
 			}

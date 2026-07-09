@@ -33,6 +33,43 @@ const (
 	testUIDValue    = "test-uid"
 	testPathValue   = "/workspaces/ns1/app1"
 	testDomainValue = "example.com"
+
+	// Additional shared test constants (extracted for goconst)
+	testOidcPrefix                  = "oidc:"
+	testClientID                    = "test-client-id"
+	testInvalidValue                = "invalid"
+	testClientValue                 = "test-client"
+	testSecretValue                 = "test-secret"
+	testDexURL                      = "https://dex.example.com"
+	testRootPathLabel               = "Root path"
+	testAuthCookieName              = "test_auth"
+	testPathNamespace1              = "/workspaces/namespace1/app1"
+	testPathNamespace1Lab           = "/workspaces/namespace1/app1/lab"
+	testAPIStatusPath               = "/api/v1/status"
+	testWorkspace1Host              = "workspace1.example.com"
+	testWorkspace1                  = "workspace1"
+	testNamespaceValue              = "test-namespace"
+	testJohndoe                     = "johndoe"
+	testAdminValue                  = "admin"
+	testUsersValue                  = "users"
+	testDexIssuerURL                = "https://example.com/dex"
+	testOrg1Team1                   = "org1:team1"
+	testOrg1Team2                   = "org1:team2"
+	testGithubOrgTeam               = "github:org:team"
+	testGithubOrg1Team1             = "github:org1:team1"
+	testIssuerURL                   = "https://test-issuer.example.com"
+	testPrefixValue                 = "test-prefix:"
+	testGroup1                      = "group1"
+	testUserUID                     = "user-uid"
+	testUIDPlain                    = "testuid"
+	testUserString                  = "user"
+	testAbcValue                    = "abc"
+	testMyApp                       = "myApp"
+	testTenant1                     = "tenant1"
+	testWorkspaceNameSubdomainRegex = "^([^-]+)-.*$"
+	testDevValue                    = "dev"
+	testGithubOrg1Team2             = "github:org1:team2"
+	testGroup2                      = "group2"
 )
 
 // createTestRequest creates a test HTTP request with the given path in X-Forwarded-URI header
@@ -63,8 +100,8 @@ func TestExtractWorkspaceInfoWithDefaultRegexes(t *testing.T) {
 			name: "Standard workspace path",
 			path: "/workspaces/default/myApp",
 			expectInfo: &WorkspaceInfo{
-				Namespace: "default",
-				Name:      "myApp",
+				Namespace: TestDefaultNamespace,
+				Name:      testMyApp,
 			},
 			expectErr: false,
 		},
@@ -72,8 +109,8 @@ func TestExtractWorkspaceInfoWithDefaultRegexes(t *testing.T) {
 			name: "Path with lab suffix",
 			path: "/workspaces/default/myApp/lab",
 			expectInfo: &WorkspaceInfo{
-				Namespace: "default",
-				Name:      "myApp",
+				Namespace: TestDefaultNamespace,
+				Name:      testMyApp,
 			},
 			expectErr: false,
 		},
@@ -81,8 +118,8 @@ func TestExtractWorkspaceInfoWithDefaultRegexes(t *testing.T) {
 			name: "Path with notebooks suffix",
 			path: "/workspaces/default/myApp/notebooks/mynb.ipynb",
 			expectInfo: &WorkspaceInfo{
-				Namespace: "default",
-				Name:      "myApp",
+				Namespace: TestDefaultNamespace,
+				Name:      testMyApp,
 			},
 			expectErr: false,
 		},
@@ -166,8 +203,8 @@ func TestExtractWorkspaceInfoWithCustomRegexes(t *testing.T) {
 			name: "Standard custom path format",
 			path: "/services/tenant1/workspaces/workspace1",
 			expectInfo: &WorkspaceInfo{
-				Namespace: "tenant1",
-				Name:      "workspace1",
+				Namespace: testTenant1,
+				Name:      testWorkspace1,
 			},
 			expectErr: false,
 		},
@@ -175,8 +212,8 @@ func TestExtractWorkspaceInfoWithCustomRegexes(t *testing.T) {
 			name: "Path with lab suffix",
 			path: "/services/tenant1/workspaces/workspace1/lab",
 			expectInfo: &WorkspaceInfo{
-				Namespace: "tenant1",
-				Name:      "workspace1",
+				Namespace: testTenant1,
+				Name:      testWorkspace1,
 			},
 			expectErr: false,
 		},
@@ -184,8 +221,8 @@ func TestExtractWorkspaceInfoWithCustomRegexes(t *testing.T) {
 			name: "Path with notebooks suffix",
 			path: "/services/tenant1/workspaces/workspace1/notebooks/file.ipynb",
 			expectInfo: &WorkspaceInfo{
-				Namespace: "tenant1",
-				Name:      "workspace1",
+				Namespace: testTenant1,
+				Name:      testWorkspace1,
 			},
 			expectErr: false,
 		},
@@ -238,10 +275,10 @@ func TestCreateConnectionAccessReview_ReturnsErrorWhenK8SClientNotSet(t *testing
 	// Try to check permission
 	result, err := server.createConnectionAccessReview(
 		context.TODO(), // Use context.TODO instead of nil
-		"test-user",
-		[]string{"group1", "group2"},
+		testUserValue,
+		[]string{testGroup1, testGroup2},
 		TestDefaultNamespace,
-		"workspace1",
+		testWorkspace1,
 		"test-uid1",
 		nil,
 	)
@@ -255,7 +292,7 @@ func TestCreateConnectionAccessReview_ReturnsErrorWhenK8SClientNotSet(t *testing
 func TestCreateConnectionAccessReview_CallsCreateAccessReview(t *testing.T) {
 	// Define test username and groups
 	username := testUserValue
-	groups := []string{"group1", "group2"}
+	groups := []string{testGroup1, testGroup2}
 	uid := "test-uid1"
 	namespace := "testNamespace"
 	workspaceName := "testWorkspaceName"
@@ -340,7 +377,7 @@ func TestCreateConnectionAccessReview_ReturnsError_WhenApiCallFails(t *testing.T
 
 	// Define test values
 	username := testUserValue
-	groups := []string{"group1", "group2"}
+	groups := []string{testGroup1, testGroup2}
 	namespace := "testNamespace2"
 	workspaceName := "testWorkspaceName2"
 
@@ -362,7 +399,7 @@ func TestCreateConnectionAccessReview_ReturnsError_WhenApiCallFails(t *testing.T
 func TestVerifyWorkspaceAccess_ReturnsResultInfoAndNoError_WhenAccessReviewSucceeds(t *testing.T) {
 	// Define test values
 	username := testUserValue
-	groups := []string{"group1", "group2"}
+	groups := []string{testGroup1, testGroup2}
 	uid := "test-uid4"
 	namespace := TestDefaultNamespace
 	workspaceName := TestWorkspaceName
@@ -461,7 +498,7 @@ func TestVerifyWorkspaceAccess_ReturnsNilAndNoError_WhenPathInterpolationFails(t
 
 	// Define test values
 	username := testUserValue
-	groups := []string{"group1", "group2"}
+	groups := []string{testGroup1, testGroup2}
 	uid := "test-uid5"
 	// This path won't match the regex patterns configured above
 	path := "/workspaces/default/myworkspace/lab"
@@ -510,7 +547,7 @@ func TestVerifyWorkspaceAccess_ReturnsNoResponseAndNoError_WhenAccessReviewFails
 
 	// Define test values
 	username := testUserValue
-	groups := []string{"group1", "group2"}
+	groups := []string{testGroup1, testGroup2}
 	uid := "test-uid6"
 	// Use the predefined test workspace path
 	path := testWorkspacePath
@@ -536,8 +573,8 @@ func TestVerifyWorkspaceAccess_ReturnsNoResponseAndNoError_WhenAccessReviewFails
 func TestExtractWorkspaceInfo_SubdomainMode(t *testing.T) {
 	config := &Config{
 		RoutingMode:                      RoutingModeSubdomain,
-		WorkspaceNameSubdomainRegex:      `^([^-]+)-.*$`,
-		WorkspaceNamespaceSubdomainRegex: `^[^-]+-(.*)$`,
+		WorkspaceNameSubdomainRegex:      testWorkspaceNameSubdomainRegex,
+		WorkspaceNamespaceSubdomainRegex: DefaultWorkspaceNameSubdomainRegex,
 	}
 	server := &Server{config: config}
 
@@ -561,13 +598,13 @@ func TestExtractWorkspaceInfo_SubdomainMode(t *testing.T) {
 func TestExtractWorkspaceInfo_PathMode(t *testing.T) {
 	config := &Config{
 		RoutingMode:                 RoutingModePath,
-		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
-		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
+		WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+		WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
 	}
 	server := &Server{config: config}
 
 	req := httptest.NewRequest("GET", "/workspaces/default/myworkspace/bearer-auth", nil)
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	req.Header.Set("X-Forwarded-URI", "/workspaces/default/myworkspace/bearer-auth")
 
 	workspaceInfo, err := server.ExtractWorkspaceInfo(req)
@@ -585,7 +622,7 @@ func TestExtractWorkspaceInfo_PathMode(t *testing.T) {
 
 func TestExtractWorkspaceInfo_UnsupportedMode(t *testing.T) {
 	config := &Config{
-		RoutingMode: "invalid",
+		RoutingMode: testInvalidValue,
 	}
 	server := &Server{config: config}
 
@@ -605,7 +642,7 @@ func TestExtractWorkspaceInfoFromPath_NamespaceMatchesButNameFails(t *testing.T)
 	server := &Server{
 		config: &Config{
 			RoutingMode:                 RoutingModePath,
-			WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
+			WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
 			WorkspaceNamePathRegex:      `^/services/[^/]+/([^/]+)`, // won't match /workspaces paths
 		},
 		logger: slog.Default(),
@@ -623,7 +660,7 @@ func TestExtractWorkspaceInfoFromSubdomain_NameMatchesButNamespaceFails(t *testi
 	server := &Server{
 		config: &Config{
 			RoutingMode:                      RoutingModeSubdomain,
-			WorkspaceNameSubdomainRegex:      `^([^-]+)-.*$`,
+			WorkspaceNameSubdomainRegex:      testWorkspaceNameSubdomainRegex,
 			WorkspaceNamespaceSubdomainRegex: `^NOMATCH$`, // won't match anything
 		},
 	}
@@ -643,8 +680,8 @@ func TestExtractWorkspaceInfoFromSubdomain_MissingForwardedHost(t *testing.T) {
 	server := &Server{
 		config: &Config{
 			RoutingMode:                      RoutingModeSubdomain,
-			WorkspaceNameSubdomainRegex:      `^([^-]+)-.*$`,
-			WorkspaceNamespaceSubdomainRegex: `^[^-]+-(.*)$`,
+			WorkspaceNameSubdomainRegex:      testWorkspaceNameSubdomainRegex,
+			WorkspaceNamespaceSubdomainRegex: DefaultWorkspaceNameSubdomainRegex,
 		},
 	}
 
@@ -664,7 +701,7 @@ func TestCreateBearerTokenReview_ReturnsErrorWhenK8SClientNotSet(t *testing.T) {
 		restClient: nil,
 	}
 
-	result, err := server.createBearerTokenReview(context.TODO(), "token", "default")
+	result, err := server.createBearerTokenReview(context.TODO(), "token", TestDefaultNamespace)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -682,7 +719,7 @@ func TestVerifyWorkspaceAccessFromJwt_ExtractWorkspaceInfoError(t *testing.T) {
 	}
 
 	claims := &jwt.Claims{
-		User:   "user",
+		User:   testUserString,
 		Groups: []string{"g1"},
 	}
 
@@ -697,8 +734,8 @@ func TestVerifyWorkspaceAccessFromJwt_ExtractWorkspaceInfoError(t *testing.T) {
 func TestExtractWorkspaceInfo_SubdomainModeInvalidHost(t *testing.T) {
 	config := &Config{
 		RoutingMode:                      RoutingModeSubdomain,
-		WorkspaceNameSubdomainRegex:      `^([^-]+)-.*$`,
-		WorkspaceNamespaceSubdomainRegex: `^[^-]+-(.*)$`,
+		WorkspaceNameSubdomainRegex:      testWorkspaceNameSubdomainRegex,
+		WorkspaceNamespaceSubdomainRegex: DefaultWorkspaceNameSubdomainRegex,
 	}
 	server := &Server{config: config}
 

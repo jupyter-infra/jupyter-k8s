@@ -77,7 +77,7 @@ func TestHandleAuth_RequiresHeaders(t *testing.T) {
 			setupRequest: func(req *http.Request) {
 				req.Header.Set("X-Auth-Request-Groups", "org1:group1,org1:group2")
 				req.Header.Set("X-Forwarded-Uri", "/workspaces/ns1/app1/lab")
-				req.Header.Set("X-Forwarded-Host", "example.com")
+				req.Header.Set("X-Forwarded-Host", testDomainValue)
 				// No Authorization header
 			},
 			setupServer: func(server *Server) {
@@ -90,14 +90,14 @@ func TestHandleAuth_RequiresHeaders(t *testing.T) {
 		{
 			name: "Missing URI header",
 			setupRequest: func(req *http.Request) {
-				req.Header.Set("X-Forwarded-Host", "example.com")
+				req.Header.Set("X-Forwarded-Host", testDomainValue)
 				req.Header.Set("Authorization", "Bearer mock-token")
 			},
 			setupServer: func(server *Server) {
 				// The claims.Username must match X-Auth-Request-User
 				setupOIDCVerifier(server, &OIDCClaims{
-					Subject:  "user-uid",
-					Username: "user-uid",
+					Subject:  testUserUID,
+					Username: testUserUID,
 					Groups:   []string{"org2:group1", "org2:group2"},
 				})
 			},
@@ -107,7 +107,7 @@ func TestHandleAuth_RequiresHeaders(t *testing.T) {
 		{
 			name: "Missing host header",
 			setupRequest: func(req *http.Request) {
-				req.Header.Set("X-Auth-Request-User", "user-uid")
+				req.Header.Set("X-Auth-Request-User", testUserUID)
 				req.Header.Set("X-Auth-Request-Groups", "org3:group1,org3:group2")
 				req.Header.Set("X-Forwarded-Uri", "/workspaces/ns1/app1/lab")
 				req.Header.Set("Authorization", "Bearer mock-token")
@@ -115,8 +115,8 @@ func TestHandleAuth_RequiresHeaders(t *testing.T) {
 			setupServer: func(server *Server) {
 				// The claims.Username must match X-Auth-Request-User
 				setupOIDCVerifier(server, &OIDCClaims{
-					Subject:  "user-uid",
-					Username: "user-uid",
+					Subject:  testUserUID,
+					Username: testUserUID,
 					Groups:   []string{"org3:group1", "org3:group2"},
 				})
 			},
@@ -165,9 +165,9 @@ func setupOIDCVerifier(server *Server, claims *OIDCClaims) {
 	// Default claims if none provided
 	if claims == nil {
 		claims = &OIDCClaims{
-			Subject:  "user-uid",   // Match X-Auth-Request-User
+			Subject:  testUserUID,  // Match X-Auth-Request-User
 			Username: "valid-user", // Match X-Auth-Request-Preferred-Username
-			Groups:   []string{"org1:team1", "org1:team2"},
+			Groups:   []string{testOrg1Team1, testOrg1Team2},
 		}
 	}
 
@@ -193,9 +193,9 @@ func TestHandleAuth_HappyPath(t *testing.T) {
 		VerifyTokenFunc: func(ctx context.Context, tokenString string, logger *slog.Logger) (*OIDCClaims, bool, error) {
 			// Return claims WITHOUT prefixes - the code will add prefixes when comparing with headers
 			return &OIDCClaims{
-				Subject:  "user-uid",                           // Matches X-Auth-Request-User directly (no prefix for UIDs)
-				Username: "valid-user",                         // Without prefix - code will add prefix when comparing with headers
-				Groups:   []string{"org1:team1", "org1:team2"}, // Without prefix - code will add prefix
+				Subject:  testUserUID,                            // Matches X-Auth-Request-User directly (no prefix for UIDs)
+				Username: "valid-user",                           // Without prefix - code will add prefix when comparing with headers
+				Groups:   []string{testOrg1Team1, testOrg1Team2}, // Without prefix - code will add prefix
 			}, false, nil
 		},
 	}
@@ -203,13 +203,13 @@ func TestHandleAuth_HappyPath(t *testing.T) {
 	// Create a request - Note: X-Auth-Request-User must match claims UID
 	req := httptest.NewRequest(http.MethodGet, "/auth?some-key=some-value", nil)
 	// X-Auth-Request-User matches Subject exactly (no prefix for UID)
-	req.Header.Set("X-Auth-Request-User", "user-uid")
+	req.Header.Set("X-Auth-Request-User", testUserUID)
 	// Don't include prefix in the header - the server will add the prefix when comparing with claims
 	req.Header.Set("X-Auth-Request-Preferred-Username", "valid-user") // Without prefix
 	req.Header.Set("X-Auth-Request-Groups", "org1:team1,org1:team2")  // Without prefix
 	// Use testAppPath directly to match exactly what's expected in the test
 	req.Header.Set("X-Forwarded-Uri", testAppPath)
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	req.Header.Set("X-Forwarded-Proto", "https")
 	req.Header.Set("Authorization", "Bearer mock-token") // Add mock bearer token
 	w := httptest.NewRecorder()
@@ -223,8 +223,8 @@ func TestHandleAuth_HappyPath(t *testing.T) {
 	// Include prefix as it's applied by GetOidcUsername and GetOidcGroups
 	// The prefix is in the server config and is DefaultOidcUsernamePrefix = "github:"
 	expectUsername := "github:valid-user"                              // With prefix
-	expectGroups := []string{"github:org1:team1", "github:org1:team2"} // With prefix
-	expectedUID := "user-uid"                                          // No prefix
+	expectGroups := []string{testGithubOrg1Team1, testGithubOrg1Team2} // With prefix
+	expectedUID := testUserUID                                         // No prefix
 
 	// Create JWT handler mock
 	jwtHandler := &MockJWTHandler{
@@ -250,7 +250,7 @@ func TestHandleAuth_HappyPath(t *testing.T) {
 			if path != testAppPath {
 				t.Errorf("Expected path '%s', got '%s'", testAppPath, path)
 			}
-			if domain != "example.com" {
+			if domain != testDomainValue {
 				t.Errorf("Expected domain 'example.com', got '%s'", domain)
 			}
 			return generatedToken, nil
@@ -272,7 +272,7 @@ func TestHandleAuth_HappyPath(t *testing.T) {
 	}
 
 	// Configure server
-	server.config.PathRegexPattern = `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`
+	server.config.PathRegexPattern = DefaultPathRegexPattern
 	server.config.WorkspaceNamespacePathRegex = DefaultWorkspaceNamespacePathRegex
 	server.config.WorkspaceNamePathRegex = DefaultWorkspaceNamePathRegex
 	server.jwtManager = jwtHandler
@@ -343,7 +343,7 @@ func TestHandleAuth_Returns5xxWhenK8sClientNotSet(t *testing.T) {
 
 	// Setup OIDC verifier with claims matching the request headers
 	setupOIDCVerifier(server, &OIDCClaims{
-		Subject:  "user-uid",
+		Subject:  testUserUID,
 		Username: "user1",
 		Groups:   []string{"org1:group1", "org1:group2"},
 	})
@@ -354,11 +354,11 @@ func TestHandleAuth_Returns5xxWhenK8sClientNotSet(t *testing.T) {
 	// Create a request with all necessary headers
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	// Match the UID exactly (Subject field in claims)
-	req.Header.Set("X-Auth-Request-User", "user-uid")
+	req.Header.Set("X-Auth-Request-User", testUserUID)
 	req.Header.Set("X-Auth-Request-Preferred-Username", "user1")
 	req.Header.Set("X-Auth-Request-Groups", "org1:group1,org1:group2")
 	req.Header.Set("X-Forwarded-Uri", testAppPath)
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	req.Header.Set("Authorization", "Bearer mock-token")
 	w := httptest.NewRecorder()
 
@@ -392,11 +392,11 @@ func TestHandleAuth_Returns403_WhenTokenIsInvalid(t *testing.T) {
 
 	// Create a request with all necessary headers
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
-	req.Header.Set("X-Auth-Request-User", "user-uid")
-	req.Header.Set("X-Auth-Request-Preferred-Username", "user-uid")
+	req.Header.Set("X-Auth-Request-User", testUserUID)
+	req.Header.Set("X-Auth-Request-Preferred-Username", testUserUID)
 	req.Header.Set("X-Auth-Request-Groups", "group1,group2")
-	req.Header.Set("X-Forwarded-Uri", "/workspaces/ns1/app1")
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Uri", testPathValue)
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	req.Header.Set("Authorization", "Bearer invalid-token")
 	w := httptest.NewRecorder()
 
@@ -432,11 +432,11 @@ func TestHandleAuth_Returns5xx_WhenVerifyTokenFails(t *testing.T) {
 
 	// Create a request with all necessary headers
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
-	req.Header.Set("X-Auth-Request-User", "user-uid")
-	req.Header.Set("X-Auth-Request-Preferred-Username", "user-uid")
+	req.Header.Set("X-Auth-Request-User", testUserUID)
+	req.Header.Set("X-Auth-Request-Preferred-Username", testUserUID)
 	req.Header.Set("X-Auth-Request-Groups", "group1,group2")
-	req.Header.Set("X-Forwarded-Uri", "/workspaces/ns1/app1")
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Uri", testPathValue)
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	req.Header.Set("Authorization", "Bearer some-token")
 	w := httptest.NewRecorder()
 
@@ -478,11 +478,11 @@ func TestHandleAuth_Returns4xx_WhenAnyAuthHeaderAndVerifyDoesNotMatch(t *testing
 
 	// Create a request with headers that won't match the OIDC claims
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
-	req.Header.Set("X-Auth-Request-User", "user-uid")               // Doesn't match claims
-	req.Header.Set("X-Auth-Request-Preferred-Username", "user-uid") // Doesn't match claims
+	req.Header.Set("X-Auth-Request-User", testUserUID)               // Doesn't match claims
+	req.Header.Set("X-Auth-Request-Preferred-Username", testUserUID) // Doesn't match claims
 	req.Header.Set("X-Auth-Request-Groups", "group1,group2")
-	req.Header.Set("X-Forwarded-Uri", "/workspaces/ns1/app1")
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Uri", testPathValue)
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	req.Header.Set("Authorization", "Bearer valid-token-wrong-user")
 	w := httptest.NewRecorder()
 
@@ -511,7 +511,7 @@ func TestHandleAuth_Returns5xx_WhenVerifyAccessWorkspaceReturnsError(t *testing.
 
 	// Setup OIDC verifier with claims matching the request headers
 	setupOIDCVerifier(server, &OIDCClaims{
-		Subject:  "user-uid",
+		Subject:  testUserUID,
 		Username: "user2",
 		Groups:   []string{"org5:group1", "org5:group2"},
 	})
@@ -532,11 +532,11 @@ func TestHandleAuth_Returns5xx_WhenVerifyAccessWorkspaceReturnsError(t *testing.
 
 	// Create a request with all necessary headers
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
-	req.Header.Set("X-Auth-Request-User", "user-uid") // Must match Subject in OIDC claims
+	req.Header.Set("X-Auth-Request-User", testUserUID) // Must match Subject in OIDC claims
 	req.Header.Set("X-Auth-Request-Preferred-Username", "user2")
 	req.Header.Set("X-Auth-Request-Groups", "org5:group1,org5:group2")
 	req.Header.Set("X-Forwarded-Uri", testAppPath)
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	req.Header.Set("Authorization", "Bearer mock-token")
 	w := httptest.NewRecorder()
 
@@ -565,7 +565,7 @@ func TestHandleAuth_Returns403_WhenVerifyAccessWorkspaceReturnsDisallowed(t *tes
 
 	// Setup OIDC verifier with claims matching the request headers
 	setupOIDCVerifier(server, &OIDCClaims{
-		Subject:  "user-uid",
+		Subject:  testUserUID,
 		Username: "user1",
 		Groups:   []string{"org6:group1", "org6:group2"},
 	})
@@ -580,7 +580,7 @@ func TestHandleAuth_Returns403_WhenVerifyAccessWorkspaceReturnsDisallowed(t *tes
 		"app1",
 		"user1",
 		[]string{"org6:group1", "org6:group2"},
-		"user-uid",
+		testUserUID,
 		false, // allowed
 		false, // not found
 		reason,
@@ -598,11 +598,11 @@ func TestHandleAuth_Returns403_WhenVerifyAccessWorkspaceReturnsDisallowed(t *tes
 
 	// Create a request with all necessary headers
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
-	req.Header.Set("X-Auth-Request-User", "user-uid") // Must match Subject in OIDC claims
+	req.Header.Set("X-Auth-Request-User", testUserUID) // Must match Subject in OIDC claims
 	req.Header.Set("X-Auth-Request-Preferred-Username", "user1")
 	req.Header.Set("X-Auth-Request-Groups", "org6:group1,org6:group2")
 	req.Header.Set("X-Forwarded-Uri", testAppPath)
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	req.Header.Set("Authorization", "Bearer mock-token")
 	w := httptest.NewRecorder()
 

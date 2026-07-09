@@ -16,34 +16,34 @@ import (
 var _ = Describe("AccessStrategyValidator", func() {
 	Context("Namespace scope validation", func() {
 		It("should reject accessStrategy targeting another team's namespace", func() {
-			validator := NewAccessStrategyValidator("jupyter-k8s-shared")
+			validator := NewAccessStrategyValidator(testSharedNamespace)
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "some-strategy",
-						Namespace: "team-b",
+						Name:      testSomeStrategy,
+						Namespace: testNamespaceTeamB,
 					},
 				},
 			}
 
 			err := validator.ValidateCreateWorkspace(workspace)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("team-b"))
-			Expect(err.Error()).To(ContainSubstring("team-a"))
-			Expect(err.Error()).To(ContainSubstring("jupyter-k8s-shared"))
+			Expect(err.Error()).To(ContainSubstring(testNamespaceTeamB))
+			Expect(err.Error()).To(ContainSubstring(testNamespaceTeamA))
+			Expect(err.Error()).To(ContainSubstring(testSharedNamespace))
 		})
 
 		It("should allow accessStrategy targeting the workspace's own namespace", func() {
-			validator := NewAccessStrategyValidator("jupyter-k8s-shared")
+			validator := NewAccessStrategyValidator(testSharedNamespace)
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
 						Name:      "local-strategy",
-						Namespace: "team-a",
+						Namespace: testNamespaceTeamA,
 					},
 				},
 			}
@@ -53,14 +53,14 @@ var _ = Describe("AccessStrategyValidator", func() {
 		})
 
 		It("should allow accessStrategy targeting the shared namespace", func() {
-			validator := NewAccessStrategyValidator("jupyter-k8s-shared")
+			validator := NewAccessStrategyValidator(testSharedNamespace)
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
 						Name:      "shared-strategy",
-						Namespace: "jupyter-k8s-shared",
+						Namespace: testSharedNamespace,
 					},
 				},
 			}
@@ -70,13 +70,13 @@ var _ = Describe("AccessStrategyValidator", func() {
 		})
 
 		It("should allow accessStrategy with empty namespace", func() {
-			validator := NewAccessStrategyValidator("jupyter-k8s-shared")
+			validator := NewAccessStrategyValidator(testSharedNamespace)
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name: "some-strategy",
+						Name: testSomeStrategy,
 					},
 				},
 			}
@@ -89,27 +89,27 @@ var _ = Describe("AccessStrategyValidator", func() {
 			validator := NewAccessStrategyValidator("")
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "some-strategy",
-						Namespace: "jupyter-k8s-shared",
+						Name:      testSomeStrategy,
+						Namespace: testSharedNamespace,
 					},
 				},
 			}
 
 			err := validator.ValidateCreateWorkspace(workspace)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("jupyter-k8s-shared"))
-			Expect(err.Error()).To(ContainSubstring("team-a"))
+			Expect(err.Error()).To(ContainSubstring(testSharedNamespace))
+			Expect(err.Error()).To(ContainSubstring(testNamespaceTeamA))
 			Expect(err.Error()).NotTo(ContainSubstring("shared namespace"))
 		})
 
 		It("should skip validation when workspace has no accessStrategy", func() {
-			validator := NewAccessStrategyValidator("jupyter-k8s-shared")
+			validator := NewAccessStrategyValidator(testSharedNamespace)
 
 			workspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec:       workspacev1alpha1.WorkspaceSpec{},
 			}
 
@@ -120,41 +120,41 @@ var _ = Describe("AccessStrategyValidator", func() {
 
 	Context("Update validation", func() {
 		It("should validate when accessStrategyRef is added", func() {
-			validator := NewAccessStrategyValidator("jupyter-k8s-shared")
+			validator := NewAccessStrategyValidator(testSharedNamespace)
 
 			oldWorkspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec:       workspacev1alpha1.WorkspaceSpec{},
 			}
 			newWorkspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "some-strategy",
-						Namespace: "team-b",
+						Name:      testSomeStrategy,
+						Namespace: testNamespaceTeamB,
 					},
 				},
 			}
 
 			err := validator.ValidateUpdateWorkspace(oldWorkspace, newWorkspace)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("team-b"))
+			Expect(err.Error()).To(ContainSubstring(testNamespaceTeamB))
 		})
 
 		It("should skip validation when accessStrategyRef is removed", func() {
-			validator := NewAccessStrategyValidator("jupyter-k8s-shared")
+			validator := NewAccessStrategyValidator(testSharedNamespace)
 
 			oldWorkspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "some-strategy",
-						Namespace: "team-b",
+						Name:      testSomeStrategy,
+						Namespace: testNamespaceTeamB,
 					},
 				},
 			}
 			newWorkspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec:       workspacev1alpha1.WorkspaceSpec{},
 			}
 
@@ -163,30 +163,30 @@ var _ = Describe("AccessStrategyValidator", func() {
 		})
 
 		It("should validate when accessStrategyRef namespace changes", func() {
-			validator := NewAccessStrategyValidator("jupyter-k8s-shared")
+			validator := NewAccessStrategyValidator(testSharedNamespace)
 
 			oldWorkspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "some-strategy",
-						Namespace: "team-a",
+						Name:      testSomeStrategy,
+						Namespace: testNamespaceTeamA,
 					},
 				},
 			}
 			newWorkspace := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "some-strategy",
-						Namespace: "team-b",
+						Name:      testSomeStrategy,
+						Namespace: testNamespaceTeamB,
 					},
 				},
 			}
 
 			err := validator.ValidateUpdateWorkspace(oldWorkspace, newWorkspace)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("team-b"))
+			Expect(err.Error()).To(ContainSubstring(testNamespaceTeamB))
 		})
 	})
 
@@ -194,10 +194,10 @@ var _ = Describe("AccessStrategyValidator", func() {
 		// All template cases use namespace "team-a"; only the access strategy namespace varies.
 		templateWithAS := func(asNamespace string) *workspacev1alpha1.WorkspaceTemplate {
 			return &workspacev1alpha1.WorkspaceTemplate{
-				ObjectMeta: metav1.ObjectMeta{Name: "tmpl", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: testTemplateNameTmpl, Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DefaultAccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name:      "some-strategy",
+						Name:      testSomeStrategy,
 						Namespace: asNamespace,
 					},
 				},
@@ -205,32 +205,32 @@ var _ = Describe("AccessStrategyValidator", func() {
 		}
 
 		It("should reject defaultAccessStrategy targeting another team's namespace", func() {
-			validator := NewAccessStrategyValidator("jupyter-k8s-shared")
+			validator := NewAccessStrategyValidator(testSharedNamespace)
 
-			err := validator.ValidateCreateTemplate(templateWithAS("team-b"))
+			err := validator.ValidateCreateTemplate(templateWithAS(testNamespaceTeamB))
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("team-b"))
-			Expect(err.Error()).To(ContainSubstring("team-a"))
-			Expect(err.Error()).To(ContainSubstring("jupyter-k8s-shared"))
+			Expect(err.Error()).To(ContainSubstring(testNamespaceTeamB))
+			Expect(err.Error()).To(ContainSubstring(testNamespaceTeamA))
+			Expect(err.Error()).To(ContainSubstring(testSharedNamespace))
 			Expect(err.Error()).To(ContainSubstring("template namespace"))
 		})
 
 		It("should allow defaultAccessStrategy targeting the template's own namespace", func() {
-			validator := NewAccessStrategyValidator("jupyter-k8s-shared")
+			validator := NewAccessStrategyValidator(testSharedNamespace)
 
-			err := validator.ValidateCreateTemplate(templateWithAS("team-a"))
+			err := validator.ValidateCreateTemplate(templateWithAS(testNamespaceTeamA))
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should allow defaultAccessStrategy targeting the shared namespace", func() {
-			validator := NewAccessStrategyValidator("jupyter-k8s-shared")
+			validator := NewAccessStrategyValidator(testSharedNamespace)
 
-			err := validator.ValidateCreateTemplate(templateWithAS("jupyter-k8s-shared"))
+			err := validator.ValidateCreateTemplate(templateWithAS(testSharedNamespace))
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should allow defaultAccessStrategy with empty namespace", func() {
-			validator := NewAccessStrategyValidator("jupyter-k8s-shared")
+			validator := NewAccessStrategyValidator(testSharedNamespace)
 
 			err := validator.ValidateCreateTemplate(templateWithAS(""))
 			Expect(err).NotTo(HaveOccurred())
@@ -239,40 +239,40 @@ var _ = Describe("AccessStrategyValidator", func() {
 		It("should reject cross-namespace when no shared namespace is configured", func() {
 			validator := NewAccessStrategyValidator("")
 
-			err := validator.ValidateCreateTemplate(templateWithAS("jupyter-k8s-shared"))
+			err := validator.ValidateCreateTemplate(templateWithAS(testSharedNamespace))
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("jupyter-k8s-shared"))
-			Expect(err.Error()).To(ContainSubstring("team-a"))
+			Expect(err.Error()).To(ContainSubstring(testSharedNamespace))
+			Expect(err.Error()).To(ContainSubstring(testNamespaceTeamA))
 			Expect(err.Error()).NotTo(ContainSubstring("shared namespace"))
 		})
 
 		It("should skip validation when template has no defaultAccessStrategy", func() {
-			validator := NewAccessStrategyValidator("jupyter-k8s-shared")
+			validator := NewAccessStrategyValidator(testSharedNamespace)
 
 			template := &workspacev1alpha1.WorkspaceTemplate{
-				ObjectMeta: metav1.ObjectMeta{Name: "tmpl", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: testTemplateNameTmpl, Namespace: testNamespaceTeamA},
 			}
 			err := validator.ValidateCreateTemplate(template)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should validate when defaultAccessStrategy namespace changes to a foreign namespace", func() {
-			validator := NewAccessStrategyValidator("jupyter-k8s-shared")
+			validator := NewAccessStrategyValidator(testSharedNamespace)
 
 			err := validator.ValidateUpdateTemplate(
-				templateWithAS("team-a"),
-				templateWithAS("team-b"))
+				templateWithAS(testNamespaceTeamA),
+				templateWithAS(testNamespaceTeamB))
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("team-b"))
+			Expect(err.Error()).To(ContainSubstring(testNamespaceTeamB))
 		})
 
 		It("should skip validation when defaultAccessStrategy is removed", func() {
-			validator := NewAccessStrategyValidator("jupyter-k8s-shared")
+			validator := NewAccessStrategyValidator(testSharedNamespace)
 
 			newTemplate := &workspacev1alpha1.WorkspaceTemplate{
-				ObjectMeta: metav1.ObjectMeta{Name: "tmpl", Namespace: "team-a"},
+				ObjectMeta: metav1.ObjectMeta{Name: testTemplateNameTmpl, Namespace: testNamespaceTeamA},
 			}
-			err := validator.ValidateUpdateTemplate(templateWithAS("team-b"), newTemplate)
+			err := validator.ValidateUpdateTemplate(templateWithAS(testNamespaceTeamB), newTemplate)
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})

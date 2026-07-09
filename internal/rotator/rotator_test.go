@@ -22,6 +22,11 @@ import (
 const (
 	testSecretName = "test-secret"
 	testNamespace  = "test-namespace"
+
+	signingKeyName1000    = "jwt-signing-key-1000"
+	signingKeyName2000    = "jwt-signing-key-2000"
+	signingKeyNameInvalid = "jwt-signing-key-invalid"
+	otherKeyName          = "other-key"
 )
 
 // getTestClient creates a fake controller-runtime client for testing
@@ -102,7 +107,7 @@ func TestRotateSecret_AddAndPruneKeys(t *testing.T) {
 			Namespace: testNamespace,
 		},
 		Data: map[string][]byte{
-			"jwt-signing-key-1000": []byte("key1"),
+			signingKeyName1000: []byte("key1"),
 		},
 	}
 	k8sClient := getTestClient(secret)
@@ -136,7 +141,7 @@ func TestRotateSecret_AddAndPruneKeys(t *testing.T) {
 
 	// Verify the oldest key (timestamp 1000) was pruned
 	for _, keyName := range keys {
-		if keyName == "jwt-signing-key-1000" {
+		if keyName == signingKeyName1000 {
 			t.Error("Expected oldest key to be pruned but it still exists")
 		}
 	}
@@ -181,11 +186,11 @@ func TestRotateSecret_MalformedKeysSkipped(t *testing.T) {
 			Namespace: testNamespace,
 		},
 		Data: map[string][]byte{
-			"jwt-signing-key-1000":    []byte("validkey1"),
-			"jwt-signing-key-2000":    []byte("validkey2"),
-			"jwt-signing-key-invalid": []byte("malformed"),
-			"jwt-signing-key-":        []byte("nots"),
-			"other-key":               []byte("notakey"),
+			signingKeyName1000:    []byte("validkey1"),
+			signingKeyName2000:    []byte("validkey2"),
+			signingKeyNameInvalid: []byte("malformed"),
+			"jwt-signing-key-":    []byte("nots"),
+			otherKeyName:          []byte("notakey"),
 		},
 	}
 	k8sClient := getTestClient(secret)
@@ -229,8 +234,8 @@ func TestValidateSecret(t *testing.T) {
 		{
 			name: "valid secret with keys",
 			secretData: map[string][]byte{
-				"jwt-signing-key-1000": []byte("key1"),
-				"jwt-signing-key-2000": []byte("key2"),
+				signingKeyName1000: []byte("key1"),
+				signingKeyName2000: []byte("key2"),
 			},
 			expectError: false,
 		},
@@ -243,7 +248,7 @@ func TestValidateSecret(t *testing.T) {
 		{
 			name: "secret with no valid keys",
 			secretData: map[string][]byte{
-				"other-key": []byte("notajwtkey"),
+				otherKeyName: []byte("notajwtkey"),
 			},
 			expectError:   true,
 			errorContains: "secret has no valid JWT signing keys",
@@ -251,7 +256,7 @@ func TestValidateSecret(t *testing.T) {
 		{
 			name: "secret with invalid key format",
 			secretData: map[string][]byte{
-				"jwt-signing-key-invalid": []byte("badkey"),
+				signingKeyNameInvalid: []byte("badkey"),
 			},
 			expectError:   true,
 			errorContains: "invalid key",
@@ -301,7 +306,7 @@ func TestGetLatestKeyID(t *testing.T) {
 		{
 			name: "single key",
 			secretData: map[string][]byte{
-				"jwt-signing-key-1000": []byte("key1"),
+				signingKeyName1000: []byte("key1"),
 			},
 			expectedKid: "1000",
 			expectError: false,
@@ -309,8 +314,8 @@ func TestGetLatestKeyID(t *testing.T) {
 		{
 			name: "multiple keys - latest is last",
 			secretData: map[string][]byte{
-				"jwt-signing-key-1000": []byte("key1"),
-				"jwt-signing-key-2000": []byte("key2"),
+				signingKeyName1000:     []byte("key1"),
+				signingKeyName2000:     []byte("key2"),
 				"jwt-signing-key-3000": []byte("key3"),
 			},
 			expectedKid: "3000",
@@ -320,8 +325,8 @@ func TestGetLatestKeyID(t *testing.T) {
 			name: "multiple keys - latest is first",
 			secretData: map[string][]byte{
 				"jwt-signing-key-5000": []byte("key5"),
-				"jwt-signing-key-2000": []byte("key2"),
-				"jwt-signing-key-1000": []byte("key1"),
+				signingKeyName2000:     []byte("key2"),
+				signingKeyName1000:     []byte("key1"),
 			},
 			expectedKid: "5000",
 			expectError: false,
@@ -335,7 +340,7 @@ func TestGetLatestKeyID(t *testing.T) {
 		{
 			name: "no valid keys",
 			secretData: map[string][]byte{
-				"other-key": []byte("notakey"),
+				otherKeyName: []byte("notakey"),
 			},
 			expectError:   true,
 			errorContains: "no valid JWT signing keys found",
@@ -343,9 +348,9 @@ func TestGetLatestKeyID(t *testing.T) {
 		{
 			name: "mixed valid and invalid keys",
 			secretData: map[string][]byte{
-				"jwt-signing-key-1000":    []byte("key1"),
-				"jwt-signing-key-invalid": []byte("badkey"),
-				"jwt-signing-key-3000":    []byte("key3"),
+				signingKeyName1000:     []byte("key1"),
+				signingKeyNameInvalid:  []byte("badkey"),
+				"jwt-signing-key-3000": []byte("key3"),
 			},
 			expectedKid: "3000",
 			expectError: false,

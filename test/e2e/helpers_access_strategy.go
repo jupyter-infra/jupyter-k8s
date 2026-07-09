@@ -199,7 +199,7 @@ func verifyCreateTemplateRejectedByWebhook(filename, group, templateName, expect
 		fmt.Sprintf("rejection should contain %q", expectedSubstring))
 
 	ginkgo.By(fmt.Sprintf("verifying template %s was not created", templateName))
-	cmd = exec.Command("kubectl", "get", "workspacetemplate", templateName, "-n", SharedNamespace, "--ignore-not-found")
+	cmd = exec.Command("kubectl", verbGet, "workspacetemplate", templateName, "-n", SharedNamespace, "--ignore-not-found")
 	getOut, getErr := utils.Run(cmd)
 	gomega.Expect(getErr).NotTo(gomega.HaveOccurred())
 	gomega.Expect(getOut).To(gomega.BeEmpty(), "template should not exist after webhook rejection")

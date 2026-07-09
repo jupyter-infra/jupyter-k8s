@@ -26,13 +26,13 @@ var _ = Describe("Reserved Prefix Validation", Ordered, func() {
 
 	BeforeAll(func() {
 		By("creating RBAC role for reserved prefix tests")
-		cmd := exec.Command("kubectl", "create", "-f",
+		cmd := exec.Command("kubectl", verbCreate, "-f",
 			BuildTestResourcePath("role", groupDir, ""))
 		_, err := utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred())
 
 		By("creating RoleBinding for test user")
-		cmd = exec.Command("kubectl", "create", "-f",
+		cmd = exec.Command("kubectl", verbCreate, "-f",
 			BuildTestResourcePath("role-binding", groupDir, ""))
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred())
