@@ -46,7 +46,7 @@ func (m *mockSigner) ValidateToken(tokenString string) (*Claims, error) {
 			ExpiresAt: jwt5.NewNumericDate(now.Add(time.Hour)),
 			IssuedAt:  jwt5.NewNumericDate(now),
 		},
-		User: "testuser",
+		User: testUser,
 	}, nil
 }
 
@@ -54,7 +54,7 @@ func TestManager_GenerateToken(t *testing.T) {
 	signer := &mockSigner{}
 	manager := NewManager(signer, false, 0, 0)
 
-	token, err := manager.GenerateToken("user", []string{"group1"}, "uid", nil, "/path", "domain", "session")
+	token, err := manager.GenerateToken("user", []string{testGroup1}, "uid", nil, "/path", "domain", "session")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -71,7 +71,7 @@ func TestManager_ValidateToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
-	if claims.User != "testuser" {
+	if claims.User != testUser {
 		t.Fatalf("Expected user 'testuser', got %s", claims.User)
 	}
 }
@@ -86,8 +86,8 @@ func TestManager_RefreshToken_Success(t *testing.T) {
 			ExpiresAt: jwt5.NewNumericDate(now.Add(time.Hour)),
 			IssuedAt:  jwt5.NewNumericDate(now),
 		},
-		User:   "testuser",
-		Groups: []string{"group1"},
+		User:   testUser,
+		Groups: []string{testGroup1},
 	}
 
 	token, err := manager.RefreshToken(claims)
@@ -191,8 +191,8 @@ func TestManager_UpdateSkipRefreshToken_Success(t *testing.T) {
 			ExpiresAt: jwt5.NewNumericDate(now.Add(time.Hour)),
 			IssuedAt:  jwt5.NewNumericDate(now),
 		},
-		User:   "testuser",
-		Groups: []string{"group1"},
+		User:   testUser,
+		Groups: []string{testGroup1},
 	}
 
 	token, err := manager.UpdateSkipRefreshToken(claims)
@@ -306,8 +306,8 @@ func TestManager_RefreshToken_PreservesIssuedAt(t *testing.T) {
 			ExpiresAt: jwt5.NewNumericDate(time.Now().UTC().Add(time.Hour)),
 			IssuedAt:  jwt5.NewNumericDate(originalIssuedAt),
 		},
-		User:   "testuser",
-		Groups: []string{"group1"},
+		User:   testUser,
+		Groups: []string{testGroup1},
 	}
 
 	token, err := manager.RefreshToken(claims)
@@ -331,8 +331,8 @@ func TestManager_RefreshToken_BeyondHorizon_ReturnsError(t *testing.T) {
 			ExpiresAt: jwt5.NewNumericDate(time.Now().UTC().Add(time.Hour)),
 			IssuedAt:  jwt5.NewNumericDate(time.Now().UTC().Add(-2 * time.Hour)), // 2 hours ago, beyond 1h horizon
 		},
-		User:   "testuser",
-		Groups: []string{"group1"},
+		User:   testUser,
+		Groups: []string{testGroup1},
 	}
 
 	_, err := manager.RefreshToken(claims)
@@ -359,8 +359,8 @@ func TestManager_UpdateSkipRefreshToken_SetsSkipRefreshTrue(t *testing.T) {
 			ExpiresAt: jwt5.NewNumericDate(time.Now().UTC().Add(time.Hour)),
 			IssuedAt:  jwt5.NewNumericDate(time.Now().UTC()),
 		},
-		User:   "testuser",
-		Groups: []string{"group1"},
+		User:   testUser,
+		Groups: []string{testGroup1},
 	}
 
 	_, err := manager.UpdateSkipRefreshToken(claims)

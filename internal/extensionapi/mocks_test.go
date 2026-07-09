@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/conversion"
 )
 
 // MockManager implements the manager.Manager interface for testing
@@ -173,8 +175,13 @@ func (m *MockManager) GetFieldIndexer() client.FieldIndexer {
 	return nil
 }
 
-// GetEventRecorderFor returns a mock event recorder
+// GetEventRecorderFor returns a mock event recorder (deprecated)
 func (m *MockManager) GetEventRecorderFor(name string) record.EventRecorder {
+	return nil
+}
+
+// GetEventRecorder returns a mock events recorder
+func (m *MockManager) GetEventRecorder(name string) events.EventRecorder {
 	return nil
 }
 
@@ -191,6 +198,11 @@ func (m *MockManager) GetAPIReader() client.Reader {
 // GetHTTPClient returns a mock HTTP client
 func (m *MockManager) GetHTTPClient() *http.Client {
 	return &http.Client{}
+}
+
+// GetConverterRegistry returns a mock converter registry
+func (m *MockManager) GetConverterRegistry() conversion.Registry {
+	return conversion.NewRegistry()
 }
 
 // ErrorWriter is a custom ResponseWriter that returns an error on Write

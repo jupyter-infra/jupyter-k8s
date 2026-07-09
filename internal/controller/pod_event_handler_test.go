@@ -62,8 +62,8 @@ func TestHandleWorkspacePodEvents_PodRunning_Success(t *testing.T) {
 	// Create workspace object
 	workspace := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace",
-			Namespace: "test-namespace",
+			Name:      testWorkspaceName,
+			Namespace: testNamespaceName,
 		},
 	}
 
@@ -83,16 +83,16 @@ func TestHandleWorkspacePodEvents_PodRunning_Success(t *testing.T) {
 	handler := &PodEventHandler{
 		client:           fakeClient,
 		resourceManager:  &ResourceManager{},
-		podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{"aws": mockHandler},
+		podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{pluginNameAWS: mockHandler},
 	}
 
 	// Create running workspace pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "workspace-pod",
-			Namespace: "test-namespace",
+			Name:      podNameWorkspaceSuffix,
+			Namespace: testNamespaceName,
 			Labels: map[string]string{
-				workspaceutil.LabelWorkspaceName: "test-workspace",
+				workspaceutil.LabelWorkspaceName: testWorkspaceName,
 			},
 		},
 		Status: corev1.PodStatus{
@@ -117,8 +117,8 @@ func TestHandleWorkspacePodEvents_PodRunning_WorkspaceNotFound(t *testing.T) {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "workspace-pod",
-			Namespace: "test-namespace",
+			Name:      podNameWorkspaceSuffix,
+			Namespace: testNamespaceName,
 			Labels: map[string]string{
 				workspaceutil.LabelWorkspaceName: "missing-workspace",
 			},
@@ -138,8 +138,8 @@ func TestHandleWorkspacePodEvents_PodRunning_WorkspaceNotFound(t *testing.T) {
 func TestHandleWorkspacePodEvents_PodRunning_HandlersNil(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-workspace",
-			Namespace: "test-namespace",
+			Name:      testWorkspaceName,
+			Namespace: testNamespaceName,
 		},
 	}
 
@@ -159,10 +159,10 @@ func TestHandleWorkspacePodEvents_PodRunning_HandlersNil(t *testing.T) {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "workspace-pod",
-			Namespace: "test-namespace",
+			Name:      podNameWorkspaceSuffix,
+			Namespace: testNamespaceName,
 			Labels: map[string]string{
-				workspaceutil.LabelWorkspaceName: "test-workspace",
+				workspaceutil.LabelWorkspaceName: testWorkspaceName,
 			},
 		},
 		Status: corev1.PodStatus{
@@ -181,16 +181,16 @@ func TestHandleWorkspacePodEvents_PodDeleted_Success(t *testing.T) {
 	handler := &PodEventHandler{
 		client:           fake.NewClientBuilder().Build(),
 		resourceManager:  &ResourceManager{},
-		podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{"aws": &mockPodEventHandler{}},
+		podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{pluginNameAWS: &mockPodEventHandler{}},
 	}
 
 	deletionTime := metav1.Now()
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "workspace-pod",
-			Namespace: "test-namespace",
+			Name:      podNameWorkspaceSuffix,
+			Namespace: testNamespaceName,
 			Labels: map[string]string{
-				workspaceutil.LabelWorkspaceName: "test-workspace",
+				workspaceutil.LabelWorkspaceName: testWorkspaceName,
 			},
 			DeletionTimestamp: &deletionTime,
 		},
@@ -213,10 +213,10 @@ func TestHandleWorkspacePodEvents_PodDeleted_HandlersNil(t *testing.T) {
 	deletionTime := metav1.Now()
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "workspace-pod",
-			Namespace: "test-namespace",
+			Name:      podNameWorkspaceSuffix,
+			Namespace: testNamespaceName,
 			Labels: map[string]string{
-				workspaceutil.LabelWorkspaceName: "test-workspace",
+				workspaceutil.LabelWorkspaceName: testWorkspaceName,
 			},
 			DeletionTimestamp: &deletionTime,
 		},
@@ -252,15 +252,15 @@ func TestHandlePodRunning_WithPodEventsHandler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "test-namespace",
+					Name:      testWorkspaceName,
+					Namespace: testNamespaceName,
 				},
 			}
 
 			accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-strategy",
-					Namespace: "test-namespace",
+					Name:      testStrategyName,
+					Namespace: testNamespaceName,
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 					PodEventsHandler: tt.podEventsHandler,
@@ -278,15 +278,15 @@ func TestHandlePodRunning_WithPodEventsHandler(t *testing.T) {
 			handler := &PodEventHandler{
 				client:           fakeClient,
 				resourceManager:  &ResourceManager{},
-				podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{"aws": mockHandler},
+				podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{pluginNameAWS: mockHandler},
 			}
 
 			pod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-pod",
-					Namespace: "test-namespace",
+					Namespace: testNamespaceName,
 					Labels: map[string]string{
-						workspaceutil.LabelWorkspaceName: "test-workspace",
+						workspaceutil.LabelWorkspaceName: testWorkspaceName,
 					},
 				},
 				Status: corev1.PodStatus{
@@ -309,7 +309,7 @@ func TestHandleWorkspacePodEvents_PodDeleted_WithAWSHandler(t *testing.T) {
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "aws-access-strategy",
-			Namespace: "default",
+			Namespace: testNamespace,
 		},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 			PodEventsHandler: "aws:ssm-remote-access",
@@ -325,18 +325,18 @@ func TestHandleWorkspacePodEvents_PodDeleted_WithAWSHandler(t *testing.T) {
 			WithObjects(accessStrategy).
 			Build(),
 		resourceManager:  &ResourceManager{},
-		podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{"aws": mockHandler},
+		podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{pluginNameAWS: mockHandler},
 	}
 
 	deletionTime := metav1.Now()
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "workspace-pod",
-			Namespace: "test-namespace",
+			Name:      podNameWorkspaceSuffix,
+			Namespace: testNamespaceName,
 			Labels: map[string]string{
-				workspaceutil.LabelWorkspaceName: "test-workspace",
+				workspaceutil.LabelWorkspaceName: testWorkspaceName,
 				LabelAccessStrategyName:          "aws-access-strategy",
-				LabelAccessStrategyNamespace:     "default",
+				LabelAccessStrategyNamespace:     testNamespace,
 			},
 			DeletionTimestamp: &deletionTime,
 		},
@@ -359,7 +359,7 @@ func TestHandleWorkspacePodEvents_PodDeleted_WithNonAWSHandler(t *testing.T) {
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "some-other-access-strategy",
-			Namespace: "default",
+			Namespace: testNamespace,
 		},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 			PodEventsHandler: "other:handler",
@@ -375,18 +375,18 @@ func TestHandleWorkspacePodEvents_PodDeleted_WithNonAWSHandler(t *testing.T) {
 			WithObjects(accessStrategy).
 			Build(),
 		resourceManager:  &ResourceManager{},
-		podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{"aws": mockHandler},
+		podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{pluginNameAWS: mockHandler},
 	}
 
 	deletionTime := metav1.Now()
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "workspace-pod",
-			Namespace: "test-namespace",
+			Name:      podNameWorkspaceSuffix,
+			Namespace: testNamespaceName,
 			Labels: map[string]string{
-				workspaceutil.LabelWorkspaceName: "test-workspace",
+				workspaceutil.LabelWorkspaceName: testWorkspaceName,
 				LabelAccessStrategyName:          "some-other-access-strategy",
-				LabelAccessStrategyNamespace:     "default",
+				LabelAccessStrategyNamespace:     testNamespace,
 			},
 			DeletionTimestamp: &deletionTime,
 		},
@@ -409,16 +409,16 @@ func TestHandleWorkspacePodEvents_PodDeleted_WithoutAccessStrategyLabel(t *testi
 	handler := &PodEventHandler{
 		client:           fake.NewClientBuilder().Build(),
 		resourceManager:  &ResourceManager{},
-		podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{"aws": mockHandler},
+		podEventAdapters: map[string]pluginadapters.PodEventPluginAdapter{pluginNameAWS: mockHandler},
 	}
 
 	deletionTime := metav1.Now()
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "workspace-pod",
-			Namespace: "test-namespace",
+			Name:      podNameWorkspaceSuffix,
+			Namespace: testNamespaceName,
 			Labels: map[string]string{
-				workspaceutil.LabelWorkspaceName: "test-workspace",
+				workspaceutil.LabelWorkspaceName: testWorkspaceName,
 			},
 			DeletionTimestamp: &deletionTime,
 		},
@@ -442,12 +442,12 @@ func TestHandleKubernetesEvents(t *testing.T) {
 			Name:      "jupyter-test-workspace-abc123-xyz789",
 			Namespace: "test-ns",
 		},
-		Reason:  "Stopped",
+		Reason:  ConditionTypeStopped,
 		Message: "Pod was Preempted by scheduler",
 	}
 
 	if event.InvolvedObject.Kind != "Pod" ||
-		event.Reason != "Stopped" ||
+		event.Reason != ConditionTypeStopped ||
 		!strings.Contains(event.Message, "Preempted") {
 		t.Error("Should detect preemption event")
 	}
@@ -457,7 +457,7 @@ func TestHandleKubernetesEvents(t *testing.T) {
 		parts := strings.Split(podName, "-")
 		if len(parts) >= 4 {
 			workspaceName := strings.Join(parts[1:len(parts)-2], "-")
-			if workspaceName != "test-workspace" {
+			if workspaceName != testWorkspaceName {
 				t.Errorf("Expected 'test-workspace', got '%s'", workspaceName)
 			}
 		}

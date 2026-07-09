@@ -27,11 +27,11 @@ var _ = Describe("StatusManager", func() {
 
 		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
-				Namespace: "default",
+				Name:      testWorkspaceName,
+				Namespace: testNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				Image: "jupyter/base-notebook:latest",
+				Image: imageBaseNotebook,
 			},
 		}
 	})
@@ -204,7 +204,7 @@ var _ = Describe("StatusManager", func() {
 		Describe("UpdateStoppedStatus", func() {
 			It("should set Stopped=True and clear resource names", func() {
 				workspace.Status.DeploymentName = "test-deployment"
-				workspace.Status.ServiceName = "test-service"
+				workspace.Status.ServiceName = testServiceName
 
 				snapshot := workspace.Status.DeepCopy()
 				err := statusManager.UpdateStoppedStatus(ctx, workspace, snapshot)
@@ -444,7 +444,7 @@ var _ = Describe("StatusManager", func() {
 			It("should clear DeploymentName and ServiceName", func() {
 				// Set resource names first
 				workspace.Status.DeploymentName = "test-deployment"
-				workspace.Status.ServiceName = "test-service"
+				workspace.Status.ServiceName = testServiceName
 				Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 

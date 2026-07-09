@@ -41,7 +41,7 @@ var _ = Describe("Idle Shutdown", Ordered, func() {
 			"dist/chart",
 			"--namespace", OperatorNamespace,
 			"--reuse-values",
-			"--set", "idleShutdown.checkInterval=5s",
+			flagSet, "idleShutdown.checkInterval=5s",
 			"--wait",
 			"--timeout", "3m",
 		)
@@ -69,7 +69,7 @@ var _ = Describe("Idle Shutdown", Ordered, func() {
 		specReport := CurrentSpecReport()
 		if specReport.Failed() {
 			By("Collecting diagnostics after idle shutdown test failure")
-			cmd := exec.Command("kubectl", "get", "workspace", "-n", workspaceNamespace,
+			cmd := exec.Command("kubectl", verbGet, "workspace", "-n", workspaceNamespace,
 				"-o", "wide")
 			if output, err := utils.Run(cmd); err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "\nWorkspaces:\n%s\n", output)
@@ -80,7 +80,7 @@ var _ = Describe("Idle Shutdown", Ordered, func() {
 				workspaceActiveNetwork, workspaceActivePodExec,
 			}
 			for _, ws := range allWorkspaces {
-				cmd = exec.Command("kubectl", "get", "workspace", ws, "-n", workspaceNamespace,
+				cmd = exec.Command("kubectl", verbGet, "workspace", ws, "-n", workspaceNamespace,
 					"-o", "jsonpath={.status}")
 				if output, err := utils.Run(cmd); err == nil {
 					_, _ = fmt.Fprintf(GinkgoWriter, "\nWorkspace %s status: %s\n", ws, output)
@@ -91,7 +91,7 @@ var _ = Describe("Idle Shutdown", Ordered, func() {
 			if logs, err := utils.Run(cmd); err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "\nController logs (last 200 lines):\n%s\n", logs)
 			}
-			cmd = exec.Command("kubectl", "get", "events", "-n", workspaceNamespace,
+			cmd = exec.Command("kubectl", verbGet, "events", "-n", workspaceNamespace,
 				"--sort-by=.lastTimestamp")
 			if events, err := utils.Run(cmd); err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "\nEvents:\n%s\n", events)
@@ -115,7 +115,7 @@ var _ = Describe("Idle Shutdown", Ordered, func() {
 			"dist/chart",
 			"--namespace", OperatorNamespace,
 			"--reuse-values",
-			"--set", "idleShutdown.checkInterval=5m",
+			flagSet, "idleShutdown.checkInterval=5m",
 			"--wait",
 			"--timeout", "3m",
 		)
@@ -177,7 +177,7 @@ var _ = Describe("Idle Shutdown", Ordered, func() {
 		By("verifying IdleShutdown events were recorded")
 		for _, wsName := range stoppedWorkspaces {
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "events",
+				cmd := exec.Command("kubectl", verbGet, "events",
 					"-n", workspaceNamespace,
 					"--field-selector", fmt.Sprintf("involvedObject.name=%s,reason=IdleShutdown", wsName),
 					"-o", "jsonpath={.items[*].reason}")
@@ -265,7 +265,7 @@ var _ = Describe("Idle Shutdown", Ordered, func() {
 
 		By("verifying NO IdleShutdown events")
 		for _, ws := range allNegativeWorkspaces {
-			cmd = exec.Command("kubectl", "get", "events",
+			cmd = exec.Command("kubectl", verbGet, "events",
 				"-n", workspaceNamespace,
 				"--field-selector", fmt.Sprintf("involvedObject.name=%s,reason=IdleShutdown", ws),
 				"-o", "jsonpath={.items[*].reason}")

@@ -11,6 +11,9 @@ import (
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
 
+// handlerK8sNative is the CreateConnectionHandler value for the built-in k8s-native signer.
+const handlerK8sNative = "k8s-native"
+
 // StandardSignerFactory creates JWT signers using a shared StandardSigner backed by K8s Secrets.
 // This factory reuses a single StandardSigner instance since all strategies share the same
 // Secret-based keys.
@@ -39,7 +42,7 @@ func (f *StandardSignerFactory) CreateSigner(accessStrategy *workspacev1alpha1.W
 
 	handler := accessStrategy.Spec.CreateConnectionHandler
 	switch handler {
-	case "", "k8s-native":
+	case "", handlerK8sNative:
 		return f.signer, nil
 	default:
 		return nil, fmt.Errorf("unsupported connection handler: %s", handler)

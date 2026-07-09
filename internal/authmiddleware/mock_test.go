@@ -480,7 +480,7 @@ func (m *MockOIDCVerifier) VerifyToken(ctx context.Context, tokenString string, 
 	// Default implementation with successful verification
 	claims := &OIDCClaims{
 		Subject:  "test-subject",
-		Username: "test-user",
+		Username: testUserValue,
 		Groups:   []string{"test-group"},
 	}
 	return claims, false, nil

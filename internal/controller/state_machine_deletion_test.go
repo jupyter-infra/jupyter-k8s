@@ -28,11 +28,11 @@ var _ = Describe("ReconcileDeletion", func() {
 		ws := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       fmt.Sprintf("sm-del-%d", time.Now().UnixNano()),
-				Namespace:  "default",
+				Namespace:  testNamespace,
 				Finalizers: []string{WorkspaceFinalizerName},
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				Image:         "jupyter/base-notebook:latest",
+				Image:         imageBaseNotebook,
 				DesiredStatus: DesiredStateRunning,
 			},
 		}
@@ -116,10 +116,10 @@ var _ = Describe("ReconcileDeletion", func() {
 		ws := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("sm-del-nofin-%d", time.Now().UnixNano()),
-				Namespace: "default",
+				Namespace: testNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				Image:         "jupyter/base-notebook:latest",
+				Image:         imageBaseNotebook,
 				DesiredStatus: DesiredStateRunning,
 			},
 		}

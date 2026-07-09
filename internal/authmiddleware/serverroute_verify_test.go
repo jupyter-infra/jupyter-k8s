@@ -29,16 +29,16 @@ const (
 func TestHandleVerifyMissingUriHeader(t *testing.T) {
 	// Create a request without X-Forwarded-Uri header
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	w := httptest.NewRecorder()
 
 	// Create a Server with minimal setup
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &Config{
-		PathRegexPattern:            `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		RoutingMode:                 "path",
-		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
-		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
+		PathRegexPattern:            DefaultPathRegexPattern,
+		RoutingMode:                 RoutingModePath,
+		WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+		WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
 	}
 	server := &Server{
 		config: cfg,
@@ -72,10 +72,10 @@ func TestHandleVerifyMissingHostHeader(t *testing.T) {
 	// Create a Server with minimal setup
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &Config{
-		PathRegexPattern:            `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		RoutingMode:                 "path",
-		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
-		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
+		PathRegexPattern:            DefaultPathRegexPattern,
+		RoutingMode:                 RoutingModePath,
+		WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+		WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
 	}
 	server := &Server{
 		config: cfg,
@@ -104,7 +104,7 @@ func TestHandleVerifyMissingCookie(t *testing.T) {
 	// Create a request with required headers
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
 	req.Header.Set("X-Forwarded-Uri", fwdUrl)
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	w := httptest.NewRecorder()
 
 	// Create cookie handler mock that returns an error
@@ -121,10 +121,10 @@ func TestHandleVerifyMissingCookie(t *testing.T) {
 	// Create server with mocks
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &Config{
-		PathRegexPattern:            `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		RoutingMode:                 "path",
-		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
-		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
+		PathRegexPattern:            DefaultPathRegexPattern,
+		RoutingMode:                 RoutingModePath,
+		WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+		WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
 	}
 	server := &Server{
 		config:        cfg,
@@ -157,7 +157,7 @@ func TestHandleVerifyInvalidJWT(t *testing.T) {
 	// Create a request with required headers
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
 	req.Header.Set("X-Forwarded-Uri", fwdUrl)
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	w := httptest.NewRecorder()
 
 	// Create mock handlers
@@ -180,10 +180,10 @@ func TestHandleVerifyInvalidJWT(t *testing.T) {
 	// Create server with mocks
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &Config{
-		PathRegexPattern:            `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		RoutingMode:                 "path",
-		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
-		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
+		PathRegexPattern:            DefaultPathRegexPattern,
+		RoutingMode:                 RoutingModePath,
+		WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+		WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
 	}
 	server := &Server{
 		config:        cfg,
@@ -214,16 +214,16 @@ func TestHandleVerifyNoRefreshBeforeWindow(t *testing.T) {
 	// Create a request with required headers
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
 	req.Header.Set("X-Forwarded-Uri", fwdUrl)
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	w := httptest.NewRecorder()
 
 	// Create claims
 	claims := &jwt.Claims{
 		User:      "testuser",
-		Groups:    []string{"group1", "group2"},
-		UID:       "testuid",
+		Groups:    []string{testGroup1, testGroup2},
+		UID:       testUIDPlain,
 		Path:      testAppPath2,
-		Domain:    "example.com",
+		Domain:    testDomainValue,
 		TokenType: jwt.TokenTypeSession, // Add session token type
 	}
 
@@ -264,10 +264,10 @@ func TestHandleVerifyNoRefreshBeforeWindow(t *testing.T) {
 	// Create server with mocks
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &Config{
-		PathRegexPattern:            `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
-		RoutingMode:                 "path",
-		WorkspaceNamespacePathRegex: `^/workspaces/([^/]+)/[^/]+`,
-		WorkspaceNamePathRegex:      `^/workspaces/[^/]+/([^/]+)`,
+		PathRegexPattern:            DefaultPathRegexPattern,
+		RoutingMode:                 RoutingModePath,
+		WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+		WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
 	}
 	server := &Server{
 		config:        cfg,
@@ -327,16 +327,16 @@ func TestHandleVerifyWithRefresh_HappyPath(t *testing.T) {
 	// Create a request with required headers
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
 	req.Header.Set("X-Forwarded-Uri", fwdUrl)
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	w := httptest.NewRecorder()
 
 	// Create claims
 	claims := &jwt.Claims{
 		User:      "testuser1",
-		Groups:    []string{"group1", "group2"},
-		UID:       "testuid",
+		Groups:    []string{testGroup1, testGroup2},
+		UID:       testUIDPlain,
 		Path:      testAppPath2,
-		Domain:    "example.com",
+		Domain:    testDomainValue,
 		TokenType: jwt.TokenTypeSession, // Add session token type
 	}
 
@@ -459,16 +459,16 @@ func TestHandleVerifyWithRefresh_NoLongerAuthorizedPath_Returns403AndClearCookie
 	// Create a request with required headers
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
 	req.Header.Set("X-Forwarded-Uri", fwdUrl)
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	w := httptest.NewRecorder()
 
 	// Create claims
 	claims := &jwt.Claims{
 		User:      "testuser2",
-		Groups:    []string{"group1", "group2"},
-		UID:       "testuid",
+		Groups:    []string{testGroup1, testGroup2},
+		UID:       testUIDPlain,
 		Path:      testAppPath2,
-		Domain:    "example.com",
+		Domain:    testDomainValue,
 		TokenType: jwt.TokenTypeSession, // Add session token type
 	}
 
@@ -599,16 +599,16 @@ func TestHandleVerifyWithRefresh_ConnectionAccessReviewFails_UpdateCookieToSkipF
 	// Create a request with required headers
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
 	req.Header.Set("X-Forwarded-Uri", fwdUrl)
-	req.Header.Set("X-Forwarded-Host", "example.com")
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
 	w := httptest.NewRecorder()
 
 	// Create claims
 	claims := &jwt.Claims{
 		User:      "testuser3",
-		Groups:    []string{"group1", "group2"},
-		UID:       "testuid",
+		Groups:    []string{testGroup1, testGroup2},
+		UID:       testUIDPlain,
 		Path:      testAppPath2,
-		Domain:    "example.com",
+		Domain:    testDomainValue,
 		TokenType: jwt.TokenTypeSession, // Add session token type
 	}
 
@@ -720,9 +720,9 @@ func TestHandleVerify_InvalidTokenType(t *testing.T) {
 	jwtHandler := &MockJWTHandler{
 		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
 			return &jwt.Claims{
-				User:      "user",
+				User:      testUserString,
 				Path:      testAppPath2,
-				Domain:    "example.com",
+				Domain:    testDomainValue,
 				TokenType: jwt.TokenTypeBootstrap, // Wrong type for verify
 			}, nil
 		},
@@ -736,7 +736,7 @@ func TestHandleVerify_InvalidTokenType(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
 	req.Header.Set(HeaderForwardedURI, testAppPath2+"/lab")
-	req.Header.Set(HeaderForwardedHost, "example.com")
+	req.Header.Set(HeaderForwardedHost, testDomainValue)
 	w := httptest.NewRecorder()
 
 	server.handleVerify(w, req)
@@ -754,9 +754,9 @@ func TestHandleVerify_PathMismatch(t *testing.T) {
 	jwtHandler := &MockJWTHandler{
 		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
 			return &jwt.Claims{
-				User:      "user",
-				Path:      "/workspaces/ns1/app1",
-				Domain:    "example.com",
+				User:      testUserString,
+				Path:      testPathValue,
+				Domain:    testDomainValue,
 				TokenType: jwt.TokenTypeSession,
 			}, nil
 		},
@@ -770,7 +770,7 @@ func TestHandleVerify_PathMismatch(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
 	req.Header.Set(HeaderForwardedURI, "/workspaces/ns2/app2/lab") // different workspace
-	req.Header.Set(HeaderForwardedHost, "example.com")
+	req.Header.Set(HeaderForwardedHost, testDomainValue)
 	w := httptest.NewRecorder()
 
 	server.handleVerify(w, req)
@@ -789,7 +789,7 @@ func TestHandleVerify_DomainMismatch(t *testing.T) {
 	jwtHandler := &MockJWTHandler{
 		ValidateTokenFunc: func(tokenString string) (*jwt.Claims, error) {
 			return &jwt.Claims{
-				User:      "user",
+				User:      testUserString,
 				Path:      testAppPath2,
 				Domain:    "other.com",
 				TokenType: jwt.TokenTypeSession,
@@ -805,7 +805,7 @@ func TestHandleVerify_DomainMismatch(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
 	req.Header.Set(HeaderForwardedURI, testAppPath2+"/lab")
-	req.Header.Set(HeaderForwardedHost, "example.com")
+	req.Header.Set(HeaderForwardedHost, testDomainValue)
 	w := httptest.NewRecorder()
 
 	server.handleVerify(w, req)
@@ -816,11 +816,11 @@ func TestHandleVerify_DomainMismatch(t *testing.T) {
 
 func TestHandleVerifyWithRefresh_RefreshTokenError_StillReturns200(t *testing.T) {
 	claims := &jwt.Claims{
-		User:      "user",
+		User:      testUserString,
 		Groups:    []string{"g1"},
 		UID:       "uid",
 		Path:      testAppPath2,
-		Domain:    "example.com",
+		Domain:    testDomainValue,
 		TokenType: jwt.TokenTypeSession,
 	}
 
@@ -856,7 +856,7 @@ func TestHandleVerifyWithRefresh_RefreshTokenError_StillReturns200(t *testing.T)
 
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
 	req.Header.Set(HeaderForwardedURI, testAppPath2+"/lab")
-	req.Header.Set(HeaderForwardedHost, "example.com")
+	req.Header.Set(HeaderForwardedHost, testDomainValue)
 	w := httptest.NewRecorder()
 
 	server.handleVerify(w, req)
@@ -866,11 +866,11 @@ func TestHandleVerifyWithRefresh_RefreshTokenError_StillReturns200(t *testing.T)
 
 func TestHandleVerifyWithRefresh_UpdateSkipRefreshTokenError_StillReturns200(t *testing.T) {
 	claims := &jwt.Claims{
-		User:      "user",
+		User:      testUserString,
 		Groups:    []string{"g1"},
 		UID:       "uid",
 		Path:      testAppPath2,
-		Domain:    "example.com",
+		Domain:    testDomainValue,
 		TokenType: jwt.TokenTypeSession,
 	}
 
@@ -909,7 +909,7 @@ func TestHandleVerifyWithRefresh_UpdateSkipRefreshTokenError_StillReturns200(t *
 
 	req := httptest.NewRequest(http.MethodGet, "/verify", nil)
 	req.Header.Set(HeaderForwardedURI, testAppPath2+"/lab")
-	req.Header.Set(HeaderForwardedHost, "example.com")
+	req.Header.Set(HeaderForwardedHost, testDomainValue)
 	w := httptest.NewRecorder()
 
 	server.handleVerify(w, req)

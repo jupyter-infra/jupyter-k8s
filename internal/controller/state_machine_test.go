@@ -33,17 +33,17 @@ func TestWorkspaceIdleChecker_CheckInterval_NegativeFallsBackToDefault(t *testin
 func TestGetDesiredStatus_ExplicitRunning(t *testing.T) {
 	sm := &StateMachine{}
 	ws := &workspacev1alpha1.Workspace{
-		Spec: workspacev1alpha1.WorkspaceSpec{DesiredStatus: "Running"},
+		Spec: workspacev1alpha1.WorkspaceSpec{DesiredStatus: DesiredStateRunning},
 	}
-	assert.Equal(t, "Running", sm.getDesiredStatus(ws))
+	assert.Equal(t, DesiredStateRunning, sm.getDesiredStatus(ws))
 }
 
 func TestGetDesiredStatus_ExplicitStopped(t *testing.T) {
 	sm := &StateMachine{}
 	ws := &workspacev1alpha1.Workspace{
-		Spec: workspacev1alpha1.WorkspaceSpec{DesiredStatus: "Stopped"},
+		Spec: workspacev1alpha1.WorkspaceSpec{DesiredStatus: ConditionTypeStopped},
 	}
-	assert.Equal(t, "Stopped", sm.getDesiredStatus(ws))
+	assert.Equal(t, ConditionTypeStopped, sm.getDesiredStatus(ws))
 }
 
 func TestGetDesiredStatus_EmptyDefaultsToRunning(t *testing.T) {

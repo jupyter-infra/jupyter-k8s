@@ -186,10 +186,10 @@ func TestNewConfigEnvOverrides(t *testing.T) {
 	setEnv(t, EnvWorkspaceNamePathRegex, "^/custom/[^/]+/workspaces/([^/]+)")
 
 	// OIDC configuration
-	setEnv(t, EnvOidcUsernamePrefix, "oidc:")
+	setEnv(t, EnvOidcUsernamePrefix, testOidcPrefix)
 	setEnv(t, EnvOidcGroupsPrefix, "oidc-group:")
 	setEnv(t, EnvOIDCIssuerURL, "https://test-dex.example.com")
-	setEnv(t, EnvOIDCClientID, "test-client-id")
+	setEnv(t, EnvOIDCClientID, testClientID)
 	setEnv(t, EnvOIDCInitTimeoutSecs, "45")
 
 	// Clean up environment variables after the test
@@ -325,7 +325,7 @@ func checkPathConfig(t *testing.T, config *Config) {
 
 // checkOIDCConfig validates that OIDC configuration values are set as expected
 func checkOIDCConfig(t *testing.T, config *Config) {
-	if config.OidcUsernamePrefix != "oidc:" {
+	if config.OidcUsernamePrefix != testOidcPrefix {
 		t.Errorf("Expected OidcUsernamePrefix to be oidc:, got %s", config.OidcUsernamePrefix)
 	}
 	if config.OidcGroupsPrefix != "oidc-group:" {
@@ -334,7 +334,7 @@ func checkOIDCConfig(t *testing.T, config *Config) {
 	if config.OIDCIssuerURL != "https://test-dex.example.com" {
 		t.Errorf("Expected OIDCIssuerURL to be https://test-dex.example.com, got %s", config.OIDCIssuerURL)
 	}
-	if config.OIDCClientID != "test-client-id" {
+	if config.OIDCClientID != testClientID {
 		t.Errorf("Expected OIDCClientID to be test-client-id, got %s", config.OIDCClientID)
 	}
 	if config.OIDCInitTimeoutSecs != 45 {
@@ -377,7 +377,7 @@ func TestOIDCInitTimeoutConfig(t *testing.T) {
 		},
 		{
 			name:        "Invalid non-numeric timeout",
-			envValue:    "invalid",
+			envValue:    testInvalidValue,
 			expectError: true,
 		},
 	}
@@ -542,7 +542,7 @@ func TestJwtNewKeyUseDelayConfig(t *testing.T) {
 		},
 		{
 			name:        "Invalid duration format",
-			envValue:    "invalid",
+			envValue:    testInvalidValue,
 			expectError: true,
 		},
 		{
@@ -600,29 +600,29 @@ func TestOIDCVerifierInitConfig(t *testing.T) {
 		{
 			name:         "Missing issuer URL",
 			issuerURL:    "",
-			clientID:     "test-client",
-			clientSecret: "test-secret",
+			clientID:     testClientValue,
+			clientSecret: testSecretValue,
 			expectError:  true,
 		},
 		{
 			name:         "Missing client ID",
-			issuerURL:    "https://dex.example.com",
+			issuerURL:    testDexURL,
 			clientID:     "",
-			clientSecret: "test-secret",
+			clientSecret: testSecretValue,
 			expectError:  true,
 		},
 		{
 			name:         "Empty client secret",
-			issuerURL:    "https://dex.example.com",
-			clientID:     "test-client",
+			issuerURL:    testDexURL,
+			clientID:     testClientValue,
 			clientSecret: "",
 			expectError:  false, // Client secret is allowed to be empty
 		},
 		{
 			name:         "Valid config",
-			issuerURL:    "https://dex.example.com",
-			clientID:     "test-client",
-			clientSecret: "test-secret",
+			issuerURL:    testDexURL,
+			clientID:     testClientValue,
+			clientSecret: testSecretValue,
 			expectError:  false,
 		},
 	}

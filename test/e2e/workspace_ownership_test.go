@@ -31,25 +31,25 @@ var _ = Describe("Workspace Ownership", Ordered, func() {
 	Context("OwnershipType enforcement", func() {
 		BeforeAll(func() {
 			By("creating RBAC role for workspace management")
-			cmd := exec.Command("kubectl", "create", "-f",
+			cmd := exec.Command("kubectl", verbCreate, "-f",
 				BuildTestResourcePath("workspace-manager-role", ownershipGroupDir, ownershipSubgroupDir))
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating RoleBinding for user-1")
-			cmd = exec.Command("kubectl", "create", "-f",
+			cmd = exec.Command("kubectl", verbCreate, "-f",
 				BuildTestResourcePath("workspace-manager-user1-binding", ownershipGroupDir, ownershipSubgroupDir))
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating RoleBinding for user-2")
-			cmd = exec.Command("kubectl", "create", "-f",
+			cmd = exec.Command("kubectl", verbCreate, "-f",
 				BuildTestResourcePath("workspace-manager-user2-binding", ownershipGroupDir, ownershipSubgroupDir))
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating RoleBinding for admin-user (system:masters)")
-			cmd = exec.Command("kubectl", "create", "-f",
+			cmd = exec.Command("kubectl", verbCreate, "-f",
 				BuildTestResourcePath("workspace-manager-admin-binding", ownershipGroupDir, ownershipSubgroupDir))
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())

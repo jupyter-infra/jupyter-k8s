@@ -37,11 +37,11 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 			template = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("test-template-%d", time.Now().UnixNano()),
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName:  "Test Template",
-					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
+					DisplayName:  testTemplateDisplayName,
+					DefaultImage: imageQuayMinimalNotebook,
 				},
 			}
 			Expect(k8sClient.Create(ctx, template)).To(Succeed())
@@ -67,14 +67,14 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 			workspace = &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("test-workspace-%d", time.Now().UnixNano()),
-					Namespace: "default",
+					Namespace: testNamespace,
 					Labels: map[string]string{
 						workspaceutil.LabelWorkspaceTemplate:          template.Name,
 						workspaceutil.LabelWorkspaceTemplateNamespace: template.Namespace,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name, Namespace: template.Namespace},
 				},
 			}
@@ -101,14 +101,14 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 			workspace = &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("test-workspace-%d", time.Now().UnixNano()),
-					Namespace: "default",
+					Namespace: testNamespace,
 					Labels: map[string]string{
 						workspaceutil.LabelWorkspaceTemplate:          template.Name,
 						workspaceutil.LabelWorkspaceTemplateNamespace: template.Namespace,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name, Namespace: template.Namespace},
 				},
 			}
@@ -148,14 +148,14 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 			workspace = &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("test-workspace-%d", time.Now().UnixNano()),
-					Namespace: "default",
+					Namespace: testNamespace,
 					Labels: map[string]string{
 						workspaceutil.LabelWorkspaceTemplate:          template.Name,
 						workspaceutil.LabelWorkspaceTemplateNamespace: template.Namespace,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name, Namespace: template.Namespace},
 				},
 			}
@@ -223,48 +223,48 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 		It("should return template name from workspace label", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testNamespace,
 					Labels: map[string]string{
-						workspaceutil.LabelWorkspaceTemplate:          "my-template",
-						workspaceutil.LabelWorkspaceTemplateNamespace: "default",
+						workspaceutil.LabelWorkspaceTemplate:          templateNameMy,
+						workspaceutil.LabelWorkspaceTemplateNamespace: testNamespace,
 					},
 				},
 			}
 
 			requests := reconciler.findTemplatesForWorkspace(ctx, workspace)
 			Expect(requests).To(HaveLen(1))
-			Expect(requests[0].Name).To(Equal("my-template"))
-			Expect(requests[0].Namespace).To(Equal("default"))
+			Expect(requests[0].Name).To(Equal(templateNameMy))
+			Expect(requests[0].Namespace).To(Equal(testNamespace))
 		})
 
 		It("should return template name during workspace deletion", func() {
 			now := metav1.Now()
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:              "test-workspace",
-					Namespace:         "default",
+					Name:              testWorkspaceName,
+					Namespace:         testNamespace,
 					DeletionTimestamp: &now,
 					Labels: map[string]string{
-						workspaceutil.LabelWorkspaceTemplate:          "my-template",
-						workspaceutil.LabelWorkspaceTemplateNamespace: "default",
+						workspaceutil.LabelWorkspaceTemplate:          templateNameMy,
+						workspaceutil.LabelWorkspaceTemplateNamespace: testNamespace,
 					},
 				},
 			}
 
 			requests := reconciler.findTemplatesForWorkspace(ctx, workspace)
 			Expect(requests).To(HaveLen(1))
-			Expect(requests[0].Name).To(Equal("my-template"),
+			Expect(requests[0].Name).To(Equal(templateNameMy),
 				"should return template name even during deletion (labels persist)")
-			Expect(requests[0].Namespace).To(Equal("default"),
+			Expect(requests[0].Namespace).To(Equal(testNamespace),
 				"should return template namespace even during deletion (labels persist)")
 		})
 
 		It("should return empty when workspace has no template label", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testNamespace,
 				},
 			}
 
@@ -275,11 +275,10 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 		It("should return empty when workspace has incomplete template labels", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testNamespace,
 					Labels: map[string]string{
-						workspaceutil.LabelWorkspaceTemplate: "my-template",
-						// Missing LabelWorkspaceTemplateNamespace
+						workspaceutil.LabelWorkspaceTemplate: templateNameMy,
 					},
 				},
 			}
@@ -292,7 +291,7 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 		It("should support cross-namespace template references", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
+					Name:      testWorkspaceName,
 					Namespace: "workspace-ns",
 					Labels: map[string]string{
 						workspaceutil.LabelWorkspaceTemplate:          "shared-template",
@@ -312,7 +311,7 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 			template := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-template",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 			}
 
@@ -340,11 +339,11 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 			template = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("deletion-test-template-%d", time.Now().UnixNano()),
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 					DisplayName:  "Deletion Test Template",
-					DefaultImage: "quay.io/jupyter/minimal-notebook:latest",
+					DefaultImage: imageQuayMinimalNotebook,
 				},
 			}
 		})
@@ -416,14 +415,14 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("test-workspace-%d", time.Now().UnixNano()),
-					Namespace: "default",
+					Namespace: testNamespace,
 					Labels: map[string]string{
 						workspaceutil.LabelWorkspaceTemplate:          template.Name,
 						workspaceutil.LabelWorkspaceTemplateNamespace: template.Namespace,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					TemplateRef: &workspacev1alpha1.TemplateRef{Name: template.Name, Namespace: template.Namespace},
 				},
 			}
@@ -481,11 +480,11 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 
 		It("stamps access strategy labels from spec.defaultAccessStrategy (explicit namespace)", func() {
 			template = &workspacev1alpha1.WorkspaceTemplate{
-				ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("tmpl-as-%d", time.Now().UnixNano()), Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("tmpl-as-%d", time.Now().UnixNano()), Namespace: testNamespace},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName:           "Test Template",
-					DefaultImage:          "quay.io/jupyter/minimal-notebook:latest",
-					DefaultAccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "web-access", Namespace: "shared-ns"},
+					DisplayName:           testTemplateDisplayName,
+					DefaultImage:          imageQuayMinimalNotebook,
+					DefaultAccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: accessStrategyNameWebAccess, Namespace: "shared-ns"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, template)).To(Succeed())
@@ -494,17 +493,17 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 
 			updated := &workspacev1alpha1.WorkspaceTemplate{}
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updated)).To(Succeed())
-			Expect(updated.Labels[workspaceutil.LabelAccessStrategyName]).To(Equal("web-access"))
+			Expect(updated.Labels[workspaceutil.LabelAccessStrategyName]).To(Equal(accessStrategyNameWebAccess))
 			Expect(updated.Labels[workspaceutil.LabelAccessStrategyNamespace]).To(Equal("shared-ns"))
 		})
 
 		It("defaults the label namespace to the template's own namespace when ref namespace is empty", func() {
 			template = &workspacev1alpha1.WorkspaceTemplate{
-				ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("tmpl-as-%d", time.Now().UnixNano()), Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("tmpl-as-%d", time.Now().UnixNano()), Namespace: testNamespace},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName:           "Test Template",
-					DefaultImage:          "quay.io/jupyter/minimal-notebook:latest",
-					DefaultAccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "web-access"},
+					DisplayName:           testTemplateDisplayName,
+					DefaultImage:          imageQuayMinimalNotebook,
+					DefaultAccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: accessStrategyNameWebAccess},
 				},
 			}
 			Expect(k8sClient.Create(ctx, template)).To(Succeed())
@@ -513,17 +512,17 @@ var _ = Describe("WorkspaceTemplate Controller", func() {
 
 			updated := &workspacev1alpha1.WorkspaceTemplate{}
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updated)).To(Succeed())
-			Expect(updated.Labels[workspaceutil.LabelAccessStrategyName]).To(Equal("web-access"))
-			Expect(updated.Labels[workspaceutil.LabelAccessStrategyNamespace]).To(Equal("default"))
+			Expect(updated.Labels[workspaceutil.LabelAccessStrategyName]).To(Equal(accessStrategyNameWebAccess))
+			Expect(updated.Labels[workspaceutil.LabelAccessStrategyNamespace]).To(Equal(testNamespace))
 		})
 
 		It("removes access strategy labels when the reference is cleared", func() {
 			template = &workspacev1alpha1.WorkspaceTemplate{
-				ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("tmpl-as-%d", time.Now().UnixNano()), Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("tmpl-as-%d", time.Now().UnixNano()), Namespace: testNamespace},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					DisplayName:           "Test Template",
-					DefaultImage:          "quay.io/jupyter/minimal-notebook:latest",
-					DefaultAccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "web-access", Namespace: "default"},
+					DisplayName:           testTemplateDisplayName,
+					DefaultImage:          imageQuayMinimalNotebook,
+					DefaultAccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: accessStrategyNameWebAccess, Namespace: testNamespace},
 				},
 			}
 			Expect(k8sClient.Create(ctx, template)).To(Succeed())

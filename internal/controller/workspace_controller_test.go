@@ -51,7 +51,7 @@ func (m *MockStateMachine) getDesiredStatus(workspace *workspacev1alpha1.Workspa
 	if m.getDesiredStatusFunc != nil {
 		return m.getDesiredStatusFunc(workspace)
 	}
-	return "Running"
+	return DesiredStateRunning
 }
 
 // GetAccessStrategyForWorkspace is a mock implementation for testing
@@ -92,7 +92,7 @@ var _ = Describe("Workspace Controller", func() {
 			ctx = context.Background()
 
 			// Generate unique names to avoid conflicts between test runs
-			workspaceName = generateUniqueName("test-workspace")
+			workspaceName = generateUniqueName(testWorkspaceName)
 
 			workspaceKey = types.NamespacedName{
 				Name:      workspaceName,
@@ -107,7 +107,7 @@ var _ = Describe("Workspace Controller", func() {
 					Namespace: workspaceNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 				},
 			}
 			Expect(k8sClient.Create(ctx, workspace)).To(Succeed())

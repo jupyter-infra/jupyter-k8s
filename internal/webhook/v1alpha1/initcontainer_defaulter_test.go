@@ -22,17 +22,17 @@ var _ = Describe("InitContainerDefaulter", func() {
 
 	BeforeEach(func() {
 		template = &workspacev1alpha1.WorkspaceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+			ObjectMeta: metav1.ObjectMeta{Name: testTemplateName},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 				DefaultInitContainers: []corev1.Container{
-					{Name: "setup", Image: "busybox:latest", Command: []string{"sh", "-c", "echo setup"}},
+					{Name: testInitContainerSetup, Image: testImageBusybox, Command: []string{"sh", "-c", "echo setup"}},
 				},
 			},
 		}
 
 		workspace = &workspacev1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-workspace"},
-			Spec:       workspacev1alpha1.WorkspaceSpec{DisplayName: "Test"},
+			ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName},
+			Spec:       workspacev1alpha1.WorkspaceSpec{DisplayName: testDisplayName},
 		}
 	})
 
@@ -41,13 +41,13 @@ var _ = Describe("InitContainerDefaulter", func() {
 			applyInitContainerDefaults(workspace, template)
 
 			Expect(workspace.Spec.InitContainers).To(HaveLen(1))
-			Expect(workspace.Spec.InitContainers[0].Name).To(Equal("setup"))
-			Expect(workspace.Spec.InitContainers[0].Image).To(Equal("busybox:latest"))
+			Expect(workspace.Spec.InitContainers[0].Name).To(Equal(testInitContainerSetup))
+			Expect(workspace.Spec.InitContainers[0].Image).To(Equal(testImageBusybox))
 		})
 
 		It("should not override existing workspace init containers", func() {
 			workspace.Spec.InitContainers = []corev1.Container{
-				{Name: "my-init", Image: "alpine:latest"},
+				{Name: "my-init", Image: testImageAlpine},
 			}
 
 			applyInitContainerDefaults(workspace, template)

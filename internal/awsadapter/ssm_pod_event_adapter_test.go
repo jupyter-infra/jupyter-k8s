@@ -21,8 +21,6 @@ import (
 )
 
 const (
-	bashCommand = "bash"
-
 	// Test values for context keys
 	testSidecarContainer         = "ssm-agent-sidecar"
 	testWorkspaceContainer       = "workspace"
@@ -58,7 +56,7 @@ func mockReadStateFile(mockPodExec *MockPodExecUtil, state *RegistrationState) {
 			mock.Anything,
 			mock.Anything,
 			testSidecarContainer,
-			[]string{"cat", testRegistrationStateFile},
+			[]string{catCommand, testRegistrationStateFile},
 			"",
 		).Return("", errors.New("file not found")).Once()
 	} else {
@@ -68,7 +66,7 @@ func mockReadStateFile(mockPodExec *MockPodExecUtil, state *RegistrationState) {
 			mock.Anything,
 			mock.Anything,
 			testSidecarContainer,
-			[]string{"cat", testRegistrationStateFile},
+			[]string{catCommand, testRegistrationStateFile},
 			"",
 		).Return(string(stateJSON), nil).Once()
 	}
@@ -120,7 +118,7 @@ func mockSSMRegistration(mockPodExec *MockPodExecUtil) {
 		mock.Anything,
 		testSidecarContainer,
 		mock.MatchedBy(func(cmd []string) bool {
-			return len(cmd) == 3 && cmd[0] == "bash" && cmd[1] == "-c" &&
+			return len(cmd) == 3 && cmd[0] == bashCommand && cmd[1] == "-c" &&
 				strings.Contains(cmd[2], "register-ssm.sh")
 		}),
 		mock.MatchedBy(func(stdin string) bool {

@@ -23,7 +23,7 @@ var _ = Describe("StorageDefaulter", func() {
 	BeforeEach(func() {
 		storageClassName := "fast-ssd"
 		template = &workspacev1alpha1.WorkspaceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-template"},
+			ObjectMeta: metav1.ObjectMeta{Name: testTemplateName},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 				PrimaryStorage: &workspacev1alpha1.StorageConfig{
 					DefaultSize:             resource.MustParse("5Gi"),
@@ -34,8 +34,8 @@ var _ = Describe("StorageDefaulter", func() {
 		}
 
 		workspace = &workspacev1alpha1.Workspace{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-workspace"},
-			Spec:       workspacev1alpha1.WorkspaceSpec{DisplayName: "Test"},
+			ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName},
+			Spec:       workspacev1alpha1.WorkspaceSpec{DisplayName: testDisplayName},
 		}
 	})
 

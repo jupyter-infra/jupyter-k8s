@@ -24,14 +24,14 @@ var _ = Describe("ReadinessProbeDefaulter", func() {
 	BeforeEach(func() {
 		template = &workspacev1alpha1.WorkspaceTemplate{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-template",
-				Namespace: "default",
+				Name:      testTemplateName,
+				Namespace: testDefaultNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{},
 		}
 		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-workspace",
+				Name: testWorkspaceName,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{},
 		}

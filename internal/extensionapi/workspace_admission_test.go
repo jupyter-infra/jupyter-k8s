@@ -46,8 +46,8 @@ var _ = Describe("WorkspaceAdmission", func() {
 
 			// Set up test values
 			testNamespace = "test-namespace"
-			testWorkspaceName = "test-workspace"
-			testUsername = "test-user"
+			testWorkspaceName = testWorkspace
+			testUsername = testUser
 		})
 
 		It("Should use the client to Get the Workspace in the namespace", func() {
@@ -58,7 +58,7 @@ var _ = Describe("WorkspaceAdmission", func() {
 					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessType: "Public",
+					AccessType: AccessTypePublic,
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -95,7 +95,7 @@ var _ = Describe("WorkspaceAdmission", func() {
 					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessType: "Public",
+					AccessType: AccessTypePublic,
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -119,11 +119,11 @@ var _ = Describe("WorkspaceAdmission", func() {
 					Name:      testWorkspaceName,
 					Namespace: testNamespace,
 					Annotations: map[string]string{
-						OwnerAnnotation: "different-user",
+						OwnerAnnotation: differentUser,
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessType: "OwnerOnly", // Private
+					AccessType: accessTypeOwnerOnly, // Private
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -138,7 +138,7 @@ var _ = Describe("WorkspaceAdmission", func() {
 			Expect(result.NotFound).To(BeFalse())
 			Expect(result.Reason).To(ContainSubstring("not the workspace owner"))
 			Expect(result.AccessType).To(Equal(AccessTypePrivate))
-			Expect(result.OwnerUsername).To(Equal("different-user"))
+			Expect(result.OwnerUsername).To(Equal(differentUser))
 		})
 
 		It("Should return allowed=true, notFound=false if Workspace exists, is private, matches caller username", func() {
@@ -152,7 +152,7 @@ var _ = Describe("WorkspaceAdmission", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessType: "OwnerOnly", // Private
+					AccessType: accessTypeOwnerOnly, // Private
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), workspace)).To(Succeed())
@@ -207,7 +207,7 @@ var _ = Describe("WorkspaceAdmission", func() {
 		It("Should return public if Workspace.Spec.AccessType=Public", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessType: "Public",
+					AccessType: AccessTypePublic,
 				},
 			}
 
@@ -218,7 +218,7 @@ var _ = Describe("WorkspaceAdmission", func() {
 		It("Should return private if Workspace.Spec.AccessType=OwnerOnly", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					AccessType: "OwnerOnly",
+					AccessType: accessTypeOwnerOnly,
 				},
 			}
 

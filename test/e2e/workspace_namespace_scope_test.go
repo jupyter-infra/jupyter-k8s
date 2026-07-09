@@ -69,7 +69,7 @@ var _ = Describe("Workspace Namespace Scope", Ordered, func() {
 			_, err := utils.Run(cmd)
 			Expect(err).To(HaveOccurred(), "Expected webhook to reject cross-namespace template reference")
 
-			cmd = exec.Command("kubectl", "get", "workspace", "ws-cross-ns-rejected",
+			cmd = exec.Command("kubectl", verbGet, "workspace", "ws-cross-ns-rejected",
 				"-n", workspaceNamespace, "--ignore-not-found")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -148,7 +148,7 @@ var _ = Describe("Workspace Namespace Scope", Ordered, func() {
 			_, err := utils.Run(cmd)
 			Expect(err).To(HaveOccurred(), "Expected webhook to reject cross-namespace access strategy reference")
 
-			cmd = exec.Command("kubectl", "get", "workspace", "ws-cross-ns-as-rejected",
+			cmd = exec.Command("kubectl", verbGet, "workspace", "ws-cross-ns-as-rejected",
 				"-n", workspaceNamespace, "--ignore-not-found")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())

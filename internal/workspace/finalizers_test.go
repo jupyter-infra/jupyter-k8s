@@ -74,8 +74,8 @@ func TestSafelyAddFinalizerToAccessStrategy_HasFinalizer_IsNoop(t *testing.T) {
 	// Create a test access strategy with the finalizer already added
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-access-strategy",
-			Namespace: "default",
+			Name:      testAccessStrategyName,
+			Namespace: defaultNamespace,
 			Finalizers: []string{
 				AccessStrategyFinalizerName,
 			},
@@ -121,8 +121,8 @@ func TestSafelyAddFinalizerToAccessStrategy_NoFinalizer_CallsUpdate(t *testing.T
 	// Create a test access strategy without the finalizer
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-access-strategy",
-			Namespace: "default",
+			Name:      testAccessStrategyName,
+			Namespace: defaultNamespace,
 		},
 	}
 
@@ -160,7 +160,7 @@ func TestSafelyAddFinalizerToAccessStrategy_NoFinalizer_CallsUpdate(t *testing.T
 	// Verify the object was updated in the client
 	updatedAccessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{}
 	err = fakeClient.Get(context.Background(),
-		client.ObjectKey{Namespace: "default", Name: "test-access-strategy"},
+		client.ObjectKey{Namespace: defaultNamespace, Name: testAccessStrategyName},
 		updatedAccessStrategy)
 	assert.NoError(t, err, "Should be able to get the updated object")
 	assert.True(t, controllerutil.ContainsFinalizer(updatedAccessStrategy, AccessStrategyFinalizerName),
@@ -175,8 +175,8 @@ func TestSafelyAddFinalizerToAccessStrategy_OnConflictWithFinalizerAdded_CallsGe
 	// Create a test access strategy without the finalizer
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-access-strategy",
-			Namespace: "default",
+			Name:      testAccessStrategyName,
+			Namespace: defaultNamespace,
 			// No finalizer initially
 		},
 	}
@@ -221,8 +221,8 @@ func TestSafelyAddFinalizerToAccessStrategy_OnConflictWithFinalizerNotAdded_Retu
 	// Create a test access strategy without the finalizer
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-access-strategy",
-			Namespace: "default",
+			Name:      testAccessStrategyName,
+			Namespace: defaultNamespace,
 			// No finalizer initially
 		},
 	}
@@ -274,8 +274,8 @@ func TestSafelyAddFinalizerToAccessStrategy_OnConflictWithGetError_ReturnGetErro
 	// Create a test access strategy without the finalizer
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-access-strategy",
-			Namespace: "default",
+			Name:      testAccessStrategyName,
+			Namespace: defaultNamespace,
 			// No finalizer initially
 		},
 	}
@@ -325,8 +325,8 @@ func TestSafelyAddFinalizerToAccessStrategy_OnNonConflictError_ReturnUpdateError
 	// Create a test access strategy without the finalizer
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-access-strategy",
-			Namespace: "default",
+			Name:      testAccessStrategyName,
+			Namespace: defaultNamespace,
 			// No finalizer initially
 		},
 	}
@@ -372,7 +372,7 @@ func TestEnsureAccessStrategyFinalizerByRef(t *testing.T) {
 	logger := zap.New(zap.UseDevMode(true)).WithName("test")
 
 	const (
-		asName = "web-access"
+		asName = webAccessName
 		asNs   = "shared-ns"
 	)
 

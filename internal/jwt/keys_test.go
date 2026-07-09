@@ -91,7 +91,7 @@ func TestParseSigningKeysFromSecret(t *testing.T) {
 		{
 			name: "single key",
 			secretData: map[string][]byte{
-				"jwt-signing-key-1000": []byte("key1"),
+				signingKeyName1000: []byte("key1"),
 			},
 			expectedKeys: 1,
 			expectedKid:  "1000",
@@ -100,8 +100,8 @@ func TestParseSigningKeysFromSecret(t *testing.T) {
 		{
 			name: "multiple keys",
 			secretData: map[string][]byte{
-				"jwt-signing-key-1000": []byte("key1"),
-				"jwt-signing-key-2000": []byte("key2"),
+				signingKeyName1000:     []byte("key1"),
+				signingKeyName2000:     []byte("key2"),
 				"jwt-signing-key-3000": []byte("key3"),
 			},
 			expectedKeys: 3,
@@ -111,9 +111,9 @@ func TestParseSigningKeysFromSecret(t *testing.T) {
 		{
 			name: "mixed keys and other data",
 			secretData: map[string][]byte{
-				"jwt-signing-key-1000": []byte("key1"),
-				"jwt-signing-key-2000": []byte("key2"),
-				"other-data":           []byte("ignored"),
+				signingKeyName1000: []byte("key1"),
+				signingKeyName2000: []byte("key2"),
+				"other-data":       []byte("ignored"),
 			},
 			expectedKeys: 2,
 			expectedKid:  "2000",

@@ -22,7 +22,7 @@ import (
 // kubectlGet retrieves a Kubernetes resource with optional JSONPath query
 func kubectlGet(resource, name, namespace, jsonpath string) (string, error) {
 	ginkgo.GinkgoHelper()
-	args := []string{"get", resource}
+	args := []string{verbGet, resource}
 	if name != "" {
 		args = append(args, name)
 	}
@@ -42,7 +42,7 @@ func kubectlGet(resource, name, namespace, jsonpath string) (string, error) {
 //nolint:unparam
 func kubectlGetByLabels(resource, labelSelector, namespace, jsonpath string) (string, error) {
 	ginkgo.GinkgoHelper()
-	args := []string{"get", resource, "-l", labelSelector}
+	args := []string{verbGet, resource, "-l", labelSelector}
 	if namespace != "" {
 		args = append(args, "-n", namespace)
 	}
@@ -57,7 +57,7 @@ func kubectlGetByLabels(resource, labelSelector, namespace, jsonpath string) (st
 // kubectlGetAllNamespaces retrieves resources across all namespaces
 func kubectlGetAllNamespaces(resource, jsonpath string) (string, error) {
 	ginkgo.GinkgoHelper()
-	args := []string{"get", resource, "-A"}
+	args := []string{verbGet, resource, "-A"}
 	if jsonpath != "" {
 		args = append(args, "-o", "jsonpath="+jsonpath)
 	}
@@ -69,7 +69,8 @@ func kubectlGetAllNamespaces(resource, jsonpath string) (string, error) {
 // createObjectAsUser creates a Kubernetes object with kubectl impersonation
 func createObjectAsUser(filepath, user string, groups []string) error {
 	ginkgo.GinkgoHelper()
-	args := []string{"create", "-f", filepath, "--as=" + user}
+	args := make([]string, 0, 4+len(groups))
+	args = append(args, verbCreate, "-f", filepath, "--as="+user)
 	for _, group := range groups {
 		args = append(args, "--as-group="+group)
 	}
@@ -81,7 +82,8 @@ func createObjectAsUser(filepath, user string, groups []string) error {
 // kubectlDeleteAllNamespaces deletes resources across all namespaces
 func kubectlDeleteAllNamespaces(resource string, opts ...string) error {
 	ginkgo.GinkgoHelper()
-	args := []string{"delete", resource, "--all", "--all-namespaces"}
+	args := make([]string, 0, 4+len(opts))
+	args = append(args, "delete", resource, "--all", "--all-namespaces")
 	args = append(args, opts...)
 	cmd := exec.Command("kubectl", args...)
 	_, err := utils.Run(cmd)
@@ -156,7 +158,7 @@ func diagnoseAndCleanupStuckResources(
 		"--for=delete", "--timeout=30s")
 	if err := cmd.Run(); err != nil {
 		// Resources still exist - diagnose before emergency cleanup
-		cmd = exec.Command("kubectl", "get", resourceKind, "-A",
+		cmd = exec.Command("kubectl", verbGet, resourceKind, "-A",
 			"-o", "jsonpath={.items[*].metadata.name}")
 		if output, _ := utils.Run(cmd); len(output) > 0 && strings.TrimSpace(output) != "" {
 			resources := strings.Fields(strings.TrimSpace(output))
@@ -166,7 +168,7 @@ func diagnoseAndCleanupStuckResources(
 
 			// Diagnose: Check which workspaces reference each stuck resource
 			for _, resName := range resources {
-				cmd = exec.Command("kubectl", "get", "workspace", "-A",
+				cmd = exec.Command("kubectl", verbGet, "workspace", "-A",
 					"-o", fmt.Sprintf("jsonpath={.items[?(@%s==\"%s\")].metadata.name}", refJSONPath, resName))
 				if wsOutput, _ := utils.Run(cmd); len(wsOutput) > 0 && strings.TrimSpace(wsOutput) != "" {
 					_, _ = fmt.Fprintf(ginkgo.GinkgoWriter,
@@ -181,7 +183,7 @@ func diagnoseAndCleanupStuckResources(
 
 			// Emergency cleanup: Force-remove finalizers to allow suite teardown
 			ginkgo.By(fmt.Sprintf("EMERGENCY: Force-removing stuck %s finalizers for clean teardown", displayName))
-			cmd = exec.Command("kubectl", "get", resourceKind, "-A", "-o", "name")
+			cmd = exec.Command("kubectl", verbGet, resourceKind, "-A", "-o", "name")
 			if resourceList, err := utils.Run(cmd); err == nil && len(resourceList) > 0 {
 				resources := strings.Split(strings.TrimSpace(resourceList), "\n")
 				for _, resource := range resources {

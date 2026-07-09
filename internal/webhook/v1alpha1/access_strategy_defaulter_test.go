@@ -33,7 +33,7 @@ var _ = Describe("AccessStrategyDefaulter", func() {
 				BeforeEach(func() {
 					template.Spec.DefaultAccessStrategy = &workspacev1alpha1.AccessStrategyRef{
 						Name:      "default-strategy",
-						Namespace: "default",
+						Namespace: testDefaultNamespace,
 					}
 				})
 
@@ -42,7 +42,7 @@ var _ = Describe("AccessStrategyDefaulter", func() {
 
 					Expect(workspace.Spec.AccessStrategy).ToNot(BeNil())
 					Expect(workspace.Spec.AccessStrategy.Name).To(Equal("default-strategy"))
-					Expect(workspace.Spec.AccessStrategy.Namespace).To(Equal("default"))
+					Expect(workspace.Spec.AccessStrategy.Namespace).To(Equal(testDefaultNamespace))
 				})
 
 				It("should create a deep copy", func() {
@@ -69,7 +69,7 @@ var _ = Describe("AccessStrategyDefaulter", func() {
 			BeforeEach(func() {
 				workspace.Spec.AccessStrategy = &workspacev1alpha1.AccessStrategyRef{
 					Name:      "existing-strategy",
-					Namespace: "existing",
+					Namespace: testExistingKey,
 				}
 				template.Spec.DefaultAccessStrategy = &workspacev1alpha1.AccessStrategyRef{
 					Name:      "template-strategy",
@@ -81,7 +81,7 @@ var _ = Describe("AccessStrategyDefaulter", func() {
 				applyAccessStrategyDefaults(workspace, template)
 
 				Expect(workspace.Spec.AccessStrategy.Name).To(Equal("existing-strategy"))
-				Expect(workspace.Spec.AccessStrategy.Namespace).To(Equal("existing"))
+				Expect(workspace.Spec.AccessStrategy.Namespace).To(Equal(testExistingKey))
 			})
 		})
 	})

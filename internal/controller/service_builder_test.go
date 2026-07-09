@@ -41,11 +41,11 @@ var _ = Describe("ServiceBuilder", func() {
 		BeforeEach(func() {
 			workspace = &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					Image: "jupyter/base-notebook:latest",
+					Image: imageBaseNotebook,
 				},
 			}
 

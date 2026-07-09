@@ -20,7 +20,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-const testUser = "testuser"
+const (
+	testUser           = "testuser"
+	testGroup1         = "group1"
+	signingKeyName1000 = "jwt-signing-key-1000"
+	signingKeyName2000 = "jwt-signing-key-2000"
+)
 
 // Helper function to create a test signer with a single key
 func createTestSigner(key, issuer, audience string, expiration time.Duration) *StandardSigner {
@@ -38,7 +43,7 @@ func TestStandardSigner_GenerateValidateRoundtrip(t *testing.T) {
 	signer := createTestSigner("test-signing-key-32-characters-long", "test-issuer", "test-audience", time.Hour)
 
 	// Generate token
-	token, err := signer.GenerateToken(testUser, []string{"group1", "group2"}, "uid123", nil, "/path", "domain.com", TokenTypeSession, false)
+	token, err := signer.GenerateToken(testUser, []string{testGroup1, "group2"}, "uid123", nil, "/path", "domain.com", TokenTypeSession, false)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -53,7 +58,7 @@ func TestStandardSigner_GenerateValidateRoundtrip(t *testing.T) {
 	if claims.User != testUser {
 		t.Errorf("Expected user '%s', got %s", testUser, claims.User)
 	}
-	if len(claims.Groups) != 2 || claims.Groups[0] != "group1" || claims.Groups[1] != "group2" {
+	if len(claims.Groups) != 2 || claims.Groups[0] != testGroup1 || claims.Groups[1] != "group2" {
 		t.Errorf("Expected groups [group1, group2], got %v", claims.Groups)
 	}
 	if claims.UID != "uid123" {
@@ -214,7 +219,7 @@ func TestStandardSigner_MultipleKeys_Validation(t *testing.T) {
 	_ = signer.UpdateKeys(signingKeys, latestKid)
 
 	// Generate token (should use latest key)
-	token, err := signer.GenerateToken(testUser, []string{"group1"}, "uid123", nil, "/path", "domain.com", TokenTypeSession, false)
+	token, err := signer.GenerateToken(testUser, []string{testGroup1}, "uid123", nil, "/path", "domain.com", TokenTypeSession, false)
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}
@@ -407,7 +412,7 @@ func TestStandardSigner_HS384Algorithm(t *testing.T) {
 		t.Fatalf("Failed to parse token: %v", err)
 	}
 
-	if parsedToken.Method.Alg() != "HS384" {
+	if parsedToken.Method.Alg() != algHS384 {
 		t.Errorf("Expected HS384 algorithm, got %s", parsedToken.Method.Alg())
 	}
 }
@@ -753,8 +758,8 @@ func TestStandardSigner_RetrieveInitialSecret_Success(t *testing.T) {
 			Namespace: "default",
 		},
 		Data: map[string][]byte{
-			"jwt-signing-key-1000": []byte("key-value-at-least-48-bytes-long-for-hs384-ok!!"),
-			"jwt-signing-key-2000": []byte("newer-key-at-least-48-bytes-long-for-hs384-ok!"),
+			signingKeyName1000: []byte("key-value-at-least-48-bytes-long-for-hs384-ok!!"),
+			signingKeyName2000: []byte("newer-key-at-least-48-bytes-long-for-hs384-ok!"),
 		},
 	}
 
@@ -821,7 +826,7 @@ func TestStandardSigner_RetrieveInitialSecret_NoSigningKeys(t *testing.T) {
 
 func TestGenerateToken_WithSkipRefreshTrue(t *testing.T) {
 	signer := createTestSigner("test-signing-key-32-characters-long", "test-issuer", "test-audience", time.Hour)
-	token, err := signer.GenerateToken(testUser, []string{"group1"}, "uid123", nil, "/path", "domain.com", TokenTypeSession, true)
+	token, err := signer.GenerateToken(testUser, []string{testGroup1}, "uid123", nil, "/path", "domain.com", TokenTypeSession, true)
 	require.NoError(t, err)
 
 	claims, err := signer.ValidateToken(token)
@@ -831,7 +836,7 @@ func TestGenerateToken_WithSkipRefreshTrue(t *testing.T) {
 
 func TestGenerateToken_WithSkipRefreshFalse(t *testing.T) {
 	signer := createTestSigner("test-signing-key-32-characters-long", "test-issuer", "test-audience", time.Hour)
-	token, err := signer.GenerateToken(testUser, []string{"group1"}, "uid123", nil, "/path", "domain.com", TokenTypeSession, false)
+	token, err := signer.GenerateToken(testUser, []string{testGroup1}, "uid123", nil, "/path", "domain.com", TokenTypeSession, false)
 	require.NoError(t, err)
 
 	claims, err := signer.ValidateToken(token)
@@ -843,7 +848,7 @@ func TestGenerateRefreshToken_PreservesIssuedAt(t *testing.T) {
 	signer := createTestSigner("test-signing-key-32-characters-long", "test-issuer", "test-audience", time.Hour)
 
 	// Generate original token
-	originalToken, err := signer.GenerateToken(testUser, []string{"group1"}, "uid123", nil, "/path", "domain.com", TokenTypeSession, false)
+	originalToken, err := signer.GenerateToken(testUser, []string{testGroup1}, "uid123", nil, "/path", "domain.com", TokenTypeSession, false)
 	require.NoError(t, err)
 	originalClaims, err := signer.ValidateToken(originalToken)
 	require.NoError(t, err)

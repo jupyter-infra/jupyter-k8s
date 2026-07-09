@@ -37,7 +37,7 @@ func TestNewCookieManagerSameSite(t *testing.T) {
 		},
 		{
 			name:      "Invalid SameSite",
-			sameSite:  "invalid",
+			sameSite:  testInvalidValue,
 			expectErr: true,
 		},
 	}
@@ -45,7 +45,7 @@ func TestNewCookieManagerSameSite(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			config := &Config{
-				CookieName:     "test_auth",
+				CookieName:     testAuthCookieName,
 				CookieSecure:   true,
 				CookiePath:     "/",
 				CookieMaxAge:   1 * time.Hour,
@@ -87,14 +87,14 @@ func TestNewCookieManagerSameSite(t *testing.T) {
 func TestDynamicCookiePath(t *testing.T) {
 	// Create a test config
 	config := &Config{
-		CookieName:       "test_auth",
+		CookieName:       testAuthCookieName,
 		CookieSecure:     true,
-		CookieDomain:     "example.com",
+		CookieDomain:     testDomainValue,
 		CookiePath:       "/",
 		CookieMaxAge:     1 * time.Hour,
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern: DefaultPathRegexPattern,
 	}
 
 	// Create a cookie manager
@@ -110,34 +110,34 @@ func TestDynamicCookiePath(t *testing.T) {
 		expectedAppPath string
 	}{
 		{
-			name:            "Root path",
+			name:            testRootPathLabel,
 			path:            "/",
 			expectedPath:    "/",
 			expectedAppPath: "/",
 		},
 		{
 			name:            "App path",
-			path:            "/workspaces/namespace1/app1",
-			expectedPath:    "/workspaces/namespace1/app1",
-			expectedAppPath: "/workspaces/namespace1/app1",
+			path:            testPathNamespace1,
+			expectedPath:    testPathNamespace1,
+			expectedAppPath: testPathNamespace1,
 		},
 		{
 			name:            "App subpath",
-			path:            "/workspaces/namespace1/app1/lab",
-			expectedPath:    "/workspaces/namespace1/app1",
-			expectedAppPath: "/workspaces/namespace1/app1",
+			path:            testPathNamespace1Lab,
+			expectedPath:    testPathNamespace1,
+			expectedAppPath: testPathNamespace1,
 		},
 		{
 			name:            "Deep subpath",
 			path:            "/workspaces/namespace1/app1/notebook/nb1.ipynb",
-			expectedPath:    "/workspaces/namespace1/app1",
-			expectedAppPath: "/workspaces/namespace1/app1",
+			expectedPath:    testPathNamespace1,
+			expectedAppPath: testPathNamespace1,
 		},
 		{
 			name:            "Non-matching path",
-			path:            "/api/v1/status",
-			expectedPath:    "/api/v1/status", // For non-matching paths, we use the path as is
-			expectedAppPath: "/api/v1/status",
+			path:            testAPIStatusPath,
+			expectedPath:    testAPIStatusPath, // For non-matching paths, we use the path as is
+			expectedAppPath: testAPIStatusPath,
 		},
 	}
 
@@ -172,13 +172,13 @@ func TestDynamicCookiePath(t *testing.T) {
 func TestCookieWithDifferentPathsButSameApp(t *testing.T) {
 	// Create a test config
 	config := &Config{
-		CookieName:       "test_auth",
+		CookieName:       testAuthCookieName,
 		CookieSecure:     true,
 		CookiePath:       "/",
 		CookieMaxAge:     1 * time.Hour,
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern: DefaultPathRegexPattern,
 	}
 
 	// Create a cookie manager
@@ -187,7 +187,7 @@ func TestCookieWithDifferentPathsButSameApp(t *testing.T) {
 		t.Fatalf("Failed to create cookie manager: %v", err)
 	}
 
-	basePath := "/workspaces/ns1/app1"
+	basePath := testPathValue
 	subPaths := []string{
 		fmt.Sprintf("%s/lab", basePath),
 		fmt.Sprintf("%s/tree", basePath),
@@ -230,14 +230,14 @@ func TestCookieWithDifferentPathsButSameApp(t *testing.T) {
 func TestSetCookieNameAndPath(t *testing.T) {
 	// Create a test config
 	config := &Config{
-		CookieName:       "test_auth",
+		CookieName:       testAuthCookieName,
 		CookieSecure:     true,
-		CookieDomain:     "example.com",
+		CookieDomain:     testDomainValue,
 		CookiePath:       "/",
 		CookieMaxAge:     1 * time.Hour,
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern: DefaultPathRegexPattern,
 	}
 
 	// Create a cookie manager
@@ -262,16 +262,16 @@ func TestSetCookieNameAndPath(t *testing.T) {
 		},
 		{
 			name:         "App path with empty domain",
-			path:         "/workspaces/namespace1/app1",
+			path:         testPathNamespace1,
 			domain:       "",
-			expectedPath: "/workspaces/namespace1/app1",
+			expectedPath: testPathNamespace1,
 			token:        "token-app",
 		},
 		{
 			name:         "App subpath with empty domain",
-			path:         "/workspaces/namespace1/app1/lab",
+			path:         testPathNamespace1Lab,
 			domain:       "",
-			expectedPath: "/workspaces/namespace1/app1",
+			expectedPath: testPathNamespace1,
 			token:        "token-subpath",
 		},
 		{
@@ -290,9 +290,9 @@ func TestSetCookieNameAndPath(t *testing.T) {
 		},
 		{
 			name:         "App path with specific domain",
-			path:         "/workspaces/namespace1/app1",
+			path:         testPathNamespace1,
 			domain:       "app1-ns1.workspaces.example.com",
-			expectedPath: "/workspaces/namespace1/app1",
+			expectedPath: testPathNamespace1,
 			token:        "token-app-domain",
 		},
 	}
@@ -346,14 +346,14 @@ func TestSetCookieNameAndPath(t *testing.T) {
 func TestGetCookieWithPath(t *testing.T) {
 	// Create a test config
 	config := &Config{
-		CookieName:       "test_auth",
+		CookieName:       testAuthCookieName,
 		CookieSecure:     true,
-		CookieDomain:     "example.com",
+		CookieDomain:     testDomainValue,
 		CookiePath:       "/",
 		CookieMaxAge:     1 * time.Hour,
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern: DefaultPathRegexPattern,
 	}
 
 	// Create a cookie manager
@@ -368,18 +368,18 @@ func TestGetCookieWithPath(t *testing.T) {
 		token string
 	}{
 		{
-			name:  "Root path",
+			name:  testRootPathLabel,
 			path:  "/",
 			token: "token-root",
 		},
 		{
 			name:  "App path",
-			path:  "/workspaces/namespace1/app1",
+			path:  testPathNamespace1,
 			token: "token-app",
 		},
 		{
 			name:  "App subpath",
-			path:  "/workspaces/namespace1/app1/lab",
+			path:  testPathNamespace1Lab,
 			token: "token-subpath",
 		},
 	}
@@ -414,14 +414,14 @@ func TestGetCookieWithPath(t *testing.T) {
 func TestGetCookieNotFound(t *testing.T) {
 	// Create a test config
 	config := &Config{
-		CookieName:       "test_auth",
+		CookieName:       testAuthCookieName,
 		CookieSecure:     true,
-		CookieDomain:     "example.com",
+		CookieDomain:     testDomainValue,
 		CookiePath:       "/",
 		CookieMaxAge:     1 * time.Hour,
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern: DefaultPathRegexPattern,
 	}
 
 	// Create a cookie manager
@@ -434,7 +434,7 @@ func TestGetCookieNotFound(t *testing.T) {
 	req := httptest.NewRequest("GET", "http://example.com/workspaces/ns1/app1", nil)
 
 	// Try to get the cookie
-	_, err = manager.GetCookie(req, "/workspaces/ns1/app1")
+	_, err = manager.GetCookie(req, testPathValue)
 
 	// Check that the error is ErrNoCookie
 	if err != ErrNoCookie {
@@ -446,14 +446,14 @@ func TestGetCookieNotFound(t *testing.T) {
 func TestClearCookie(t *testing.T) {
 	// Create a test config
 	config := &Config{
-		CookieName:       "test_auth",
+		CookieName:       testAuthCookieName,
 		CookieSecure:     true,
-		CookieDomain:     "example.com",
+		CookieDomain:     testDomainValue,
 		CookiePath:       "/",
 		CookieMaxAge:     1 * time.Hour,
 		CookieHTTPOnly:   true,
 		CookieSameSite:   SameSiteLax,
-		PathRegexPattern: `^(/workspaces/[^/]+/[^/]+)(?:/.*)?$`,
+		PathRegexPattern: DefaultPathRegexPattern,
 	}
 
 	// Create a cookie manager
@@ -474,12 +474,12 @@ func TestClearCookie(t *testing.T) {
 		},
 		{
 			name:   "App path with empty domain",
-			path:   "/workspaces/namespace1/app1",
+			path:   testPathNamespace1,
 			domain: "",
 		},
 		{
 			name:   "App subpath with empty domain",
-			path:   "/workspaces/namespace1/app1/lab",
+			path:   testPathNamespace1Lab,
 			domain: "",
 		},
 		{
@@ -489,7 +489,7 @@ func TestClearCookie(t *testing.T) {
 		},
 		{
 			name:   "App path with specific domain",
-			path:   "/workspaces/namespace1/app1",
+			path:   testPathNamespace1,
 			domain: "app1-ns1.workspaces.example.com",
 		},
 	}

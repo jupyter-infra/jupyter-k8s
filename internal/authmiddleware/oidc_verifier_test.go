@@ -34,7 +34,7 @@ func testOIDCClaimsParsingFromGitHub(t *testing.T, subject string) {
 	// Create a sample raw token claims as they would come from Dex with GitHub connector
 	// This simulates the JSON payload inside a JWT token from Dex
 	rawClaims := map[string]interface{}{
-		"iss":                "https://example.com/dex",
+		"iss":                testDexIssuerURL,
 		"sub":                subject, // Subject format passed from the test case
 		"aud":                "authmiddleware-client",
 		"exp":                time.Now().Add(1 * time.Hour).Unix(),
@@ -43,8 +43,8 @@ func testOIDCClaimsParsingFromGitHub(t *testing.T, subject string) {
 		"preferred_username": "github-user", // GitHub username
 		"email":              "user@github.com",
 		"groups": []string{
-			"org1:team1",
-			"org1:team2",
+			testOrg1Team1,
+			testOrg1Team2,
 			"org2:admins",
 		},
 		"name": "GitHub User", // Additional claim not explicitly in our struct
@@ -66,8 +66,8 @@ func testOIDCClaimsParsingFromGitHub(t *testing.T, subject string) {
 
 	// Verify groups are parsed correctly
 	assert.Len(t, claims.Groups, 3)
-	assert.Contains(t, claims.Groups, "org1:team1")
-	assert.Contains(t, claims.Groups, "org1:team2")
+	assert.Contains(t, claims.Groups, testOrg1Team1)
+	assert.Contains(t, claims.Groups, testOrg1Team2)
 	assert.Contains(t, claims.Groups, "org2:admins")
 
 	// Test that GetOIDCGroupsFromToken correctly processes GitHub groups
@@ -118,8 +118,8 @@ func testOIDCVerifierWithSubject(t *testing.T, subject string) {
 				Email:    "user@github.com",
 				Subject:  subject,
 				Groups: []string{
-					"org1:team1",
-					"org1:team2",
+					testOrg1Team1,
+					testOrg1Team2,
 					"org2:admins",
 				},
 				ExtraClaimsField: map[string]any{
@@ -145,7 +145,7 @@ func testOIDCVerifierWithSubject(t *testing.T, subject string) {
 func TestOIDCVerifierConfig(t *testing.T) {
 	// Create a comprehensive config to test all values
 	config := &Config{
-		OIDCIssuerURL:       "https://example.com/dex",
+		OIDCIssuerURL:       testDexIssuerURL,
 		OIDCClientID:        "oauth2-proxy",
 		OIDCInitTimeoutSecs: 30,
 	}
@@ -182,17 +182,17 @@ func TestGetOIDCGroupsFromToken(t *testing.T) {
 		{
 			name: "Normal groups",
 			config: &Config{
-				OidcGroupsPrefix: "oidc:",
+				OidcGroupsPrefix: testOidcPrefix,
 			},
 			claims: &OIDCClaims{
-				Groups: []string{"admin", "dev", "user"},
+				Groups: []string{testAdminValue, testDevValue, testUserString},
 			},
 			expected: []string{"oidc:admin", "oidc:dev", "oidc:user"},
 		},
 		{
 			name: "Empty groups",
 			config: &Config{
-				OidcGroupsPrefix: "oidc:",
+				OidcGroupsPrefix: testOidcPrefix,
 			},
 			claims: &OIDCClaims{
 				Groups: []string{},
@@ -202,7 +202,7 @@ func TestGetOIDCGroupsFromToken(t *testing.T) {
 		{
 			name: "Nil claims",
 			config: &Config{
-				OidcGroupsPrefix: "oidc:",
+				OidcGroupsPrefix: testOidcPrefix,
 			},
 			claims:   nil,
 			expected: []string{},
@@ -210,12 +210,12 @@ func TestGetOIDCGroupsFromToken(t *testing.T) {
 		{
 			name: "System groups",
 			config: &Config{
-				OidcGroupsPrefix: "github:",
+				OidcGroupsPrefix: DefaultOidcUsernamePrefix,
 			},
 			claims: &OIDCClaims{
-				Groups: []string{"system:authenticated", "org:team"},
+				Groups: []string{SystemAuthenticatedGroup, "org:team"},
 			},
-			expected: []string{"system:authenticated", "github:org:team"},
+			expected: []string{SystemAuthenticatedGroup, testGithubOrgTeam},
 		},
 	}
 
@@ -238,17 +238,17 @@ func TestGetOIDCUsernameFromToken(t *testing.T) {
 		{
 			name: "Normal username",
 			config: &Config{
-				OidcUsernamePrefix: "oidc:",
+				OidcUsernamePrefix: testOidcPrefix,
 			},
 			claims: &OIDCClaims{
-				Username: "johndoe",
+				Username: testJohndoe,
 			},
 			expected: "oidc:johndoe",
 		},
 		{
 			name: "Empty username",
 			config: &Config{
-				OidcUsernamePrefix: "oidc:",
+				OidcUsernamePrefix: testOidcPrefix,
 			},
 			claims: &OIDCClaims{
 				Username: "",
@@ -258,7 +258,7 @@ func TestGetOIDCUsernameFromToken(t *testing.T) {
 		{
 			name: "Nil claims",
 			config: &Config{
-				OidcUsernamePrefix: "oidc:",
+				OidcUsernamePrefix: testOidcPrefix,
 			},
 			claims:   nil,
 			expected: "",
@@ -276,8 +276,8 @@ func TestGetOIDCUsernameFromToken(t *testing.T) {
 // TestVerifyToken_NotInitialized tests that VerifyToken returns an error when called before Start()
 func TestVerifyToken_NotInitialized(t *testing.T) {
 	config := &Config{
-		OIDCIssuerURL:       "https://example.com/dex",
-		OIDCClientID:        "test-client",
+		OIDCIssuerURL:       testDexIssuerURL,
+		OIDCClientID:        testClientValue,
 		OIDCInitTimeoutSecs: 10,
 	}
 
@@ -300,7 +300,7 @@ func TestVerifyToken_NotInitialized(t *testing.T) {
 func TestStart_WithInvalidIssuer(t *testing.T) {
 	config := &Config{
 		OIDCIssuerURL:       "http://nonexistent-issuer-that-does-not-exist.local",
-		OIDCClientID:        "test-client",
+		OIDCClientID:        testClientValue,
 		OIDCInitTimeoutSecs: 2, // Short timeout for faster test
 	}
 
@@ -321,7 +321,7 @@ func TestNewOIDCVerifier_RequiredFields(t *testing.T) {
 	t.Run("Missing issuer URL", func(t *testing.T) {
 		config := &Config{
 			OIDCIssuerURL:       "", // Missing
-			OIDCClientID:        "test-client",
+			OIDCClientID:        testClientValue,
 			OIDCInitTimeoutSecs: 10,
 		}
 
@@ -333,7 +333,7 @@ func TestNewOIDCVerifier_RequiredFields(t *testing.T) {
 
 	t.Run("Missing client ID", func(t *testing.T) {
 		config := &Config{
-			OIDCIssuerURL:       "https://example.com/dex",
+			OIDCIssuerURL:       testDexIssuerURL,
 			OIDCClientID:        "", // Missing
 			OIDCInitTimeoutSecs: 10,
 		}
@@ -349,7 +349,7 @@ func TestNewOIDCVerifier_RequiredFields(t *testing.T) {
 func TestStart_ContextCanceled(t *testing.T) {
 	config := &Config{
 		OIDCIssuerURL:       "http://nonexistent-issuer-that-does-not-exist.local",
-		OIDCClientID:        "test-client",
+		OIDCClientID:        testClientValue,
 		OIDCInitTimeoutSecs: 30,
 	}
 

@@ -18,6 +18,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// algHS384 is the only JWT signing algorithm accepted (AWS security requirement).
+const algHS384 = "HS384"
+
 // StandardSigner handles JWT token creation and validation using HMAC
 // Supports multiple signing keys for key rotation
 type StandardSigner struct {
@@ -161,7 +164,7 @@ func (s *StandardSigner) ValidateToken(tokenString string) (*Claims, error) {
 			}
 
 			// Enforce HS384 only (AWS security requirement)
-			if t.Method.Alg() != "HS384" {
+			if t.Method.Alg() != algHS384 {
 				return nil, fmt.Errorf("unexpected algorithm: %v, expected HS384", t.Method.Alg())
 			}
 
@@ -184,7 +187,7 @@ func (s *StandardSigner) ValidateToken(tokenString string) (*Claims, error) {
 		},
 		jwt5.WithIssuer(s.issuer),
 		jwt5.WithAudience(s.audience),
-		jwt5.WithValidMethods([]string{"HS384"}),
+		jwt5.WithValidMethods([]string{algHS384}),
 		jwt5.WithLeeway(5*time.Second),
 	)
 

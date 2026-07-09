@@ -49,7 +49,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-storage",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					Storage: &workspacev1alpha1.StorageSpec{
@@ -63,13 +63,13 @@ var _ = Describe("DeploymentBuilder", func() {
 
 			// Verify volume is added
 			Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(1))
-			Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal("workspace-storage"))
+			Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(volumeNameWorkspaceStorage))
 			Expect(deployment.Spec.Template.Spec.Volumes[0].VolumeSource.PersistentVolumeClaim.ClaimName).To(Equal(GeneratePVCName(workspace.Name)))
 
 			// Verify volume mount is added to container
 			container := deployment.Spec.Template.Spec.Containers[0]
 			Expect(container.VolumeMounts).To(HaveLen(1))
-			Expect(container.VolumeMounts[0].Name).To(Equal("workspace-storage"))
+			Expect(container.VolumeMounts[0].Name).To(Equal(volumeNameWorkspaceStorage))
 			Expect(container.VolumeMounts[0].MountPath).To(Equal(DefaultMountPath))
 		})
 
@@ -77,7 +77,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-storage-override",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					Storage: &workspacev1alpha1.StorageSpec{
@@ -101,7 +101,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-volumes",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					Storage: &workspacev1alpha1.StorageSpec{
@@ -159,7 +159,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-container-config",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					ContainerConfig: &workspacev1alpha1.ContainerConfig{
@@ -183,7 +183,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-env",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					Env: []corev1.EnvVar{
@@ -216,7 +216,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-env-valuefrom",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					Env: []corev1.EnvVar{
@@ -270,7 +270,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-empty-env",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					Env: []corev1.EnvVar{},
@@ -289,7 +289,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-nil-config",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					ContainerConfig: nil,
@@ -308,11 +308,11 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-full-config",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					ContainerConfig: &workspacev1alpha1.ContainerConfig{
-						Command: []string{"/bin/sh"},
+						Command: []string{shellBinSh},
 						Args:    []string{"-c", "echo $MY_VAR"},
 					},
 					Env: []corev1.EnvVar{
@@ -330,7 +330,7 @@ var _ = Describe("DeploymentBuilder", func() {
 
 			container := deployment.Spec.Template.Spec.Containers[0]
 
-			Expect(container.Command).To(Equal([]string{"/bin/sh"}))
+			Expect(container.Command).To(Equal([]string{shellBinSh}))
 			Expect(container.Args).To(Equal([]string{"-c", "echo $MY_VAR"}))
 			Expect(container.Env).To(HaveLen(1))
 			Expect(container.Env[0].Name).To(Equal("MY_VAR"))
@@ -343,7 +343,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-node-selector",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					NodeSelector: map[string]string{
@@ -369,7 +369,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-affinity",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					Affinity: &corev1.Affinity{
@@ -407,7 +407,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-preferred-affinity",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					Affinity: &corev1.Affinity{
@@ -445,7 +445,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-tolerations",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					Tolerations: []corev1.Toleration{
@@ -482,7 +482,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-single-toleration",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					Tolerations: []corev1.Toleration{
@@ -509,18 +509,18 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-lifecycle",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					Lifecycle: &corev1.Lifecycle{
 						PostStart: &corev1.LifecycleHandler{
 							Exec: &corev1.ExecAction{
-								Command: []string{"/bin/sh", "-c", "echo 'started' > /tmp/started"},
+								Command: []string{shellBinSh, "-c", "echo 'started' > /tmp/started"},
 							},
 						},
 						PreStop: &corev1.LifecycleHandler{
 							Exec: &corev1.ExecAction{
-								Command: []string{"/bin/sh", "-c", "echo 'stopping' > /tmp/stopping"},
+								Command: []string{shellBinSh, "-c", "echo 'stopping' > /tmp/stopping"},
 							},
 						},
 					},
@@ -536,11 +536,11 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(container.Lifecycle).NotTo(BeNil())
 			Expect(container.Lifecycle.PostStart).NotTo(BeNil())
 			Expect(container.Lifecycle.PostStart.Exec).NotTo(BeNil())
-			Expect(container.Lifecycle.PostStart.Exec.Command).To(Equal([]string{"/bin/sh", "-c", "echo 'started' > /tmp/started"}))
+			Expect(container.Lifecycle.PostStart.Exec.Command).To(Equal([]string{shellBinSh, "-c", "echo 'started' > /tmp/started"}))
 
 			Expect(container.Lifecycle.PreStop).NotTo(BeNil())
 			Expect(container.Lifecycle.PreStop.Exec).NotTo(BeNil())
-			Expect(container.Lifecycle.PreStop.Exec.Command).To(Equal([]string{"/bin/sh", "-c", "echo 'stopping' > /tmp/stopping"}))
+			Expect(container.Lifecycle.PreStop.Exec.Command).To(Equal([]string{shellBinSh, "-c", "echo 'stopping' > /tmp/stopping"}))
 		})
 	})
 
@@ -549,7 +549,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-readiness",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					ReadinessProbe: &corev1.Probe{
@@ -581,7 +581,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-no-readiness",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{},
 			}
@@ -597,13 +597,13 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-http-readiness",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					ReadinessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
-								Path: "/api/status",
+								Path: pathAPIStatus,
 								Port: intstr.FromInt(JupyterPort),
 							},
 						},
@@ -617,7 +617,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			container := deployment.Spec.Template.Spec.Containers[0]
 			Expect(container.ReadinessProbe).NotTo(BeNil())
 			Expect(container.ReadinessProbe.HTTPGet).NotTo(BeNil())
-			Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/api/status"))
+			Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal(pathAPIStatus))
 			Expect(container.ReadinessProbe.HTTPGet.Port).To(Equal(intstr.FromInt(JupyterPort)))
 		})
 	})
@@ -631,8 +631,8 @@ var _ = Describe("DeploymentBuilder", func() {
 		BeforeEach(func() {
 			workspace = &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					Image: "jupyter/base-notebook:v1",
@@ -743,11 +743,11 @@ var _ = Describe("DeploymentBuilder", func() {
 			fsGroup := int64(1000)
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-workspace",
-					Namespace: "default",
+					Name:      testWorkspaceName,
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 					PodSecurityContext: &corev1.PodSecurityContext{
 						FSGroup: &fsGroup,
 					},
@@ -769,7 +769,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-no-container-sc",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{},
 			}
@@ -787,7 +787,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-container-sc",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					ContainerSecurityContext: &corev1.SecurityContext{
@@ -814,7 +814,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-with-annotations",
-					Namespace: "default",
+					Namespace: testNamespace,
 					Annotations: map[string]string{
 						"custom.io/annotation":  "value1",
 						"another.io/annotation": "value2",
@@ -823,7 +823,7 @@ var _ = Describe("DeploymentBuilder", func() {
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 				},
 			}
 
@@ -849,13 +849,13 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-annotation-update",
-					Namespace: "default",
+					Namespace: testNamespace,
 					Annotations: map[string]string{
 						"initial-annotation": "initial-value",
 					},
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
-					DisplayName: "Test Workspace",
+					DisplayName: testWorkspaceDisplayName,
 				},
 			}
 
@@ -889,7 +889,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-init",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{
 					DisplayName: "Test",
@@ -911,7 +911,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			workspace := &workspacev1alpha1.Workspace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-no-init",
-					Namespace: "default",
+					Namespace: testNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceSpec{DisplayName: "Test"},
 			}

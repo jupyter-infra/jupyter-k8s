@@ -71,11 +71,11 @@ func WaitForPVCBinding(pvcName, namespace string) {
 	ginkgo.GinkgoHelper()
 	ginkgo.By(fmt.Sprintf("waiting for PVC %s to bind", pvcName))
 	gomega.Eventually(func() error {
-		phase, phaseErr := kubectlGet("pvc", pvcName, namespace, "{.status.phase}")
+		phase, phaseErr := kubectlGet("pvc", pvcName, namespace, jsonPathStatusPhase)
 		if phaseErr != nil {
 			return phaseErr
 		}
-		if phase != "Bound" {
+		if phase != phaseBound {
 			return fmt.Errorf("PVC %s not bound, status: %s", pvcName, phase)
 		}
 		return nil

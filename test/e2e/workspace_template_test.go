@@ -717,7 +717,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 					{
 						description: "verifying workspace inherited idle shutdown",
 						jsonPath:    "{.spec.idleShutdown.enabled}",
-						expected:    "true",
+						expected:    valueTrue,
 					},
 					{
 						description: "verifying workspace inherited idle timeout in minutes",
@@ -791,7 +791,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 					{
 						description: "verifying workspace inherited container security context runAsNonRoot",
 						jsonPath:    "{.spec.containerSecurityContext.runAsNonRoot}",
-						expected:    "true",
+						expected:    valueTrue,
 					},
 					{
 						description: "verifying workspace inherited container security context runAsUser",
@@ -1033,13 +1033,13 @@ var _ = Describe("Workspace Template", Ordered, func() {
 				[]valueTestCaseForTemplateTest{
 					{
 						description: "verifying workspace inherited volume name",
-						jsonPath:    "{.spec.volumes[0].name}",
-						expected:    "team-data",
+						jsonPath:    jsonPathVolumeName,
+						expected:    volumeNameTeamData,
 					},
 					{
 						description: "verifying workspace inherited volume PVC name",
-						jsonPath:    "{.spec.volumes[0].persistentVolumeClaimName}",
-						expected:    "shared-team-data",
+						jsonPath:    jsonPathVolumePVCName,
+						expected:    pvcNameSharedTeamData,
 					},
 					{
 						description: "verifying workspace inherited volume mount path",
@@ -1050,7 +1050,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 			)
 
 			By("verifying volume is mounted in the deployment")
-			VerifyWorkspaceVolumeMount(workspaceName, workspaceNamespace, "team-data", "/data")
+			VerifyWorkspaceVolumeMount(workspaceName, workspaceNamespace, volumeNameTeamData, "/data")
 		})
 
 		It("should not override workspace volumes with template default volumes", func() {
@@ -1082,7 +1082,7 @@ var _ = Describe("Workspace Template", Ordered, func() {
 				[]valueTestCaseForTemplateTest{
 					{
 						description: "verifying workspace has its own volume name",
-						jsonPath:    "{.spec.volumes[0].name}",
+						jsonPath:    jsonPathVolumeName,
 						expected:    "my-data",
 					},
 					{
@@ -1126,13 +1126,13 @@ var _ = Describe("Workspace Template", Ordered, func() {
 				[]valueTestCaseForTemplateTest{
 					{
 						description: "verifying first workspace inherited volume name",
-						jsonPath:    "{.spec.volumes[0].name}",
-						expected:    "team-data",
+						jsonPath:    jsonPathVolumeName,
+						expected:    volumeNameTeamData,
 					},
 					{
 						description: "verifying first workspace inherited volume PVC",
-						jsonPath:    "{.spec.volumes[0].persistentVolumeClaimName}",
-						expected:    "shared-team-data",
+						jsonPath:    jsonPathVolumePVCName,
+						expected:    pvcNameSharedTeamData,
 					},
 				},
 			)
@@ -1143,13 +1143,13 @@ var _ = Describe("Workspace Template", Ordered, func() {
 				[]valueTestCaseForTemplateTest{
 					{
 						description: "verifying second workspace inherited volume name",
-						jsonPath:    "{.spec.volumes[0].name}",
-						expected:    "team-data",
+						jsonPath:    jsonPathVolumeName,
+						expected:    volumeNameTeamData,
 					},
 					{
 						description: "verifying second workspace inherited volume PVC",
-						jsonPath:    "{.spec.volumes[0].persistentVolumeClaimName}",
-						expected:    "shared-team-data",
+						jsonPath:    jsonPathVolumePVCName,
+						expected:    pvcNameSharedTeamData,
 					},
 				},
 			)

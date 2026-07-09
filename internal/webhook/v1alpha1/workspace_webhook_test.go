@@ -35,6 +35,64 @@ const (
 	testValidBaseNotebook = "jupyter/base-notebook:latest"
 	testDefaultNamespace  = "default"
 	testStrategyName      = "test-strategy"
+
+	testTemplateName         = "test-template"
+	testWorkspaceName        = "test-workspace"
+	testDisplayName          = "Test"
+	testWorkspaceDisplayName = "Test Workspace"
+	testTemplateDisplayName  = "Test Template"
+	testStrategyDisplayName  = "Test Strategy"
+	testOwnershipPublic      = "Public"
+	testOwnershipOwnerOnly   = "OwnerOnly"
+	testStatusRunning        = "Running"
+
+	testExistingKey    = "existing"
+	testLabelValue     = "value"
+	testLabelKeyEnv    = "env"
+	testDataScience    = "data-science"
+	testEnvDevelopment = "development"
+	testEnvProduction  = "production"
+
+	testNamespaceTeamA  = "team-a"
+	testNamespaceTeamB  = "team-b"
+	testSharedNamespace = "jupyter-k8s-shared"
+	testOtherNamespace  = "other-ns"
+	testNamespaceName   = "test-namespace"
+
+	testSomeStrategy      = "some-strategy"
+	testSomeTemplate      = "some-template"
+	testSharedTemplate    = "shared-template"
+	testWebAccessStrategy = "web-access"
+	testTemplateNameTmpl  = "tmpl"
+
+	testBinBash          = "/bin/bash"
+	testBinSh            = "/bin/sh"
+	testStartNotebookCmd = "start-notebook.sh"
+	testEchoHiCmd        = "echo hi"
+	testDataMountPath    = "/data"
+
+	testImageBusybox    = "busybox:latest"
+	testImageAlpine     = "alpine:latest"
+	testImageTestLatest = "test:latest"
+	testScipyNotebook   = "jupyter/scipy-notebook:latest"
+
+	testEnvNameEnv    = "ENV"
+	testEnvNameRegion = "REGION"
+	testEnvValueProd  = "prod"
+
+	testWorkspacePodName   = "workspace-pod"
+	testServiceAccountName = "test-sa"
+	testUser1              = "user1"
+	testOriginalUser       = "original-user"
+	testOwnerUser          = "owner-user"
+	testOtherAnnotation    = "other-annotation"
+
+	testInitContainerSetup    = "setup"
+	testTemplateInitContainer = "template-init"
+	testLabelKeyTeam          = "team"
+	testOtherValue            = "other-value"
+	testVolumeNameData        = "data"
+	testPVCNameData           = "data-pvc"
 )
 
 // createUserContext creates a context with user information for testing
@@ -55,14 +113,14 @@ var _ = Describe("Workspace Webhook", func() {
 	BeforeEach(func() {
 		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-workspace",
+				Name:      testWorkspaceName,
 				Namespace: testDefaultNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				DisplayName:   "Test Workspace",
-				Image:         "jupyter/base-notebook:latest",
-				DesiredStatus: "Running",
-				OwnershipType: "Public",
+				DisplayName:   testWorkspaceDisplayName,
+				Image:         testValidBaseNotebook,
+				DesiredStatus: testStatusRunning,
+				OwnershipType: testOwnershipPublic,
 			},
 		}
 
@@ -96,26 +154,26 @@ var _ = Describe("Workspace Webhook", func() {
 		})
 
 		It("should not overwrite existing created-by annotation", func() {
-			workspace.Annotations = map[string]string{controller.AnnotationCreatedBy: "original-user"}
+			workspace.Annotations = map[string]string{controller.AnnotationCreatedBy: testOriginalUser}
 			ctx = createUserContext(ctx, "UPDATE", "new-user")
 
 			err := defaulter.Default(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(workspace.Annotations[controller.AnnotationCreatedBy]).To(Equal("original-user"))
+			Expect(workspace.Annotations[controller.AnnotationCreatedBy]).To(Equal(testOriginalUser))
 			Expect(workspace.Annotations[controller.AnnotationLastUpdatedBy]).To(Equal("new-user"))
 		})
 
 		It("should preserve existing annotations", func() {
 			workspace.Annotations = map[string]string{
 				"custom-annotation":            "custom-value",
-				controller.AnnotationCreatedBy: "original-user",
+				controller.AnnotationCreatedBy: testOriginalUser,
 			}
 			ctx = createUserContext(ctx, "UPDATE", "new-user")
 
 			err := defaulter.Default(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspace.Annotations["custom-annotation"]).To(Equal("custom-value"))
-			Expect(workspace.Annotations[controller.AnnotationCreatedBy]).To(Equal("original-user"))
+			Expect(workspace.Annotations[controller.AnnotationCreatedBy]).To(Equal(testOriginalUser))
 			Expect(workspace.Annotations[controller.AnnotationLastUpdatedBy]).To(Equal("new-user"))
 		})
 
@@ -138,13 +196,6 @@ var _ = Describe("Workspace Webhook", func() {
 			err := defaulter.Default(ctx, workspace)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(workspace.Spec.DesiredStatus).To(Equal(controller.DesiredStateStopped))
-		})
-
-		It("should return error for wrong object type", func() {
-			wrongObj := &runtime.Unknown{}
-			err := defaulter.Default(ctx, wrongObj)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("expected an Workspace object"))
 		})
 
 		It("should not add created-by annotation for UPDATE operations", func() {
@@ -175,7 +226,7 @@ var _ = Describe("Workspace Webhook", func() {
 					// No finalizers initially
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					DisplayName: "Test Strategy",
+					DisplayName: testStrategyDisplayName,
 				},
 			}
 
@@ -253,7 +304,7 @@ var _ = Describe("Workspace Webhook", func() {
 					// No finalizers initially
 				},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					DisplayName: "Test Strategy",
+					DisplayName: testStrategyDisplayName,
 				},
 			}
 
@@ -312,12 +363,12 @@ var _ = Describe("Workspace Webhook", func() {
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "original-user",
+				controller.AnnotationCreatedBy: testOriginalUser,
 			}
 			newWorkspace := workspace.DeepCopy()
 			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			newWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "original-user",
+				controller.AnnotationCreatedBy: testOriginalUser,
 			}
 
 			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
@@ -333,7 +384,7 @@ var _ = Describe("Workspace Webhook", func() {
 			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
 			newWorkspace := workspace.DeepCopy()
 			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
-			newWorkspace.Spec.Image = "jupyter/scipy-notebook:latest"
+			newWorkspace.Spec.Image = testScipyNotebook
 
 			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
 			Expect(err).NotTo(HaveOccurred())
@@ -341,17 +392,17 @@ var _ = Describe("Workspace Webhook", func() {
 		})
 
 		It("should allow OwnerOnly workspace update by owner", func() {
-			userCtx := createUserContext(ctx, "UPDATE", "owner-user")
+			userCtx := createUserContext(ctx, "UPDATE", testOwnerUser)
 
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "owner-user",
+				controller.AnnotationCreatedBy: testOwnerUser,
 			}
 			newWorkspace := workspace.DeepCopy()
 			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			newWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "owner-user",
+				controller.AnnotationCreatedBy: testOwnerUser,
 			}
 
 			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
@@ -360,12 +411,12 @@ var _ = Describe("Workspace Webhook", func() {
 		})
 
 		It("should allow OwnerOnly workspace deletion by owner", func() {
-			userCtx := createUserContext(ctx, "DELETE", "owner-user")
+			userCtx := createUserContext(ctx, "DELETE", testOwnerUser)
 
 			ownerOnlyWorkspace := workspace.DeepCopy()
 			ownerOnlyWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			ownerOnlyWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "owner-user",
+				controller.AnnotationCreatedBy: testOwnerUser,
 			}
 
 			warnings, err := validator.ValidateDelete(userCtx, ownerOnlyWorkspace)
@@ -378,7 +429,7 @@ var _ = Describe("Workspace Webhook", func() {
 
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "original-user",
+				controller.AnnotationCreatedBy: testOriginalUser,
 			}
 			newWorkspace := workspace.DeepCopy()
 			newWorkspace.Annotations = map[string]string{
@@ -392,17 +443,17 @@ var _ = Describe("Workspace Webhook", func() {
 		})
 
 		It("should allow changing ownershipType from OwnerOnly to Public", func() {
-			ownerCtx := createUserContext(ctx, "UPDATE", "owner-user")
+			ownerCtx := createUserContext(ctx, "UPDATE", testOwnerUser)
 
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "owner-user",
+				controller.AnnotationCreatedBy: testOwnerUser,
 			}
 			newWorkspace := workspace.DeepCopy()
 			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
 			newWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "owner-user",
+				controller.AnnotationCreatedBy: testOwnerUser,
 			}
 
 			warnings, err := validator.ValidateUpdate(ownerCtx, oldWorkspace, newWorkspace)
@@ -416,12 +467,12 @@ var _ = Describe("Workspace Webhook", func() {
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "original-user",
+				controller.AnnotationCreatedBy: testOriginalUser,
 			}
 			newWorkspace := workspace.DeepCopy()
 			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			newWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "original-user",
+				controller.AnnotationCreatedBy: testOriginalUser,
 			}
 
 			warnings, err := validator.ValidateUpdate(nonOwnerCtx, oldWorkspace, newWorkspace)
@@ -455,12 +506,12 @@ var _ = Describe("Workspace Webhook", func() {
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypePublic
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "original-user",
+				controller.AnnotationCreatedBy: testOriginalUser,
 			}
 			newWorkspace := workspace.DeepCopy()
 			newWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			newWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "original-user",
+				controller.AnnotationCreatedBy: testOriginalUser,
 			}
 
 			warnings, err := validator.ValidateUpdate(adminCtx, oldWorkspace, newWorkspace)
@@ -473,12 +524,12 @@ var _ = Describe("Workspace Webhook", func() {
 
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "original-user",
-				"other-annotation":             "other-value",
+				controller.AnnotationCreatedBy: testOriginalUser,
+				testOtherAnnotation:            testOtherValue,
 			}
 			newWorkspace := workspace.DeepCopy()
 			newWorkspace.Annotations = map[string]string{
-				"other-annotation": "other-value",
+				testOtherAnnotation: testOtherValue,
 			}
 
 			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
@@ -492,8 +543,8 @@ var _ = Describe("Workspace Webhook", func() {
 
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "original-user",
-				"other-annotation":             "other-value",
+				controller.AnnotationCreatedBy: testOriginalUser,
+				testOtherAnnotation:            testOtherValue,
 			}
 			newWorkspace := workspace.DeepCopy()
 			newWorkspace.Annotations = nil
@@ -509,7 +560,7 @@ var _ = Describe("Workspace Webhook", func() {
 
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "original-user",
+				controller.AnnotationCreatedBy: testOriginalUser,
 			}
 			newWorkspace := workspace.DeepCopy()
 			newWorkspace.Annotations = map[string]string{
@@ -526,7 +577,7 @@ var _ = Describe("Workspace Webhook", func() {
 
 			oldWorkspace := workspace.DeepCopy()
 			oldWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "original-user",
+				controller.AnnotationCreatedBy: testOriginalUser,
 			}
 			newWorkspace := workspace.DeepCopy()
 			newWorkspace.Annotations = map[string]string{
@@ -545,29 +596,6 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
-		It("should return error for wrong object type in create", func() {
-			wrongObj := &runtime.Unknown{}
-			warnings, err := validator.ValidateCreate(ctx, wrongObj)
-			Expect(err).To(HaveOccurred())
-			Expect(warnings).To(BeNil())
-			Expect(err.Error()).To(ContainSubstring("expected a Workspace object"))
-		})
-
-		It("should return error for wrong object type in update", func() {
-			wrongObj := &runtime.Unknown{}
-			warnings, err := validator.ValidateUpdate(ctx, workspace, wrongObj)
-			Expect(err).To(HaveOccurred())
-			Expect(warnings).To(BeNil())
-			Expect(err.Error()).To(ContainSubstring("expected a Workspace object"))
-		})
-
-		It("should return error for wrong object type in delete", func() {
-			wrongObj := &runtime.Unknown{}
-			warnings, err := validator.ValidateDelete(ctx, wrongObj)
-			Expect(err).To(HaveOccurred())
-			Expect(warnings).To(BeNil())
-			Expect(err.Error()).To(ContainSubstring("expected a Workspace object"))
-		})
 	})
 
 	Context("validateOwnershipPermission", func() {
@@ -577,12 +605,12 @@ var _ = Describe("Workspace Webhook", func() {
 			ownerOnlyWorkspace = workspace.DeepCopy()
 			ownerOnlyWorkspace.Spec.OwnershipType = webhookconst.OwnershipTypeOwnerOnly
 			ownerOnlyWorkspace.Annotations = map[string]string{
-				controller.AnnotationCreatedBy: "owner-user",
+				controller.AnnotationCreatedBy: testOwnerUser,
 			}
 		})
 
 		It("should allow owner access", func() {
-			userInfo := &authenticationv1.UserInfo{Username: "owner-user"}
+			userInfo := &authenticationv1.UserInfo{Username: testOwnerUser}
 			req := admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{UserInfo: *userInfo}}
 			userCtx := admission.NewContextWithRequest(ctx, req)
 
@@ -613,19 +641,19 @@ var _ = Describe("Workspace Webhook", func() {
 		BeforeEach(func() {
 			template = &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-template",
-					Namespace: "default",
+					Name:      testTemplateName,
+					Namespace: testDefaultNamespace,
 				},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					AllowedImages: []string{"jupyter/base-notebook:latest", "jupyter/scipy-notebook:latest"},
-					DefaultImage:  "jupyter/base-notebook:latest",
+					AllowedImages: []string{testValidBaseNotebook, testScipyNotebook},
+					DefaultImage:  testValidBaseNotebook,
 				},
 			}
 		})
 
 		Context("validateImageAllowed", func() {
 			It("should allow image in allowed list", func() {
-				violation := validateImageAllowed("jupyter/base-notebook:latest", template)
+				violation := validateImageAllowed(testValidBaseNotebook, template)
 				Expect(violation).To(BeNil())
 			})
 
@@ -634,12 +662,12 @@ var _ = Describe("Workspace Webhook", func() {
 				Expect(violation).NotTo(BeNil())
 				Expect(violation.Type).To(Equal(ViolationTypeImageNotAllowed))
 				Expect(violation.Message).To(ContainSubstring("malicious/image:latest"))
-				Expect(violation.Message).To(ContainSubstring("test-template"))
+				Expect(violation.Message).To(ContainSubstring(testTemplateName))
 			})
 
 			It("should use default image when allowed list is empty", func() {
 				template.Spec.AllowedImages = []string{}
-				violation := validateImageAllowed("jupyter/base-notebook:latest", template)
+				violation := validateImageAllowed(testValidBaseNotebook, template)
 				Expect(violation).To(BeNil())
 			})
 
@@ -691,7 +719,7 @@ var _ = Describe("Workspace Webhook", func() {
 				Expect(violation).NotTo(BeNil())
 				Expect(violation.Type).To(Equal(ViolationTypeStorageExceeded))
 				Expect(violation.Message).To(ContainSubstring("below minimum"))
-				Expect(violation.Message).To(ContainSubstring("test-template"))
+				Expect(violation.Message).To(ContainSubstring(testTemplateName))
 			})
 
 			It("should reject storage above maximum", func() {
@@ -699,7 +727,7 @@ var _ = Describe("Workspace Webhook", func() {
 				Expect(violation).NotTo(BeNil())
 				Expect(violation.Type).To(Equal(ViolationTypeStorageExceeded))
 				Expect(violation.Message).To(ContainSubstring("exceeds maximum"))
-				Expect(violation.Message).To(ContainSubstring("test-template"))
+				Expect(violation.Message).To(ContainSubstring(testTemplateName))
 			})
 
 			It("should allow any size when no storage config", func() {
@@ -714,7 +742,7 @@ var _ = Describe("Workspace Webhook", func() {
 				allowSecondaryStorages := true
 				template.Spec.AllowSecondaryStorages = &allowSecondaryStorages
 				volumes := []workspacev1alpha1.VolumeSpec{
-					{Name: "data", PersistentVolumeClaimName: "data-pvc", MountPath: "/data"},
+					{Name: testVolumeNameData, PersistentVolumeClaimName: testPVCNameData, MountPath: testDataMountPath},
 				}
 				violation := validateSecondaryStorages(volumes, template)
 				Expect(violation).To(BeNil())
@@ -723,7 +751,7 @@ var _ = Describe("Workspace Webhook", func() {
 			It("should allow volumes when AllowSecondaryStorages is nil (default true)", func() {
 				template.Spec.AllowSecondaryStorages = nil
 				volumes := []workspacev1alpha1.VolumeSpec{
-					{Name: "data", PersistentVolumeClaimName: "data-pvc", MountPath: "/data"},
+					{Name: testVolumeNameData, PersistentVolumeClaimName: testPVCNameData, MountPath: testDataMountPath},
 				}
 				violation := validateSecondaryStorages(volumes, template)
 				Expect(violation).To(BeNil())
@@ -733,7 +761,7 @@ var _ = Describe("Workspace Webhook", func() {
 				allowSecondaryStorages := false
 				template.Spec.AllowSecondaryStorages = &allowSecondaryStorages
 				volumes := []workspacev1alpha1.VolumeSpec{
-					{Name: "data", PersistentVolumeClaimName: "data-pvc", MountPath: "/data"},
+					{Name: testVolumeNameData, PersistentVolumeClaimName: testPVCNameData, MountPath: testDataMountPath},
 				}
 				violation := validateSecondaryStorages(volumes, template)
 				Expect(violation).NotTo(BeNil())
@@ -764,11 +792,11 @@ var _ = Describe("Workspace Webhook", func() {
 			It("should return true for equal storages", func() {
 				storage1 := &workspacev1alpha1.StorageSpec{
 					Size:      resource.MustParse("1Gi"),
-					MountPath: "/data",
+					MountPath: testDataMountPath,
 				}
 				storage2 := &workspacev1alpha1.StorageSpec{
 					Size:      resource.MustParse("1Gi"),
-					MountPath: "/data",
+					MountPath: testDataMountPath,
 				}
 				Expect(storageEqual(storage1, storage2)).To(BeTrue())
 			})
@@ -808,7 +836,7 @@ var _ = Describe("Workspace Webhook", func() {
 		})
 
 		It("should return true for controller service account", func() {
-			Expect(os.Setenv(controller.ControllerPodNamespaceEnv, "default")).To(Succeed())
+			Expect(os.Setenv(controller.ControllerPodNamespaceEnv, testDefaultNamespace)).To(Succeed())
 			Expect(os.Setenv(controller.ControllerPodServiceAccountEnv, "controller")).To(Succeed())
 			defer func() {
 				_ = os.Unsetenv(controller.ControllerPodNamespaceEnv)
@@ -834,9 +862,9 @@ var _ = Describe("Workspace Webhook", func() {
 			userCtx := createUserContext(ctx, "UPDATE", "test-user")
 
 			oldWorkspace := workspace.DeepCopy()
-			oldWorkspace.Labels = map[string]string{"env": "prod"}
+			oldWorkspace.Labels = map[string]string{testLabelKeyEnv: testEnvValueProd}
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Labels = map[string]string{"env": "prod", "team": "data-science"}
+			newWorkspace.Labels = map[string]string{testLabelKeyEnv: testEnvValueProd, testLabelKeyTeam: testDataScience}
 
 			// Both workspaces have identical spec - only labels changed
 			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
@@ -867,10 +895,10 @@ var _ = Describe("Workspace Webhook", func() {
 			userCtx := createUserContext(ctx, "UPDATE", "test-user")
 
 			oldWorkspace := workspace.DeepCopy()
-			oldWorkspace.Labels = map[string]string{"env": "dev"}
+			oldWorkspace.Labels = map[string]string{testLabelKeyEnv: "dev"}
 			newWorkspace := workspace.DeepCopy()
-			newWorkspace.Labels = map[string]string{"env": "prod"}
-			newWorkspace.Spec.Image = "jupyter/scipy-notebook:latest" // Spec changed
+			newWorkspace.Labels = map[string]string{testLabelKeyEnv: testEnvValueProd}
+			newWorkspace.Spec.Image = testScipyNotebook // Spec changed
 
 			// Should validate because spec changed (not just metadata)
 			warnings, err := validator.ValidateUpdate(userCtx, oldWorkspace, newWorkspace)
@@ -916,7 +944,7 @@ var _ = Describe("Workspace Webhook", func() {
 
 			// Create validator with template validator initialized
 			validatorWithTemplate = &WorkspaceCustomValidator{
-				templateValidator: NewTemplateValidator(k8sClient, "default"),
+				templateValidator: NewTemplateValidator(k8sClient, testDefaultNamespace),
 				volumeValidator:   NewVolumeValidator(k8sClient),
 			}
 		})
@@ -943,7 +971,7 @@ var _ = Describe("Workspace Webhook", func() {
 			newWorkspace.Spec.DesiredStatus = controller.DesiredStateStopped // Stopping
 			newWorkspace.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{
 				Name:      template.Name,
-				Namespace: "default",
+				Namespace: testDefaultNamespace,
 			}
 
 			// Should reject because image changed to invalid value (not just stopping)
@@ -1159,6 +1187,10 @@ func (m *MockClient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersio
 
 func (m *MockClient) IsObjectNamespaced(obj runtime.Object) (bool, error) {
 	return true, nil
+}
+
+func (m *MockClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+	return nil
 }
 
 func (m *MockClient) SubResource(subResource string) client.SubResourceClient {

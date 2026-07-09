@@ -56,11 +56,11 @@ func createTestIdleConfigChecker(timeoutMinutes int) *workspacev1alpha1.IdleShut
 		Detection: workspacev1alpha1.IdleDetectionSpec{
 			HTTPGet: &workspacev1alpha1.IdleHTTPGetAction{
 				HTTPGetAction: corev1.HTTPGetAction{
-					Path:   "/api/idle",
+					Path:   pathAPIIdle,
 					Port:   intstr.FromInt(8888),
 					Scheme: corev1.URISchemeHTTP,
 				},
-				Transport: "network",
+				Transport: transportNetwork,
 			},
 		},
 	}
@@ -72,7 +72,7 @@ func createTestIdleConfigCheckerPodExec(timeoutMinutes int) *workspacev1alpha1.I
 		Detection: workspacev1alpha1.IdleDetectionSpec{
 			HTTPGet: &workspacev1alpha1.IdleHTTPGetAction{
 				HTTPGetAction: corev1.HTTPGetAction{
-					Path:   "/api/idle",
+					Path:   pathAPIIdle,
 					Port:   intstr.FromInt(8888),
 					Scheme: corev1.URISchemeHTTP,
 				},
@@ -85,7 +85,7 @@ func createTestIdleConfigCheckerPodExec(timeoutMinutes int) *workspacev1alpha1.I
 func createTestService() *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-service",
+			Name:      testServiceName,
 			Namespace: testNamespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -332,7 +332,7 @@ func createLegacyTestIdleConfig() *workspacev1alpha1.IdleShutdownSpec {
 		Detection: workspacev1alpha1.IdleDetectionSpec{
 			HTTPGet: &workspacev1alpha1.IdleHTTPGetAction{
 				HTTPGetAction: corev1.HTTPGetAction{
-					Path:   "/api/idle",
+					Path:   pathAPIIdle,
 					Port:   intstr.FromInt(8888),
 					Scheme: corev1.URISchemeHTTP,
 				},

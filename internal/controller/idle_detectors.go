@@ -91,7 +91,7 @@ func (h *PodExecHTTPGetDetector) CheckIdle(ctx context.Context, workspace *works
 
 	logger.V(1).Info("Calling idle endpoint via podExec", "url", probeURL)
 
-	const workspaceContainerName = "workspace"
+	const workspaceContainerName = ResourcePrefix
 	output, err := h.execUtil.ExecInPod(ctx, h.pod, workspaceContainerName, cmd, "")
 	if err != nil {
 		// curl exit code 7 = connection refused (temporary failure)
@@ -254,7 +254,7 @@ func extractJSONField(body, path string) (string, error) {
 // parseTimestamp parses a timestamp string according to the specified format.
 func parseTimestamp(value, format string) (time.Time, error) {
 	switch format {
-	case "unix":
+	case timestampFormatUnix:
 		epoch, err := strconv.ParseFloat(value, 64)
 		if err != nil {
 			return time.Time{}, fmt.Errorf("invalid unix timestamp %q: %w", value, err)
@@ -291,7 +291,7 @@ func resolveIdlePath(basePath, httpGetPath string) string {
 func buildIdleProbeURL(httpGetConfig *workspacev1alpha1.IdleHTTPGetAction, host, fullPath string) string {
 	scheme := strings.ToLower(string(httpGetConfig.Scheme))
 	if scheme == "" {
-		scheme = "http"
+		scheme = httpScheme
 	}
 	if !strings.HasPrefix(fullPath, "/") {
 		fullPath = "/" + fullPath

@@ -20,9 +20,9 @@ func TestGetOidcUsername(t *testing.T) {
 		{
 			name: "add prefix to username",
 			config: &Config{
-				OidcUsernamePrefix: "github:",
+				OidcUsernamePrefix: DefaultOidcUsernamePrefix,
 			},
-			preferredUsername: "johndoe",
+			preferredUsername: testJohndoe,
 			expected:          "github:johndoe",
 		},
 		{
@@ -36,7 +36,7 @@ func TestGetOidcUsername(t *testing.T) {
 		{
 			name: "empty username",
 			config: &Config{
-				OidcUsernamePrefix: "github:",
+				OidcUsernamePrefix: DefaultOidcUsernamePrefix,
 			},
 			preferredUsername: "",
 			expected:          "",
@@ -46,8 +46,8 @@ func TestGetOidcUsername(t *testing.T) {
 			config: &Config{
 				OidcUsernamePrefix: "",
 			},
-			preferredUsername: "johndoe",
-			expected:          "johndoe",
+			preferredUsername: testJohndoe,
+			expected:          testJohndoe,
 		},
 	}
 
@@ -71,9 +71,9 @@ func TestGetOidcGroups(t *testing.T) {
 		{
 			name: "add prefix to groups",
 			config: &Config{
-				OidcGroupsPrefix: "github:",
+				OidcGroupsPrefix: DefaultOidcUsernamePrefix,
 			},
-			groups:   []string{"dev", "admin"},
+			groups:   []string{testDevValue, testAdminValue},
 			expected: []string{"github:dev", "github:admin"},
 		},
 		{
@@ -81,13 +81,13 @@ func TestGetOidcGroups(t *testing.T) {
 			config: &Config{
 				OidcGroupsPrefix: "gitlab-",
 			},
-			groups:   []string{"users", "team1", "team2"},
+			groups:   []string{testUsersValue, "team1", "team2"},
 			expected: []string{"gitlab-users", "gitlab-team1", "gitlab-team2"},
 		},
 		{
 			name: "empty groups list",
 			config: &Config{
-				OidcGroupsPrefix: "github:",
+				OidcGroupsPrefix: DefaultOidcUsernamePrefix,
 			},
 			groups:   []string{},
 			expected: []string{},
@@ -97,13 +97,13 @@ func TestGetOidcGroups(t *testing.T) {
 			config: &Config{
 				OidcGroupsPrefix: "",
 			},
-			groups:   []string{"dev", "admin"},
-			expected: []string{"dev", "admin"},
+			groups:   []string{testDevValue, testAdminValue},
+			expected: []string{testDevValue, testAdminValue},
 		},
 		{
 			name: "already prefixed groups",
 			config: &Config{
-				OidcGroupsPrefix: "github:",
+				OidcGroupsPrefix: DefaultOidcUsernamePrefix,
 			},
 			groups:   []string{"github:admin", "team1"},
 			expected: []string{"github:github:admin", "github:team1"},
@@ -111,18 +111,18 @@ func TestGetOidcGroups(t *testing.T) {
 		{
 			name: "system:authenticated group is preserved",
 			config: &Config{
-				OidcGroupsPrefix: "github:",
+				OidcGroupsPrefix: DefaultOidcUsernamePrefix,
 			},
-			groups:   []string{"system:authenticated", "dev-team"},
-			expected: []string{"system:authenticated", "github:dev-team"},
+			groups:   []string{SystemAuthenticatedGroup, "dev-team"},
+			expected: []string{SystemAuthenticatedGroup, "github:dev-team"},
 		},
 		{
 			name: "mixed system and regular groups",
 			config: &Config{
-				OidcGroupsPrefix: "oidc:",
+				OidcGroupsPrefix: testOidcPrefix,
 			},
-			groups:   []string{"admin", "system:authenticated", "users"},
-			expected: []string{"oidc:admin", "system:authenticated", "oidc:users"},
+			groups:   []string{testAdminValue, SystemAuthenticatedGroup, testUsersValue},
+			expected: []string{"oidc:admin", SystemAuthenticatedGroup, "oidc:users"},
 		},
 	}
 

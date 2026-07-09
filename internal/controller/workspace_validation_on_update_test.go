@@ -32,14 +32,14 @@ var _ = Describe("Lazy Application", func() {
 		template = &workspacev1alpha1.WorkspaceTemplate{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "lazy-app-template",
-				Namespace: "default",
+				Namespace: testNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 				DisplayName:  "Lazy Application Template",
 				DefaultImage: "image:v1",
 				AllowedImages: []string{
 					"image:v1",
-					"image:v2",
+					imageV2,
 				},
 				DefaultResources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -69,9 +69,9 @@ var _ = Describe("Lazy Application", func() {
 		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "lazy-app-workspace",
-				Namespace: "default",
+				Namespace: testNamespace,
 				Labels: map[string]string{
-					"workspace.jupyter.org/template-name": template.Name,
+					LabelWorkspaceTemplate: template.Name,
 				},
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
@@ -121,7 +121,7 @@ var _ = Describe("Lazy Application", func() {
 	It("should apply new template defaults to new workspaces after template modification", func() {
 		updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updatedTemplate)).To(Succeed())
-		updatedTemplate.Spec.DefaultImage = "image:v2"
+		updatedTemplate.Spec.DefaultImage = imageV2
 		updatedTemplate.Spec.DefaultResources.Requests[corev1.ResourceCPU] = resource.MustParse("200m")
 		Expect(k8sClient.Update(ctx, updatedTemplate)).To(Succeed())
 
@@ -129,7 +129,7 @@ var _ = Describe("Lazy Application", func() {
 		newWorkspace := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "new-workspace-after-change",
-				Namespace: "default",
+				Namespace: testNamespace,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
 				DisplayName: "New Workspace",
@@ -150,7 +150,7 @@ var _ = Describe("Lazy Application", func() {
 
 		createdWorkspace := &workspacev1alpha1.Workspace{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(newWorkspace), createdWorkspace)).To(Succeed())
-		Expect(createdWorkspace.Spec.Image).To(Equal("image:v2"))
+		Expect(createdWorkspace.Spec.Image).To(Equal(imageV2))
 		Expect(createdWorkspace.Spec.Resources.Requests.Cpu().String()).To(Equal("200m"))
 	})
 
@@ -158,7 +158,7 @@ var _ = Describe("Lazy Application", func() {
 		// Update template to be more restrictive
 		updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updatedTemplate)).To(Succeed())
-		updatedTemplate.Spec.DefaultImage = "image:v2"
+		updatedTemplate.Spec.DefaultImage = imageV2
 		updatedTemplate.Spec.DefaultResources.Requests[corev1.ResourceCPU] = resource.MustParse("200m")
 		Expect(k8sClient.Update(ctx, updatedTemplate)).To(Succeed())
 

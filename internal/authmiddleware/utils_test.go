@@ -17,20 +17,20 @@ func TestSplitGroup(t *testing.T) {
 		expected []string
 	}{
 		{
-			groups:   "github:org:team",
-			expected: []string{"github:org:team"},
+			groups:   testGithubOrgTeam,
+			expected: []string{testGithubOrgTeam},
 		},
 		{
 			groups:   "github:org1:team1, github:org1:team2",
-			expected: []string{"github:org1:team1", "github:org1:team2"},
+			expected: []string{testGithubOrg1Team1, testGithubOrg1Team2},
 		},
 		{
 			groups:   "github:org1:team1,github:org1:team2",
-			expected: []string{"github:org1:team1", "github:org1:team2"},
+			expected: []string{testGithubOrg1Team1, testGithubOrg1Team2},
 		},
 		{
 			groups:   "github:org1:team1 github:org1:team2",
-			expected: []string{"github:org1:team1", "github:org1:team2"},
+			expected: []string{testGithubOrg1Team1, testGithubOrg1Team2},
 		},
 		{
 			groups:   "",
@@ -60,11 +60,11 @@ func TestJoinGroups(t *testing.T) {
 		expected string
 	}{
 		{
-			groups:   []string{"github:org:team"},
-			expected: "github:org:team",
+			groups:   []string{testGithubOrgTeam},
+			expected: testGithubOrgTeam,
 		},
 		{
-			groups:   []string{"github:org1:team1", "github:org1:team2"},
+			groups:   []string{testGithubOrg1Team1, testGithubOrg1Team2},
 			expected: "github:org1:team1,github:org1:team2",
 		},
 		{
@@ -111,9 +111,9 @@ func TestSplitString(t *testing.T) {
 			expected: []string{"a", "b:c"},
 		},
 		{
-			input:    "abc",
+			input:    testAbcValue,
 			sep:      ",",
-			expected: []string{"abc"},
+			expected: []string{testAbcValue},
 		},
 		{
 			input:    "",
@@ -154,9 +154,9 @@ func TestSplitAndTrim(t *testing.T) {
 			expected: []string{"a", "b", "c"},
 		},
 		{
-			input:    "abc",
+			input:    testAbcValue,
 			sep:      ",",
-			expected: []string{"abc"},
+			expected: []string{testAbcValue},
 		},
 		{
 			input:    "",
