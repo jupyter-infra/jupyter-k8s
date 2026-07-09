@@ -28,7 +28,7 @@ func getFixturePath(filename string) string {
 // createConnectionAccessReviewAndGetStatus creates a ConnectionAccessReview and parses the response status
 func createConnectionAccessReviewAndGetStatus(filepath string) (allowed bool, notFound bool, reason string, err error) {
 	ginkgo.GinkgoHelper()
-	cmd := exec.Command("kubectl", "create", "-f", filepath, "-o", "yaml")
+	cmd := exec.Command("kubectl", verbCreate, "-f", filepath, "-o", "yaml")
 	output, createErr := utils.Run(cmd)
 	if createErr != nil {
 		return false, false, "", createErr
@@ -56,7 +56,7 @@ func createConnectionAccessReviewAndGetStatus(filepath string) (allowed bool, no
 // to extract workspaceConnectionType and workspaceConnectionUrl from the status.
 func createWorkspaceConnectionAndGetResponse(filepath string) (connType, connURL string, err error) {
 	ginkgo.GinkgoHelper()
-	cmd := exec.Command("kubectl", "create", "-f", filepath, "-o", "yaml")
+	cmd := exec.Command("kubectl", verbCreate, "-f", filepath, "-o", "yaml")
 	output, createErr := utils.Run(cmd)
 	if createErr != nil {
 		return "", "", createErr
@@ -80,7 +80,8 @@ func createWorkspaceConnectionAndGetResponse(filepath string) (connType, connURL
 // returning the raw output and error.
 func createWorkspaceConnectionAsUser(filepath, user string, groups []string) (string, error) {
 	ginkgo.GinkgoHelper()
-	args := []string{"create", "-f", filepath, "-o", "yaml", "--as=" + user}
+	args := make([]string, 0, 6+len(groups))
+	args = append(args, verbCreate, "-f", filepath, "-o", "yaml", "--as="+user)
 	for _, group := range groups {
 		args = append(args, "--as-group="+group)
 	}
@@ -136,7 +137,7 @@ func createBearerTokenReview(token, asUser string) (*bearerTokenReviewResult, er
 	body := fmt.Sprintf(`{"apiVersion":"connection.workspace.jupyter.org/v1alpha1","kind":"BearerTokenReview","metadata":{"namespace":"%s"},"spec":{"token":"%s"}}`, ns, token)
 	apiPath := fmt.Sprintf("/apis/connection.workspace.jupyter.org/v1alpha1/namespaces/%s/bearertokenreviews", ns)
 
-	args := []string{"create", "--raw", apiPath, "-f", "-"}
+	args := []string{verbCreate, "--raw", apiPath, "-f", "-"}
 	if asUser != "" {
 		args = append(args, "--as="+asUser)
 	}
@@ -192,7 +193,8 @@ func extractTokenFromConnectionURL(connURL string) (string, error) {
 // updateObjectAsUser updates a Kubernetes object with kubectl impersonation
 func updateObjectAsUser(filepath, user string, groups []string) error {
 	ginkgo.GinkgoHelper()
-	args := []string{"apply", "-f", filepath, "--as=" + user}
+	args := make([]string, 0, 4+len(groups))
+	args = append(args, "apply", "-f", filepath, "--as="+user)
 	for _, group := range groups {
 		args = append(args, "--as-group="+group)
 	}

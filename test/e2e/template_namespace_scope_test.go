@@ -82,7 +82,7 @@ var _ = Describe("Template Namespace Scope", Ordered, func() {
 		_, err := utils.Run(cmd)
 		Expect(err).To(HaveOccurred(), "Expected webhook to reject cross-namespace access strategy reference")
 
-		cmd = exec.Command("kubectl", "get", "workspacetemplate", "template-cross-ns-as-rejected",
+		cmd = exec.Command("kubectl", verbGet, "workspacetemplate", "template-cross-ns-as-rejected",
 			"-n", templateNamespace, "--ignore-not-found")
 		output, err := utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred())

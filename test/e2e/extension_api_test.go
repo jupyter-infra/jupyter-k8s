@@ -35,7 +35,7 @@ var _ = Describe("Extension API", Ordered, func() {
 		It("should have extension API service registered and available", func() {
 			By("verifying APIService v1alpha1.connection.workspace.jupyter.org is available")
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "apiservice", "v1alpha1.connection.workspace.jupyter.org",
+				cmd := exec.Command("kubectl", verbGet, "apiservice", "v1alpha1.connection.workspace.jupyter.org",
 					"-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}")
 				status, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -47,7 +47,7 @@ var _ = Describe("Extension API", Ordered, func() {
 		It("should allow authorized user to create ConnectionAccessReview", func() {
 			By("creating ConnectionAccessReview without impersonation (admin user)")
 			reviewPath := getFixturePath("access-review-basic")
-			cmd := exec.Command("kubectl", "create", "-f", reviewPath, "-o", "yaml")
+			cmd := exec.Command("kubectl", verbCreate, "-f", reviewPath, "-o", "yaml")
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Admin user should be able to create ConnectionAccessReview")
 
@@ -70,13 +70,13 @@ var _ = Describe("Extension API", Ordered, func() {
 	Context("ConnectionAccessReview", func() {
 		BeforeAll(func() {
 			By("creating RBAC role for workspace creation")
-			cmd := exec.Command("kubectl", "create", "-f",
+			cmd := exec.Command("kubectl", verbCreate, "-f",
 				getFixturePath("workspace-creator-role"))
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating RoleBinding for owner user to create workspaces")
-			cmd = exec.Command("kubectl", "create", "-f",
+			cmd = exec.Command("kubectl", verbCreate, "-f",
 				getFixturePath("workspace-creator-binding"))
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -86,7 +86,7 @@ var _ = Describe("Extension API", Ordered, func() {
 
 			By("creating a private workspace as owner user")
 			privateWorkspacePath := getFixturePath("workspace-owner-only-access")
-			cmd = exec.Command("kubectl", "create", "-f", privateWorkspacePath,
+			cmd = exec.Command("kubectl", verbCreate, "-f", privateWorkspacePath,
 				"--as=owner-for-access-test-user")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -96,19 +96,19 @@ var _ = Describe("Extension API", Ordered, func() {
 			WaitForWorkspaceToReachCondition("workspace-owner-only-access", extensionAPITestNamespace, ConditionTypeAvailable, ConditionTrue)
 
 			By("creating RBAC role for workspace connection permission")
-			cmd = exec.Command("kubectl", "create", "-f",
+			cmd = exec.Command("kubectl", verbCreate, "-f",
 				getFixturePath("workspace-connection-role"))
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating RoleBinding for owner user")
-			cmd = exec.Command("kubectl", "create", "-f",
+			cmd = exec.Command("kubectl", verbCreate, "-f",
 				getFixturePath("workspace-connection-owner-binding"))
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating RoleBinding for workspace-users group")
-			cmd = exec.Command("kubectl", "create", "-f",
+			cmd = exec.Command("kubectl", verbCreate, "-f",
 				getFixturePath("workspace-connection-group-binding"))
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
@@ -260,7 +260,7 @@ var _ = Describe("Extension API", Ordered, func() {
 
 			By("creating private workspace as connection-owner-user")
 			privatePath := getFixturePath("workspace-connection-private")
-			cmd = exec.Command("kubectl", "create", "-f", privatePath, "--as=connection-owner-user")
+			cmd = exec.Command("kubectl", verbCreate, "-f", privatePath, "--as=connection-owner-user")
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -396,7 +396,7 @@ var _ = Describe("Extension API", Ordered, func() {
 			_, _ = fmt.Fprintf(GinkgoWriter, "Initial kid: %s\n", kid1)
 
 			By("triggering JWT key rotation via CronJob")
-			cmd := exec.Command("kubectl", "create", "job",
+			cmd := exec.Command("kubectl", verbCreate, "job",
 				"--from=cronjob/jupyter-k8s-jwt-rotator",
 				"jwt-rotation-e2e", "-n", OperatorNamespace)
 			_, err = utils.Run(cmd)
@@ -546,7 +546,7 @@ var _ = Describe("Extension API", Ordered, func() {
 			_, _ = fmt.Fprintf(GinkgoWriter, "Pre-rotation kid: %s\n", preRotationKid)
 
 			By("triggering JWT key rotation")
-			cmd := exec.Command("kubectl", "create", "job",
+			cmd := exec.Command("kubectl", verbCreate, "job",
 				"--from=cronjob/jupyter-k8s-jwt-rotator",
 				"jwt-rotation-bearer-review-e2e", "-n", OperatorNamespace)
 			_, err = utils.Run(cmd)

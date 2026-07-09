@@ -46,6 +46,45 @@ const WorkspaceLabelName = "workspace.jupyter.org/workspace-name"
 // WebhookCertificateName is the name of the webhook certificate
 const WebhookCertificateName = "jupyter-k8s-serving-cert"
 
+// Common string literal values used across e2e tests. Declared as constants to
+// satisfy goconst (repeated string literals) and to keep usage consistent.
+const (
+	// valueTrue is the string representation of a boolean true value
+	valueTrue = "true"
+	// flagSet is the helm/kubectl "--set" flag
+	flagSet = "--set"
+	// verbGet is the kubectl "get" verb
+	verbGet = "get"
+	// verbCreate is the kubectl "create" verb
+	verbCreate = "create"
+	// phaseBound is the PVC "Bound" phase value
+	phaseBound = "Bound"
+	// accessModeRWO is the "ReadWriteOnce" PVC access mode value
+	accessModeRWO = "ReadWriteOnce"
+	// volumeNameTeamData is the shared team-data volume name
+	volumeNameTeamData = "team-data"
+	// pvcNameSharedTeamData is the shared-team-data PVC name
+	pvcNameSharedTeamData = "shared-team-data"
+)
+
+// JSONPath expressions used to query Kubernetes resources in e2e tests.
+const (
+	jsonPathPVCStorage    = "{.spec.resources.requests.storage}"
+	jsonPathAccessMode    = "{.spec.accessModes[0]}"
+	jsonPathOwnerRefName  = "{.metadata.ownerReferences[0].name}"
+	jsonPathStatusPhase   = "{.status.phase}"
+	jsonPathVolumeName    = "{.spec.volumes[0].name}"
+	jsonPathVolumePVCName = "{.spec.volumes[0].persistentVolumeClaimName}"
+)
+
+// Description strings used in table-driven storage/template verification tests.
+const (
+	descVerifyingPVCSize       = "verifying pvc size"
+	descVerifyingPVCAccessMode = "verifying pvc access mode"
+	descVerifyingOwnerRef      = "verifying owner reference"
+	descVerifyingBindingStatus = "verifying binding status"
+)
+
 // GetWorkspaceCrds returns an array with the workspace CRD names
 func GetWorkspaceCrds() []string {
 	return []string{

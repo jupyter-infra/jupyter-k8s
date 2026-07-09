@@ -29,7 +29,7 @@ var (
 	// - E2E_ROTATOR_IMAGE: Override rotator image (default: docker.io/library/rotator:local)
 	// - E2E_CHART_SOURCE: Override chart source — local path or oci:// URL (default: dist/chart)
 	// - E2E_CHART_VERSION: Chart version for OCI source (required when E2E_CHART_SOURCE is oci://)
-	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
+	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == valueTrue
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
 
@@ -127,11 +127,11 @@ var _ = BeforeSuite(func() {
 	}
 
 	By("installing Traefik CRDs for access strategy tests")
-	cmd = exec.Command("kubectl", "get", "crds", "ingressroutes.traefik.io", "--ignore-not-found")
+	cmd = exec.Command("kubectl", verbGet, "crds", "ingressroutes.traefik.io", "--ignore-not-found")
 	traeficCRD, _ := utils.Run(cmd)
 	if strings.TrimSpace(traeficCRD) == "" {
 		By("Creating traefik namespace")
-		cmd = exec.Command("kubectl", "create", "namespace", "traefik", "--dry-run=client", "-o", "yaml")
+		cmd = exec.Command("kubectl", verbCreate, "namespace", "traefik", "--dry-run=client", "-o", "yaml")
 		createNs, _ := utils.Run(cmd)
 		cmd = exec.Command("sh", "-c", fmt.Sprintf("echo '%s' | kubectl apply -f -", createNs))
 		_, _ = utils.Run(cmd)
@@ -154,7 +154,7 @@ var _ = BeforeSuite(func() {
 
 		By("Verifying CRD installation")
 		Eventually(func(g Gomega) {
-			cmd := exec.Command("kubectl", "get", "crds", "ingressroutes.traefik.io")
+			cmd := exec.Command("kubectl", verbGet, "crds", "ingressroutes.traefik.io")
 			output, err := utils.Run(cmd)
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(output).To(ContainSubstring("ingressroutes.traefik.io"))
@@ -173,19 +173,19 @@ var _ = BeforeSuite(func() {
 	helmArgs := []string{
 		"upgrade", "--install", helmReleaseName, chartSource,
 		"--namespace", OperatorNamespace, "--create-namespace",
-		"--set", fmt.Sprintf("manager.image.repository=%s", strings.Split(projectImage, ":")[0]),
-		"--set", fmt.Sprintf("manager.image.tag=%s", strings.Split(projectImage, ":")[1]),
-		"--set", "manager.image.pullPolicy=Never",
-		"--set", "application.imagesPullPolicy=Never",
-		"--set", "application.imagesRegistry=docker.io/library",
-		"--set", "extensionApi.enable=true",
-		"--set", "extensionApi.jwtSecret.enable=true",
-		"--set", fmt.Sprintf("extensionApi.jwtSecret.rotator.repository=%s", rotatorRepo),
-		"--set", fmt.Sprintf("extensionApi.jwtSecret.rotator.imageName=%s", rotatorName),
-		"--set", fmt.Sprintf("extensionApi.jwtSecret.rotator.imageTag=%s", rotatorTag),
-		"--set", "extensionApi.jwtSecret.rotator.imagePullPolicy=Never",
-		"--set", "workspacePodWatching.enable=true",
-		"--set", "accessResources.traefik.enable=true",
+		flagSet, fmt.Sprintf("manager.image.repository=%s", strings.Split(projectImage, ":")[0]),
+		flagSet, fmt.Sprintf("manager.image.tag=%s", strings.Split(projectImage, ":")[1]),
+		flagSet, "manager.image.pullPolicy=Never",
+		flagSet, "application.imagesPullPolicy=Never",
+		flagSet, "application.imagesRegistry=docker.io/library",
+		flagSet, "extensionApi.enable=true",
+		flagSet, "extensionApi.jwtSecret.enable=true",
+		flagSet, fmt.Sprintf("extensionApi.jwtSecret.rotator.repository=%s", rotatorRepo),
+		flagSet, fmt.Sprintf("extensionApi.jwtSecret.rotator.imageName=%s", rotatorName),
+		flagSet, fmt.Sprintf("extensionApi.jwtSecret.rotator.imageTag=%s", rotatorTag),
+		flagSet, "extensionApi.jwtSecret.rotator.imagePullPolicy=Never",
+		flagSet, "workspacePodWatching.enable=true",
+		flagSet, "accessResources.traefik.enable=true",
 		"--wait",
 		"--timeout", "5m",
 	}
@@ -203,7 +203,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with pod security policy")
 
 	By("creating jupyter-k8s-shared namespace for templates")
-	cmd = exec.Command("kubectl", "create", "ns", SharedNamespace, "--dry-run=client", "-o", "yaml")
+	cmd = exec.Command("kubectl", verbCreate, "ns", SharedNamespace, "--dry-run=client", "-o", "yaml")
 	nsYaml, _ := utils.Run(cmd)
 	cmd = exec.Command("sh", "-c", fmt.Sprintf("echo '%s' | kubectl apply -f -", nsYaml))
 	_, err = utils.Run(cmd)
@@ -219,7 +219,7 @@ var _ = BeforeSuite(func() {
 
 	By("verifying controller pods are running and ready")
 	Eventually(func(g Gomega) {
-		cmd := exec.Command("kubectl", "get", "pods",
+		cmd := exec.Command("kubectl", verbGet, "pods",
 			"-l", "control-plane=controller-manager",
 			"-n", OperatorNamespace,
 			"-o", "jsonpath={.items[*].metadata.name}")
@@ -230,7 +230,7 @@ var _ = BeforeSuite(func() {
 
 		// Verify pod is actually Running, not CrashLoopBackOff
 		for _, podName := range podNames {
-			phase, err := kubectlGet("pod", podName, OperatorNamespace, "{.status.phase}")
+			phase, err := kubectlGet("pod", podName, OperatorNamespace, jsonPathStatusPhase)
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(strings.TrimSpace(phase)).To(Equal("Running"),
 				fmt.Sprintf("Pod %s not in Running state", podName))
@@ -240,7 +240,7 @@ var _ = BeforeSuite(func() {
 				"{.status.containerStatuses[*].ready}")
 			g.Expect(err).NotTo(HaveOccurred())
 			for _, ready := range strings.Fields(readyStates) {
-				g.Expect(strings.TrimSpace(ready)).To(Equal("true"),
+				g.Expect(strings.TrimSpace(ready)).To(Equal(valueTrue),
 					fmt.Sprintf("Container in pod %s not ready", podName))
 			}
 		}
@@ -248,7 +248,7 @@ var _ = BeforeSuite(func() {
 
 	By("waiting for webhook certificate to be ready")
 	Eventually(func(g Gomega) {
-		cmd := exec.Command("kubectl", "get", "certificate", WebhookCertificateName,
+		cmd := exec.Command("kubectl", verbGet, "certificate", WebhookCertificateName,
 			"-n", OperatorNamespace,
 			"-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
 		status, err := utils.Run(cmd)
@@ -258,7 +258,7 @@ var _ = BeforeSuite(func() {
 
 	By("verifying mutating webhook configuration with CA bundle")
 	Eventually(func(g Gomega) {
-		cmd := exec.Command("kubectl", "get", "mutatingwebhookconfiguration",
+		cmd := exec.Command("kubectl", verbGet, "mutatingwebhookconfiguration",
 			"jupyter-k8s-mutating-webhook-configuration",
 			"-o", "jsonpath={.webhooks[0].clientConfig.caBundle}")
 		caBundle, err := utils.Run(cmd)
@@ -268,7 +268,7 @@ var _ = BeforeSuite(func() {
 
 	By("verifying validating webhook configuration with CA bundle")
 	Eventually(func(g Gomega) {
-		cmd := exec.Command("kubectl", "get", "validatingwebhookconfiguration",
+		cmd := exec.Command("kubectl", verbGet, "validatingwebhookconfiguration",
 			"jupyter-k8s-validating-webhook-configuration",
 			"-o", "jsonpath={.webhooks[0].clientConfig.caBundle}")
 		caBundle, err := utils.Run(cmd)
@@ -293,7 +293,7 @@ var _ = BeforeSuite(func() {
 
 	By("waiting for extension API service to be available")
 	Eventually(func(g Gomega) {
-		cmd := exec.Command("kubectl", "get", "apiservice",
+		cmd := exec.Command("kubectl", verbGet, "apiservice",
 			"v1alpha1.connection.workspace.jupyter.org",
 			"-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}")
 		status, err := utils.Run(cmd)
@@ -308,7 +308,7 @@ var _ = BeforeSuite(func() {
 func dumpSetupDiagnostics() {
 	_, _ = fmt.Fprintf(GinkgoWriter, "\n=== SETUP FAILED - Collecting Diagnostics ===\n")
 
-	cmd := exec.Command("kubectl", "get", "pods", "-A")
+	cmd := exec.Command("kubectl", verbGet, "pods", "-A")
 	if output, _ := utils.Run(cmd); len(output) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nAll pods:\n%s\n", output)
 	}
@@ -321,14 +321,14 @@ func dumpSetupDiagnostics() {
 	}
 
 	// Check deployment status
-	cmd = exec.Command("kubectl", "get", "deployment",
+	cmd = exec.Command("kubectl", verbGet, "deployment",
 		"-n", OperatorNamespace, "-o", "wide")
 	if deploys, _ := utils.Run(cmd); len(deploys) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nDeployments:\n%s\n", deploys)
 	}
 
 	// Check replicasets (shows deployment issues)
-	cmd = exec.Command("kubectl", "get", "replicasets",
+	cmd = exec.Command("kubectl", verbGet, "replicasets",
 		"-n", OperatorNamespace, "-o", "wide")
 	if rs, _ := utils.Run(cmd); len(rs) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nReplicaSets:\n%s\n", rs)
@@ -340,18 +340,18 @@ func dumpSetupDiagnostics() {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nController logs:\n%s\n", logs)
 	}
 
-	cmd = exec.Command("kubectl", "get", "events", "-A",
+	cmd = exec.Command("kubectl", verbGet, "events", "-A",
 		"--sort-by=.lastTimestamp", "--field-selector", "type=Warning")
 	if events, _ := utils.Run(cmd); len(events) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nWarning events:\n%s\n", events)
 	}
 
-	cmd = exec.Command("kubectl", "get", "certificate", "-n", OperatorNamespace)
+	cmd = exec.Command("kubectl", verbGet, "certificate", "-n", OperatorNamespace)
 	if certs, _ := utils.Run(cmd); len(certs) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nCertificates:\n%s\n", certs)
 	}
 
-	cmd = exec.Command("kubectl", "get", "mutatingwebhookconfiguration",
+	cmd = exec.Command("kubectl", verbGet, "mutatingwebhookconfiguration",
 		"jupyter-k8s-mutating-webhook-configuration", "-o", "yaml")
 	if mwh, _ := utils.Run(cmd); len(mwh) > 0 {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\nMutatingWebhookConfiguration:\n%s\n", mwh)
