@@ -325,28 +325,45 @@ if [ -f "${APISERVICE_YAML}" ]; then
     sed -i 's|{{ .Release.Namespace }}/jupyter-k8s-extension-server-cert|{{ .Release.Namespace }}/{{ include "jupyter-k8s.resourceName" (dict "suffix" "extension-server-cert" "context" $) }}|' "${APISERVICE_YAML}"
 fi
 
-# --- Create extension API auth RoleBinding in kube-system ---
-echo "Creating extension API auth RoleBinding template..."
+# --- Create extension API auth ClusterRole/ClusterRoleBinding ---
+# Uses cluster-scoped resources instead of a kube-system RoleBinding for
+# compatibility with environments that lack cross-namespace permissions
+# (e.g., EKS addon framework).
+echo "Creating extension API auth ClusterRole/ClusterRoleBinding template..."
 cat > "${CHART_DIR}/templates/rbac/extension-api-auth-binding.yaml" << 'AUTHEOF'
 {{- if .Values.extensionApi.enable }}
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRole
 metadata:
   labels:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/name: {{ include "jupyter-k8s.name" . }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     app.kubernetes.io/instance: {{ .Release.Name }}
-  name: jupyter-k8s-extension-api-auth
-  namespace: kube-system
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: extension-apiserver-authentication-reader
+  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "read-auth-configmap" "context" $) }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["extension-apiserver-authentication"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "jupyter-k8s.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "read-auth-configmap" "context" $) }}
 subjects:
-- kind: ServiceAccount
-  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "controller-manager" "context" $) }}
-  namespace: {{ .Release.Namespace }}
+  - kind: ServiceAccount
+    name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "controller-manager" "context" $) }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "read-auth-configmap" "context" $) }}
+  apiGroup: rbac.authorization.k8s.io
 {{- end }}
 AUTHEOF
 
