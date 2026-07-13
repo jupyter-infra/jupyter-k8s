@@ -232,6 +232,62 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:MaxItems=10
 	// +optional
 	InitContainers []corev1.Container `json:"initContainers,omitempty"`
+
+	// IntegrationTemplateRefs attaches one or more WorkspaceIntegrationTemplates that inject runtime
+	// capabilities (sidecars, volumes, env vars) into the workspace pod with template-based
+	// dynamic resolution. Each entry is the user's REQUEST only -- a reference to a
+	// WorkspaceIntegrationTemplate plus parameters -- never the resolved sidecars.
+	//
+	// The workspace controller resolves each integration against its referenced resources (e.g. a
+	// RayCluster) only when the input token -- hash(templateRef + parameters) -- changes. On an
+	// unchanged token (external drift in a referenced resource, an idle reconcile), the controller
+	// rebuilds the pod template from the frozen values recorded in status.resolvedIntegrations
+	// instead of re-reading the referenced resource, so drift never rolls the running pod. No
+	// WorkspaceIntegration child object is created.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=1
+	IntegrationTemplateRefs []IntegrationTemplateRef `json:"integrationTemplateRefs,omitempty"`
+}
+
+// IntegrationParameter is a single user-provided input for template expression resolution.
+type IntegrationParameter struct {
+	// Name of the parameter, referenced in template expressions as {{ .Parameters.<Name> }}
+	Name string `json:"name"`
+
+	// Value of the parameter (substituted into template expression fields at resolution time)
+	// +optional
+	Value string `json:"value,omitempty"`
+}
+
+// IntegrationTemplateRef defines a reference to a WorkspaceIntegrationTemplate.
+type IntegrationTemplateRef struct {
+	// Name of the WorkspaceIntegrationTemplate
+	Name string `json:"name"`
+
+	// Namespace where the WorkspaceIntegrationTemplate is located
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// Parameters provided by the user for template expression resolution.
+	// Each parameter is referenced in template expressions as {{ .Parameters.<Name> }}.
+	// Names must be unique.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=10
+	Parameters []IntegrationParameter `json:"parameters,omitempty"`
+}
+
+// ParametersMap flattens the extensible name/value parameter list into a map keyed
+// by name for {{ .Parameters.<name> }} expression access.
+func (r *IntegrationTemplateRef) ParametersMap() map[string]string {
+	m := make(map[string]string, len(r.Parameters))
+	for _, p := range r.Parameters {
+		m[p.Name] = p.Value
+	}
+	return m
 }
 
 // AccessResourceStatus defines the status of a resource created from a template
@@ -325,6 +381,80 @@ type WorkspaceStatus struct {
 	// +patchMergeKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+
+	// IntegrationStatuses reports the operator-observed readiness of each integration applied to the
+	// workspace, as observed by the periodic status probe. One entry per integration that defines
+	// a statusProbe. Absence of an entry means "not yet probed"; a present entry always reflects
+	// an actual observation (Ready + Reason). Named after the k8s pod.status.containerStatuses
+	// convention (<thing>Statuses []<Thing>Status), matching the IntegrationStatus element type.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	IntegrationStatuses []IntegrationStatus `json:"integrationStatuses,omitempty"`
+
+	// ResolvedIntegrations records the frozen output of the last successful integration resolution,
+	// one entry per attached integration. It is the operator's private freeze store: on an unchanged
+	// input token the controller rebuilds the pod template from these values WITHOUT re-reading the
+	// referenced resource, so external drift never re-resolves and never rolls the running pod. Each
+	// entry stores only the resolved template substitutions (a small string map), never the fully
+	// rendered pod spec -- the pod SHAPE still comes from the live WorkspaceIntegrationTemplate; only
+	// the resolved VALUES are frozen here. Written by the controller via the status subresource; it
+	// is never user-authored.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	ResolvedIntegrations []ResolvedIntegration `json:"resolvedIntegrations,omitempty"`
+}
+
+// ResolvedIntegration is the frozen resolution record for a single attached integration. It is the
+// source of truth the controller replays from on unchanged-token reconciles.
+type ResolvedIntegration struct {
+	// Name is the WorkspaceIntegrationTemplate name this record resolves (matches the
+	// spec.integrationTemplateRefs[].name that produced it).
+	Name string `json:"name"`
+
+	// ParametersVersion is a hash of the integration ref's identity and user-supplied parameters
+	// (templateRef namespace+name + the sorted parameter map) captured when these values were
+	// resolved. A change means the user switched clusters or edited a parameter.
+	ParametersVersion string `json:"parametersVersion"`
+
+	// ObservedIntegrationTemplateVersion is "<template.UID>.<template.Generation>" captured when these
+	// values were resolved. A change means the admin edited (or replaced) the referenced
+	// WorkspaceIntegrationTemplate. Mirrors status.observedAccessStrategyVersion.
+	ObservedIntegrationTemplateVersion string `json:"observedIntegrationTemplateVersion"`
+
+	// The controller replays the frozen Values (below) as long as BOTH ParametersVersion and
+	// ObservedIntegrationTemplateVersion still match the live inputs; if either differs it re-resolves
+	// against the referenced resource and refreezes. Re-resolution re-renders the pod template, so it
+	// rolls the pod only when the rendered output actually changes.
+
+	// Values is the frozen resolution map: each key is a "<resourceRefID>|<jsonPath>" capture key
+	// and each value is the literal string the {{ resource ... }} expression resolved to at capture
+	// time. On replay, the resolver serves these instead of reading the referenced resource. Storing
+	// only these substitutions (not the rendered pod spec) keeps the status payload small.
+	// +optional
+	Values map[string]string `json:"values,omitempty"`
+}
+
+// IntegrationStatus reports the operator-observed readiness of a single integration. It follows the
+// KRO instance-status precedent (https://kro.run/docs/concepts/instances#understanding-status):
+// a name, a coarse state, and standard Kubernetes conditions carrying the machine-readable detail.
+type IntegrationStatus struct {
+	// Name is the name of the WorkspaceIntegrationTemplate this status reports on.
+	Name string `json:"name"`
+
+	// State is a coarse, human-facing rollup of the conditions below: "Ready" when the integration's
+	// last probe succeeded, "Degraded" when it failed. Empty means "not yet probed".
+	// +optional
+	State string `json:"state,omitempty"`
+
+	// Conditions carry the detailed, machine-readable observation. The operator sets a single
+	// "Ready" condition whose Reason is one of Ready/ProbeFailed/PodNotFound/ProbeError and whose
+	// Message holds any human-readable detail (e.g. the probe's stderr on failure).
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
