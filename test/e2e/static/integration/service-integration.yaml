@@ -1,0 +1,61 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceIntegrationTemplate
+metadata:
+  name: service-integration
+  namespace: default
+spec:
+  displayName: Shared Service Integration
+  # parameters declares the contract: every {{ .Parameters.X }} the template uses must be declared here,
+  # and a referencing workspace must supply each. The validating webhook rejects an undeclared reference
+  # (author typo) or a workspace that omits one. Only serviceName is user-supplied; the namespace uses
+  # {{ .Workspace.Namespace }}, which is not a parameter.
+  parameters:
+    - name: serviceName
+  # shareProcessNamespace is a static pod-level toggle (no resolution). The deployment builder
+  # OR-reduces it onto the pod; the e2e asserts the pod ends up with spec.shareProcessNamespace: true.
+  shareProcessNamespace: true
+  # KRO-style external reference: the operator fetches this Service at reconcile time, captures the
+  # {{ resource ... }} values, and FREEZES them into workspace.status.resolvedIntegrations. The `name`
+  # field is the handle referenced by {{ resource "cache" ... }} below. A Service is a built-in kind
+  # (no CRD), and the operator already has get on Services -- so no extra RBAC is needed to read it.
+  resourceRefs:
+    - name: cache
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: "{{ .Parameters.serviceName }}"
+        namespace: "{{ .Workspace.Namespace }}"
+  # statusProbe is run by the operator against the workspace pod and its verdict is recorded in
+  # workspace.status.integrationStatuses[]. The command carries a {{ resource }} expression that the
+  # operator MUST resolve from the frozen values before exec -- it compares the resolved service name
+  # against the known value, so it exits 0 (Ready) ONLY if resolution happened. If the operator ever
+  # regresses to exec'ing the literal "{{ resource ... }}" string, this test compares the literal against
+  # the expected value, fails, and the integration reports Degraded -- catching the probe-resolution bug.
+  statusProbe:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        # Double-quoted YAML scalar: YAML turns \" into a literal ", so the resolver receives a
+        # well-formed {{ resource "cache" ... }} action. The shell then compares the RESOLVED service
+        # name against the known value.
+        - "[ \"{{ resource \"cache\" \"{.metadata.name}\" }}\" = shared-cache ]"
+  deploymentModifications:
+    podModifications:
+      additionalContainers:
+        # A sidecar that connects the workspace to the shared service. The image is a fixed, sensible
+        # value (not resolved from the ref) -- a Service has no image to resolve, and real integrations
+        # pin the sidecar image. Only the connection target (host:port) is resolved from the Service.
+        - name: cache-proxy
+          image: busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - "echo connecting to {{ resource \"cache\" \"{.metadata.name}\" }}:{{ resource \"cache\" \"{.spec.ports[0].port}\" }} && sleep infinity"
+      primaryContainerModifications:
+        mergeEnv:
+          - name: CACHE_HOST
+            valueTemplate: '{{ resource "cache" "{.metadata.name}" }}'
+          - name: CACHE_PORT
+            valueTemplate: '{{ resource "cache" "{.spec.ports[0].port}" }}'
+          - name: CACHE_SERVICE_NAME
+            valueTemplate: "{{ .Parameters.serviceName }}"
