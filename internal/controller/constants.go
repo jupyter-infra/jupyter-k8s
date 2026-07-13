@@ -62,6 +62,13 @@ const (
 	// DesiredStateStopped indicates the workspace is stopped
 	DesiredStateStopped = "Stopped"
 
+	// IntegrationStateReady is the coarse rollup reported in status.integrationStatuses[].state when an
+	// integration's last probe succeeded.
+	IntegrationStateReady = "Ready"
+	// IntegrationStateDegraded is the coarse rollup reported in status.integrationStatuses[].state when
+	// an integration's last probe failed.
+	IntegrationStateDegraded = "Degraded"
+
 	// PreemptedReason is the reason for preempted workspaces
 	PreemptedReason = "Workspace preempted due to resource contention"
 

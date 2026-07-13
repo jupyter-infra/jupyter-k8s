@@ -28,6 +28,11 @@ const (
 
 	// ConditionTypeDeleting indicates the Workspace is being deleted and resources are being cleaned up
 	ConditionTypeDeleting = "Deleting"
+
+	// IntegrationConditionTypeReady is the condition type on status.integrationStatuses[].conditions
+	// carrying an integration's probe verdict. Named after the positive state (Kubernetes convention),
+	// like ConditionTypeAvailable; its Status (True/False) holds the actual verdict.
+	IntegrationConditionTypeReady = "Ready"
 )
 
 // Condition reasons for Workspace resources

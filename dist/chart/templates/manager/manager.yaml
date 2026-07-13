@@ -82,6 +82,9 @@ spec:
         {{- if .Values.idleShutdown.checkInterval }}
         - "--idle-check-interval={{ .Values.idleShutdown.checkInterval }}"
         {{- end }}
+        {{- if .Values.integrationProbe.period }}
+        - "--integration-probe-period={{ .Values.integrationProbe.period }}"
+        {{- end }}
         {{- if .Values.certManager.enable }}
         - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         {{- end }}

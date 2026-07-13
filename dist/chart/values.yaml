@@ -179,6 +179,14 @@ idleShutdown:
   # clamped up to 1s to avoid saturating the controller at scale.
   checkInterval: "5m"
 
+# [INTEGRATION PROBE]: Report-only integration status probe configuration
+integrationProbe:
+  # Base cadence for report-only integration status probes on running workspaces. Must be a valid Go
+  # duration string with a unit (e.g. "5m", "30s"); a bare number like "5" is invalid.
+  # Leave empty to fall back to the controller default (5m). Values below 1s are
+  # clamped up to 1s to avoid saturating the controller at scale.
+  period: "5m"
+
 # [ACCESS RESOURCES]: Configure resources to watch for access strategy
 accessResources:
   # Guided mode using traefik proxy
