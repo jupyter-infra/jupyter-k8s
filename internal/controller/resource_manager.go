@@ -7,6 +7,7 @@ package controller
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
@@ -95,7 +96,7 @@ func (rm *ResourceManager) getPVC(ctx context.Context, workspace *workspacev1alp
 func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*appsv1.Deployment, error) {
 	logger := logf.FromContext(ctx)
 
-	deployment, err := rm.deploymentBuilder.BuildDeploymentWithAccessStrategy(ctx, workspace, accessStrategy)
+	deployment, err := rm.deploymentBuilder.BuildWorkspaceDeployment(ctx, workspace, accessStrategy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build deployment: %w", err)
 	}
@@ -189,6 +190,17 @@ func (rm *ResourceManager) EnsureDeploymentExists(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*appsv1.Deployment, error) {
+	// Integration workspaces: refresh the frozen resolution (status.resolvedIntegrations) BEFORE
+	// building the Deployment, so create/update below replay the current frozen values. Re-resolution
+	// happens only on an input-token change; a capture failure is non-fatal here (fail-closed --
+	// preserve the running pod) and is surfaced via the workspace's integration status elsewhere.
+	if rm.hasIntegrationTemplateRefs(workspace) {
+		if err := rm.reconcileIntegrations(ctx, workspace); err != nil {
+			logf.FromContext(ctx).Error(err, "integration freeze reconcile reported an error; proceeding with preserved frozen values",
+				"workspace", workspace.Name)
+		}
+	}
+
 	deployment, err := rm.getDeployment(ctx, workspace)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -219,6 +231,19 @@ func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deploym
 
 	needsUpdate, err := rm.deploymentBuilder.NeedsUpdate(ctx, deployment, workspace, accessStrategy)
 	if err != nil {
+		// Building the desired state can fail specifically in the integration frozen-replay path -- e.g. a
+		// referenced template was deleted, edited to reference a value not in the frozen set, or names a
+		// sidecar/volume that collides with an existing one. Those failures are tagged
+		// errIntegrationReplayFailed. Fail-closed AND non-fatal: leave the running Deployment (and its
+		// already-injected sidecar) exactly as-is rather than rolling or blocking the reconcile; the
+		// integration's health surfaces separately via the status probe. EVERY OTHER build error (image
+		// resolver, access strategy, transient template Get) stays fatal so a legitimately-needed spec
+		// change is never silently dropped.
+		if stderrors.Is(err, errIntegrationReplayFailed) {
+			logf.FromContext(ctx).Error(err, "could not apply the workspace's integration; keeping the current workspace running unchanged",
+				"workspace", workspace.Name)
+			return deployment, nil
+		}
 		return nil, fmt.Errorf("failed to check if deployment needs update: %w", err)
 	}
 
@@ -243,8 +268,8 @@ func (rm *ResourceManager) updateDeployment(ctx context.Context, deployment *app
 		}
 	}
 
-	// Update the deployment spec using the builder with access strategy
-	updatedDeployment, err := rm.deploymentBuilder.BuildDeploymentWithAccessStrategy(ctx, workspace, accessStrategy)
+	// Update the deployment spec using the builder with access strategy (+ frozen integration overlays)
+	updatedDeployment, err := rm.deploymentBuilder.BuildWorkspaceDeployment(ctx, workspace, accessStrategy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build updated deployment: %w", err)
 	}

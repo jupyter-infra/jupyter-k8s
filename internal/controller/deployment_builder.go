@@ -26,6 +26,10 @@ type DeploymentBuilder struct {
 	scheme        *runtime.Scheme
 	options       WorkspaceControllerOptions
 	imageResolver *ImageResolver
+	// client is used to load a WorkspaceIntegrationTemplate when replaying an integration's frozen
+	// values into the pod template (see deployment_builder_integration.go). It never reads a referenced
+	// resource -- that read happens during capture, before the build.
+	client client.Client
 }
 
 // NewDeploymentBuilder creates a new DeploymentBuilder
@@ -34,6 +38,7 @@ func NewDeploymentBuilder(scheme *runtime.Scheme, options WorkspaceControllerOpt
 		scheme:        scheme,
 		options:       options,
 		imageResolver: NewImageResolver(options.ApplicationImagesRegistry),
+		client:        k8sClient,
 	}
 }
 
@@ -53,9 +58,12 @@ func (db *DeploymentBuilder) BuildDeployment(ctx context.Context, workspace *wor
 	return deployment, nil
 }
 
-// BuildDeploymentWithAccessStrategy creates a Deployment resource with access strategy applied
-// This is a helper function that should be called from ResourceManager
-func (db *DeploymentBuilder) BuildDeploymentWithAccessStrategy(
+// BuildWorkspaceDeployment builds the full desired Deployment for a workspace: the base pod template,
+// then the access-strategy overlay, then the integration overlay (frozen values replayed from
+// status.resolvedIntegrations). It is the single desired-state entry point -- create, update, and
+// NeedsUpdate all call it, so the compared desired state is identical in every path and an unchanged
+// input produces no diff and no pod roll.
+func (db *DeploymentBuilder) BuildWorkspaceDeployment(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
@@ -70,6 +78,11 @@ func (db *DeploymentBuilder) BuildDeploymentWithAccessStrategy(
 		if err := db.ApplyAccessStrategyToDeployment(deployment, workspace, accessStrategy); err != nil {
 			return nil, fmt.Errorf("failed to apply access strategy to deployment: %w", err)
 		}
+	}
+
+	// Apply the workspace's integrations by replaying their frozen values (status.resolvedIntegrations).
+	if err := db.applyIntegrationsToDeployment(ctx, deployment, workspace); err != nil {
+		return nil, err
 	}
 
 	return deployment, nil
@@ -236,7 +249,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 	}
 
 	container := corev1.Container{
-		Name:            ResourcePrefix,
+		Name:            PrimaryContainerName,
 		Image:           image,
 		ImagePullPolicy: db.options.ApplicationImagesPullPolicy,
 		SecurityContext: workspace.Spec.ContainerSecurityContext,
@@ -321,7 +334,7 @@ func (db *DeploymentBuilder) NeedsUpdate(
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 ) (bool, error) {
 	// Build the desired deployment spec with access strategy applied
-	desiredDeployment, err := db.BuildDeploymentWithAccessStrategy(ctx, workspace, accessStrategy)
+	desiredDeployment, err := db.BuildWorkspaceDeployment(ctx, workspace, accessStrategy)
 	if err != nil {
 		return false, fmt.Errorf("failed to build desired deployment: %w", err)
 	}
