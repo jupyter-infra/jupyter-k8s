@@ -1,0 +1,25 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceIntegrationTemplate
+metadata:
+  name: invalid-integration-undeclared-resource
+  namespace: default
+spec:
+  displayName: Invalid Integration (undeclared resourceRef)
+  # The sidecar arg references {{ resource "otherCache" ... }} but no resourceRef named "otherCache"
+  # is declared, so the WIT validating webhook must REJECT this template at create time.
+  parameters:
+    - name: serviceName
+  resourceRefs:
+    - name: cache
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: "{{ .Parameters.serviceName }}"
+        namespace: "{{ .Workspace.Namespace }}"
+  deploymentModifications:
+    podModifications:
+      additionalContainers:
+        - name: cache-proxy
+          image: busybox:latest
+          args:
+            - 'echo {{ resource "otherCache" "{.spec.ports[0].port}" }}'

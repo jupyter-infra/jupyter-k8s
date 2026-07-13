@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
@@ -1246,3 +1247,187 @@ func (m *MockClientWithTracking) Delete(ctx context.Context, obj client.Object, 
 	}
 	return m.Client.Delete(ctx, obj, opts...)
 }
+
+// Webhook-level coverage of the integration path: the WorkspaceCustomDefaulter stamping refs via the
+// IntegrationRefDefaulter, and the WorkspaceCustomValidator invoking the IntegrationTemplateRefValidator
+// on create/update. The IntegrationRefDefaulter and IntegrationTemplateRefValidator each have their own
+// focused unit tests; these assert the two are correctly WIRED into the Workspace webhook handlers.
+var _ = Describe("Workspace Webhook integration refs", func() {
+	var (
+		ctx    context.Context
+		scheme *runtime.Scheme
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		scheme = runtime.NewScheme()
+		Expect(workspacev1alpha1.AddToScheme(scheme)).To(Succeed())
+		// corev1 is needed because Default() runs the service-account defaulter, which lists ServiceAccounts.
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+	})
+
+	integrationTemplateIn := func(namespace string, params ...string) *workspacev1alpha1.WorkspaceIntegrationTemplate {
+		declared := make([]workspacev1alpha1.IntegrationTemplateParameter, 0, len(params))
+		for _, p := range params {
+			declared = append(declared, workspacev1alpha1.IntegrationTemplateParameter{Name: p})
+		}
+		return &workspacev1alpha1.WorkspaceIntegrationTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: testIntegrationName, Namespace: namespace},
+			Spec:       workspacev1alpha1.WorkspaceIntegrationTemplateSpec{Parameters: declared},
+		}
+	}
+
+	// wsInTeamA builds a team-a workspace with a single integrationTemplateRef (name testIntegrationName).
+	wsInTeamA := func(refNamespace string, params ...workspacev1alpha1.IntegrationParameter) *workspacev1alpha1.Workspace {
+		return &workspacev1alpha1.Workspace{
+			ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceTeamA},
+			Spec: workspacev1alpha1.WorkspaceSpec{
+				Image:         testValidBaseNotebook,
+				DesiredStatus: testStatusRunning,
+				IntegrationTemplateRefs: []workspacev1alpha1.IntegrationTemplateRef{{
+					Name:       testIntegrationName,
+					Namespace:  refNamespace,
+					Parameters: params,
+				}},
+			},
+		}
+	}
+
+	newDefaulter := func(objs ...runtime.Object) WorkspaceCustomDefaulter {
+		c := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objs...).Build()
+		return WorkspaceCustomDefaulter{
+			templateDefaulter:       NewTemplateDefaulter(c, testSharedNamespace),
+			serviceAccountDefaulter: NewServiceAccountDefaulter(c),
+			templateGetter:          NewTemplateGetter(c, testSharedNamespace),
+			templateValidator:       NewTemplateValidator(c, testSharedNamespace),
+			accessStrategyValidator: NewAccessStrategyValidator(testSharedNamespace),
+			integrationRefDefaulter: NewIntegrationRefDefaulter(c, testSharedNamespace),
+			client:                  c,
+		}
+	}
+
+	newValidator := func(objs ...runtime.Object) WorkspaceCustomValidator {
+		c := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objs...).Build()
+		return WorkspaceCustomValidator{
+			templateValidator:               NewTemplateValidator(c, testSharedNamespace),
+			serviceAccountValidator:         NewServiceAccountValidator(c),
+			volumeValidator:                 NewVolumeValidator(c),
+			integrationTemplateRefValidator: NewIntegrationTemplateRefValidator(c, testSharedNamespace),
+		}
+	}
+
+	Context("Defaulter stamps the integrationTemplateRef namespace", func() {
+		It("stamps the workspace's own namespace when the template lives there", func() {
+			ws := wsInTeamA("") // omitted namespace
+			d := newDefaulter(integrationTemplateIn(testNamespaceTeamA))
+			Expect(d.Default(createUserContext(ctx, "CREATE", "test-user"), ws)).To(Succeed())
+			Expect(ws.Spec.IntegrationTemplateRefs[0].Namespace).To(Equal(testNamespaceTeamA))
+		})
+
+		It("falls back to and stamps the shared namespace when the template lives only there", func() {
+			ws := wsInTeamA("")
+			d := newDefaulter(integrationTemplateIn(testSharedNamespace))
+			Expect(d.Default(createUserContext(ctx, "CREATE", "test-user"), ws)).To(Succeed())
+			Expect(ws.Spec.IntegrationTemplateRefs[0].Namespace).To(Equal(testSharedNamespace))
+		})
+
+		It("leaves an explicit ref namespace untouched", func() {
+			ws := wsInTeamA(testNamespaceTeamA)
+			d := newDefaulter(integrationTemplateIn(testSharedNamespace)) // only shared has it; explicit must NOT be rewritten
+			Expect(d.Default(createUserContext(ctx, "CREATE", "test-user"), ws)).To(Succeed())
+			Expect(ws.Spec.IntegrationTemplateRefs[0].Namespace).To(Equal(testNamespaceTeamA))
+		})
+
+		It("leaves the ref unstamped when the template is absent everywhere (validator will reject)", func() {
+			ws := wsInTeamA("")
+			d := newDefaulter() // empty client
+			Expect(d.Default(createUserContext(ctx, "CREATE", "test-user"), ws)).To(Succeed())
+			Expect(ws.Spec.IntegrationTemplateRefs[0].Namespace).To(BeEmpty())
+		})
+	})
+
+	Context("ValidateCreate wires in the integration ref validator", func() {
+		It("admits a workspace whose ref resolves and supplies all parameters", func() {
+			ws := wsInTeamA(testNamespaceTeamA, workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
+			v := newValidator(integrationTemplateIn(testNamespaceTeamA, testRayClusterParam))
+			_, err := v.ValidateCreate(ctx, ws)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("rejects a workspace whose ref targets another team's namespace (scope)", func() {
+			ws := wsInTeamA("team-b")
+			v := newValidator(integrationTemplateIn("team-b"))
+			_, err := v.ValidateCreate(ctx, ws)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("team-b"))
+		})
+
+		It("rejects a workspace whose referenced template does not exist", func() {
+			ws := wsInTeamA(testNamespaceTeamA)
+			v := newValidator() // empty client -> not found
+			_, err := v.ValidateCreate(ctx, ws)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not found"))
+		})
+
+		It("rejects a workspace missing a declared parameter", func() {
+			ws := wsInTeamA(testNamespaceTeamA) // supplies nothing
+			v := newValidator(integrationTemplateIn(testNamespaceTeamA, testRayClusterParam))
+			_, err := v.ValidateCreate(ctx, ws)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(testRayClusterParam))
+		})
+
+		It("surfaces a non-blocking warning for an undeclared supplied parameter", func() {
+			ws := wsInTeamA(testNamespaceTeamA,
+				workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue},
+				workspacev1alpha1.IntegrationParameter{Name: "rayClustrName", Value: "typo"},
+			)
+			v := newValidator(integrationTemplateIn(testNamespaceTeamA, testRayClusterParam))
+			warnings, err := v.ValidateCreate(ctx, ws)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(ContainElement(ContainSubstring("rayClustrName")))
+		})
+	})
+
+	Context("ValidateUpdate only re-validates when the refs change", func() {
+		It("re-validates and rejects when a user changes the ref to a missing template", func() {
+			old := wsInTeamA(testNamespaceTeamA, workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
+			updated := old.DeepCopy()
+			updated.Spec.IntegrationTemplateRefs[0].Name = "does-not-exist"
+			v := newValidator(integrationTemplateIn(testNamespaceTeamA, testRayClusterParam))
+			userCtx := createUserContext(ctx, "UPDATE", "different-user")
+			_, err := v.ValidateUpdate(userCtx, old, updated)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not found"))
+		})
+
+		It("skips integration validation when the refs are unchanged (no wedge on metadata-only update)", func() {
+			// Even though the template is ABSENT from the client, an unchanged-refs update must NOT be
+			// rejected -- integrationRefsChanged is false, so the validator never fetches. This is the
+			// wedge-avoidance contract: a controller finalizer/label update on a workspace whose template
+			// was later deleted still passes.
+			old := wsInTeamA(testNamespaceTeamA, workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
+			updated := old.DeepCopy()
+			updated.Labels = map[string]string{"touched": "true"} // metadata-only change; refs identical
+			v := newValidator()                                   // empty client: a fetch WOULD fail with not-found
+			userCtx := createUserContext(ctx, "UPDATE", "different-user")
+			_, err := v.ValidateUpdate(userCtx, old, updated)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	It("accepts a detach (integrationTemplateRefs cleared to empty)", func() {
+		// Clearing the refs is a valid transition (detach): the empty-parameter/missing-template checks
+		// only run per-ref, so an empty ref list passes admission.
+		old := wsInTeamA(testNamespaceTeamA, workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
+		updated := old.DeepCopy()
+		updated.Spec.IntegrationTemplateRefs = []workspacev1alpha1.IntegrationTemplateRef{}
+		v := newValidator() // empty client is fine; nothing to fetch
+		userCtx := createUserContext(ctx, "UPDATE", "different-user")
+		var warnings admission.Warnings
+		warnings, err := v.ValidateUpdate(userCtx, old, updated)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(warnings).To(BeEmpty())
+	})
+})
