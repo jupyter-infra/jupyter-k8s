@@ -223,6 +223,17 @@ func createRecommendedOptions(config *ExtensionConfig) *genericoptions.Recommend
 	// turn off advanced priority and fairness features that require extra permissions
 	recommendedOptions.Features.EnablePriorityAndFairness = false
 
+	// Disable admission policy plugins that require K8s 1.32+ APIs.
+	// The extension API server serves custom endpoints (JWT tokens, workspace
+	// connections, bearer token reviews) and does not need admission policy
+	// evaluation. These plugins start informers for MutatingAdmissionPolicy
+	// and ValidatingAdmissionPolicy resources which don't exist on clusters
+	// running K8s < 1.32, causing infinite error loops in the reflector.
+	recommendedOptions.Admission.DisablePlugins = []string{
+		"MutatingAdmissionPolicy",
+		"ValidatingAdmissionPolicy",
+	}
+
 	return recommendedOptions
 }
 
