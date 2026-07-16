@@ -96,6 +96,7 @@ DeploymentModifications defines modifications to apply to deployment spec
 
 _Appears in:_
 - [WorkspaceAccessStrategySpec](#workspaceaccessstrategyspec)
+- [WorkspaceIntegrationTemplateSpec](#workspaceintegrationtemplatespec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |

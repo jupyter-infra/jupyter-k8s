@@ -3003,6 +3003,62 @@ spec:
                   type: object
                 maxItems: 10
                 type: array
+              integrationTemplateRefs:
+                description: |-
+                  IntegrationTemplateRefs attaches one or more WorkspaceIntegrationTemplates that inject runtime
+                  capabilities (sidecars, volumes, env vars) into the workspace pod with template-based
+                  dynamic resolution. Each entry is the user's REQUEST only -- a reference to a
+                  WorkspaceIntegrationTemplate plus parameters -- never the resolved sidecars.
+
+                  The workspace controller resolves each integration against its referenced resources (e.g. a
+                  RayCluster) only when the input token -- hash(templateRef + parameters) -- changes. On an
+                  unchanged token (external drift in a referenced resource, an idle reconcile), the controller
+                  rebuilds the pod template from the frozen values recorded in status.resolvedIntegrations
+                  instead of re-reading the referenced resource, so drift never rolls the running pod. No
+                  WorkspaceIntegration child object is created.
+                items:
+                  description: IntegrationTemplateRef defines a reference to a WorkspaceIntegrationTemplate.
+                  properties:
+                    name:
+                      description: Name of the WorkspaceIntegrationTemplate
+                      type: string
+                    namespace:
+                      description: Namespace where the WorkspaceIntegrationTemplate
+                        is located
+                      type: string
+                    parameters:
+                      description: |-
+                        Parameters provided by the user for template expression resolution.
+                        Each parameter is referenced in template expressions as {{ .Parameters.<Name> }}.
+                        Names must be unique.
+                      items:
+                        description: IntegrationParameter is a single user-provided
+                          input for template expression resolution.
+                        properties:
+                          name:
+                            description: Name of the parameter, referenced in template
+                              expressions as {{ .Parameters.<Name> }}
+                            type: string
+                          value:
+                            description: Value of the parameter (substituted into
+                              template expression fields at resolution time)
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      maxItems: 10
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - name
+                      x-kubernetes-list-type: map
+                  required:
+                  - name
+                  type: object
+                maxItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               lifecycle:
                 description: |-
                   Lifecycle specifies actions that the management system should take
@@ -3946,12 +4002,155 @@ spec:
                   attempt to enforce spacing; survives watch-triggered re-reconciliations.
                 format: date-time
                 type: string
+              integrationStatuses:
+                description: |-
+                  IntegrationStatuses reports the operator-observed readiness of each integration applied to the
+                  workspace, as observed by the periodic status probe. One entry per integration that defines
+                  a statusProbe. Absence of an entry means "not yet probed"; a present entry always reflects
+                  an actual observation (Ready + Reason). Named after the k8s pod.status.containerStatuses
+                  convention (<thing>Statuses []<Thing>Status), matching the IntegrationStatus element type.
+                items:
+                  description: |-
+                    IntegrationStatus reports the operator-observed readiness of a single integration. It follows the
+                    KRO instance-status precedent (https://kro.run/docs/concepts/instances#understanding-status):
+                    a name, a coarse state, and standard Kubernetes conditions carrying the machine-readable detail.
+                  properties:
+                    conditions:
+                      description: |-
+                        Conditions carry the detailed, machine-readable observation. The operator sets a single
+                        "Ready" condition whose Reason is one of Ready/ProbeFailed/PodNotFound/ProbeError and whose
+                        Message holds any human-readable detail (e.g. the probe's stderr on failure).
+                      items:
+                        description: Condition contains details for one aspect of
+                          the current state of this API Resource.
+                        properties:
+                          lastTransitionTime:
+                            description: |-
+                              lastTransitionTime is the last time the condition transitioned from one status to another.
+                              This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                            format: date-time
+                            type: string
+                          message:
+                            description: |-
+                              message is a human readable message indicating details about the transition.
+                              This may be an empty string.
+                            maxLength: 32768
+                            type: string
+                          observedGeneration:
+                            description: |-
+                              observedGeneration represents the .metadata.generation that the condition was set based upon.
+                              For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                              with respect to the current state of the instance.
+                            format: int64
+                            minimum: 0
+                            type: integer
+                          reason:
+                            description: |-
+                              reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                              Producers of specific condition types may define expected values and meanings for this field,
+                              and whether the values are considered a guaranteed API.
+                              The value should be a CamelCase string.
+                              This field may not be empty.
+                            maxLength: 1024
+                            minLength: 1
+                            pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                            type: string
+                          status:
+                            description: status of the condition, one of True, False,
+                              Unknown.
+                            enum:
+                            - "True"
+                            - "False"
+                            - Unknown
+                            type: string
+                          type:
+                            description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                            maxLength: 316
+                            pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                            type: string
+                        required:
+                        - lastTransitionTime
+                        - message
+                        - reason
+                        - status
+                        - type
+                        type: object
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - type
+                      x-kubernetes-list-type: map
+                    name:
+                      description: Name is the name of the WorkspaceIntegrationTemplate
+                        this status reports on.
+                      type: string
+                    state:
+                      description: |-
+                        State is a coarse, human-facing rollup of the conditions below: "Ready" when the integration's
+                        last probe succeeded, "Degraded" when it failed. Empty means "not yet probed".
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               observedAccessStrategyVersion:
                 description: |-
                   ObservedAccessStrategyVersion is a token capturing the identity and
                   version of the AccessStrategy last evaluated during workspace
                   reconciliation. The controller resets probe state when this value changes.
                 type: string
+              resolvedIntegrations:
+                description: |-
+                  ResolvedIntegrations records the frozen output of the last successful integration resolution,
+                  one entry per attached integration. It is the operator's private freeze store: on an unchanged
+                  input token the controller rebuilds the pod template from these values WITHOUT re-reading the
+                  referenced resource, so external drift never re-resolves and never rolls the running pod. Each
+                  entry stores only the resolved template substitutions (a small string map), never the fully
+                  rendered pod spec -- the pod SHAPE still comes from the live WorkspaceIntegrationTemplate; only
+                  the resolved VALUES are frozen here. Written by the controller via the status subresource; it
+                  is never user-authored.
+                items:
+                  description: |-
+                    ResolvedIntegration is the frozen resolution record for a single attached integration. It is the
+                    source of truth the controller replays from on unchanged-token reconciles.
+                  properties:
+                    name:
+                      description: |-
+                        Name is the WorkspaceIntegrationTemplate name this record resolves (matches the
+                        spec.integrationTemplateRefs[].name that produced it).
+                      type: string
+                    observedIntegrationTemplateVersion:
+                      description: |-
+                        ObservedIntegrationTemplateVersion is "<template.UID>.<template.Generation>" captured when these
+                        values were resolved. A change means the admin edited (or replaced) the referenced
+                        WorkspaceIntegrationTemplate. Mirrors status.observedAccessStrategyVersion.
+                      type: string
+                    parametersVersion:
+                      description: |-
+                        ParametersVersion is a hash of the integration ref's identity and user-supplied parameters
+                        (templateRef namespace+name + the sorted parameter map) captured when these values were
+                        resolved. A change means the user switched clusters or edited a parameter.
+                      type: string
+                    values:
+                      additionalProperties:
+                        type: string
+                      description: |-
+                        Values is the frozen resolution map: each key is a "<resourceRefID>|<jsonPath>" capture key
+                        and each value is the literal string the {{ resource ... }} expression resolved to at capture
+                        time. On replay, the resolver serves these instead of reading the referenced resource. Storing
+                        only these substitutions (not the rendered pod spec) keeps the status payload small.
+                      type: object
+                  required:
+                  - name
+                  - observedIntegrationTemplateVersion
+                  - parametersVersion
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               serviceName:
                 description: ServiceName is the name of the service exposing the Workspace
                 type: string
