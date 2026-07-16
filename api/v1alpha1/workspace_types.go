@@ -238,8 +238,8 @@ type WorkspaceSpec struct {
 	// dynamic resolution. Each entry is the user's REQUEST only -- a reference to a
 	// WorkspaceIntegrationTemplate plus parameters -- never the resolved sidecars.
 	//
-	// The workspace controller resolves each integration against its referenced resources (e.g. a
-	// RayCluster) only when the input token -- hash(templateRef + parameters) -- changes. On an
+	// The workspace controller resolves each integration against its referenced resources only when
+	// the input token -- hash(templateRef + parameters) -- changes. On an
 	// unchanged token (external drift in a referenced resource, an idle reconcile), the controller
 	// rebuilds the pod template from the frozen values recorded in status.resolvedIntegrations
 	// instead of re-reading the referenced resource, so drift never rolls the running pod. No
@@ -413,17 +413,17 @@ type ResolvedIntegration struct {
 	// spec.integrationTemplateRefs[].name that produced it).
 	Name string `json:"name"`
 
-	// ParametersVersion is a hash of the integration ref's identity and user-supplied parameters
+	// ParametersHash is a hash of the integration ref's identity and user-supplied parameters
 	// (templateRef namespace+name + the sorted parameter map) captured when these values were
 	// resolved. A change means the user switched clusters or edited a parameter.
-	ParametersVersion string `json:"parametersVersion"`
+	ParametersHash string `json:"parametersHash"`
 
 	// ObservedIntegrationTemplateVersion is "<template.UID>.<template.Generation>" captured when these
 	// values were resolved. A change means the admin edited (or replaced) the referenced
 	// WorkspaceIntegrationTemplate. Mirrors status.observedAccessStrategyVersion.
 	ObservedIntegrationTemplateVersion string `json:"observedIntegrationTemplateVersion"`
 
-	// The controller replays the frozen Values (below) as long as BOTH ParametersVersion and
+	// The controller replays the frozen Values (below) as long as BOTH ParametersHash and
 	// ObservedIntegrationTemplateVersion still match the live inputs; if either differs it re-resolves
 	// against the referenced resource and refreezes. Re-resolution re-renders the pod template, so it
 	// rolls the pod only when the rendered output actually changes.

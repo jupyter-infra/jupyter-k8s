@@ -5275,11 +5275,6 @@ spec:
                         type: array
                         x-kubernetes-list-type: atomic
                     type: object
-                  periodSeconds:
-                    description: 'How often (in seconds) the operator performs the
-                      probe. Default: operator poll cadence.'
-                    format: int32
-                    type: integer
                   timeoutSeconds:
                     description: 'Number of seconds after which a single probe attempt
                       times out. Default: 5. Minimum: 1.'
