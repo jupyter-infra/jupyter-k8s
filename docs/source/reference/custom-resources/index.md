@@ -6,6 +6,7 @@ API reference for **Jupyter K8s** Custom Resource Definitions.
 |----------|-----------|---------|
 | [Workspace](workspace) | `workspace.jupyter.org` | `v1alpha1` |
 | [WorkspaceTemplate](workspacetemplate) | `workspace.jupyter.org` | `v1alpha1` |
+| [WorkspaceIntegrationTemplate](workspaceintegrationtemplate) | `workspace.jupyter.org` | `v1alpha1` |
 | [WorkspaceAccessStrategy](workspaceaccessstrategy) | `workspace.jupyter.org` | `v1alpha1` |
 
 ```{toctree}
@@ -13,5 +14,6 @@ API reference for **Jupyter K8s** Custom Resource Definitions.
 
 workspace
 workspacetemplate
+workspaceintegrationtemplate
 workspaceaccessstrategy
 ```

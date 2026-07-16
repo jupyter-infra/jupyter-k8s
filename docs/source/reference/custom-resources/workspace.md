@@ -139,6 +139,77 @@ _Appears in:_
 
 
 
+## IntegrationParameter
+
+
+
+IntegrationParameter is a single user-provided input for template expression resolution.
+
+_Appears in:_
+- [IntegrationTemplateRef](#integrationtemplateref)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name of the parameter, referenced in template expressions as \{\{ .Parameters.<Name> \}\} |  |  |
+| `value` _string_ | Value of the parameter (substituted into template expression fields at resolution time) |  | Optional: \{\} <br /> |
+
+
+
+## IntegrationStatus
+
+
+
+IntegrationStatus reports the operator-observed readiness of a single integration. It follows the
+KRO instance-status precedent (https://kro.run/docs/concepts/instances#understanding-status):
+a name, a coarse state, and standard Kubernetes conditions carrying the machine-readable detail.
+
+_Appears in:_
+- [WorkspaceStatus](#workspacestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the name of the WorkspaceIntegrationTemplate this status reports on. |  |  |
+| `state` _string_ | State is a coarse, human-facing rollup of the conditions below: "Ready" when the integration's<br />last probe succeeded, "Degraded" when it failed. Empty means "not yet probed". |  | Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#condition-v1-meta) array_ | Conditions carry the detailed, machine-readable observation. The operator sets a single<br />"Ready" condition whose Reason is one of Ready/ProbeFailed/PodNotFound/ProbeError and whose<br />Message holds any human-readable detail (e.g. the probe's stderr on failure). |  | Optional: \{\} <br /> |
+
+
+
+## IntegrationTemplateRef
+
+
+
+IntegrationTemplateRef defines a reference to a WorkspaceIntegrationTemplate.
+
+_Appears in:_
+- [WorkspaceSpec](#workspacespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name of the WorkspaceIntegrationTemplate |  |  |
+| `namespace` _string_ | Namespace where the WorkspaceIntegrationTemplate is located |  | Optional: \{\} <br /> |
+| `parameters` _[IntegrationParameter](#integrationparameter) array_ | Parameters provided by the user for template expression resolution.<br />Each parameter is referenced in template expressions as \{\{ .Parameters.<Name> \}\}.<br />Names must be unique. |  | MaxItems: 10 <br />Optional: \{\} <br /> |
+
+
+
+## ResolvedIntegration
+
+
+
+ResolvedIntegration is the frozen resolution record for a single attached integration. It is the
+source of truth the controller replays from on unchanged-token reconciles.
+
+_Appears in:_
+- [WorkspaceStatus](#workspacestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the WorkspaceIntegrationTemplate name this record resolves (matches the<br />spec.integrationTemplateRefs[].name that produced it). |  |  |
+| `parametersVersion` _string_ | ParametersVersion is a hash of the integration ref's identity and user-supplied parameters<br />(templateRef namespace+name + the sorted parameter map) captured when these values were<br />resolved. A change means the user switched clusters or edited a parameter. |  |  |
+| `observedIntegrationTemplateVersion` _string_ | ObservedIntegrationTemplateVersion is "<template.UID>.<template.Generation>" captured when these<br />values were resolved. A change means the admin edited (or replaced) the referenced<br />WorkspaceIntegrationTemplate. Mirrors status.observedAccessStrategyVersion. |  |  |
+| `values` _object (keys:string, values:string)_ | Values is the frozen resolution map: each key is a "<resourceRefID>\|<jsonPath>" capture key<br />and each value is the literal string the \{\{ resource ... \}\} expression resolved to at capture<br />time. On replay, the resolver serves these instead of reading the referenced resource. Storing<br />only these substitutions (not the rendered pod spec) keeps the status payload small. |  | Optional: \{\} <br /> |
+
+
+
 ## StorageSpec
 
 
@@ -224,6 +295,7 @@ _Appears in:_
 | `podSecurityContext` _[PodSecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#podsecuritycontext-v1-core)_ | PodSecurityContext specifies pod-level security context<br />Overrides template defaults when specified |  | Optional: \{\} <br /> |
 | `containerSecurityContext` _[SecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#securitycontext-v1-core)_ | ContainerSecurityContext specifies container-level security context for the main workspace container<br />Takes precedence over PodSecurityContext for the main container<br />Overrides template defaults when specified |  | Optional: \{\} <br /> |
 | `initContainers` _[Container](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#container-v1-core) array_ | InitContainers specifies init containers to run before the workspace container starts<br />When a template is used, template's DefaultInitContainers are applied if workspace has none<br />Requires AllowCustomInitContainers=true on the template to specify custom init containers |  | MaxItems: 10 <br />Optional: \{\} <br /> |
+| `integrationTemplateRefs` _[IntegrationTemplateRef](#integrationtemplateref) array_ | IntegrationTemplateRefs attaches one or more WorkspaceIntegrationTemplates that inject runtime<br />capabilities (sidecars, volumes, env vars) into the workspace pod with template-based<br />dynamic resolution. Each entry is the user's REQUEST only -- a reference to a<br />WorkspaceIntegrationTemplate plus parameters -- never the resolved sidecars.<br />The workspace controller resolves each integration against its referenced resources (e.g. a<br />RayCluster) only when the input token -- hash(templateRef + parameters) -- changes. On an<br />unchanged token (external drift in a referenced resource, an idle reconcile), the controller<br />rebuilds the pod template from the frozen values recorded in status.resolvedIntegrations<br />instead of re-reading the referenced resource, so drift never rolls the running pod. No<br />WorkspaceIntegration child object is created. |  | MaxItems: 1 <br />Optional: \{\} <br /> |
 
 
 
@@ -249,5 +321,7 @@ _Appears in:_
 | `accessStartupProbeFailures` _integer_ | AccessStartupProbeFailures tracks the number of consecutive failed access<br />startup probe attempts. Set by the controller during the probing phase;<br />cleared (nil) on success or when the workspace stops. |  | Optional: \{\} <br /> |
 | `earliestNextProbeTime` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#time-v1-meta)_ | EarliestNextProbeTime is the earliest wall-clock time at which the next<br />access startup probe may fire. Set by the controller after each probe<br />attempt to enforce spacing; survives watch-triggered re-reconciliations. |  | Optional: \{\} <br /> |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#condition-v1-meta) array_ | Conditions represent the current state of the Workspace resource.<br />Each condition has a unique type and reflects the status of a specific aspect of the resource.<br />Standard condition types include:<br />- "Available": the resource is fully functional and ready to use<br />- "Progressing": the resource is being created, updated, or stopped<br />- "Degraded": the resource failed to reach or maintain its desired state<br />- "Stopped": the workspace has been stopped and resources scaled down<br />The status of each condition is one of True, False, or Unknown. |  | Optional: \{\} <br /> |
+| `integrationStatuses` _[IntegrationStatus](#integrationstatus) array_ | IntegrationStatuses reports the operator-observed readiness of each integration applied to the<br />workspace, as observed by the periodic status probe. One entry per integration that defines<br />a statusProbe. Absence of an entry means "not yet probed"; a present entry always reflects<br />an actual observation (Ready + Reason). Named after the k8s pod.status.containerStatuses<br />convention (<thing>Statuses []<Thing>Status), matching the IntegrationStatus element type. |  | Optional: \{\} <br /> |
+| `resolvedIntegrations` _[ResolvedIntegration](#resolvedintegration) array_ | ResolvedIntegrations records the frozen output of the last successful integration resolution,<br />one entry per attached integration. It is the operator's private freeze store: on an unchanged<br />input token the controller rebuilds the pod template from these values WITHOUT re-reading the<br />referenced resource, so external drift never re-resolves and never rolls the running pod. Each<br />entry stores only the resolved template substitutions (a small string map), never the fully<br />rendered pod spec -- the pod SHAPE still comes from the live WorkspaceIntegrationTemplate; only<br />the resolved VALUES are frozen here. Written by the controller via the status subresource; it<br />is never user-authored. |  | Optional: \{\} <br /> |
 
 
