@@ -43,7 +43,6 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `exec` _[ExecAction](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#execaction-v1-core)_ | Exec runs a command inside the workspace container; exit code 0 means ready. The<br />command always runs in the workspace container (the operator fixes this; it is not<br />author-selectable) so it sees the pod's real network and auth context, catching<br />data-plane failures a control-plane status check would miss (e.g. a Ray GCS reconnect<br />loop while .status still reads ready). This is the only transport implemented today. |  | Optional: \{\} <br /> |
-| `periodSeconds` _integer_ | How often (in seconds) the operator performs the probe. Default: operator poll cadence. |  | Optional: \{\} <br /> |
 | `timeoutSeconds` _integer_ | Number of seconds after which a single probe attempt times out. Default: 5. Minimum: 1. |  | Optional: \{\} <br /> |
 
 

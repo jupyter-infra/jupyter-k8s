@@ -132,10 +132,6 @@ type IntegrationStatusProbe struct {
 	// +optional
 	Exec *corev1.ExecAction `json:"exec,omitempty"`
 
-	// How often (in seconds) the operator performs the probe. Default: operator poll cadence.
-	// +optional
-	PeriodSeconds int32 `json:"periodSeconds,omitempty"`
-
 	// Number of seconds after which a single probe attempt times out. Default: 5. Minimum: 1.
 	// +optional
 	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
