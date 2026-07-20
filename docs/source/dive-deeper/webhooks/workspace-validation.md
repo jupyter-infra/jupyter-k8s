@@ -29,6 +29,10 @@ When a workspace has `ownershipType: OwnerOnly`:
 
 On `DELETE`, the webhook only checks ownership permission for `OwnerOnly` workspaces. All other deletes pass through (RBAC is the primary guard).
 
+## Idle shutdown override enforcement
+
+When the template sets `idleShutdownOverrides.allow: false`, the webhook requires the workspace's `idleShutdown` to match the template's `defaultIdleShutdown` on every field except `idleTimeoutInMinutes`. Declared `minIdleTimeoutInMinutes`/`maxIdleTimeoutInMinutes` bounds are enforced on any *enabled* idle shutdown regardless of `allow`; a disabled idle shutdown has no timeout to bound. See [idle shutdown bounds](../../concepts/templates/bounds.md) for the policy semantics.
+
 ## Lazy constraint enforcement
 
 The webhook enforces template constraints at **admission time**, when a user creates or updates a workspace.
