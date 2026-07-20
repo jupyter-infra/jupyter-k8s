@@ -210,6 +210,59 @@ var _ = Describe("WorkspaceTemplate Validator", func() {
 
 	})
 
+	Context("Idle shutdown policy consistency", func() {
+		boolPtr := func(b bool) *bool { return &b }
+
+		lockingPolicy := func() *workspacev1alpha1.IdleShutdownOverridePolicy {
+			return &workspacev1alpha1.IdleShutdownOverridePolicy{Allow: boolPtr(false)}
+		}
+		idleDefault := func() *workspacev1alpha1.IdleShutdownSpec {
+			return &workspacev1alpha1.IdleShutdownSpec{Enabled: true, IdleTimeoutInMinutes: 30}
+		}
+		templateWithIdle := func(
+			policy *workspacev1alpha1.IdleShutdownOverridePolicy,
+			def *workspacev1alpha1.IdleShutdownSpec,
+		) *workspacev1alpha1.WorkspaceTemplate {
+			return &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: testTemplateNameTmpl, Namespace: testNamespaceTeamA},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					IdleShutdownOverrides: policy,
+					DefaultIdleShutdown:   def,
+				},
+			}
+		}
+
+		It("rejects create when allow is false and defaultIdleShutdown is nil", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithIdle(lockingPolicy(), nil))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("defaultIdleShutdown is not set"))
+		})
+
+		It("rejects update when allow is false and defaultIdleShutdown is nil", func() {
+			oldTemplate := templateWithIdle(lockingPolicy(), idleDefault())
+			newTemplate := templateWithIdle(lockingPolicy(), nil)
+			_, err := validator.ValidateUpdate(ctx, oldTemplate, newTemplate)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("defaultIdleShutdown is not set"))
+		})
+
+		It("allows allow: false when a defaultIdleShutdown is set", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithIdle(lockingPolicy(), idleDefault()))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("allows allow: true without a defaultIdleShutdown", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithIdle(
+				&workspacev1alpha1.IdleShutdownOverridePolicy{Allow: boolPtr(true)}, nil))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("allows a nil policy without a defaultIdleShutdown", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithIdle(nil, nil))
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
 	Context("ValidateDelete", func() {
 		It("allows deletion and returns no warnings", func() {
 			warnings, err := validator.ValidateDelete(ctx, templateWithAS(testNamespaceTeamB))
