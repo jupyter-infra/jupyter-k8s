@@ -1,0 +1,18 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: permissive-disable-idle-workspace
+  namespace: default
+spec:
+  displayName: "Permissive Disable Idle"
+  templateRef:
+    name: permissive-idle-template
+    namespace: jupyter-k8s-shared
+  idleShutdown:
+    enabled: false
+    idleTimeoutInMinutes: 30
+    detection:
+      httpGet:
+        path: /api/status
+        port: 8888
+        transport: network
