@@ -1,0 +1,19 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: allow-override-disabled-workspace
+  namespace: default
+spec:
+  displayName: "Allow Override Disabled"
+  templateRef:
+    name: allow-override-idle-template
+    namespace: jupyter-k8s-shared
+  # Disabled: permitted because allow is true, and bounds don't apply when disabled.
+  idleShutdown:
+    enabled: false
+    idleTimeoutInMinutes: 999
+    detection:
+      httpGet:
+        path: /api/status
+        port: 8888
+        transport: network

@@ -1,0 +1,20 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: reject-modified-detection-workspace
+  namespace: default
+spec:
+  displayName: "Reject Modified Detection"
+  templateRef:
+    name: enforce-idle-template
+    namespace: jupyter-k8s-shared
+  # Timeout is within bounds, but a non-timeout field (detection path/transport)
+  # diverges from the template default, which is a forbidden override.
+  idleShutdown:
+    enabled: true
+    idleTimeoutInMinutes: 45
+    detection:
+      httpGet:
+        path: /custom/idle
+        port: 8888
+        transport: podExec
