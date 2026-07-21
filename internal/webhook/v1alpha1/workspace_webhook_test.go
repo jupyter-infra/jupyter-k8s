@@ -1248,10 +1248,10 @@ func (m *MockClientWithTracking) Delete(ctx context.Context, obj client.Object, 
 	return m.Client.Delete(ctx, obj, opts...)
 }
 
-// Webhook-level coverage of the integration path: the WorkspaceCustomDefaulter stamping refs via the
-// IntegrationRefDefaulter, and the WorkspaceCustomValidator invoking the IntegrationTemplateRefValidator
-// on create/update. The IntegrationRefDefaulter and IntegrationTemplateRefValidator each have their own
-// focused unit tests; these assert the two are correctly WIRED into the Workspace webhook handlers.
+// Webhook-level coverage of the integration path: the WorkspaceCustomValidator invoking the
+// IntegrationTemplateRefValidator on create/update (namespace scope, template existence in the ref's
+// namespace, and parameter completeness). The IntegrationTemplateRefValidator has its own focused unit
+// tests; these assert it is correctly WIRED into the Workspace webhook handlers.
 var _ = Describe("Workspace Webhook integration refs", func() {
 	var (
 		ctx    context.Context
@@ -1293,19 +1293,6 @@ var _ = Describe("Workspace Webhook integration refs", func() {
 		}
 	}
 
-	newDefaulter := func(objs ...runtime.Object) WorkspaceCustomDefaulter {
-		c := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objs...).Build()
-		return WorkspaceCustomDefaulter{
-			templateDefaulter:       NewTemplateDefaulter(c, testSharedNamespace),
-			serviceAccountDefaulter: NewServiceAccountDefaulter(c),
-			templateGetter:          NewTemplateGetter(c, testSharedNamespace),
-			templateValidator:       NewTemplateValidator(c, testSharedNamespace),
-			accessStrategyValidator: NewAccessStrategyValidator(testSharedNamespace),
-			integrationRefDefaulter: NewIntegrationRefDefaulter(c, testSharedNamespace),
-			client:                  c,
-		}
-	}
-
 	newValidator := func(objs ...runtime.Object) WorkspaceCustomValidator {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objs...).Build()
 		return WorkspaceCustomValidator{
@@ -1316,40 +1303,19 @@ var _ = Describe("Workspace Webhook integration refs", func() {
 		}
 	}
 
-	Context("Defaulter stamps the integrationTemplateRef namespace", func() {
-		It("stamps the workspace's own namespace when the template lives there", func() {
-			ws := wsInTeamA("") // omitted namespace
-			d := newDefaulter(integrationTemplateIn(testNamespaceTeamA))
-			Expect(d.Default(createUserContext(ctx, "CREATE", "test-user"), ws)).To(Succeed())
-			Expect(ws.Spec.IntegrationTemplateRefs[0].Namespace).To(Equal(testNamespaceTeamA))
-		})
-
-		It("falls back to and stamps the shared namespace when the template lives only there", func() {
-			ws := wsInTeamA("")
-			d := newDefaulter(integrationTemplateIn(testSharedNamespace))
-			Expect(d.Default(createUserContext(ctx, "CREATE", "test-user"), ws)).To(Succeed())
-			Expect(ws.Spec.IntegrationTemplateRefs[0].Namespace).To(Equal(testSharedNamespace))
-		})
-
-		It("leaves an explicit ref namespace untouched", func() {
-			ws := wsInTeamA(testNamespaceTeamA)
-			d := newDefaulter(integrationTemplateIn(testSharedNamespace)) // only shared has it; explicit must NOT be rewritten
-			Expect(d.Default(createUserContext(ctx, "CREATE", "test-user"), ws)).To(Succeed())
-			Expect(ws.Spec.IntegrationTemplateRefs[0].Namespace).To(Equal(testNamespaceTeamA))
-		})
-
-		It("leaves the ref unstamped when the template is absent everywhere (validator will reject)", func() {
-			ws := wsInTeamA("")
-			d := newDefaulter() // empty client
-			Expect(d.Default(createUserContext(ctx, "CREATE", "test-user"), ws)).To(Succeed())
-			Expect(ws.Spec.IntegrationTemplateRefs[0].Namespace).To(BeEmpty())
-		})
-	})
-
 	Context("ValidateCreate wires in the integration ref validator", func() {
 		It("admits a workspace whose ref resolves and supplies all parameters", func() {
 			ws := wsInTeamA(testNamespaceTeamA, workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
 			v := newValidator(integrationTemplateIn(testNamespaceTeamA, testRayClusterParam))
+			_, err := v.ValidateCreate(ctx, ws)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("admits a ref that explicitly targets the shared namespace where the template lives", func() {
+			// A shared-namespace template is referenced by setting ref.Namespace to the shared namespace
+			// explicitly; the read targets exactly that namespace. There is no own-ns -> shared-ns fallback.
+			ws := wsInTeamA(testSharedNamespace, workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
+			v := newValidator(integrationTemplateIn(testSharedNamespace, testRayClusterParam))
 			_, err := v.ValidateCreate(ctx, ws)
 			Expect(err).NotTo(HaveOccurred())
 		})

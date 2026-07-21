@@ -217,7 +217,6 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace
 	serviceAccountDefaulter := NewServiceAccountDefaulter(mgr.GetClient())
 	volumeValidator := NewVolumeValidator(mgr.GetClient())
 	integrationTemplateRefValidator := NewIntegrationTemplateRefValidator(mgr.GetClient(), defaultTemplateNamespace)
-	integrationRefDefaulter := NewIntegrationRefDefaulter(mgr.GetClient(), defaultTemplateNamespace)
 
 	return ctrl.NewWebhookManagedBy(mgr, &workspacev1alpha1.Workspace{}).
 		WithValidator(&WorkspaceCustomValidator{
@@ -233,7 +232,6 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace
 			templateGetter:          templateGetter,
 			templateValidator:       templateValidator,
 			accessStrategyValidator: accessStrategyValidator,
-			integrationRefDefaulter: integrationRefDefaulter,
 			client:                  mgr.GetClient(),
 		}).
 		Complete()
@@ -252,7 +250,6 @@ type WorkspaceCustomDefaulter struct {
 	templateGetter          *TemplateGetter
 	templateValidator       *TemplateValidator
 	accessStrategyValidator *AccessStrategyValidator
-	integrationRefDefaulter *IntegrationRefDefaulter
 	client                  client.Client
 }
 
@@ -310,16 +307,6 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, workspace *works
 	if err := d.serviceAccountDefaulter.ApplyServiceAccountDefaults(ctx, workspace); err != nil {
 		workspacelog.Error(err, "Failed to apply service account defaults", "workspace", workspace.GetName())
 		return fmt.Errorf("failed to apply service account defaults: %w", err)
-	}
-
-	// Resolve and stamp the namespace of any integrationTemplateRef that omits one, so the ref is stored
-	// fully-qualified and the validating webhook (and controller) never re-infer it. Skipped when the
-	// defaulter is unset (e.g. in unit tests that construct the defaulter directly).
-	if d.integrationRefDefaulter != nil {
-		if err := d.integrationRefDefaulter.ApplyIntegrationRefDefaults(ctx, workspace); err != nil {
-			workspacelog.Error(err, "Failed to apply integration ref defaults", "workspace", workspace.GetName())
-			return fmt.Errorf("failed to apply integration ref defaults: %w", err)
-		}
 	}
 
 	// Set workspace defaults for OwnershipType and AccessType

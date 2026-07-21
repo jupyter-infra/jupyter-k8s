@@ -193,12 +193,19 @@ func validatePodFieldExpression(field string, allowedParamNames map[string]strin
 // or carries an invalid JSONPath. The rendered output is discarded -- only errors matter. Prefer the
 // validateMetadataExpression / validatePodFieldExpression wrappers over calling this directly.
 //
-// KNOWN LIMITATION of static validation: missingkey=error only fires for the field-access form
-// {{ .Parameters.X }}. The dynamic-key form {{ index .Parameters "X" }} bypasses missingkey entirely --
-// text/template's index builtin returns the map's zero value (empty string) for an unknown key rather
-// than erroring -- so a typo'd or undeclared key resolves silently to empty here and passes validation.
-// A template that reaches an undeclared parameter via {{ index .Parameters "..." }} therefore escapes
-// this check and only surfaces as a degraded workspace at resolve time.
+// KNOWN LIMITATIONS of static validation, both of which let an undeclared/typo'd parameter reference
+// slip past here and surface only as a degraded workspace at resolve time:
+//
+//  1. Dynamic-key access: missingkey=error only fires for the field-access form {{ .Parameters.X }}. The
+//     dynamic-key form {{ index .Parameters "X" }} bypasses missingkey entirely -- text/template's index
+//     builtin returns the map's zero value (empty string) for an unknown key rather than erroring -- so a
+//     typo'd or undeclared key resolves silently to empty and passes validation.
+//  2. Untaken conditional branches: validation seeds every declared parameter to the empty string (its
+//     name, not a value -- see templateValidationData), so a {{ if .Parameters.X }} / {{ range ... }}
+//     guard is falsy and its body is never executed during this render. Any {{ .Parameters.<undeclared> }}
+//     or {{ resource ... }} expression inside that untaken branch is therefore not exercised and its error
+//     does not surface here; it is only caught at resolve time when real parameter values make the branch
+//     taken.
 func validateTemplateExpression(field string, allowedParamNames map[string]string, allowedResourceRefIDs map[string]bool, allowResourceRefs bool) error {
 	if field == "" {
 		return nil

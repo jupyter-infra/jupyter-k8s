@@ -146,26 +146,33 @@ var _ = Describe("IntegrationTemplateRefValidator namespace scope", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("validates a by-name ref against the namespace stamped by the defaulter (no shared-ns fallback here)", func() {
-		// Namespace resolution (own-ns -> shared-ns) is the mutating webhook's job: it stamps the resolved
-		// namespace onto the ref before validation. So a ref whose namespace was stamped to the shared
-		// namespace validates against exactly that namespace -- the validator does a single read there and
-		// does NOT re-run the fallback itself. (Regression guard: the validator no longer duplicates the
-		// defaulter's own-ns -> shared-ns resolution.)
-		ws := wsWithIntegrationNamespace("jupyter-k8s-shared") // already stamped, e.g. by the defaulter
+	It("admits an explicit shared-namespace ref when the template lives there", func() {
+		// To use a shared-namespace template the user sets ref.Namespace to the shared namespace explicitly;
+		// the read then targets exactly that namespace.
+		ws := wsWithIntegrationNamespace("jupyter-k8s-shared")
 		_, err := newValidatorWith("jupyter-k8s-shared", tmplIn("jupyter-k8s-shared")).Validate(ctx, ws)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("rejects a by-name ref left unstamped when the template is absent from the own namespace", func() {
-		// Empty ref namespace + template nowhere: the defaulter left it unstamped, so the validator reads
-		// the workspace's own namespace and rejects with a message naming that single namespace -- it does
-		// NOT fall back to (or mention) the shared namespace, since resolution already happened upstream.
+	It("rejects a bare-name ref whose template lives only in the shared namespace (no auto-fallback)", func() {
+		// Empty ref namespace resolves to the workspace's own namespace only -- there is no own-ns ->
+		// shared-ns fallback. A template present solely in the shared namespace is therefore not found, and
+		// the message names the workspace namespace it looked in. The user must set the shared namespace
+		// explicitly on the ref.
+		ws := wsWithIntegrationNamespace("")
+		_, err := newValidatorWith("jupyter-k8s-shared", tmplIn("jupyter-k8s-shared")).Validate(ctx, ws)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("not found"))
+		Expect(err.Error()).To(ContainSubstring("team-a"))
+	})
+
+	It("rejects a bare-name ref whose template is absent from the workspace namespace", func() {
+		// Empty ref namespace + template nowhere: single read against the workspace namespace misses and the
+		// ref is rejected, naming that namespace.
 		ws := wsWithIntegrationNamespace("")
 		_, err := newValidatorWith("jupyter-k8s-shared").Validate(ctx, ws)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("team-a"))
-		Expect(err.Error()).NotTo(ContainSubstring("jupyter-k8s-shared"))
 	})
 
 	It("rejects a cross-namespace integrationTemplateRef even when no shared namespace is configured", func() {

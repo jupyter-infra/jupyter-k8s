@@ -4,9 +4,9 @@ metadata:
   name: valid-integration
   namespace: jupyter-k8s-shared
 spec:
-  displayName: Valid Integration in shared namespace (for bare-name stamping)
+  displayName: Valid Integration in shared namespace (for bare-name resolution)
   # resourceRefs is required by the CRD (minItems=1); it is fetched only at controller resolve time, so
-  # its target need not exist for the defaulter/validator admission path this fixture exercises.
+  # its target need not exist for the validator admission path this fixture exercises.
   parameters:
     - name: serviceName
   resourceRefs:

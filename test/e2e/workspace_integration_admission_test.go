@@ -19,10 +19,11 @@ import (
 )
 
 // This suite exercises the ADMISSION behavior added by the integration webhooks (PR #421): the
-// WorkspaceIntegrationTemplate validating webhook, the workspace-side integrationTemplateRef validator,
-// and the mutating defaulter that stamps a bare-name ref's namespace. It deliberately uses templates whose
-// resourceRef is never fetched (admission does not read the referenced resource), so it tests admission
-// alone -- the controller resolve/freeze/replay behavior is covered by workspace_integration_test.go.
+// WorkspaceIntegrationTemplate validating webhook and the workspace-side integrationTemplateRef validator
+// (namespace scope, template existence in the ref's namespace, parameter completeness). It deliberately
+// uses templates whose resourceRef is never fetched (admission does not read the referenced resource), so
+// it tests admission alone -- the controller resolve/freeze/replay behavior is covered by
+// workspace_integration_test.go.
 // Fixtures for this suite live under test/e2e/static/integration-admission/ with no subgroup. These are
 // file-scoped so the apply/create helpers below can reference them directly (they are invariant across
 // every spec, so passing them as arguments tripped unparam).
@@ -93,22 +94,24 @@ var _ = Describe("Workspace Integration Admission", Ordered, func() {
 		})
 	})
 
-	Context("Mutating defaulter namespace stamping", func() {
-		It("stamps the shared namespace onto a bare-name ref that resolves only there", func() {
+	Context("Shared-namespace ref", func() {
+		It("admits a ref that explicitly targets the shared namespace where the template lives", func() {
 			By("installing the template ONLY in the shared namespace")
 			createIntegrationTemplateForTest("valid-integration-shared")
 
-			By("creating a workspace whose ref omits the namespace")
-			applyExpectSucceeds("ws-integration-bare-name",
-				"a bare-name ref resolvable in the shared namespace should be admitted")
+			By("creating a workspace whose ref names the shared namespace explicitly")
+			applyExpectSucceeds("ws-integration-shared-explicit",
+				"a ref explicitly targeting the shared namespace should be admitted")
 
-			By("verifying the mutating defaulter stamped the shared namespace into the stored spec")
-			Eventually(func(g Gomega) {
-				stamped, err := kubectlGet("workspace", "ws-integration-bare-name", integrationWorkspaceNS,
+			By("verifying the stored ref namespace is left as the user wrote it (the shared namespace)")
+			// The validator reads the template from the ref's namespace as written -- it does not rewrite the
+			// stored spec, so the ref namespace stays exactly as submitted.
+			Consistently(func(g Gomega) {
+				stored, err := kubectlGet("workspace", "ws-integration-shared-explicit", integrationWorkspaceNS,
 					"{.spec.integrationTemplateRefs[0].namespace}")
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(stamped).To(Equal(SharedNamespace))
-			}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+				g.Expect(stored).To(Equal(SharedNamespace))
+			}).WithTimeout(10 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
 		})
 	})
 })

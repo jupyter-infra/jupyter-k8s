@@ -21,13 +21,14 @@ import (
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
 
-// IntegrationTemplateRefValidator validates a Workspace's integrationTemplateRefs at admission on two
+// IntegrationTemplateRefValidator validates a Workspace's integrationTemplateRefs at admission on three
 // axes, in this order: (1) namespace scope -- a ref may only target the workspace's own namespace or the
 // configured shared namespace (checked first, before any read, so a cross-namespace ref never triggers a
-// read of another team's template); and (2) parameter completeness -- the workspace supplies every
-// parameter the referenced WorkspaceIntegrationTemplate declares. Catching both at the USER's write --
-// rather than at controller resolve time -- gives immediate, actionable feedback instead of a degraded
-// workspace.
+// read of another team's template); (2) template existence -- the referenced WorkspaceIntegrationTemplate
+// must exist in the ref's namespace (which defaults to the workspace namespace when omitted); and
+// (3) parameter completeness -- the workspace supplies every parameter the template declares. Catching all
+// three at the USER's write -- rather than at controller resolve time -- gives immediate, actionable
+// feedback instead of a degraded workspace.
 type IntegrationTemplateRefValidator struct {
 	client          client.Client
 	sharedNamespace string
@@ -42,10 +43,9 @@ var errIntegrationTemplateLoadFailed = stderrors.New("failed to load integration
 // NewIntegrationTemplateRefValidator creates the validator. sharedNamespace is the cluster-wide shared
 // namespace an integrationTemplateRef may additionally target (beyond the workspace's own namespace). This
 // is the SAME value the WorkspaceTemplate guard uses (the operator's --default-template-namespace flag), so
-// integration templates and workspace templates share one shared-namespace setting. Namespace RESOLUTION
-// for a by-name ref happens earlier, in the mutating webhook (IntegrationRefDefaulter, which stamps the
-// resolved namespace onto the spec); this validator only enforces scope and existence against the
-// already-stamped namespace -- it does not re-run the own-ns -> shared-ns fallback.
+// integration templates and workspace templates share one shared-namespace setting. An omitted ref
+// namespace means the workspace's own namespace; to reference a shared-namespace template the user sets
+// ref.Namespace to the shared namespace explicitly.
 func NewIntegrationTemplateRefValidator(c client.Client, sharedNamespace string) *IntegrationTemplateRefValidator {
 	return &IntegrationTemplateRefValidator{client: c, sharedNamespace: sharedNamespace}
 }
@@ -95,12 +95,9 @@ func (v *IntegrationTemplateRefValidator) validateRef(
 		return nil, err
 	}
 
-	// The namespace is resolved and stamped upstream by the mutating webhook (IntegrationRefDefaulter), so
-	// by the time validation runs a by-name ref carries the namespace the template was found in. A ref that
-	// is still empty here means the defaulter could not resolve it in either the workspace's own or the
-	// shared namespace (or the defaulter is disabled) -- treat it as the workspace's own namespace, which
-	// then fails the existence check below with a clear "not found" message. Either way, the validator does
-	// a SINGLE read against the stamped namespace and does not re-run the own-ns -> shared-ns fallback.
+	// Read the template from the ref's namespace, defaulting to the workspace namespace when omitted -- to
+	// reference a template in the shared namespace the user sets ref.Namespace to it explicitly
+	// (validateNamespaceScope has already restricted it to the workspace's own or the shared namespace).
 	ns := ref.Namespace
 	if ns == "" {
 		ns = workspace.Namespace
