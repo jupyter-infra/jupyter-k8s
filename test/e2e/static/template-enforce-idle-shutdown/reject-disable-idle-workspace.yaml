@@ -1,0 +1,19 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: reject-disable-idle-workspace
+  namespace: default
+spec:
+  displayName: "Reject Disable Idle"
+  templateRef:
+    name: enforce-idle-template
+    namespace: jupyter-k8s-shared
+  # enabled: false is a forbidden override when the template locks idle shutdown.
+  idleShutdown:
+    enabled: false
+    idleTimeoutInMinutes: 30
+    detection:
+      httpGet:
+        path: /api/status
+        port: 8888
+        transport: network

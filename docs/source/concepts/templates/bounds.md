@@ -60,6 +60,12 @@ spec:
     maxIdleTimeoutInMinutes: 480
 ```
 
+`allow` controls whether workspace users may disable idle shutdown, and whether the `idleShutdown` field of a workspace may diverge from the template's defined defaults. It matters because the `idleShutdown.detection` settings are deeply tied to the application running in the workspace. Misconfiguring the `idleShutdown.detection` field of a workspace may prevent the operator from shutting down idle workspaces.
+
+The `minIdleTimeoutInMinutes` and `maxIdleTimeoutInMinutes` bounds are independent of `allow`: they cap `idleShutdown.idleTimeoutInMinutes` on any workspace with idle shutdown *enabled*, whether or not overrides are allowed. So even with `allow: false`, you can still permit users to tune the timeout within those bounds. If `allow: false` and `minIdleTimeoutInMinutes` is omitted, the enforced minimum falls back to the template's `spec.defaultIdleShutdown.idleTimeoutInMinutes`; `maxIdleTimeoutInMinutes` behaves the same way. When `allow: true`, an omitted bound simply leaves that side unbounded.
+
+A template with `allow: false` must define `defaultIdleShutdown`, or the template webhook rejects it.
+
 ## Environment and label requirements
 
 Templates can require specific environment variables or labels with regex validation:

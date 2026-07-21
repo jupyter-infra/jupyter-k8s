@@ -120,6 +120,11 @@ func (v *WorkspaceTemplateCustomValidator) ValidateCreate(ctx context.Context, t
 		return nil, err
 	}
 
+	// Enforce that an idle-shutdown-locking policy has a default to enforce against.
+	if err := validateIdleShutdownPolicyConsistency(template); err != nil {
+		return nil, err
+	}
+
 	return nil, nil
 }
 
@@ -130,6 +135,11 @@ func (v *WorkspaceTemplateCustomValidator) ValidateUpdate(ctx context.Context, o
 	// Enforce that the referenced access strategy is in an allowed namespace, so the template
 	// cannot make referencing workspaces fail their own admission webhook.
 	if err := v.accessStrategyValidator.ValidateUpdateTemplate(oldTemplate, newTemplate); err != nil {
+		return nil, err
+	}
+
+	// Enforce that an idle-shutdown-locking policy has a default to enforce against.
+	if err := validateIdleShutdownPolicyConsistency(newTemplate); err != nil {
 		return nil, err
 	}
 
@@ -240,6 +250,27 @@ func maxStorageSizeChanged(oldStorage, newStorage *workspacev1alpha1.StorageConf
 	}
 
 	return false
+}
+
+// validateIdleShutdownPolicyConsistency rejects a template whose idle shutdown policy locks
+// overrides (Allow=false) without a DefaultIdleShutdown baseline. Without a default there is
+// nothing for the workspace webhook to enforce the lock against, so the policy would silently
+// do nothing - a misconfiguration we surface at template admission instead.
+func validateIdleShutdownPolicyConsistency(template *workspacev1alpha1.WorkspaceTemplate) error {
+	policy := template.Spec.IdleShutdownOverrides
+	if policy == nil || policy.Allow == nil || *policy.Allow {
+		return nil
+	}
+
+	if template.Spec.DefaultIdleShutdown == nil {
+		return fmt.Errorf(
+			"idleShutdownOverrides.allow is false but defaultIdleShutdown is not set: "+
+				"a locked idle shutdown policy requires a defaultIdleShutdown for workspaces to match (template %q)",
+			template.GetName(),
+		)
+	}
+
+	return nil
 }
 
 // idleShutdownAllowOverrideChanged checks if Allow setting changed
