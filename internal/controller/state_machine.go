@@ -223,8 +223,23 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		return ctrl.Result{}, pvcErr
 	}
 
+	// Integration workspaces: refresh the frozen resolution (status.resolvedIntegrations) alongside the
+	// access strategy fetch, BEFORE building the Deployment, so create/update below replay the current
+	// frozen values and reuse the templates loaded here. Re-resolution happens only on an input-token
+	// change. A reconcile error is non-fatal (fail-closed -- preserve the running pod); the in-memory
+	// status it records is persisted by this reconcile's single status write below.
+	var integrationTemplates map[string]*workspacev1alpha1.WorkspaceIntegrationTemplate
+	if sm.resourceManager.hasIntegrationTemplateRefs(workspace) {
+		var integrationErr error
+		integrationTemplates, integrationErr = sm.resourceManager.reconcileIntegrations(ctx, workspace)
+		if integrationErr != nil {
+			logger.Error(integrationErr, "integration freeze reconcile reported an error; proceeding with preserved frozen values",
+				"workspace", workspace.Name)
+		}
+	}
+
 	// EnsureDeploymentExists creates deployment if missing, or returns existing deployment
-	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace, accessStrategy)
+	deployment, err := sm.resourceManager.EnsureDeploymentExists(ctx, workspace, accessStrategy, integrationTemplates)
 	if err != nil {
 		deployErr := fmt.Errorf("failed to ensure deployment exists: %w", err)
 		// Update error condition

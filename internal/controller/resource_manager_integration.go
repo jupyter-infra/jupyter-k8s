@@ -31,27 +31,38 @@ import (
 // refreezes the {{ resource }} VALUES to match, so an edit that adds a new {{ resource }} doesn't leave the
 // frozen set missing a key (which would hard-error the build's frozen-replay).
 
-// RBAC for the resources capture reads. Deliberately narrow (get-only, named kind, no wildcard) per
-// least-privilege -- a new referenced kind needs its own marker here, never a blanket grant.
-// get-only (no list/watch) is sufficient because capture reads the referenced resource as an
-// Unstructured, which controller-runtime v0.24.1 serves via a direct API get that bypasses the
-// informer cache -- so no list/watch backing a cache is required. If a cached typed client is ever
-// used for these reads, add list;watch.
-// +kubebuilder:rbac:groups=ray.io,resources=rayclusters,verbs=get
+// RBAC for the resources capture reads: the operator gets the referenced resource as an Unstructured
+// (get-only is sufficient -- controller-runtime v0.24.1 serves an Unstructured Get directly from the API,
+// bypassing the informer cache, so no list/watch backing a cache is required).
+//
+// There is deliberately NO +kubebuilder:rbac marker for these reads and the operator chart grants no
+// cross-API read by default: an integration's referenced kinds (e.g. ray.io rayclusters) are specific to a
+// deployment, not the generic operator, so baking them into the default ClusterRole would grant every
+// install read on APIs it never uses. A deployment that configures integrations supplies the read grant
+// out-of-band -- the same model as watched resources (--watch-resources-gvk / accessResources.additionalGvk),
+// which the generic chart also does not auto-grant.
 
 // hasIntegrationTemplateRefs reports whether the workspace attaches any integrations.
 func (rm *ResourceManager) hasIntegrationTemplateRefs(workspace *workspacev1alpha1.Workspace) bool {
 	return len(workspace.Spec.IntegrationTemplateRefs) > 0
 }
 
-// reconcileIntegrations brings status.resolvedIntegrations up to date before the build: per ref, carry
-// the frozen record forward or recapture (see hasIntegrationChanged), pruning removed integrations and
-// persisting a changed set in one status patch. Fail-closed: a capture error preserves the existing record.
-func (rm *ResourceManager) reconcileIntegrations(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
+// reconcileIntegrations brings status.resolvedIntegrations up to date before the build and returns the
+// templates it loaded, keyed by integration name, so the build renders each pod shape without re-fetching.
+// Per ref it loads the template once (feeding both the recapture gate and the build), then carries the
+// frozen record forward or recaptures (see hasIntegrationChanged), pruning removed integrations. It mutates
+// workspace.Status.ResolvedIntegrations IN MEMORY only -- the reconcile's single status write (via
+// status_manager) persists it -- so status is written at most once per reconcile. Fail-closed: a template
+// that can't be loaded, or a capture that fails, preserves the existing frozen record and is reported as an
+// error; a template absent from the returned map makes the build preserve the running pod for that ref.
+func (rm *ResourceManager) reconcileIntegrations(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+) (map[string]*workspacev1alpha1.WorkspaceIntegrationTemplate, error) {
 	logger := logf.FromContext(ctx)
 
+	templates := make(map[string]*workspacev1alpha1.WorkspaceIntegrationTemplate, len(workspace.Spec.IntegrationTemplateRefs))
 	resolvedIntegrations := make([]workspacev1alpha1.ResolvedIntegration, 0, len(workspace.Spec.IntegrationTemplateRefs))
-	changed := false
 	var firstErr error
 
 	for i := range workspace.Spec.IntegrationTemplateRefs {
@@ -59,8 +70,8 @@ func (rm *ResourceManager) reconcileIntegrations(ctx context.Context, workspace 
 		currentParametersHash := getIntegrationParametersHash(ref)
 		existing := findResolvedIntegration(&workspace.Status, ref.Name)
 
-		// Load the template (cached read, not the referenced resource): feeds the gate and the capture.
-		// Fail-closed if unreadable -- keep any existing record so the running sidecar survives.
+		// Load the template (cached read, not the referenced resource): feeds the gate, the capture, and
+		// the build. Fail-closed if unreadable -- keep any existing record so the running sidecar survives.
 		template, err := getIntegrationTemplate(ctx, rm.client, workspace, ref)
 		if err != nil {
 			if existing != nil {
@@ -76,6 +87,7 @@ func (rm *ResourceManager) reconcileIntegrations(ctx context.Context, workspace 
 			}
 			continue
 		}
+		templates[ref.Name] = template
 		currentTemplateVersion := getIntegrationTemplateVersion(template)
 
 		if !hasIntegrationChanged(existing, currentParametersHash, currentTemplateVersion) {
@@ -110,25 +122,15 @@ func (rm *ResourceManager) reconcileIntegrations(ctx context.Context, workspace 
 			ObservedIntegrationTemplateVersion: currentTemplateVersion,
 			Values:                             values,
 		})
-		changed = true
 		logger.Info("Integration input changed; recorded new resolved values",
 			"integration", ref.Name, "parametersHash", currentParametersHash,
 			"observedIntegrationTemplateVersion", currentTemplateVersion, "valueCount", len(values))
 	}
 
-	// Detect pruned records (integration removed from spec) as a change too.
-	if len(resolvedIntegrations) != len(workspace.Status.ResolvedIntegrations) {
-		changed = true
-	}
-
-	if changed {
-		if err := rm.persistResolvedIntegrationsToStatus(ctx, workspace, resolvedIntegrations); err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
-		}
-	}
-	return firstErr
+	// Record the reconciled set on the in-memory workspace so the build renders from it and the reconcile's
+	// single status write persists it. Pruned records (integration removed from spec) fall out naturally.
+	workspace.Status.ResolvedIntegrations = resolvedIntegrations
+	return templates, firstErr
 }
 
 // captureIntegrationValues renders the pod modifications with a recording provider and returns the
@@ -202,22 +204,6 @@ func (rm *ResourceManager) fetchReferencedResources(
 		resources[ref.Name] = obj
 	}
 	return resources, nil
-}
-
-// persistResolvedIntegrationsToStatus writes status.resolvedIntegrations via a status merge patch (won't clobber
-// concurrent condition/probe writes) and updates the in-memory workspace so the same reconcile's build
-// renders from the just-frozen values.
-func (rm *ResourceManager) persistResolvedIntegrationsToStatus(
-	ctx context.Context,
-	workspace *workspacev1alpha1.Workspace,
-	resolved []workspacev1alpha1.ResolvedIntegration,
-) error {
-	base := workspace.DeepCopy()
-	workspace.Status.ResolvedIntegrations = resolved
-	if err := rm.client.Status().Patch(ctx, workspace, client.MergeFrom(base)); err != nil {
-		return fmt.Errorf("failed to persist status.resolvedIntegrations: %w", err)
-	}
-	return nil
 }
 
 // hasIntegrationChanged reports whether an integration's parametersHash or templateVersion drifts from

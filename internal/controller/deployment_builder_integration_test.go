@@ -13,7 +13,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func rayRef(cluster, ns string) *workspacev1alpha1.IntegrationTemplateRef {
@@ -164,6 +163,133 @@ func envValue(c *corev1.Container, name string) string {
 	return ""
 }
 
+// integrationTemplatesFor builds the name-keyed template map the build side now expects, standing in for
+// the map the resource manager loads once per reconcile.
+func integrationTemplatesFor(templates ...*workspacev1alpha1.WorkspaceIntegrationTemplate) map[string]*workspacev1alpha1.WorkspaceIntegrationTemplate {
+	m := make(map[string]*workspacev1alpha1.WorkspaceIntegrationTemplate, len(templates))
+	for _, t := range templates {
+		m[t.Name] = t
+	}
+	return m
+}
+
+// TestBuildWorkspaceDeployment_EnvPrecedence is the regression guard for the primary-container env-var
+// layering order. Overlays are applied base -> integration -> access strategy, and each overlay overwrites
+// an earlier same-named var, so the precedence is:
+//
+//	access-strategy MergeEnv  >  integration MergeEnv  >  workspace.Spec.Env (base)
+//
+// Access strategy must win outright because breaking workspace access is worse than breaking an
+// integration; an integration in turn overrides only the workspace's own base env. The test seeds a var
+// contested at each tier plus a tier-exclusive var, and asserts the surviving value at every level.
+func TestBuildWorkspaceDeployment_EnvPrecedence(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	if err := workspacev1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add to scheme: %v", err)
+	}
+
+	const (
+		// Contested by all three tiers -- access strategy must win.
+		allThree = "ALL_THREE"
+		// Contested by base + integration only -- integration must win.
+		baseVsIntegration = "BASE_VS_INTEGRATION"
+		// Contested by base + access strategy only -- access strategy must win.
+		baseVsAccess = "BASE_VS_ACCESS"
+		// Owned by exactly one tier -- each must survive untouched.
+		baseOnly        = "BASE_ONLY"
+		integrationOnly = "INTEGRATION_ONLY"
+		accessOnly      = "ACCESS_ONLY"
+
+		// The value each tier writes, so the surviving value names its winning tier.
+		fromBase        = "from-base"
+		fromIntegration = "from-integration"
+		fromAccess      = "from-access-strategy"
+	)
+
+	// Integration template overlay.
+	template := &workspacev1alpha1.WorkspaceIntegrationTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: rayIntegrationName, Namespace: testNamespace},
+		Spec: workspacev1alpha1.WorkspaceIntegrationTemplateSpec{
+			DeploymentModifications: &workspacev1alpha1.DeploymentModifications{
+				PodModifications: &workspacev1alpha1.PodModifications{
+					PrimaryContainerModifications: &workspacev1alpha1.PrimaryContainerModifications{
+						MergeEnv: []workspacev1alpha1.AccessEnvTemplate{
+							{Name: allThree, ValueTemplate: fromIntegration},
+							{Name: baseVsIntegration, ValueTemplate: fromIntegration},
+							{Name: integrationOnly, ValueTemplate: fromIntegration},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Access strategy overlay (applied last).
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{Name: "as", Namespace: testNamespace},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			DeploymentModifications: &workspacev1alpha1.DeploymentModifications{
+				PodModifications: &workspacev1alpha1.PodModifications{
+					PrimaryContainerModifications: &workspacev1alpha1.PrimaryContainerModifications{
+						MergeEnv: []workspacev1alpha1.AccessEnvTemplate{
+							{Name: allThree, ValueTemplate: fromAccess},
+							{Name: baseVsAccess, ValueTemplate: fromAccess},
+							{Name: accessOnly, ValueTemplate: fromAccess},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Base env from the workspace create/update API.
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: "precedence-ws", Namespace: testNamespace},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			Env: []corev1.EnvVar{
+				{Name: allThree, Value: fromBase},
+				{Name: baseVsIntegration, Value: fromBase},
+				{Name: baseVsAccess, Value: fromBase},
+				{Name: baseOnly, Value: fromBase},
+			},
+			IntegrationTemplateRefs: []workspacev1alpha1.IntegrationTemplateRef{{Name: rayIntegrationName}},
+		},
+	}
+	// A frozen record must exist so the integration overlay is applied (no {{ resource }} -> empty Values).
+	workspace.Status.ResolvedIntegrations = []workspacev1alpha1.ResolvedIntegration{{
+		Name:                               rayIntegrationName,
+		ParametersHash:                     getIntegrationParametersHash(&workspace.Spec.IntegrationTemplateRefs[0]),
+		ObservedIntegrationTemplateVersion: "uid.1",
+		Values:                             map[string]string{},
+	}}
+
+	db := NewDeploymentBuilder(scheme, WorkspaceControllerOptions{ApplicationImagesPullPolicy: corev1.PullIfNotPresent})
+	deployment, err := db.BuildWorkspaceDeployment(ctx, workspace, accessStrategy, integrationTemplatesFor(template))
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+
+	primary := findPrimaryContainer(&deployment.Spec.Template.Spec)
+	if primary == nil {
+		t.Fatal("primary container not found")
+	}
+
+	want := map[string]string{
+		allThree:          fromAccess,      // access strategy beats integration beats base
+		baseVsIntegration: fromIntegration, // integration beats base
+		baseVsAccess:      fromAccess,      // access strategy beats base
+		baseOnly:          fromBase,        // untouched
+		integrationOnly:   fromIntegration, // untouched
+		accessOnly:        fromAccess,      // untouched
+	}
+	for name, wantVal := range want {
+		if got := envValue(primary, name); got != wantVal {
+			t.Errorf("env %s: got %q, want %q", name, got, wantVal)
+		}
+	}
+}
+
 // TestApplyIntegrations_NoRollOnSecondReconcile documents the intended #7 no-roll guarantee: once an
 // integration sidecar has been injected and the API server has defaulted its empty fields
 // (terminationMessagePath, terminationMessagePolicy, imagePullPolicy, port protocol), a subsequent
@@ -231,11 +357,10 @@ func TestApplyIntegrations_NoRollOnSecondReconcile(t *testing.T) {
 		Values:                             map[string]string{},
 	}}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(template).Build()
-	db := NewDeploymentBuilder(scheme, WorkspaceControllerOptions{ApplicationImagesPullPolicy: corev1.PullIfNotPresent}, c)
+	db := NewDeploymentBuilder(scheme, WorkspaceControllerOptions{ApplicationImagesPullPolicy: corev1.PullIfNotPresent})
 
 	// Build the desired Deployment once.
-	desired, err := db.BuildWorkspaceDeployment(ctx, workspace, nil)
+	desired, err := db.BuildWorkspaceDeployment(ctx, workspace, nil, integrationTemplatesFor(template))
 	if err != nil {
 		t.Fatalf("build desired deployment: %v", err)
 	}
@@ -260,7 +385,7 @@ func TestApplyIntegrations_NoRollOnSecondReconcile(t *testing.T) {
 	}
 
 	// A second reconcile against the server-defaulted stored object must NOT report a needed update.
-	needsUpdate, err := db.NeedsUpdate(ctx, stored, workspace, nil)
+	needsUpdate, err := db.NeedsUpdate(ctx, stored, workspace, nil, integrationTemplatesFor(template))
 	if err != nil {
 		t.Fatalf("NeedsUpdate: %v", err)
 	}

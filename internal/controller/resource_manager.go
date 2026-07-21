@@ -93,10 +93,10 @@ func (rm *ResourceManager) getPVC(ctx context.Context, workspace *workspacev1alp
 }
 
 // CreateDeployment creates a new deployment for the Workspace
-func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*appsv1.Deployment, error) {
+func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy, integrationTemplates map[string]*workspacev1alpha1.WorkspaceIntegrationTemplate) (*appsv1.Deployment, error) {
 	logger := logf.FromContext(ctx)
 
-	deployment, err := rm.deploymentBuilder.BuildWorkspaceDeployment(ctx, workspace, accessStrategy)
+	deployment, err := rm.deploymentBuilder.BuildWorkspaceDeployment(ctx, workspace, accessStrategy, integrationTemplates)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build deployment: %w", err)
 	}
@@ -185,35 +185,27 @@ func (rm *ResourceManager) deleteService(ctx context.Context, service *corev1.Se
 	return nil
 }
 
-// EnsureDeploymentExists creates a deployment if it doesn't exist, or updates it if the pod spec differs
+// EnsureDeploymentExists creates a deployment if it doesn't exist, or updates it if the pod spec differs.
+// integrationTemplates carries the WorkspaceIntegrationTemplates the caller already loaded (keyed by
+// integration name) so the build renders each integration's pod shape without re-fetching.
 func (rm *ResourceManager) EnsureDeploymentExists(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
-	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*appsv1.Deployment, error) {
-	// Integration workspaces: refresh the frozen resolution (status.resolvedIntegrations) BEFORE
-	// building the Deployment, so create/update below replay the current frozen values. Re-resolution
-	// happens only on an input-token change; a capture failure is non-fatal here (fail-closed --
-	// preserve the running pod) and is surfaced via the workspace's integration status elsewhere.
-	if rm.hasIntegrationTemplateRefs(workspace) {
-		if err := rm.reconcileIntegrations(ctx, workspace); err != nil {
-			logf.FromContext(ctx).Error(err, "integration freeze reconcile reported an error; proceeding with preserved frozen values",
-				"workspace", workspace.Name)
-		}
-	}
-
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
+	integrationTemplates map[string]*workspacev1alpha1.WorkspaceIntegrationTemplate) (*appsv1.Deployment, error) {
 	deployment, err := rm.getDeployment(ctx, workspace)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return rm.createDeployment(ctx, workspace, accessStrategy)
+			return rm.createDeployment(ctx, workspace, accessStrategy, integrationTemplates)
 		}
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
 
-	return rm.ensureDeploymentUpToDate(ctx, deployment, workspace, accessStrategy)
+	return rm.ensureDeploymentUpToDate(ctx, deployment, workspace, accessStrategy, integrationTemplates)
 }
 
 // ensureDeploymentUpToDate checks if deployment needs update and updates it if necessary
-func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*appsv1.Deployment, error) {
+func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy, integrationTemplates map[string]*workspacev1alpha1.WorkspaceIntegrationTemplate) (*appsv1.Deployment, error) {
 	// Only perform updates when workspace is available to avoid interfering with creation
 	if !rm.statusManager.IsWorkspaceAvailable(workspace) {
 		return deployment, nil
@@ -229,7 +221,7 @@ func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deploym
 		}
 	}
 
-	needsUpdate, err := rm.deploymentBuilder.NeedsUpdate(ctx, deployment, workspace, accessStrategy)
+	needsUpdate, err := rm.deploymentBuilder.NeedsUpdate(ctx, deployment, workspace, accessStrategy, integrationTemplates)
 	if err != nil {
 		// Building the desired state can fail specifically in the integration frozen-replay path -- e.g. a
 		// referenced template was deleted, edited to reference a value not in the frozen set, or names a
@@ -248,14 +240,14 @@ func (rm *ResourceManager) ensureDeploymentUpToDate(ctx context.Context, deploym
 	}
 
 	if needsUpdate {
-		return rm.updateDeployment(ctx, deployment, workspace, accessStrategy)
+		return rm.updateDeployment(ctx, deployment, workspace, accessStrategy, integrationTemplates)
 	}
 
 	return deployment, nil
 }
 
 // updateDeployment updates an existing deployment with new pod spec
-func (rm *ResourceManager) updateDeployment(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*appsv1.Deployment, error) {
+func (rm *ResourceManager) updateDeployment(ctx context.Context, deployment *appsv1.Deployment, workspace *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy, integrationTemplates map[string]*workspacev1alpha1.WorkspaceIntegrationTemplate) (*appsv1.Deployment, error) {
 	logger := logf.FromContext(ctx)
 
 	// Use the provided accessStrategy instead of fetching it again
@@ -269,7 +261,7 @@ func (rm *ResourceManager) updateDeployment(ctx context.Context, deployment *app
 	}
 
 	// Update the deployment spec using the builder with access strategy (+ frozen integration overlays)
-	updatedDeployment, err := rm.deploymentBuilder.BuildWorkspaceDeployment(ctx, workspace, accessStrategy)
+	updatedDeployment, err := rm.deploymentBuilder.BuildWorkspaceDeployment(ctx, workspace, accessStrategy, integrationTemplates)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build updated deployment: %w", err)
 	}

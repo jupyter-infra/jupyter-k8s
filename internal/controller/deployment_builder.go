@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -26,19 +25,14 @@ type DeploymentBuilder struct {
 	scheme        *runtime.Scheme
 	options       WorkspaceControllerOptions
 	imageResolver *ImageResolver
-	// client is used to load a WorkspaceIntegrationTemplate when replaying an integration's frozen
-	// values into the pod template (see deployment_builder_integration.go). It never reads a referenced
-	// resource -- that read happens during capture, before the build.
-	client client.Client
 }
 
 // NewDeploymentBuilder creates a new DeploymentBuilder
-func NewDeploymentBuilder(scheme *runtime.Scheme, options WorkspaceControllerOptions, k8sClient client.Client) *DeploymentBuilder {
+func NewDeploymentBuilder(scheme *runtime.Scheme, options WorkspaceControllerOptions) *DeploymentBuilder {
 	return &DeploymentBuilder{
 		scheme:        scheme,
 		options:       options,
 		imageResolver: NewImageResolver(options.ApplicationImagesRegistry),
-		client:        k8sClient,
 	}
 }
 
@@ -58,15 +52,18 @@ func (db *DeploymentBuilder) BuildDeployment(ctx context.Context, workspace *wor
 	return deployment, nil
 }
 
-// BuildWorkspaceDeployment builds the full desired Deployment for a workspace: the base pod template,
-// then the access-strategy overlay, then the integration overlay (frozen values replayed from
-// status.resolvedIntegrations). It is the single desired-state entry point -- create, update, and
-// NeedsUpdate all call it, so the compared desired state is identical in every path and an unchanged
-// input produces no diff and no pod roll.
+// BuildWorkspaceDeployment builds the full desired Deployment for a workspace by layering, in order:
+// the base pod template, then the integration overlays (frozen values replayed from
+// status.resolvedIntegrations), then the access-strategy overlay. Access strategy is applied LAST so it
+// wins every conflict (a primary-container env var it sets overwrites the same key from an integration):
+// access to the workspace is fundamental to its usability, so an integration must never be able to break
+// it. It is the single desired-state entry point -- create, update, and NeedsUpdate all call it, so the
+// compared desired state is identical in every path and an unchanged input produces no diff and no pod roll.
 func (db *DeploymentBuilder) BuildWorkspaceDeployment(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
+	integrationTemplates map[string]*workspacev1alpha1.WorkspaceIntegrationTemplate,
 ) (*appsv1.Deployment, error) {
 	// Build the base deployment
 	deployment, err := db.BuildDeployment(ctx, workspace)
@@ -74,15 +71,17 @@ func (db *DeploymentBuilder) BuildWorkspaceDeployment(
 		return nil, err
 	}
 
+	// Apply the workspace's integrations by replaying their frozen values (status.resolvedIntegrations)
+	// onto the pre-fetched templates the caller supplies.
+	if err := db.applyIntegrationsToDeployment(ctx, deployment, workspace, integrationTemplates); err != nil {
+		return nil, err
+	}
+
+	// Access strategy is applied after integrations so its settings take precedence.
 	if accessStrategy != nil {
 		if err := db.ApplyAccessStrategyToDeployment(deployment, workspace, accessStrategy); err != nil {
 			return nil, fmt.Errorf("failed to apply access strategy to deployment: %w", err)
 		}
-	}
-
-	// Apply the workspace's integrations by replaying their frozen values (status.resolvedIntegrations).
-	if err := db.applyIntegrationsToDeployment(ctx, deployment, workspace); err != nil {
-		return nil, err
 	}
 
 	return deployment, nil
@@ -332,9 +331,10 @@ func (db *DeploymentBuilder) NeedsUpdate(
 	existingDeployment *appsv1.Deployment,
 	workspace *workspacev1alpha1.Workspace,
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
+	integrationTemplates map[string]*workspacev1alpha1.WorkspaceIntegrationTemplate,
 ) (bool, error) {
 	// Build the desired deployment spec with access strategy applied
-	desiredDeployment, err := db.BuildWorkspaceDeployment(ctx, workspace, accessStrategy)
+	desiredDeployment, err := db.BuildWorkspaceDeployment(ctx, workspace, accessStrategy, integrationTemplates)
 	if err != nil {
 		return false, fmt.Errorf("failed to build desired deployment: %w", err)
 	}

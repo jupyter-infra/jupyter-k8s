@@ -26,17 +26,21 @@ import (
 var errIntegrationReplayFailed = errors.New("could not apply integration to the workspace")
 
 // This file is the build side of integrations: it renders each attached integration onto the pod template
-// from the frozen values (status.resolvedIntegrations), loading the template for pod SHAPE but never
-// reading the referenced resource (that is the capture side's job). Mirrors deployment_builder_access.go.
-// Functions are ordered entry points first, then the helpers they call.
+// from the frozen values (status.resolvedIntegrations), using the pre-fetched template (supplied by the
+// resource manager) for pod SHAPE and never reading the referenced resource (that is the capture side's
+// job). Mirrors deployment_builder_access.go. Functions are ordered entry points first, then the helpers
+// they call.
 
-// applyIntegrationsToDeployment merges every attached integration's frozen values into the pod template
-// -- same values yield the same template, so an unchanged integration never rolls the pod. Fail-closed:
-// no frozen record yet -> skip (base-only); render error -> abort the build, leaving the running pod.
+// applyIntegrationsToDeployment merges every attached integration's frozen values into the pod template,
+// using the caller-supplied templates keyed by integration name -- same values yield the same template, so
+// an unchanged integration never rolls the pod. Fail-closed: no frozen record yet -> skip (base-only); no
+// template supplied for the ref, or a render error -> abort the build with a sentinel-tagged error so the
+// resource manager leaves the running pod untouched.
 func (db *DeploymentBuilder) applyIntegrationsToDeployment(
 	ctx context.Context,
 	deployment *appsv1.Deployment,
 	workspace *workspacev1alpha1.Workspace,
+	integrationTemplates map[string]*workspacev1alpha1.WorkspaceIntegrationTemplate,
 ) error {
 	logger := logf.FromContext(ctx)
 
@@ -48,10 +52,16 @@ func (db *DeploymentBuilder) applyIntegrationsToDeployment(
 				"integration", ref.Name)
 			continue
 		}
-		mods, shareProcessNamespace, err := db.buildIntegrationPodModifications(ctx, workspace, ref, frozen)
+		template := integrationTemplates[ref.Name]
+		if template == nil {
+			// The resource manager could not supply the template (deleted or transiently unreadable). An
+			// existing workspace must PRESERVE its running sidecar, not wedge or roll to a base-only pod:
+			// tag with the sentinel so the resource manager swallows it and keeps the running Deployment.
+			return fmt.Errorf("integration %q overlay failed: could not load the template: %w",
+				ref.Name, errIntegrationReplayFailed)
+		}
+		mods, shareProcessNamespace, err := db.buildIntegrationPodModifications(workspace, ref, frozen, template)
 		if err != nil {
-			// err is sentinel-tagged (errIntegrationReplayFailed) ONLY when it originates in the frozen
-			// render path; a template-load (Get) failure propagates untagged and stays fatal upstream.
 			return fmt.Errorf("integration %q overlay failed: %w", ref.Name, err)
 		}
 		if err := applyPodModifications(&deployment.Spec.Template.Spec, mods); err != nil {
@@ -65,23 +75,14 @@ func (db *DeploymentBuilder) applyIntegrationsToDeployment(
 	return nil
 }
 
-// buildIntegrationPodModifications loads the template for pod SHAPE but resolves {{ resource }} values
-// from the frozen set (a missing frozen value is a hard error). shareProcessNamespace is carried through.
+// buildIntegrationPodModifications resolves {{ resource }} values from the frozen set (a missing frozen
+// value is a hard error) against the pre-fetched template's pod shape. shareProcessNamespace is carried through.
 func (db *DeploymentBuilder) buildIntegrationPodModifications(
-	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
 	ref *workspacev1alpha1.IntegrationTemplateRef,
 	frozen *workspacev1alpha1.ResolvedIntegration,
+	template *workspacev1alpha1.WorkspaceIntegrationTemplate,
 ) (*workspacev1alpha1.PodModifications, *bool, error) {
-	template, err := getIntegrationTemplate(ctx, db.client, workspace, ref)
-	if err != nil {
-		// Loading the template is part of the frozen-replay path: an existing workspace whose template was
-		// deleted (or is transiently unreadable) must PRESERVE its running sidecar, not wedge or roll to a
-		// base-only pod. Tag with the sentinel so the resource manager swallows it and keeps the running
-		// Deployment; the workspace's health still surfaces via the status probe.
-		return nil, nil, fmt.Errorf("could not load the template for integration %q: %w",
-			ref.Name, errors.Join(errIntegrationReplayFailed, err))
-	}
 	shareProcessNamespace := template.Spec.ShareProcessNamespace
 
 	if template.Spec.DeploymentModifications == nil || template.Spec.DeploymentModifications.PodModifications == nil {
@@ -93,8 +94,7 @@ func (db *DeploymentBuilder) buildIntegrationPodModifications(
 	mods, err := resolver.ResolvePodModifications(template.Spec.DeploymentModifications.PodModifications, data)
 	if err != nil {
 		// A frozen value can no longer be rendered (template edited to reference a value not in the
-		// frozen set). Tag with the sentinel so the resource manager preserves the running pod; a
-		// template-load failure above returns untagged and stays fatal.
+		// frozen set). Tag with the sentinel so the resource manager preserves the running pod.
 		return nil, nil, fmt.Errorf("could not apply the pod changes for integration %q: %w",
 			ref.Name, errors.Join(errIntegrationReplayFailed, err))
 	}

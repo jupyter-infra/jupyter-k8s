@@ -74,9 +74,8 @@ func resolveStatusProbeCommand(
 }
 
 // getIntegrationTemplate loads the referenced template from the ref's namespace, defaulting to the
-// workspace's own namespace when the ref omits one. The mutating webhook (IntegrationRefDefaulter)
-// stamps the resolved namespace onto the ref at admission, so a stored workspace's ref is already
-// fully-qualified. Missing is a fail-closed error.
+// workspace's own namespace when the ref omits one. Admission validates that the ref targets the
+// workspace's own namespace or the shared namespace before it is stored. Missing is a fail-closed error.
 func getIntegrationTemplate(
 	ctx context.Context,
 	c client.Client,

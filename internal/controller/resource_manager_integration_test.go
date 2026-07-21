@@ -172,7 +172,7 @@ func freezeResourceManager(c client.Client) *ResourceManager {
 	opts := WorkspaceControllerOptions{ApplicationImagesPullPolicy: corev1.PullIfNotPresent}
 	return NewResourceManager(
 		c, c.Scheme(),
-		NewDeploymentBuilder(c.Scheme(), opts, c),
+		NewDeploymentBuilder(c.Scheme(), opts),
 		NewServiceBuilder(c.Scheme()),
 		NewPVCBuilder(c.Scheme()),
 		NewAccessResourcesBuilder(),
@@ -211,11 +211,15 @@ type freezeHarness struct {
 	ns         string
 }
 
-// ensure re-runs the reconcile entry point (EnsureDeploymentExists) and returns the resulting
-// Deployment, failing the test with the phase label on any error.
+// ensure re-runs the reconcile entry point -- reconcileIntegrations (freeze + load templates) then
+// EnsureDeploymentExists -- mirroring the state machine, and returns the resulting Deployment, failing the
+// test with the phase label on any error. reconcileIntegrations records the frozen values on h.ws.Status
+// in memory (a real reconcile persists them in its single status write); the harness reuses h.ws so the
+// next phase sees them.
 func (h *freezeHarness) ensure(label string) *appsv1.Deployment {
 	h.t.Helper()
-	if _, err := h.rm.EnsureDeploymentExists(h.ctx, h.ws, nil); err != nil {
+	integrationTemplates, _ := h.rm.reconcileIntegrations(h.ctx, h.ws)
+	if _, err := h.rm.EnsureDeploymentExists(h.ctx, h.ws, nil, integrationTemplates); err != nil {
 		h.t.Fatalf("%s ensure: %v", label, err)
 	}
 	d := &appsv1.Deployment{}
@@ -395,9 +399,9 @@ func TestIntegrationFreeze_EndToEnd(t *testing.T) {
 
 // TestIntegrationFreeze_SharedNamespaceStampedRef verifies that a WorkspaceIntegrationTemplate published
 // only in the shared namespace is resolved for a workspace in a different namespace whose ref carries the
-// shared namespace in integrationTemplateRefs[].namespace. The mutating webhook (IntegrationRefDefaulter)
-// stamps that namespace at admission, so this test seeds the ref the same way and asserts the controller
-// reads the template from the stamped namespace.
+// shared namespace in integrationTemplateRefs[].namespace. The admission webhook allows a ref to target the
+// workspace's own namespace or the shared namespace, so this test seeds a shared-namespace ref and asserts
+// the controller reads the template from that namespace.
 func TestIntegrationFreeze_SharedNamespaceStampedRef(t *testing.T) {
 	ctx := context.Background()
 	c, stop := startFreezeEnvtest(t)
@@ -437,7 +441,8 @@ func TestIntegrationFreeze_SharedNamespaceStampedRef(t *testing.T) {
 	}}
 	_ = c.Status().Update(ctx, ws)
 
-	if _, err := rm.EnsureDeploymentExists(ctx, ws, nil); err != nil {
+	integrationTemplates, _ := rm.reconcileIntegrations(ctx, ws)
+	if _, err := rm.EnsureDeploymentExists(ctx, ws, nil, integrationTemplates); err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
 	d := &appsv1.Deployment{}
