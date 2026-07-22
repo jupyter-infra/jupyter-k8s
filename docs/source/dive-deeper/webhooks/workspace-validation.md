@@ -7,6 +7,7 @@ The validating webhook enforces constraints on workspace create, update, and del
 | Check | Description |
 |-------|-------------|
 | Template constraints | Validates resources, images, storage size, and idle shutdown bounds against the template's constraint fields |
+| Storage size shrink | On update, rejects a decrease of `spec.storage.size` below the workspace's provisioned PVC size |
 | Reference namespace scope | Rejects references to templates or access strategies outside the workspace's own namespace or the configured shared namespace |
 | Volume ownership | Rejects references to other workspaces' primary storage PVCs (secondary storage can be shared freely) |
 
@@ -29,9 +30,13 @@ When a workspace has `ownershipType: OwnerOnly`:
 
 On `DELETE`, the webhook only checks ownership permission for `OwnerOnly` workspaces. All other deletes pass through (RBAC is the primary guard).
 
-## Idle shutdown override enforcement
+## Storage size changes
 
-When the template sets `idleShutdownOverrides.allow: false`, the webhook requires the workspace's `idleShutdown` to match the template's `defaultIdleShutdown` on every field except `idleTimeoutInMinutes`. Declared `minIdleTimeoutInMinutes`/`maxIdleTimeoutInMinutes` bounds are enforced on any *enabled* idle shutdown regardless of `allow`; a disabled idle shutdown has no timeout to bound. See [idle shutdown bounds](../../concepts/templates/bounds.md) for the policy semantics.
+On update, the webhook rejects shrinking `spec.storage.size` below the size the workspace's PVC already requests. Kubernetes does not support shrinking a volume below its current size, so a resize-down would otherwise pass admission but fail to reconcile.
+
+```{note}
+The webhook does not block a size increase at admission: whether it succeeds at reconciliation depends on the StorageClass's `allowVolumeExpansion`.
+```
 
 ## Lazy constraint enforcement
 

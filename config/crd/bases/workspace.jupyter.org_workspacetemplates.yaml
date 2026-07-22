@@ -3919,7 +3919,7 @@ spec:
                       description: |-
                         ResourceRange defines min and max for a resource
                         NOTE: CEL validation for min <= max is not possible due to resource.Quantity type limitations
-                        Validation is enforced at runtime in the template resolver
+                        Consistency (min <= max) is enforced by the WorkspaceTemplate validating webhook
                       properties:
                         max:
                           anyOf:
