@@ -382,6 +382,14 @@ func main() {
 	}
 
 	// nolint:goconst
+	if os.Getenv("ENABLE_WORKSPACE_INTEGRATION_TEMPLATE_WEBHOOK") != "false" {
+		if err := webhookv1alpha1.SetupWorkspaceIntegrationTemplateWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "WorkspaceIntegrationTemplate")
+			os.Exit(1)
+		}
+	}
+
+	// nolint:goconst
 	if enableExtensionAPI {
 		setupLog.Info("Setting up extension API server")
 		// Create config with a different port to avoid conflict with metrics

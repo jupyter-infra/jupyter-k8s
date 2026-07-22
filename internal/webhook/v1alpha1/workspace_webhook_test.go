@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
@@ -1246,3 +1247,153 @@ func (m *MockClientWithTracking) Delete(ctx context.Context, obj client.Object, 
 	}
 	return m.Client.Delete(ctx, obj, opts...)
 }
+
+// Webhook-level coverage of the integration path: the WorkspaceCustomValidator invoking the
+// IntegrationTemplateRefValidator on create/update (namespace scope, template existence in the ref's
+// namespace, and parameter completeness). The IntegrationTemplateRefValidator has its own focused unit
+// tests; these assert it is correctly WIRED into the Workspace webhook handlers.
+var _ = Describe("Workspace Webhook integration refs", func() {
+	var (
+		ctx    context.Context
+		scheme *runtime.Scheme
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		scheme = runtime.NewScheme()
+		Expect(workspacev1alpha1.AddToScheme(scheme)).To(Succeed())
+		// corev1 is needed because Default() runs the service-account defaulter, which lists ServiceAccounts.
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+	})
+
+	integrationTemplateIn := func(namespace string, params ...string) *workspacev1alpha1.WorkspaceIntegrationTemplate {
+		declared := make([]workspacev1alpha1.IntegrationTemplateParameter, 0, len(params))
+		for _, p := range params {
+			declared = append(declared, workspacev1alpha1.IntegrationTemplateParameter{Name: p})
+		}
+		return &workspacev1alpha1.WorkspaceIntegrationTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: testIntegrationName, Namespace: namespace},
+			Spec:       workspacev1alpha1.WorkspaceIntegrationTemplateSpec{Parameters: declared},
+		}
+	}
+
+	// wsInTeamA builds a team-a workspace with a single integrationTemplateRef (name testIntegrationName).
+	wsInTeamA := func(refNamespace string, params ...workspacev1alpha1.IntegrationParameter) *workspacev1alpha1.Workspace {
+		return &workspacev1alpha1.Workspace{
+			ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceTeamA},
+			Spec: workspacev1alpha1.WorkspaceSpec{
+				Image:         testValidBaseNotebook,
+				DesiredStatus: testStatusRunning,
+				IntegrationTemplateRefs: []workspacev1alpha1.IntegrationTemplateRef{{
+					Name:       testIntegrationName,
+					Namespace:  refNamespace,
+					Parameters: params,
+				}},
+			},
+		}
+	}
+
+	newValidator := func(objs ...runtime.Object) WorkspaceCustomValidator {
+		c := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objs...).Build()
+		return WorkspaceCustomValidator{
+			templateValidator:               NewTemplateValidator(c, testSharedNamespace),
+			serviceAccountValidator:         NewServiceAccountValidator(c),
+			volumeValidator:                 NewVolumeValidator(c),
+			integrationTemplateRefValidator: NewIntegrationTemplateRefValidator(c, testSharedNamespace),
+		}
+	}
+
+	Context("ValidateCreate wires in the integration ref validator", func() {
+		It("admits a workspace whose ref resolves and supplies all parameters", func() {
+			ws := wsInTeamA(testNamespaceTeamA, workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
+			v := newValidator(integrationTemplateIn(testNamespaceTeamA, testRayClusterParam))
+			_, err := v.ValidateCreate(ctx, ws)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("admits a ref that explicitly targets the shared namespace where the template lives", func() {
+			// A shared-namespace template is referenced by setting ref.Namespace to the shared namespace
+			// explicitly; the read targets exactly that namespace. There is no own-ns -> shared-ns fallback.
+			ws := wsInTeamA(testSharedNamespace, workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
+			v := newValidator(integrationTemplateIn(testSharedNamespace, testRayClusterParam))
+			_, err := v.ValidateCreate(ctx, ws)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("rejects a workspace whose ref targets another team's namespace (scope)", func() {
+			ws := wsInTeamA("team-b")
+			v := newValidator(integrationTemplateIn("team-b"))
+			_, err := v.ValidateCreate(ctx, ws)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("team-b"))
+		})
+
+		It("rejects a workspace whose referenced template does not exist", func() {
+			ws := wsInTeamA(testNamespaceTeamA)
+			v := newValidator() // empty client -> not found
+			_, err := v.ValidateCreate(ctx, ws)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not found"))
+		})
+
+		It("rejects a workspace missing a declared parameter", func() {
+			ws := wsInTeamA(testNamespaceTeamA) // supplies nothing
+			v := newValidator(integrationTemplateIn(testNamespaceTeamA, testRayClusterParam))
+			_, err := v.ValidateCreate(ctx, ws)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(testRayClusterParam))
+		})
+
+		It("surfaces a non-blocking warning for an undeclared supplied parameter", func() {
+			ws := wsInTeamA(testNamespaceTeamA,
+				workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue},
+				workspacev1alpha1.IntegrationParameter{Name: "rayClustrName", Value: "typo"},
+			)
+			v := newValidator(integrationTemplateIn(testNamespaceTeamA, testRayClusterParam))
+			warnings, err := v.ValidateCreate(ctx, ws)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(ContainElement(ContainSubstring("rayClustrName")))
+		})
+	})
+
+	Context("ValidateUpdate only re-validates when the refs change", func() {
+		It("re-validates and rejects when a user changes the ref to a missing template", func() {
+			old := wsInTeamA(testNamespaceTeamA, workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
+			updated := old.DeepCopy()
+			updated.Spec.IntegrationTemplateRefs[0].Name = "does-not-exist"
+			v := newValidator(integrationTemplateIn(testNamespaceTeamA, testRayClusterParam))
+			userCtx := createUserContext(ctx, "UPDATE", "different-user")
+			_, err := v.ValidateUpdate(userCtx, old, updated)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not found"))
+		})
+
+		It("skips integration validation when the refs are unchanged (no wedge on metadata-only update)", func() {
+			// Even though the template is ABSENT from the client, an unchanged-refs update must NOT be
+			// rejected -- integrationRefsChanged is false, so the validator never fetches. This is the
+			// wedge-avoidance contract: a controller finalizer/label update on a workspace whose template
+			// was later deleted still passes.
+			old := wsInTeamA(testNamespaceTeamA, workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
+			updated := old.DeepCopy()
+			updated.Labels = map[string]string{"touched": "true"} // metadata-only change; refs identical
+			v := newValidator()                                   // empty client: a fetch WOULD fail with not-found
+			userCtx := createUserContext(ctx, "UPDATE", "different-user")
+			_, err := v.ValidateUpdate(userCtx, old, updated)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	It("accepts a detach (integrationTemplateRefs cleared to empty)", func() {
+		// Clearing the refs is a valid transition (detach): the empty-parameter/missing-template checks
+		// only run per-ref, so an empty ref list passes admission.
+		old := wsInTeamA(testNamespaceTeamA, workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
+		updated := old.DeepCopy()
+		updated.Spec.IntegrationTemplateRefs = []workspacev1alpha1.IntegrationTemplateRef{}
+		v := newValidator() // empty client is fine; nothing to fetch
+		userCtx := createUserContext(ctx, "UPDATE", "different-user")
+		var warnings admission.Warnings
+		warnings, err := v.ValidateUpdate(userCtx, old, updated)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(warnings).To(BeEmpty())
+	})
+})

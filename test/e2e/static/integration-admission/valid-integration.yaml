@@ -1,0 +1,19 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceIntegrationTemplate
+metadata:
+  name: valid-integration
+  namespace: default
+spec:
+  displayName: Valid Integration (admission e2e)
+  # A well-formed template with one declared parameter and a single resourceRef (the CRD requires
+  # minItems=1). The resourceRef is only fetched by the controller at RESOLVE time -- its target need not
+  # exist for admission -- so this fixture still exercises admission only (no controller resolution).
+  parameters:
+    - name: serviceName
+  resourceRefs:
+    - name: cache
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: "{{ .Parameters.serviceName }}"
+        namespace: "{{ .Workspace.Namespace }}"
