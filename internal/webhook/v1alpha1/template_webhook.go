@@ -120,8 +120,9 @@ func (v *WorkspaceTemplateCustomValidator) ValidateCreate(ctx context.Context, t
 		return nil, err
 	}
 
-	// Enforce that an idle-shutdown-locking policy has a default to enforce against.
-	if err := validateIdleShutdownPolicyConsistency(template); err != nil {
+	// Enforce that the template's own constraints are internally consistent, so it cannot make
+	// its own defaults or any workspace value un-admittable.
+	if err := validateTemplateConsistency(template); err != nil {
 		return nil, err
 	}
 
@@ -138,8 +139,9 @@ func (v *WorkspaceTemplateCustomValidator) ValidateUpdate(ctx context.Context, o
 		return nil, err
 	}
 
-	// Enforce that an idle-shutdown-locking policy has a default to enforce against.
-	if err := validateIdleShutdownPolicyConsistency(newTemplate); err != nil {
+	// Enforce that the template's own constraints are internally consistent, so it cannot make
+	// its own defaults or any workspace value un-admittable.
+	if err := validateTemplateConsistency(newTemplate); err != nil {
 		return nil, err
 	}
 
@@ -252,13 +254,51 @@ func maxStorageSizeChanged(oldStorage, newStorage *workspacev1alpha1.StorageConf
 	return false
 }
 
+// validateTemplateConsistency rejects a template whose own constraints are internally
+// inconsistent - contradictions that would make the template's defaults or any workspace value
+// un-admittable, silently self-defeating the template. These checks run on create and update.
+func validateTemplateConsistency(template *workspacev1alpha1.WorkspaceTemplate) error {
+	// defaultImage must be creatable under the template's own image policy (#440).
+	if err := validateTemplateImageConsistency(template); err != nil {
+		return err
+	}
+
+	// primaryStorage minSize must not exceed maxSize.
+	if err := validateTemplateStorageConsistency(template); err != nil {
+		return err
+	}
+
+	// resourceBounds min must not exceed max for any resource.
+	if err := validateTemplateResourceBoundsConsistency(template); err != nil {
+		return err
+	}
+
+	// idleShutdownOverrides bounds must be consistent, and a locked policy needs a default.
+	return validateIdleShutdownPolicyConsistency(template)
+}
+
 // validateIdleShutdownPolicyConsistency rejects a template whose idle shutdown policy locks
 // overrides (Allow=false) without a DefaultIdleShutdown baseline. Without a default there is
 // nothing for the workspace webhook to enforce the lock against, so the policy would silently
 // do nothing - a misconfiguration we surface at template admission instead.
 func validateIdleShutdownPolicyConsistency(template *workspacev1alpha1.WorkspaceTemplate) error {
 	policy := template.Spec.IdleShutdownOverrides
-	if policy == nil || policy.Allow == nil || *policy.Allow {
+	if policy == nil {
+		return nil
+	}
+
+	// The timeout bounds must be internally consistent regardless of the Allow setting: a
+	// min greater than max can never admit any workspace timeout.
+	if policy.MinIdleTimeoutInMinutes != nil && policy.MaxIdleTimeoutInMinutes != nil &&
+		*policy.MinIdleTimeoutInMinutes > *policy.MaxIdleTimeoutInMinutes {
+		return fmt.Errorf(
+			"idleShutdownOverrides.minIdleTimeoutInMinutes %d is greater than maxIdleTimeoutInMinutes %d: "+
+				"no idle timeout can satisfy these bounds (template %q)",
+			*policy.MinIdleTimeoutInMinutes, *policy.MaxIdleTimeoutInMinutes, template.GetName(),
+		)
+	}
+
+	if policy.Allow == nil || *policy.Allow {
 		return nil
 	}
 

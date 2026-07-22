@@ -10,6 +10,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -19,6 +21,13 @@ import (
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
+)
+
+const (
+	testImageA   = "image-a"
+	testImgA     = "img-a"
+	testImgB     = "img-b"
+	testImgDeflt = "img-default"
 )
 
 var _ = Describe("WorkspaceTemplate Defaulter", func() {
@@ -179,13 +188,15 @@ var _ = Describe("WorkspaceTemplate Validator", func() {
 			oldTemplate := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{Name: testTemplateNameTmpl, Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					AllowedImages: []string{"image-a"},
+					DefaultImage:  testImageA,
+					AllowedImages: []string{testImageA},
 				},
 			}
 			newTemplate := &workspacev1alpha1.WorkspaceTemplate{
 				ObjectMeta: metav1.ObjectMeta{Name: testTemplateNameTmpl, Namespace: testNamespaceTeamA},
 				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-					AllowedImages: []string{"image-a", "image-b"},
+					DefaultImage:  testImageA,
+					AllowedImages: []string{testImageA, "image-b"},
 				},
 			}
 			warnings, err := validator.ValidateUpdate(ctx, oldTemplate, newTemplate)
@@ -259,6 +270,140 @@ var _ = Describe("WorkspaceTemplate Validator", func() {
 
 		It("allows a nil policy without a defaultIdleShutdown", func() {
 			_, err := validator.ValidateCreate(ctx, templateWithIdle(nil, nil))
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("Idle shutdown timeout bounds consistency", func() {
+		intPtr := func(i int) *int { return &i }
+
+		templateWithBounds := func(min, max *int) *workspacev1alpha1.WorkspaceTemplate {
+			return &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: testTemplateNameTmpl, Namespace: testNamespaceTeamA},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					IdleShutdownOverrides: &workspacev1alpha1.IdleShutdownOverridePolicy{
+						MinIdleTimeoutInMinutes: min,
+						MaxIdleTimeoutInMinutes: max,
+					},
+				},
+			}
+		}
+
+		It("rejects create when min timeout exceeds max timeout", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithBounds(intPtr(60), intPtr(30)))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("minIdleTimeoutInMinutes"))
+		})
+
+		It("allows min equal to max", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithBounds(intPtr(30), intPtr(30)))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("allows only one bound set", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithBounds(intPtr(30), nil))
+			Expect(err).NotTo(HaveOccurred())
+			_, err = validator.ValidateCreate(ctx, templateWithBounds(nil, intPtr(30)))
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("Image policy consistency", func() {
+		boolPtr := func(b bool) *bool { return &b }
+
+		templateWithImages := func(defaultImage string, allowed []string, allowCustom *bool) *workspacev1alpha1.WorkspaceTemplate {
+			return &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: testTemplateNameTmpl, Namespace: testNamespaceTeamA},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DefaultImage:      defaultImage,
+					AllowedImages:     allowed,
+					AllowCustomImages: allowCustom,
+				},
+			}
+		}
+
+		It("rejects a defaultImage absent from a non-empty allowedImages", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithImages(testImgDeflt, []string{testImgA, testImgB}, nil))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("defaultImage"))
+			Expect(err.Error()).To(ContainSubstring("allowedImages"))
+		})
+
+		It("allows a defaultImage present in allowedImages", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithImages(testImgA, []string{testImgA, testImgB}, nil))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("allows an empty allowedImages (falls back to defaultImage)", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithImages(testImgDeflt, nil, nil))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("allows a mismatch when custom images are permitted", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithImages(testImgDeflt, []string{testImgA}, boolPtr(true)))
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("Storage bounds consistency", func() {
+		qtyPtr := func(s string) *resource.Quantity {
+			q := resource.MustParse(s)
+			return &q
+		}
+
+		templateWithStorage := func(min, max *resource.Quantity) *workspacev1alpha1.WorkspaceTemplate {
+			return &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: testTemplateNameTmpl, Namespace: testNamespaceTeamA},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					PrimaryStorage: &workspacev1alpha1.StorageConfig{MinSize: min, MaxSize: max},
+				},
+			}
+		}
+
+		It("rejects minSize greater than maxSize", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithStorage(qtyPtr("20Gi"), qtyPtr("10Gi")))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("minSize"))
+		})
+
+		It("allows minSize equal to maxSize", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithStorage(qtyPtr("10Gi"), qtyPtr("10Gi")))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("allows only one bound set", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithStorage(qtyPtr("10Gi"), nil))
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("Resource bounds consistency", func() {
+		templateWithResourceBounds := func(min, max string) *workspacev1alpha1.WorkspaceTemplate {
+			return &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: testTemplateNameTmpl, Namespace: testNamespaceTeamA},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					ResourceBounds: &workspacev1alpha1.ResourceBounds{
+						Resources: map[corev1.ResourceName]workspacev1alpha1.ResourceRange{
+							corev1.ResourceCPU: {Min: resource.MustParse(min), Max: resource.MustParse(max)},
+						},
+					},
+				},
+			}
+		}
+
+		It("rejects a resource min greater than max", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithResourceBounds("4", "2"))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("resourceBounds"))
+		})
+
+		It("allows a resource min equal to max", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithResourceBounds("2", "2"))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("allows a valid resource range", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithResourceBounds("1", "4"))
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
