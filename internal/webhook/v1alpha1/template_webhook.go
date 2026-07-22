@@ -277,10 +277,10 @@ func validateTemplateConsistency(template *workspacev1alpha1.WorkspaceTemplate) 
 	return validateIdleShutdownPolicyConsistency(template)
 }
 
-// validateIdleShutdownPolicyConsistency rejects a template whose idle shutdown policy locks
-// overrides (Allow=false) without a DefaultIdleShutdown baseline. Without a default there is
-// nothing for the workspace webhook to enforce the lock against, so the policy would silently
-// do nothing - a misconfiguration we surface at template admission instead.
+// validateIdleShutdownPolicyConsistency rejects a template whose idle shutdown policy is
+// self-defeating: bounds that no timeout can satisfy, a locked policy with no default to enforce
+// against, or a default timeout that its own bounds would reject. All are surfaced at template
+// admission instead of silently making the template's default un-creatable.
 func validateIdleShutdownPolicyConsistency(template *workspacev1alpha1.WorkspaceTemplate) error {
 	policy := template.Spec.IdleShutdownOverrides
 	if policy == nil {
@@ -298,16 +298,35 @@ func validateIdleShutdownPolicyConsistency(template *workspacev1alpha1.Workspace
 		)
 	}
 
-	if policy.Allow == nil || *policy.Allow {
-		return nil
-	}
-
-	if template.Spec.DefaultIdleShutdown == nil {
+	// A locked policy (allow=false) needs a default for workspaces to match against.
+	if policy.Allow != nil && !*policy.Allow && template.Spec.DefaultIdleShutdown == nil {
 		return fmt.Errorf(
 			"idleShutdownOverrides.allow is false but defaultIdleShutdown is not set: "+
 				"a locked idle shutdown policy requires a defaultIdleShutdown for workspaces to match (template %q)",
 			template.GetName(),
 		)
+	}
+
+	// The default timeout must satisfy the declared bounds, regardless of the Allow setting: the
+	// defaulter applies defaultIdleShutdown to any workspace that omits idleShutdown, and the
+	// workspace webhook then enforces the bounds on that enabled default. A default outside the
+	// bounds would make the template's own default un-creatable.
+	def := template.Spec.DefaultIdleShutdown
+	if def != nil && def.Enabled {
+		if policy.MinIdleTimeoutInMinutes != nil && def.IdleTimeoutInMinutes < *policy.MinIdleTimeoutInMinutes {
+			return fmt.Errorf(
+				"defaultIdleShutdown.idleTimeoutInMinutes %d is below idleShutdownOverrides.minIdleTimeoutInMinutes %d: "+
+					"the template default would be rejected by its own bounds (template %q)",
+				def.IdleTimeoutInMinutes, *policy.MinIdleTimeoutInMinutes, template.GetName(),
+			)
+		}
+		if policy.MaxIdleTimeoutInMinutes != nil && def.IdleTimeoutInMinutes > *policy.MaxIdleTimeoutInMinutes {
+			return fmt.Errorf(
+				"defaultIdleShutdown.idleTimeoutInMinutes %d is above idleShutdownOverrides.maxIdleTimeoutInMinutes %d: "+
+					"the template default would be rejected by its own bounds (template %q)",
+				def.IdleTimeoutInMinutes, *policy.MaxIdleTimeoutInMinutes, template.GetName(),
+			)
+		}
 	}
 
 	return nil

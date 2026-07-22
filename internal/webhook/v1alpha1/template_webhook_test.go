@@ -308,6 +308,71 @@ var _ = Describe("WorkspaceTemplate Validator", func() {
 		})
 	})
 
+	Context("Idle shutdown default within bounds consistency", func() {
+		intPtr := func(i int) *int { return &i }
+		boolPtr := func(b bool) *bool { return &b }
+
+		// templateWithDefaultAndBounds builds a template whose enabled default has the given timeout
+		// and whose override policy declares the given bounds (nil = unset) and allow flag.
+		templateWithDefaultAndBounds := func(defaultTimeout int, min, max *int, allow *bool) *workspacev1alpha1.WorkspaceTemplate {
+			return &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: testTemplateNameTmpl, Namespace: testNamespaceTeamA},
+				Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+					DefaultIdleShutdown: &workspacev1alpha1.IdleShutdownSpec{
+						Enabled:              true,
+						IdleTimeoutInMinutes: defaultTimeout,
+					},
+					IdleShutdownOverrides: &workspacev1alpha1.IdleShutdownOverridePolicy{
+						Allow:                   allow,
+						MinIdleTimeoutInMinutes: min,
+						MaxIdleTimeoutInMinutes: max,
+					},
+				},
+			}
+		}
+
+		It("rejects a default timeout below the minimum (allow: false)", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithDefaultAndBounds(30, intPtr(60), intPtr(120), boolPtr(false)))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("below idleShutdownOverrides.minIdleTimeoutInMinutes"))
+		})
+
+		It("rejects a default timeout below the minimum (allow: true)", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithDefaultAndBounds(30, intPtr(60), intPtr(120), boolPtr(true)))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("below idleShutdownOverrides.minIdleTimeoutInMinutes"))
+		})
+
+		It("rejects a default timeout above the maximum", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithDefaultAndBounds(240, intPtr(15), intPtr(120), boolPtr(true)))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("above idleShutdownOverrides.maxIdleTimeoutInMinutes"))
+		})
+
+		It("rejects a default outside a one-sided (min-only) bound", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithDefaultAndBounds(30, intPtr(60), nil, boolPtr(false)))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("below idleShutdownOverrides.minIdleTimeoutInMinutes"))
+		})
+
+		It("allows a default within the bounds", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithDefaultAndBounds(60, intPtr(15), intPtr(120), boolPtr(true)))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("allows a default equal to a bound", func() {
+			_, err := validator.ValidateCreate(ctx, templateWithDefaultAndBounds(15, intPtr(15), intPtr(120), boolPtr(false)))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("ignores the bounds when the default is disabled", func() {
+			tmpl := templateWithDefaultAndBounds(30, intPtr(60), intPtr(120), boolPtr(true))
+			tmpl.Spec.DefaultIdleShutdown.Enabled = false
+			_, err := validator.ValidateCreate(ctx, tmpl)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
 	Context("Image policy consistency", func() {
 		boolPtr := func(b bool) *bool { return &b }
 
