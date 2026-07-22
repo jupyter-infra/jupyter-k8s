@@ -778,47 +778,7 @@ var _ = Describe("Workspace Webhook", func() {
 			})
 		})
 
-		Context("storageEqual", func() {
-			It("should return true for nil storages", func() {
-				Expect(storageEqual(nil, nil)).To(BeTrue())
-			})
-
-			It("should return false when one is nil", func() {
-				storage := &workspacev1alpha1.StorageSpec{Size: resource.MustParse("1Gi")}
-				Expect(storageEqual(nil, storage)).To(BeFalse())
-				Expect(storageEqual(storage, nil)).To(BeFalse())
-			})
-
-			It("should return true for equal storages", func() {
-				storage1 := &workspacev1alpha1.StorageSpec{
-					Size:      resource.MustParse("1Gi"),
-					MountPath: testDataMountPath,
-				}
-				storage2 := &workspacev1alpha1.StorageSpec{
-					Size:      resource.MustParse("1Gi"),
-					MountPath: testDataMountPath,
-				}
-				Expect(storageEqual(storage1, storage2)).To(BeTrue())
-			})
-
-			It("should return false for different sizes", func() {
-				storage1 := &workspacev1alpha1.StorageSpec{Size: resource.MustParse("1Gi")}
-				storage2 := &workspacev1alpha1.StorageSpec{Size: resource.MustParse("2Gi")}
-				Expect(storageEqual(storage1, storage2)).To(BeFalse())
-			})
-
-			It("should return false for different mount paths", func() {
-				storage1 := &workspacev1alpha1.StorageSpec{
-					Size:      resource.MustParse("1Gi"),
-					MountPath: "/data1",
-				}
-				storage2 := &workspacev1alpha1.StorageSpec{
-					Size:      resource.MustParse("1Gi"),
-					MountPath: "/data2",
-				}
-				Expect(storageEqual(storage1, storage2)).To(BeFalse())
-			})
-		})
+		// StorageValidator storage-shrink validation is covered in storage_validator_test.go.
 	})
 
 	Context("isControllerOrAdminUser", func() {

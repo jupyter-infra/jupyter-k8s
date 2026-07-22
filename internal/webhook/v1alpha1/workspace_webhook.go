@@ -216,6 +216,7 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace
 	serviceAccountValidator := NewServiceAccountValidator(mgr.GetClient())
 	serviceAccountDefaulter := NewServiceAccountDefaulter(mgr.GetClient())
 	volumeValidator := NewVolumeValidator(mgr.GetClient())
+	storageValidator := NewStorageValidator(mgr.GetClient())
 
 	return ctrl.NewWebhookManagedBy(mgr, &workspacev1alpha1.Workspace{}).
 		WithValidator(&WorkspaceCustomValidator{
@@ -223,6 +224,7 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace
 			accessStrategyValidator: accessStrategyValidator,
 			serviceAccountValidator: serviceAccountValidator,
 			volumeValidator:         volumeValidator,
+			storageValidator:        storageValidator,
 		}).
 		WithDefaulter(&WorkspaceCustomDefaulter{
 			templateDefaulter:       templateDefaulter,
@@ -356,6 +358,7 @@ type WorkspaceCustomValidator struct {
 	accessStrategyValidator *AccessStrategyValidator
 	serviceAccountValidator *ServiceAccountValidator
 	volumeValidator         *VolumeValidator
+	storageValidator        *StorageValidator
 }
 
 var _ admission.Validator[*workspacev1alpha1.Workspace] = &WorkspaceCustomValidator{}
@@ -446,6 +449,14 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldWorksp
 
 	// Validate template constraints for new workspace (only changed fields)
 	if err := v.templateValidator.ValidateUpdateWorkspace(ctx, oldWorkspace, newWorkspace); err != nil {
+		return nil, err
+	}
+
+	// Reject shrinking storage below the workspace's provisioned PVC size: Kubernetes cannot
+	// shrink a volume, so a resize-down would pass admission and then silently fail to reconcile
+	// (#439). Anchored on the live PVC, so a workspace with no PVC yet is unaffected. Applies to
+	// all workspaces, template-backed or standalone.
+	if err := v.storageValidator.ValidateStorageSizeNotShrinking(ctx, newWorkspace); err != nil {
 		return nil, err
 	}
 
