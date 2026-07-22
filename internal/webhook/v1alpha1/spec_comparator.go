@@ -18,6 +18,16 @@ func specChanged(oldSpec, newSpec *workspacev1alpha1.WorkspaceSpec) bool {
 	return !equality.Semantic.DeepEqual(oldSpec, newSpec)
 }
 
+// integrationRefsChanged detects whether spec.integrationTemplateRefs differs between old and new.
+// Used on update to run integration-ref validation only when the user actually changed the refs --
+// mirroring how template validation gates on specChanged. This is what keeps an admin's out-of-band
+// template edit (e.g. adding a required parameter) or deletion from wedging reconciliation of an
+// already-referencing workspace: the controller's own finalizer/label updates leave the refs untouched,
+// so they skip the check. Uses semantic equality (nil slice == empty slice) like the sibling comparators.
+func integrationRefsChanged(oldSpec, newSpec *workspacev1alpha1.WorkspaceSpec) bool {
+	return !equality.Semantic.DeepEqual(oldSpec.IntegrationTemplateRefs, newSpec.IntegrationTemplateRefs)
+}
+
 // onlyDesiredStatusChanged checks if DesiredStatus is the ONLY spec field that changed
 // Used to determine if stopping a workspace should bypass validation
 // Returns true only when DesiredStatus changed and all other fields remain unchanged

@@ -1,0 +1,26 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceIntegrationTemplate
+metadata:
+  name: invalid-integration-undeclared-param
+  namespace: default
+spec:
+  displayName: Invalid Integration (undeclared parameter)
+  # The mergeEnv value references {{ .Parameters.notDeclared }}, which is not in spec.parameters. Under
+  # missingkey=error the WIT validating webhook must REJECT this template at create time. resourceRefs
+  # is present (CRD requires minItems=1) and references only DECLARED params, so the ONLY rejection cause
+  # is the undeclared parameter in mergeEnv -- not a bad resourceRef.
+  parameters:
+    - name: serviceName
+  resourceRefs:
+    - name: cache
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: "{{ .Parameters.serviceName }}"
+        namespace: "{{ .Workspace.Namespace }}"
+  deploymentModifications:
+    podModifications:
+      primaryContainerModifications:
+        mergeEnv:
+          - name: CACHE_HOST
+            valueTemplate: "{{ .Parameters.notDeclared }}"
