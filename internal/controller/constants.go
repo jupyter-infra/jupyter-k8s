@@ -135,6 +135,9 @@ const (
 	// ResourcePrefix is the prefix for workspace resource names
 	ResourcePrefix = "workspace"
 
+	// PrimaryContainerName is the name of the workspace's primary application container in the pod.
+	PrimaryContainerName = "workspace"
+
 	// ReservedMetadataPrefix is the prefix reserved for system-managed labels and annotations
 	ReservedMetadataPrefix = "workspace.jupyter.org/"
 
