@@ -183,6 +183,26 @@ var _ = Describe("Template Idle Shutdown Enforcement", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).To(BeEmpty(), "template should not exist after webhook rejection")
 		})
+
+		It("should reject a template whose default idle timeout is outside its own bounds", func() {
+			templateFilename := "invalid-default-out-of-bounds-template"
+			templateName := "invalid-default-out-of-bounds-template"
+
+			By("attempting to create a template whose enabled default timeout is below the minimum")
+			path := BuildTestResourcePath(templateFilename, groupDir, "")
+			cmd := exec.Command("kubectl", "apply", "-f", path)
+			output, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "template webhook should reject a default outside its own bounds")
+			Expect(output).To(ContainSubstring("below idleShutdownOverrides.minIdleTimeoutInMinutes"),
+				"rejection should explain the default is below the minimum bound")
+
+			By("verifying the template was not created")
+			cmd = exec.Command("kubectl", verbGet, "workspacetemplate", templateName,
+				"-n", SharedNamespace, "--ignore-not-found")
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(BeEmpty(), "template should not exist after webhook rejection")
+		})
 	})
 })
 
