@@ -335,7 +335,7 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	resourceManager := NewResourceManager(
 		k8sClient,
 		scheme,
-		NewDeploymentBuilder(scheme, options, k8sClient),
+		NewDeploymentBuilder(scheme, options),
 		NewServiceBuilder(scheme),
 		NewPVCBuilder(scheme),
 		NewAccessResourcesBuilder(),
