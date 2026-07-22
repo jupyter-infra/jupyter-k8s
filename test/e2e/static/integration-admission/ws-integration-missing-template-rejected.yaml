@@ -1,0 +1,22 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ws-integration-missing-template-rejected
+  namespace: default
+spec:
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  # References a template that does not exist in the own or shared namespace -> rejected at admission.
+  integrationTemplateRefs:
+    - name: does-not-exist
+      namespace: default
+      parameters:
+        - name: serviceName
+          value: shared-cache
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

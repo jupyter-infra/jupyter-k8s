@@ -216,15 +216,17 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace
 	serviceAccountValidator := NewServiceAccountValidator(mgr.GetClient())
 	serviceAccountDefaulter := NewServiceAccountDefaulter(mgr.GetClient())
 	volumeValidator := NewVolumeValidator(mgr.GetClient())
+	integrationTemplateRefValidator := NewIntegrationTemplateRefValidator(mgr.GetClient(), defaultTemplateNamespace)
 	storageValidator := NewStorageValidator(mgr.GetClient())
 
 	return ctrl.NewWebhookManagedBy(mgr, &workspacev1alpha1.Workspace{}).
 		WithValidator(&WorkspaceCustomValidator{
-			templateValidator:       templateValidator,
-			accessStrategyValidator: accessStrategyValidator,
-			serviceAccountValidator: serviceAccountValidator,
-			volumeValidator:         volumeValidator,
-			storageValidator:        storageValidator,
+			templateValidator:               templateValidator,
+			accessStrategyValidator:         accessStrategyValidator,
+			serviceAccountValidator:         serviceAccountValidator,
+			volumeValidator:                 volumeValidator,
+			integrationTemplateRefValidator: integrationTemplateRefValidator,
+			storageValidator:                storageValidator,
 		}).
 		WithDefaulter(&WorkspaceCustomDefaulter{
 			templateDefaulter:       templateDefaulter,
@@ -354,11 +356,12 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, workspace *works
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceCustomValidator struct {
-	templateValidator       *TemplateValidator
-	accessStrategyValidator *AccessStrategyValidator
-	serviceAccountValidator *ServiceAccountValidator
-	volumeValidator         *VolumeValidator
-	storageValidator        *StorageValidator
+	templateValidator               *TemplateValidator
+	accessStrategyValidator         *AccessStrategyValidator
+	serviceAccountValidator         *ServiceAccountValidator
+	volumeValidator                 *VolumeValidator
+	integrationTemplateRefValidator *IntegrationTemplateRefValidator
+	storageValidator                *StorageValidator
 }
 
 var _ admission.Validator[*workspacev1alpha1.Workspace] = &WorkspaceCustomValidator{}
@@ -377,6 +380,18 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, workspace
 		return nil, err
 	}
 
+	// Validate integrationTemplateRefs: reject a ref that targets a disallowed namespace, references a
+	// missing template, or omits a required parameter (all user errors, applied to every caller on create).
+	// Supplied-but-undeclared parameters are surfaced as non-blocking warnings.
+	var warnings admission.Warnings
+	if v.integrationTemplateRefValidator != nil {
+		w, err := v.integrationTemplateRefValidator.Validate(ctx, workspace)
+		if err != nil {
+			return nil, err
+		}
+		warnings = append(warnings, w...)
+	}
+
 	// Validate volume ownership (security check - applies to all users)
 	if err := v.volumeValidator.ValidateVolumeOwnership(ctx, workspace); err != nil {
 		return nil, err
@@ -384,7 +399,7 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, workspace
 
 	// Controller or admin users bypass validation
 	if isControllerOrAdminUser(ctx) {
-		return nil, nil
+		return warnings, nil
 	}
 
 	// Validate no user-submitted reserved prefix labels/annotations
@@ -397,7 +412,7 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, workspace
 		return nil, err
 	}
 
-	return nil, nil
+	return warnings, nil
 }
 
 // ValidateUpdate implements admission.Validator so a webhook will be registered for the type Workspace.
@@ -419,6 +434,28 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldWorksp
 	// Admin users bypass user validation
 	if isAdmin {
 		return nil, nil
+	}
+
+	// Validate integrationTemplateRefs -- AFTER the admin/controller bypass and only when the user
+	// actually changed the refs, mirroring how templateRef validation runs post-bypass on changed spec.
+	//
+	// INTENTIONAL ASYMMETRY -- do NOT "align" this with ValidateCreate, which validates BEFORE the bypass.
+	// On UPDATE the check MUST sit after the bypass (this is a wedge fix, matching the WorkspaceTemplate
+	// precedent below): a controller finalizer/label PATCH, or an admin's out-of-band template edit (e.g.
+	// adding a required parameter to, or deleting, a template a live workspace already references), would
+	// otherwise re-validate the workspace against a since-changed/-deleted template and wedge every
+	// reconcile -- locking the operator (and admins) out of an already-admitted workspace. Placing it after
+	// the bypass lets controller/admin writes through, and the integrationRefsChanged gate means ordinary
+	// user PATCHes that don't touch the refs are never re-validated either. Moving it before the bypass (to
+	// match CREATE) reintroduces the wedge. On CREATE there is no live workspace to wedge, so the check runs
+	// before the bypass there. Non-blocking warnings (unused parameters) are surfaced to the user.
+	var warnings admission.Warnings
+	if v.integrationTemplateRefValidator != nil && integrationRefsChanged(&oldWorkspace.Spec, &newWorkspace.Spec) {
+		w, err := v.integrationTemplateRefValidator.Validate(ctx, newWorkspace)
+		if err != nil {
+			return nil, err
+		}
+		warnings = append(warnings, w...)
 	}
 
 	// Validate no user modifications to reserved prefix labels/annotations
@@ -470,7 +507,7 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldWorksp
 		return nil, err
 	}
 
-	return nil, nil
+	return warnings, nil
 }
 
 // ValidateDelete implements admission.Validator so a webhook will be registered for the type Workspace.

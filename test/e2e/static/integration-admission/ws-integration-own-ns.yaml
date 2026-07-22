@@ -1,0 +1,22 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ws-integration-own-ns
+  namespace: default
+spec:
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  # Explicit own-namespace ref: passes namespace scope, template exists, parameter supplied -> admitted.
+  integrationTemplateRefs:
+    - name: valid-integration
+      namespace: default
+      parameters:
+        - name: serviceName
+          value: shared-cache
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
