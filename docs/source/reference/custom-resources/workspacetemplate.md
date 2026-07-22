@@ -91,7 +91,7 @@ _Appears in:_
 
 ResourceRange defines min and max for a resource
 NOTE: CEL validation for min <= max is not possible due to resource.Quantity type limitations
-Validation is enforced at runtime in the template resolver
+Consistency (min <= max) is enforced by the WorkspaceTemplate validating webhook
 
 _Appears in:_
 - [ResourceBounds](#resourcebounds)
@@ -109,7 +109,7 @@ _Appears in:_
 
 StorageConfig defines storage settings
 NOTE: CEL validation for minSize <= maxSize is not possible due to resource.Quantity type limitations
-Validation is enforced at runtime in the template resolver
+Consistency (minSize <= maxSize) is enforced by the WorkspaceTemplate validating webhook
 
 _Appears in:_
 - [WorkspaceTemplateSpec](#workspacetemplatespec)
