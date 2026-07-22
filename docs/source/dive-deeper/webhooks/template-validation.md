@@ -17,6 +17,7 @@ On **create and update**, the webhook rejects a template whose own constraints a
 - `resourceBounds` `min` must not exceed `max` for any resource.
 - `idleShutdownOverrides.minIdleTimeoutInMinutes` must not exceed `maxIdleTimeoutInMinutes`.
 - `idleShutdownOverrides.allow: false` requires a `defaultIdleShutdown` for workspaces to match against.
+- an enabled `defaultIdleShutdown.idleTimeoutInMinutes` must fall within the `idleShutdownOverrides` timeout bounds.
 
 ## Constraint fields
 
