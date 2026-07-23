@@ -26,6 +26,9 @@ import (
 // satisfy goconst. The default namespace reuses the package-level testNamespace const.
 const intReadyName = "int-ready"
 
+// probeFailMsg is the sample probe stderr reused across specs, hoisted to satisfy goconst.
+const probeFailMsg = "cannot connect to GCS"
+
 // fakeExec implements PodExecWithStderr for unit testing the prober verdicts.
 type fakeExec struct {
 	stdout, stderr string
@@ -58,7 +61,7 @@ func TestIntegrationProber_Verdicts(t *testing.T) {
 		wantReason string
 	}{
 		{"probe exits zero -> ready", &fakeExec{stdout: "ok"}, true, IntegrationReasonReady},
-		{"probe exits nonzero -> degraded", &fakeExec{stderr: "cannot connect to GCS", err: fmt.Errorf("exit 1")}, false, IntegrationReasonProbeFailed},
+		{"probe exits nonzero -> degraded", &fakeExec{stderr: probeFailMsg, err: fmt.Errorf("exit 1")}, false, IntegrationReasonProbeFailed},
 	}
 
 	for _, tc := range cases {
@@ -84,7 +87,7 @@ func TestIntegrationProber_Verdicts(t *testing.T) {
 				t.Errorf("%s: got cond status=%v reason=%q, want status=%v reason=%q",
 					tc.name, cond.Status, cond.Reason, wantCondStatus, tc.wantReason)
 			}
-			if !tc.wantReady && cond.Message != "cannot connect to GCS" {
+			if !tc.wantReady && cond.Message != probeFailMsg {
 				t.Errorf("%s: want stderr in condition message, got %q", tc.name, cond.Message)
 			}
 		})
@@ -491,7 +494,7 @@ func TestIsTransientProbeError(t *testing.T) {
 // multi-byte rune is never split.
 func TestTruncateProbeMessage(t *testing.T) {
 	t.Run("under cap -> unchanged", func(t *testing.T) {
-		msg := "cannot connect to GCS"
+		msg := probeFailMsg
 		if got := truncateProbeMessage(msg); got != msg {
 			t.Errorf("short message must pass through unchanged, got %q", got)
 		}
