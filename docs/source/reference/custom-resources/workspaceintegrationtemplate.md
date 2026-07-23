@@ -90,7 +90,8 @@ _Appears in:_
 
 
 
-ResourceRefMetadata is the templated object identity (name + optional namespace) of a ResourceRef.
+ResourceRefMetadata is the templated object identity (name) of a ResourceRef. The object is always
+looked up in the referencing workspace's namespace; a resourceRef cannot target another namespace.
 
 _Appears in:_
 - [ResourceRef](#resourceref)
@@ -98,7 +99,6 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name of the target object; supports template expressions. |  |  |
-| `namespace` _string_ | Namespace of the target object; supports template expressions. Defaults to the workspace's<br />namespace if omitted. |  | Optional: \{\} <br /> |
 
 
 

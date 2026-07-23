@@ -69,17 +69,13 @@ func validateIntegrationTemplate(tmpl *workspacev1alpha1.WorkspaceIntegrationTem
 		allowedResourceRefIDs[tmpl.Spec.ResourceRefs[i].Name] = true
 	}
 
-	// 2. A resourceRef's own metadata.name/namespace may interpolate .Workspace/.Parameters but NEVER
-	//    {{ resource }} (they identify the resource to fetch, so can't depend on a fetched one).
+	// 2. A resourceRef's own metadata.name may interpolate .Workspace/.Parameters but NEVER
+	//    {{ resource }} (it identifies the resource to fetch, so can't depend on a fetched one). There
+	//    is no per-ref namespace: the resource is always fetched in the workspace's own namespace.
 	for i := range tmpl.Spec.ResourceRefs {
 		ref := &tmpl.Spec.ResourceRefs[i]
 		if err := validateMetadataExpression(ref.Metadata.Name, allowedParamNames); err != nil {
 			return fmt.Errorf("resourceRef %q metadata.name: %w", ref.Name, err)
-		}
-		if ref.Metadata.Namespace != "" {
-			if err := validateMetadataExpression(ref.Metadata.Namespace, allowedParamNames); err != nil {
-				return fmt.Errorf("resourceRef %q metadata.namespace: %w", ref.Name, err)
-			}
 		}
 	}
 

@@ -130,8 +130,7 @@ func freezeTemplate(ns string) *workspacev1alpha1.WorkspaceIntegrationTemplate {
 			ResourceRefs: []workspacev1alpha1.ResourceRef{{
 				Name: rayClusterHandle, APIVersion: rayAPIVersion, Kind: rayClusterKind,
 				Metadata: workspacev1alpha1.ResourceRefMetadata{
-					Name:      rayClusterNameExpr,
-					Namespace: "{{ .Parameters.rayClusterNamespace }}",
+					Name: rayClusterNameExpr,
 				},
 			}},
 			DeploymentModifications: &workspacev1alpha1.DeploymentModifications{

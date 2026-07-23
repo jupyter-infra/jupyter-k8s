@@ -32,8 +32,7 @@ func validTemplate() *workspacev1alpha1.WorkspaceIntegrationTemplate {
 			ResourceRefs: []workspacev1alpha1.ResourceRef{{
 				Name: "rayCluster", APIVersion: "ray.io/v1", Kind: "RayCluster",
 				Metadata: workspacev1alpha1.ResourceRefMetadata{
-					Name:      "{{ .Parameters.rayClusterName }}",
-					Namespace: "{{ .Parameters.rayClusterNamespace }}",
+					Name: "{{ .Parameters.rayClusterName }}",
 				},
 			}},
 			DeploymentModifications: &workspacev1alpha1.DeploymentModifications{
@@ -211,17 +210,6 @@ func TestValidateIntegrationTemplate_PrimaryMergeEnvValidated(t *testing.T) {
 	err := validateIntegrationTemplate(tmpl)
 	if err == nil || !strings.Contains(err.Error(), "undeclared resourceRef") {
 		t.Fatalf("expected primaryContainerModifications mergeEnv to be validated, got: %v", err)
-	}
-}
-
-func TestValidateIntegrationTemplate_MetadataNamespaceRejectsResource(t *testing.T) {
-	tmpl := validTemplate()
-	// A resourceRef's metadata.namespace, like its name, identifies the resource to fetch and so may not
-	// depend on a fetched one -- a {{ resource }} there must be rejected, not only in metadata.name.
-	tmpl.Spec.ResourceRefs[0].Metadata.Namespace = `{{ resource "rayCluster" "{.metadata.namespace}" }}`
-	err := validateIntegrationTemplate(tmpl)
-	if err == nil || !strings.Contains(err.Error(), "may not reference resources") {
-		t.Fatalf("expected metadata.namespace to reject a {{ resource }} expression, got: %v", err)
 	}
 }
 

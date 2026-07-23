@@ -17,7 +17,6 @@ spec:
       kind: Service
       metadata:
         name: "{{ .Parameters.serviceName }}"
-        namespace: "{{ .Workspace.Namespace }}"
   deploymentModifications:
     podModifications:
       primaryContainerModifications:
