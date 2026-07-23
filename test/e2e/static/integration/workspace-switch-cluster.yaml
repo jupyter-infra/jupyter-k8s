@@ -1,0 +1,24 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-with-integration
+  namespace: default
+spec:
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  integrationTemplateRefs:
+    - name: service-integration
+      parameters:
+        # Same workspace as workspace-with-integration.yaml, re-applied pointing at a different Service.
+        # The parameter change flips the integration's parametersHash, so the operator re-resolves
+        # against other-cache and freezes the new service's values into status.resolvedIntegrations
+        # (a controlled re-resolve, not drift).
+        - name: serviceName
+          value: other-cache
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

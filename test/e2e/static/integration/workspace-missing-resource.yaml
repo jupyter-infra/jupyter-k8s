@@ -1,0 +1,25 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-missing-resource
+  namespace: default
+spec:
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  integrationTemplateRefs:
+    - name: service-integration
+      parameters:
+        # Points at a Service that does not exist. First-attach capture fails, but 2b is fail-closed
+        # AND non-fatal: no frozen values exist yet, so the operator deploys the pod base-only (no
+        # sidecar) and the workspace still becomes Available. The workspace's own Available condition
+        # does NOT go False/Degraded; the integration is instead reported as Degraded in
+        # status.integrationStatuses[] so the failure is still visible on status.
+        - name: serviceName
+          value: nonexistent-cache
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

@@ -1,0 +1,23 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-failprobe
+  namespace: default
+spec:
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  # References the failing-probe template against the real shared-cache Service: the integration
+  # RESOLVES (sidecar injected, values frozen) but its statusProbe exits non-zero. This exercises the
+  # report-only contract -- Degraded on the integration status, Available still True on the workspace.
+  integrationTemplateRefs:
+    - name: service-integration-failprobe
+      parameters:
+        - name: serviceName
+          value: shared-cache
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
