@@ -51,18 +51,18 @@ func NewPodExecUtil() (*PodExecUtil, error) {
 	}, nil
 }
 
-// ExecInPod executes a command in a specific container of a pod with optional stdin input
-func (p *PodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string, stdin string) (string, error) {
+// ExecInPodWithStderr executes a command in a container and returns stdout, stderr, and error
+// separately. Used by the integration status probe so a failing probe can surface the command's
+// stderr in workspace.status.integrationStatuses[].message.
+func (p *PodExecUtil) ExecInPodWithStderr(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string, stdin string) (stdoutStr, stderrStr string, err error) {
 	logger := logf.FromContext(ctx).WithValues("pod", pod.Name, "container", containerName, "cmd", cmd)
 
-	// Create exec request
 	req := p.clientset.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(pod.Name).
 		Namespace(pod.Namespace).
 		SubResource("exec")
 
-	// Enable stdin only if we have stdin data
 	hasStdin := stdin != ""
 	req.VersionedParams(&corev1.PodExecOptions{
 		Container: containerName,
@@ -72,31 +72,32 @@ func (p *PodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, containerN
 		Stderr:    true,
 	}, scheme.ParameterCodec)
 
-	// Execute command
 	exec, err := newSPDYExecutor(p.config, "POST", req.URL())
 	if err != nil {
-		return "", fmt.Errorf("failed to create executor: %w", err)
+		return "", "", fmt.Errorf("failed to create executor: %w", err)
 	}
 
 	var stdout, stderr bytes.Buffer
-	streamOptions := remotecommand.StreamOptions{
-		Stdout: &stdout,
-		Stderr: &stderr,
-	}
-
-	// Add stdin only if we have data
+	streamOptions := remotecommand.StreamOptions{Stdout: &stdout, Stderr: &stderr}
 	if hasStdin {
 		streamOptions.Stdin = strings.NewReader(stdin)
 	}
 
 	err = exec.StreamWithContext(ctx, streamOptions)
-
-	output := strings.TrimSpace(stdout.String())
+	stdoutStr = strings.TrimSpace(stdout.String())
+	stderrStr = strings.TrimSpace(stderr.String())
 	if err != nil {
-		logger.V(1).Info("Command execution failed", "hasStdin", hasStdin, "error", err, "stderr", stderr.String())
-		return output, err
+		logger.V(1).Info("Command execution failed", "error", err, "stderr", stderrStr)
+		return stdoutStr, stderrStr, err
 	}
+	logger.V(1).Info("Command executed successfully", "output", stdoutStr)
+	return stdoutStr, stderrStr, nil
+}
 
-	logger.V(1).Info("Command executed successfully", "hasStdin", hasStdin, "output", output)
-	return output, nil
+// ExecInPod executes a command in a specific container of a pod with optional stdin input, returning
+// only stdout and the exec error. It delegates to ExecInPodWithStderr and discards the separate stderr
+// return value (which that function logs at V(1) on failure), so both paths share one implementation.
+func (p *PodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string, stdin string) (string, error) {
+	stdout, _, err := p.ExecInPodWithStderr(ctx, pod, containerName, cmd, stdin)
+	return stdout, err
 }

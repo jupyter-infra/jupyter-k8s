@@ -129,6 +129,7 @@ type IntegrationStatusProbe struct {
 	// author-selectable) so it sees the pod's real network and auth context, catching
 	// data-plane failures a control-plane status check would miss (e.g. a Ray GCS reconnect
 	// loop while .status still reads ready). This is the only transport implemented today.
+	// +kubebuilder:validation:Required
 	// +optional
 	Exec *corev1.ExecAction `json:"exec,omitempty"`
 

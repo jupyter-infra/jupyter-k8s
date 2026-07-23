@@ -8,6 +8,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 
@@ -33,6 +34,11 @@ type StateMachine struct {
 	recorder            record.EventRecorder
 	idleChecker         *WorkspaceIdleChecker
 	accessStartupProber AccessStartupProberInterface
+	// integrationProber runs each integration's report-only statusProbe and writes the verdict into
+	// status.integrationStatuses[]. It may be nil (e.g. when pod-exec config is unavailable); the probe step
+	// is then skipped and integrations report no status. It also owns the base re-probe cadence
+	// (ProbePeriod), mirroring how idleChecker owns CheckInterval.
+	integrationProber IntegrationProberInterface
 }
 
 // NewStateMachine creates a new StateMachine
@@ -42,6 +48,7 @@ func NewStateMachine(
 	recorder record.EventRecorder,
 	idleChecker *WorkspaceIdleChecker,
 	accessStartupProber AccessStartupProberInterface,
+	integrationProber IntegrationProberInterface,
 ) *StateMachine {
 	return &StateMachine{
 		resourceManager:     resourceManager,
@@ -49,6 +56,7 @@ func NewStateMachine(
 		recorder:            recorder,
 		idleChecker:         idleChecker,
 		accessStartupProber: accessStartupProber,
+		integrationProber:   integrationProber,
 	}
 }
 
@@ -312,12 +320,23 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		logger.Info("Deployment and Service are both ready, updating to Running status")
 		sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceRunning", "Workspace is now running")
 
+		// Run report-only integration status probes and stage their verdicts into status.integrationStatuses[]
+		// BEFORE the status write, so they persist in the same Status().Update as the Running conditions.
+		// Non-gating: probe verdicts never change whether the workspace is Available.
+		integrationProbeInterval := sm.probeIntegrationStatus(ctx, workspace)
+
 		if err := sm.statusManager.UpdateRunningStatus(ctx, workspace, snapshotStatus); err != nil {
 			return ctrl.Result{}, err
 		}
 
-		// Handle idle shutdown for running workspaces
-		return sm.handleIdleShutdownForRunningWorkspace(ctx, workspace, service)
+		// Handle idle shutdown for running workspaces, honoring the sooner of the idle requeue and the
+		// integration probe cadence (there is no watch driving re-probes, so we must requeue to re-run).
+		result, err := sm.handleIdleShutdownForRunningWorkspace(ctx, workspace, service)
+		if err != nil {
+			return result, err
+		}
+		result.RequeueAfter = getShorterInterval(result.RequeueAfter, integrationProbeInterval)
+		return result, nil
 	}
 
 	// Resources are being created/started but not fully ready yet
@@ -339,6 +358,107 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 
 	// Requeue to check resource readiness again later
 	return ctrl.Result{RequeueAfter: requeueDelay}, nil
+}
+
+// probeIntegrationStatus runs each attached integration's report-only statusProbe and writes one
+// verdict per integration into workspace.Status.integrationStatuses. It is non-gating and best-effort:
+//   - An integration with no FROZEN values (status.resolvedIntegrations record) has not resolved yet --
+//     its first-attach capture failed. It contributes a Degraded/NotResolved entry (rather than being
+//     silently skipped) so the unresolved integration is visible on the Workspace status, and self-
+//     corrects to Ready once capture eventually succeeds.
+//   - The statusProbe spec is read from the template (a static admin-authored field); reading it does
+//     not re-read the referenced resource, so the freeze contract is preserved. A template that has
+//     gone missing contributes a not-ready ProbeError entry rather than failing the reconcile.
+//   - With no integrations at all, status.integrationStatuses[] is cleared so a removed integration leaves no
+//     stale entry.
+//
+// Returns the shortest interval after which any probe should re-run, or 0 when nothing needs probing
+// (so the caller knows whether to keep requeuing the Running workspace on the probe cadence -- there
+// is no watch on the referenced resource driving re-probes).
+func (sm *StateMachine) probeIntegrationStatus(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+) time.Duration {
+	if sm.integrationProber == nil || !sm.resourceManager.hasIntegrationTemplateRefs(workspace) {
+		workspace.Status.IntegrationStatuses = nil
+		return 0
+	}
+	logger := logf.FromContext(ctx)
+
+	// Index the prior verdicts by name so an unchanged re-probe can preserve its LastTransitionTime
+	// (avoids churning the status subresource on every probe cadence).
+	prior := make(map[string]*workspacev1alpha1.IntegrationStatus, len(workspace.Status.IntegrationStatuses))
+	for i := range workspace.Status.IntegrationStatuses {
+		prior[workspace.Status.IntegrationStatuses[i].Name] = &workspace.Status.IntegrationStatuses[i]
+	}
+
+	// Resolve the workspace pod ONCE for the whole pass -- every Probe execs into the same pod, so N
+	// integrations must not each list pods. A lookup failure isn't fatal: the pod may still be starting;
+	// each probed integration then reports PodNotFound and we retry on the base cadence.
+	pod, podErr := sm.integrationProber.FindRunningPod(ctx, workspace)
+
+	var statuses []workspacev1alpha1.IntegrationStatus
+	// appendStatus preserves the prior timestamp on an unchanged verdict and records the status. There is
+	// no per-verdict interval math: every integration re-probes on the same flat operator cadence (the
+	// prober's ProbePeriod), mirroring how the idle checker requeues on a flat CheckInterval.
+	appendStatus := func(s workspacev1alpha1.IntegrationStatus) {
+		preserveConditionTimestamp(prior[s.Name], &s)
+		statuses = append(statuses, s)
+	}
+	for i := range workspace.Spec.IntegrationTemplateRefs {
+		ref := &workspace.Spec.IntegrationTemplateRefs[i]
+		// An integration with no frozen record has not resolved yet -- its first-attach capture failed
+		// (e.g. the referenced resource does not exist, or the template is broken). The freeze reconcile
+		// (which ran earlier this reconcile) already logged the detailed cause; surface a Degraded entry
+		// so an admin sees the unresolved integration on the Workspace status rather than only in logs.
+		if findResolvedIntegration(&workspace.Status, ref.Name) == nil {
+			appendStatus(buildIntegrationStatus(ref.Name, false, IntegrationReasonNotResolved,
+				"integration has not resolved yet (first-attach capture failed; see operator logs for the cause)"))
+			continue
+		}
+		probe, err := sm.resourceManager.getIntegrationStatusProbeSpec(ctx, workspace, ref)
+		if err != nil {
+			// The template went missing after freeze: report not-ready rather than dropping the entry.
+			logger.Error(err, "Failed to load integration template for status probe", "integration", ref.Name)
+			appendStatus(buildIntegrationStatus(ref.Name, false, IntegrationReasonProbeError, err.Error()))
+			continue
+		}
+		if probe == nil {
+			// Resolved, but no statusProbe declared -> nothing to report for this integration.
+			continue
+		}
+		if podErr != nil {
+			// No running pod yet: report PodNotFound and retry on the base cadence (no exec attempted).
+			appendStatus(buildIntegrationStatus(ref.Name, false, IntegrationReasonPodNotFound, podErr.Error()))
+			continue
+		}
+		appendStatus(sm.integrationProber.Probe(ctx, pod, ref.Name, probe))
+	}
+
+	// Assign (possibly nil) so a removed or probe-less integration leaves no stale entry behind.
+	workspace.Status.IntegrationStatuses = statuses
+	// Requeue on the flat operator cadence when there is at least one integration status to refresh;
+	// 0 means "no integration timer" (getShorterInterval treats it as absent), so a workspace with no
+	// reportable integrations adds no requeue of its own.
+	if len(statuses) == 0 {
+		return 0
+	}
+	return sm.integrationProber.ProbePeriod()
+}
+
+// getShorterInterval returns the shorter of two requeue delays. A delay of 0 means "no timer"
+// (controller-runtime's meaning for RequeueAfter == 0) and is skipped, so it does not win as the
+// numerically smallest value: with one side 0 the other wins, with both 0 the result is 0 (no
+// requeue), and with both set the smaller wins. Commutative. Used to pick the shorter of the
+// idle-shutdown requeue and the integration probe cadence.
+func getShorterInterval(a, b time.Duration) time.Duration {
+	if a == 0 {
+		return b
+	}
+	if b == 0 {
+		return a
+	}
+	return min(a, b)
 }
 
 // handleIdleShutdownForRunningWorkspace handles idle shutdown logic for running workspaces
