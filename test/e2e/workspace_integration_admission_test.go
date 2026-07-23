@@ -114,6 +114,96 @@ var _ = Describe("Workspace Integration Admission", Ordered, func() {
 			}).WithTimeout(10 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
 		})
 	})
+
+	// Referenced-resource authorization (the SubjectAccessReview confused-deputy guard): a non-exempt user
+	// who references a resource they cannot get is rejected; one who can get it is admitted; an exempt
+	// (admin) caller bypasses the check entirely. These run as impersonated users (kubectl --as), so unlike
+	// the specs above they exercise the check against the REAL cluster authorizer and the operator's real
+	// SubjectAccessReview-create grant -- which a unit test (fake authorizer) structurally cannot cover.
+	Context("Referenced-resource authorization (SubjectAccessReview)", func() {
+		BeforeAll(func() {
+			By("granting workspace-create to the denied and allowed users, and service-get to the allowed user only")
+			for _, fixture := range []string{
+				"sar-workspace-creator-role",
+				"sar-service-reader-role",
+				"sar-denied-user-binding",
+				"sar-allowed-user-workspace-binding",
+				"sar-allowed-user-service-binding",
+			} {
+				cmd := exec.Command("kubectl", "apply", "-f",
+					BuildTestResourcePath(fixture, integrationAdmissionGroup, integrationAdmissionSubgroup))
+				_, err := utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "failed to apply RBAC fixture %s", fixture)
+			}
+
+			By("installing the integration template the workspaces reference")
+			createIntegrationTemplateForTest("sar-integration")
+		})
+
+		AfterAll(func() {
+			By("cleaning up the SAR RBAC roles and bindings")
+			cmd := exec.Command("kubectl", "delete", "role,rolebinding",
+				"-l", "jk8s/e2e=integration-sar-test", "-n", integrationWorkspaceNS,
+				"--ignore-not-found", "--wait=true", "--timeout=60s")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("rejects a workspace whose submitter cannot get the referenced resource", func() {
+			createIntegrationTemplateForTest("sar-integration")
+			By("creating the workspace as sar-denied-user (workspace-create but no service-get)")
+			path := BuildTestResourcePath("ws-sar-denied", integrationAdmissionGroup, integrationAdmissionSubgroup)
+			err := createObjectAsUser(path, "sar-denied-user", nil)
+			Expect(err).To(HaveOccurred(),
+				"a user who cannot get the referenced Service must be rejected by the resource authorization")
+			// Confirm the rejection is the integration authorization verdict, not an unrelated RBAC denial on
+			// workspaces (the user is granted workspace-create precisely so this message is attributable).
+			Expect(err.Error()).To(ContainSubstring("may not get"),
+				"rejection must come from the referenced-resource SubjectAccessReview, not a workspace RBAC denial")
+
+			By("verifying the rejected workspace was not persisted")
+			// --ignore-not-found so an absent workspace yields empty output (not a NotFound error), matching
+			// the not-persisted check in applyExpectRejected.
+			cmd := exec.Command("kubectl", verbGet, "workspace", "ws-sar-denied",
+				"-n", integrationWorkspaceNS, "--ignore-not-found")
+			output, getErr := utils.Run(cmd)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(output).To(BeEmpty(), "the rejected workspace should not have been persisted")
+		})
+
+		It("admits a workspace whose submitter can get the referenced resource", func() {
+			createIntegrationTemplateForTest("sar-integration")
+			By("creating the workspace as sar-allowed-user (workspace-create AND service-get)")
+			path := BuildTestResourcePath("ws-sar-allowed", integrationAdmissionGroup, integrationAdmissionSubgroup)
+			err := createObjectAsUser(path, "sar-allowed-user", nil)
+			Expect(err).NotTo(HaveOccurred(),
+				"a user who can get the referenced Service must pass the resource authorization")
+
+			By("verifying the admitted workspace was persisted")
+			Eventually(func(g Gomega) {
+				name, getErr := kubectlGet("workspace", "ws-sar-allowed", integrationWorkspaceNS, "{.metadata.name}")
+				g.Expect(getErr).NotTo(HaveOccurred())
+				g.Expect(name).To(Equal("ws-sar-allowed"))
+			}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+		})
+
+		It("admits an exempt (admin) caller without checking referenced-resource access", func() {
+			createIntegrationTemplateForTest("sar-integration")
+			By("creating the workspace as an admin (system:masters) with no explicit service-get binding")
+			// system:masters is the webhook's DefaultAdminGroup, so the integration resource authorization is
+			// skipped entirely -- admitted despite no service-get RoleBinding for this identity.
+			path := BuildTestResourcePath("ws-sar-exempt-admin", integrationAdmissionGroup, integrationAdmissionSubgroup)
+			err := createObjectAsUser(path, "sar-admin-user", []string{systemMastersGroup})
+			Expect(err).NotTo(HaveOccurred(),
+				"an exempt admin caller must bypass the referenced-resource authorization")
+
+			By("verifying the admitted workspace was persisted")
+			Eventually(func(g Gomega) {
+				name, getErr := kubectlGet("workspace", "ws-sar-exempt-admin", integrationWorkspaceNS, "{.metadata.name}")
+				g.Expect(getErr).NotTo(HaveOccurred())
+				g.Expect(name).To(Equal("ws-sar-exempt-admin"))
+			}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+		})
+	})
 })
 
 // applyExpectSucceeds applies a static fixture from the integration-admission group and asserts the

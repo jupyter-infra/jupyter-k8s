@@ -65,6 +65,8 @@ const (
 	volumeNameTeamData = "team-data"
 	// pvcNameSharedTeamData is the shared-team-data PVC name
 	pvcNameSharedTeamData = "shared-team-data"
+	// systemMastersGroup is the Kubernetes super-user group used to impersonate an admin/exempt caller
+	systemMastersGroup = "system:masters"
 )
 
 // JSONPath expressions used to query Kubernetes resources in e2e tests.

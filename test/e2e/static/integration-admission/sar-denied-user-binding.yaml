@@ -1,0 +1,17 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sar-denied-user-binding
+  namespace: default
+  labels:
+    jk8s/e2e: integration-sar-test
+# Binds sar-denied-user to workspace-create ONLY (no service get). This user can submit a workspace but
+# cannot get the referenced Service, so the integration resource authorization must reject the create.
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sar-workspace-creator-role
+subjects:
+- kind: User
+  name: sar-denied-user
+  apiGroup: rbac.authorization.k8s.io

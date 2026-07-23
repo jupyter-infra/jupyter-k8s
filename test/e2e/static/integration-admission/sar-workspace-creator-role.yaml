@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sar-workspace-creator-role
+  namespace: default
+  labels:
+    jk8s/e2e: integration-sar-test
+# Grants ONLY workspace create/read -- deliberately NOT get on services. A user bound to this role can
+# submit a workspace, so a rejected create is attributable to the integration resource authorization
+# (the SubjectAccessReview on the referenced Service), not to an RBAC denial on workspaces themselves.
+rules:
+- apiGroups: ["workspace.jupyter.org"]
+  resources: ["workspaces"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

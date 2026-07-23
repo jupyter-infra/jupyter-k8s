@@ -377,25 +377,32 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, workspace
 		return nil, err
 	}
 
+	// Validate volume ownership (security check - applies to all users)
+	if err := v.volumeValidator.ValidateVolumeOwnership(ctx, workspace); err != nil {
+		return nil, err
+	}
+
+	// isExempt (the controller service account or a cluster-admin group) is a local check on the admission
+	// request's UserInfo -- no API call. Exempt callers bypass the permission checks below, including the
+	// integration resource authorization; they still get the correctness checks that run for everyone.
+	isExempt := isControllerOrAdminUser(ctx)
+
 	// Validate integrationTemplateRefs: reject a ref that targets a disallowed namespace, references a
 	// missing template, or omits a required parameter (all user errors, applied to every caller on create).
+	// For non-exempt callers it also authorizes the requesting user against each referenced resource
+	// (SubjectAccessReview), reusing the template fetched for correctness so the read happens once.
 	// Supplied-but-undeclared parameters are surfaced as non-blocking warnings.
 	var warnings admission.Warnings
 	if v.integrationTemplateRefValidator != nil {
-		w, err := v.integrationTemplateRefValidator.Validate(ctx, workspace)
+		w, err := v.integrationTemplateRefValidator.Validate(ctx, workspace, !isExempt)
 		if err != nil {
 			return nil, err
 		}
 		warnings = append(warnings, w...)
 	}
 
-	// Validate volume ownership (security check - applies to all users)
-	if err := v.volumeValidator.ValidateVolumeOwnership(ctx, workspace); err != nil {
-		return nil, err
-	}
-
-	// Controller or admin users bypass validation
-	if isControllerOrAdminUser(ctx) {
+	// Controller or admin users bypass the remaining permission checks.
+	if isExempt {
 		return warnings, nil
 	}
 
@@ -423,13 +430,13 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldWorksp
 	}
 
 	// Controller or admin users bypass validation
-	isAdmin := isControllerOrAdminUser(ctx)
+	isExempt := isControllerOrAdminUser(ctx)
 
 	// NOTE: Removed templateRef immutability check to enable template mutability (PR #129)
 	// Templates can now be changed after workspace creation
 
-	// Admin users bypass user validation
-	if isAdmin {
+	// Exempt (controller/admin) callers bypass user validation
+	if isExempt {
 		return nil, nil
 	}
 
@@ -446,9 +453,11 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldWorksp
 	// user PATCHes that don't touch the refs are never re-validated either. Moving it before the bypass (to
 	// match CREATE) reintroduces the wedge. On CREATE there is no live workspace to wedge, so the check runs
 	// before the bypass there. Non-blocking warnings (unused parameters) are surfaced to the user.
+	// authorize is unconditionally true here: this runs only after the admin/controller bypass above, so
+	// every caller reaching it is a non-exempt user whose referenced resources must be authorized.
 	var warnings admission.Warnings
 	if v.integrationTemplateRefValidator != nil && integrationRefsChanged(&oldWorkspace.Spec, &newWorkspace.Spec) {
-		w, err := v.integrationTemplateRefValidator.Validate(ctx, newWorkspace)
+		w, err := v.integrationTemplateRefValidator.Validate(ctx, newWorkspace, true)
 		if err != nil {
 			return nil, err
 		}

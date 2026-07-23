@@ -1303,11 +1303,19 @@ var _ = Describe("Workspace Webhook integration refs", func() {
 		}
 	}
 
+	// adminCreateCtx builds a CREATE admission context for an admin user. These wiring specs exercise the
+	// correctness checks (namespace scope, template existence, parameter completeness), which run for every
+	// caller; the admin context skips the per-resource SubjectAccessReview pass -- authorization is covered
+	// by the e2e admission suite (the fake client here has no SubjectAccessReview support).
+	adminCreateCtx := func() context.Context {
+		return createUserContext(ctx, "CREATE", "admin", webhookconst.DefaultAdminGroup)
+	}
+
 	Context("ValidateCreate wires in the integration ref validator", func() {
 		It("admits a workspace whose ref resolves and supplies all parameters", func() {
 			ws := wsInTeamA(testNamespaceTeamA, workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
 			v := newValidator(integrationTemplateIn(testNamespaceTeamA, testRayClusterParam))
-			_, err := v.ValidateCreate(ctx, ws)
+			_, err := v.ValidateCreate(adminCreateCtx(), ws)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -1316,14 +1324,14 @@ var _ = Describe("Workspace Webhook integration refs", func() {
 			// explicitly; the read targets exactly that namespace. There is no own-ns -> shared-ns fallback.
 			ws := wsInTeamA(testSharedNamespace, workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
 			v := newValidator(integrationTemplateIn(testSharedNamespace, testRayClusterParam))
-			_, err := v.ValidateCreate(ctx, ws)
+			_, err := v.ValidateCreate(adminCreateCtx(), ws)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("rejects a workspace whose ref targets another team's namespace (scope)", func() {
 			ws := wsInTeamA("team-b")
 			v := newValidator(integrationTemplateIn("team-b"))
-			_, err := v.ValidateCreate(ctx, ws)
+			_, err := v.ValidateCreate(adminCreateCtx(), ws)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("team-b"))
 		})
@@ -1331,7 +1339,7 @@ var _ = Describe("Workspace Webhook integration refs", func() {
 		It("rejects a workspace whose referenced template does not exist", func() {
 			ws := wsInTeamA(testNamespaceTeamA)
 			v := newValidator() // empty client -> not found
-			_, err := v.ValidateCreate(ctx, ws)
+			_, err := v.ValidateCreate(adminCreateCtx(), ws)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("not found"))
 		})
@@ -1339,7 +1347,7 @@ var _ = Describe("Workspace Webhook integration refs", func() {
 		It("rejects a workspace missing a declared parameter", func() {
 			ws := wsInTeamA(testNamespaceTeamA) // supplies nothing
 			v := newValidator(integrationTemplateIn(testNamespaceTeamA, testRayClusterParam))
-			_, err := v.ValidateCreate(ctx, ws)
+			_, err := v.ValidateCreate(adminCreateCtx(), ws)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring(testRayClusterParam))
 		})
@@ -1350,7 +1358,7 @@ var _ = Describe("Workspace Webhook integration refs", func() {
 				workspacev1alpha1.IntegrationParameter{Name: "rayClustrName", Value: "typo"},
 			)
 			v := newValidator(integrationTemplateIn(testNamespaceTeamA, testRayClusterParam))
-			warnings, err := v.ValidateCreate(ctx, ws)
+			warnings, err := v.ValidateCreate(adminCreateCtx(), ws)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(ContainElement(ContainSubstring("rayClustrName")))
 		})

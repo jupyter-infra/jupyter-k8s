@@ -19,11 +19,16 @@ func specChanged(oldSpec, newSpec *workspacev1alpha1.WorkspaceSpec) bool {
 }
 
 // integrationRefsChanged detects whether spec.integrationTemplateRefs differs between old and new.
-// Used on update to run integration-ref validation only when the user actually changed the refs --
-// mirroring how template validation gates on specChanged. This is what keeps an admin's out-of-band
-// template edit (e.g. adding a required parameter) or deletion from wedging reconciliation of an
-// already-referencing workspace: the controller's own finalizer/label updates leave the refs untouched,
-// so they skip the check. Uses semantic equality (nil slice == empty slice) like the sibling comparators.
+// It gates the update-path integration checks so they run only when the user actually changed the refs,
+// mirroring how template validation gates on specChanged:
+//   - ref validation (namespace scope, template existence, parameter completeness) -- so a controller
+//     finalizer/label update or an admin's out-of-band template edit/deletion never re-validates a live
+//     workspace's refs against a possibly-missing template and wedges reconciliation; and
+//   - per-resource authorization (the SubjectAccessReview pass) -- the objects a workspace authorizes are
+//     a function of its refs (template + parameters) and its namespace, and the namespace is immutable, so
+//     unchanged refs mean the user already passed authorization when the refs were introduced.
+//
+// Uses semantic equality (nil slice == empty slice) like the sibling comparators.
 func integrationRefsChanged(oldSpec, newSpec *workspacev1alpha1.WorkspaceSpec) bool {
 	return !equality.Semantic.DeepEqual(oldSpec.IntegrationTemplateRefs, newSpec.IntegrationTemplateRefs)
 }

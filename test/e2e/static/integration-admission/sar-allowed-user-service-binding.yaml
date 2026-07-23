@@ -1,0 +1,17 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sar-allowed-user-service-binding
+  namespace: default
+  labels:
+    jk8s/e2e: integration-sar-test
+# Grants sar-allowed-user get on services (the referenced resource). This is the extra grant, over the
+# denied user, that makes the referenced-resource SubjectAccessReview ALLOW -> the workspace is admitted.
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sar-service-reader-role
+subjects:
+- kind: User
+  name: sar-allowed-user
+  apiGroup: rbac.authorization.k8s.io

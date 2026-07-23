@@ -191,7 +191,7 @@ var _ = Describe("Workspace Ownership", Ordered, func() {
 				By("updating OwnerOnly workspace as admin-user")
 				ownerOnlyWorkspaceUpdatedPath := BuildTestResourcePath("owner-only-workspace-updated", ownershipGroupDir,
 					ownershipSubgroupDir)
-				err = updateObjectAsUser(ownerOnlyWorkspaceUpdatedPath, adminUser, []string{"system:masters"})
+				err = updateObjectAsUser(ownerOnlyWorkspaceUpdatedPath, adminUser, []string{systemMastersGroup})
 				Expect(err).NotTo(HaveOccurred(), "admin-user should be able to update OwnerOnly workspace")
 
 				By("verifying the update was applied")
@@ -202,7 +202,7 @@ var _ = Describe("Workspace Ownership", Ordered, func() {
 				}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
 
 				By("deleting OwnerOnly workspace as admin-user")
-				err = deleteWorkspaceAsUser("owner-only-workspace", adminUser, []string{"system:masters"})
+				err = deleteWorkspaceAsUser("owner-only-workspace", adminUser, []string{systemMastersGroup})
 				Expect(err).NotTo(HaveOccurred(), "admin-user should be able to delete OwnerOnly workspace")
 
 				By("verifying workspace was deleted")

@@ -1,0 +1,24 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ws-sar-denied
+  namespace: default
+spec:
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  # Correctness checks all PASS (own-ns ref, template exists, parameter supplied). The only thing that
+  # can reject this create is the integration resource authorization: the submitting user
+  # (sar-denied-user) cannot get the referenced Service, so the SubjectAccessReview denies.
+  integrationTemplateRefs:
+    - name: sar-integration
+      namespace: default
+      parameters:
+        - name: serviceName
+          value: shared-cache
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

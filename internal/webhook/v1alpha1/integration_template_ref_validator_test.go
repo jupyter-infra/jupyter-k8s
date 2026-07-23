@@ -10,9 +10,17 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	admissionv1 "k8s.io/api/admission/v1"
+	authenticationv1 "k8s.io/api/authentication/v1"
+	authorizationv1 "k8s.io/api/authorization/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
@@ -22,6 +30,12 @@ const (
 	testIntegrationName = "ray-integration"
 	testRayClusterParam = "rayClusterName"
 	testClusterAValue   = "c-a"
+
+	testRayGroup           = "ray.io"
+	testRayAPIVersion      = "ray.io/v1"
+	testRayClusterKind     = "RayCluster"
+	testRayClusterNameExpr = "{{ .Parameters.rayClusterName }}"
+	testUser               = "alice"
 )
 
 var _ = Describe("validateWorkspaceIntegrationParameters", func() {
@@ -118,7 +132,7 @@ var _ = Describe("IntegrationTemplateRefValidator namespace scope", func() {
 
 	It("rejects an integrationTemplateRef targeting another team's namespace", func() {
 		ws := wsWithIntegrationNamespace("team-b")
-		_, err := newValidator("jupyter-k8s-shared").Validate(ctx, ws)
+		_, err := newValidator("jupyter-k8s-shared").Validate(ctx, ws, false)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("team-b"))
 		Expect(err.Error()).To(ContainSubstring("team-a"))
@@ -130,19 +144,19 @@ var _ = Describe("IntegrationTemplateRefValidator namespace scope", func() {
 	// existence check; the scope check is what they exercise (the template just has to exist).
 	It("allows an integrationTemplateRef targeting the workspace's own namespace", func() {
 		ws := wsWithIntegrationNamespace("team-a")
-		_, err := newValidatorWith("jupyter-k8s-shared", tmplIn("team-a")).Validate(ctx, ws)
+		_, err := newValidatorWith("jupyter-k8s-shared", tmplIn("team-a")).Validate(ctx, ws, false)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("allows an integrationTemplateRef targeting the shared namespace", func() {
 		ws := wsWithIntegrationNamespace("jupyter-k8s-shared")
-		_, err := newValidatorWith("jupyter-k8s-shared", tmplIn("jupyter-k8s-shared")).Validate(ctx, ws)
+		_, err := newValidatorWith("jupyter-k8s-shared", tmplIn("jupyter-k8s-shared")).Validate(ctx, ws, false)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("allows an integrationTemplateRef with an empty namespace (defaults to the workspace namespace)", func() {
 		ws := wsWithIntegrationNamespace("")
-		_, err := newValidatorWith("jupyter-k8s-shared", tmplIn("team-a")).Validate(ctx, ws)
+		_, err := newValidatorWith("jupyter-k8s-shared", tmplIn("team-a")).Validate(ctx, ws, false)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -150,7 +164,7 @@ var _ = Describe("IntegrationTemplateRefValidator namespace scope", func() {
 		// To use a shared-namespace template the user sets ref.Namespace to the shared namespace explicitly;
 		// the read then targets exactly that namespace.
 		ws := wsWithIntegrationNamespace("jupyter-k8s-shared")
-		_, err := newValidatorWith("jupyter-k8s-shared", tmplIn("jupyter-k8s-shared")).Validate(ctx, ws)
+		_, err := newValidatorWith("jupyter-k8s-shared", tmplIn("jupyter-k8s-shared")).Validate(ctx, ws, false)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -160,7 +174,7 @@ var _ = Describe("IntegrationTemplateRefValidator namespace scope", func() {
 		// the message names the workspace namespace it looked in. The user must set the shared namespace
 		// explicitly on the ref.
 		ws := wsWithIntegrationNamespace("")
-		_, err := newValidatorWith("jupyter-k8s-shared", tmplIn("jupyter-k8s-shared")).Validate(ctx, ws)
+		_, err := newValidatorWith("jupyter-k8s-shared", tmplIn("jupyter-k8s-shared")).Validate(ctx, ws, false)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("not found"))
 		Expect(err.Error()).To(ContainSubstring("team-a"))
@@ -170,14 +184,14 @@ var _ = Describe("IntegrationTemplateRefValidator namespace scope", func() {
 		// Empty ref namespace + template nowhere: single read against the workspace namespace misses and the
 		// ref is rejected, naming that namespace.
 		ws := wsWithIntegrationNamespace("")
-		_, err := newValidatorWith("jupyter-k8s-shared").Validate(ctx, ws)
+		_, err := newValidatorWith("jupyter-k8s-shared").Validate(ctx, ws, false)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("team-a"))
 	})
 
 	It("rejects a cross-namespace integrationTemplateRef even when no shared namespace is configured", func() {
 		ws := wsWithIntegrationNamespace("team-b")
-		_, err := newValidator("").Validate(ctx, ws)
+		_, err := newValidator("").Validate(ctx, ws, false)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("team-b"))
 		Expect(err.Error()).To(ContainSubstring("team-a"))
@@ -224,21 +238,21 @@ var _ = Describe("IntegrationTemplateRefValidator end-to-end (with a fetched tem
 	It("passes when the referenced template exists and every declared parameter is supplied", func() {
 		v := validatorWith(declaredTemplate())
 		ws := wsRef(workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
-		warnings, err := v.Validate(ctx, ws)
+		warnings, err := v.Validate(ctx, ws, false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(warnings).To(BeEmpty())
 	})
 
 	It("rejects when the referenced template exists but a declared parameter is missing", func() {
 		v := validatorWith(declaredTemplate())
-		_, err := v.Validate(ctx, wsRef()) // supplies nothing
+		_, err := v.Validate(ctx, wsRef(), false) // supplies nothing
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring(testRayClusterParam))
 	})
 
 	It("rejects when the referenced template does not exist", func() {
 		v := validatorWith() // empty client -> template not found
-		_, err := v.Validate(ctx, wsRef())
+		_, err := v.Validate(ctx, wsRef(), false)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("not found"))
 		Expect(err.Error()).To(ContainSubstring(testIntegrationName))
@@ -250,7 +264,7 @@ var _ = Describe("IntegrationTemplateRefValidator end-to-end (with a fetched tem
 			workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue}, // declared, satisfied
 			workspacev1alpha1.IntegrationParameter{Name: "rayClustrName", Value: "typo"},                // undeclared typo
 		)
-		warnings, err := v.Validate(ctx, ws)
+		warnings, err := v.Validate(ctx, ws, false)
 		Expect(err).NotTo(HaveOccurred()) // undeclared params do not reject
 		Expect(warnings).To(HaveLen(1))
 		Expect(warnings[0]).To(ContainSubstring("rayClustrName"))
@@ -262,7 +276,7 @@ var _ = Describe("IntegrationTemplateRefValidator end-to-end (with a fetched tem
 		v := validatorWith(declaredTemplate())
 		ws := wsRef(workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
 		ws.Spec.IntegrationTemplateRefs[0].Namespace = ""
-		warnings, err := v.Validate(ctx, ws)
+		warnings, err := v.Validate(ctx, ws, false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(warnings).To(BeEmpty())
 	})
@@ -298,5 +312,250 @@ var _ = Describe("integrationRefsChanged", func() {
 		old := ref(workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: testClusterAValue})
 		changed := ref(workspacev1alpha1.IntegrationParameter{Name: testRayClusterParam, Value: "c-b"})
 		Expect(integrationRefsChanged(specWithRef(old), specWithRef(changed))).To(BeTrue())
+	})
+})
+
+var _ = Describe("IntegrationTemplateRefValidator resource access", func() {
+	const (
+		workspaceNamespace = "team-a"
+		otherNamespace     = "team-b"
+		sharedNamespace    = "jupyter-k8s-shared"
+	)
+
+	var scheme *runtime.Scheme
+
+	BeforeEach(func() {
+		scheme = runtime.NewScheme()
+		Expect(workspacev1alpha1.AddToScheme(scheme)).To(Succeed())
+		Expect(authorizationv1.AddToScheme(scheme)).To(Succeed())
+	})
+
+	// rayClusterMapper maps RayCluster (ray.io/v1) to its rayclusters resource, standing in for the
+	// discovery-backed RESTMapper the manager provides at runtime.
+	rayClusterMapper := func() meta.RESTMapper {
+		m := meta.NewDefaultRESTMapper([]schema.GroupVersion{{Group: testRayGroup, Version: "v1"}})
+		m.Add(schema.GroupVersionKind{Group: testRayGroup, Version: "v1", Kind: testRayClusterKind}, meta.RESTScopeNamespace)
+		return m
+	}
+
+	// template references a resource whose name and namespace come from parameters -- the shape the shipped
+	// integration template uses. It lives in workspaceNamespace with the referenced template.
+	template := func() *workspacev1alpha1.WorkspaceIntegrationTemplate {
+		return &workspacev1alpha1.WorkspaceIntegrationTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: testIntegrationName, Namespace: workspaceNamespace},
+			Spec: workspacev1alpha1.WorkspaceIntegrationTemplateSpec{
+				ResourceRefs: []workspacev1alpha1.ResourceRef{{
+					Name:       "rayCluster",
+					APIVersion: testRayAPIVersion,
+					Kind:       testRayClusterKind,
+					Metadata: workspacev1alpha1.ResourceRefMetadata{
+						Name:      testRayClusterNameExpr,
+						Namespace: "{{ .Parameters.rayClusterNamespace }}",
+					},
+				}},
+			},
+		}
+	}
+
+	param := func(name, value string) workspacev1alpha1.IntegrationParameter {
+		return workspacev1alpha1.IntegrationParameter{Name: name, Value: value}
+	}
+
+	// workspaceRef builds a workspace in workspaceNamespace referencing the template with the given params.
+	workspaceRef := func(params ...workspacev1alpha1.IntegrationParameter) *workspacev1alpha1.Workspace {
+		return &workspacev1alpha1.Workspace{
+			ObjectMeta: metav1.ObjectMeta{Name: "ws", Namespace: workspaceNamespace},
+			Spec: workspacev1alpha1.WorkspaceSpec{
+				IntegrationTemplateRefs: []workspacev1alpha1.IntegrationTemplateRef{{
+					Name:       testIntegrationName,
+					Parameters: params,
+				}},
+			},
+		}
+	}
+
+	// asUser returns a context carrying the admission request identity (testUser plus the given groups),
+	// as the webhook sees at runtime.
+	asUser := func(groups ...string) context.Context {
+		return admission.NewContextWithRequest(context.Background(), admission.Request{
+			AdmissionRequest: admissionv1.AdmissionRequest{
+				UserInfo: authenticationv1.UserInfo{Username: testUser, Groups: groups},
+			},
+		})
+	}
+
+	// validator builds a validator seeded with the given template. Its SubjectAccessReview verdict is
+	// stubbed: a get is allowed only for the "namespace/name" keys in allow. The fake client has no
+	// authorizer, so a Create interceptor plays the API server and records the attributes each review
+	// asked about.
+	validator := func(allow map[string]bool, captured *[]authorizationv1.ResourceAttributes, objs ...runtime.Object) *IntegrationTemplateRefValidator {
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithRESTMapper(rayClusterMapper()).
+			WithRuntimeObjects(objs...).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Create: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+					review, ok := obj.(*authorizationv1.SubjectAccessReview)
+					if !ok {
+						return cl.Create(ctx, obj, opts...)
+					}
+					attrs := review.Spec.ResourceAttributes
+					if captured != nil {
+						*captured = append(*captured, *attrs)
+					}
+					review.Status.Allowed = allow[attrs.Namespace+"/"+attrs.Name]
+					return nil
+				},
+			}).
+			Build()
+		return NewIntegrationTemplateRefValidator(c, sharedNamespace)
+	}
+
+	// authorize runs the one-pass admission flow the webhook uses for a non-admin caller: Validate does the
+	// correctness checks and, because authorize=true, the per-resource SubjectAccessReview -- reusing the
+	// template it fetched for correctness so the read happens once. Warnings are dropped to keep each spec
+	// focused on the access decision.
+	authorize := func(v *IntegrationTemplateRefValidator, ctx context.Context, ws *workspacev1alpha1.Workspace) error {
+		_, err := v.Validate(ctx, ws, true)
+		return err
+	}
+
+	It("allows a workspace when the user can get the resolved resource", func() {
+		var captured []authorizationv1.ResourceAttributes
+		v := validator(map[string]bool{workspaceNamespace + "/cluster-a": true}, &captured, template())
+
+		err := authorize(v, asUser(),
+			workspaceRef(param("rayClusterName", "cluster-a"), param("rayClusterNamespace", workspaceNamespace)))
+
+		Expect(err).NotTo(HaveOccurred())
+		// The review must target the fully resolved resource, not the raw template expression.
+		Expect(captured).To(ConsistOf(authorizationv1.ResourceAttributes{
+			Verb: "get", Group: testRayGroup, Resource: "rayclusters", Namespace: workspaceNamespace, Name: "cluster-a",
+		}))
+	})
+
+	It("rejects a workspace when the user cannot get a resource in another namespace", func() {
+		v := validator(map[string]bool{workspaceNamespace + "/cluster-a": true}, nil, template())
+
+		err := authorize(v, asUser(),
+			workspaceRef(param("rayClusterName", "cluster-b"), param("rayClusterNamespace", otherNamespace)))
+
+		Expect(err).To(MatchError(ContainSubstring(`may not get RayCluster "cluster-b" in namespace "team-b"`)))
+		Expect(err).To(MatchError(ContainSubstring("alice")))
+	})
+
+	It("distinguishes two resources in the same namespace by name", func() {
+		v := validator(map[string]bool{workspaceNamespace + "/cluster-a": true}, nil, template())
+		ns := param("rayClusterNamespace", workspaceNamespace)
+
+		allowed := authorize(v, asUser(), workspaceRef(param("rayClusterName", "cluster-a"), ns))
+		Expect(allowed).NotTo(HaveOccurred())
+
+		denied := authorize(v, asUser(), workspaceRef(param("rayClusterName", "cluster-b"), ns))
+		Expect(denied).To(HaveOccurred())
+	})
+
+	It("defaults an omitted resourceRef namespace to the workspace namespace", func() {
+		tmpl := template()
+		tmpl.Spec.ResourceRefs[0].Metadata.Namespace = ""
+
+		var captured []authorizationv1.ResourceAttributes
+		v := validator(map[string]bool{workspaceNamespace + "/cluster-a": true}, &captured, tmpl)
+
+		err := authorize(v, asUser(), workspaceRef(param("rayClusterName", "cluster-a")))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(captured).To(HaveLen(1))
+		Expect(captured[0].Namespace).To(Equal(workspaceNamespace))
+	})
+
+	It("rejects an empty resolved resource name rather than authorizing a blank get", func() {
+		// A parameter may be supplied with an empty value; the resolver rejects an empty name so the
+		// webhook never issues a SubjectAccessReview against a blank resource name.
+		reviewed := false
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithRESTMapper(rayClusterMapper()).
+			WithRuntimeObjects(template()).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Create: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+					if _, ok := obj.(*authorizationv1.SubjectAccessReview); ok {
+						reviewed = true
+					}
+					return cl.Create(ctx, obj, opts...)
+				},
+			}).
+			Build()
+		v := NewIntegrationTemplateRefValidator(c, sharedNamespace)
+
+		err := authorize(v, asUser(),
+			workspaceRef(param("rayClusterName", ""), param("rayClusterNamespace", workspaceNamespace)))
+		Expect(err).To(HaveOccurred())
+		Expect(reviewed).To(BeFalse())
+	})
+
+	It("presents the user's groups to the review", func() {
+		var seenGroups []string
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithRESTMapper(rayClusterMapper()).
+			WithRuntimeObjects(template()).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Create: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+					review := obj.(*authorizationv1.SubjectAccessReview)
+					seenGroups = review.Spec.Groups
+					review.Status.Allowed = true
+					return nil
+				},
+			}).
+			Build()
+		v := NewIntegrationTemplateRefValidator(c, sharedNamespace)
+
+		err := authorize(v, asUser("readers", "system:authenticated"),
+			workspaceRef(param("rayClusterName", "cluster-a"), param("rayClusterNamespace", workspaceNamespace)))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(seenGroups).To(ContainElements("readers", "system:authenticated"))
+	})
+
+	It("fails closed when the review cannot be created", func() {
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithRESTMapper(rayClusterMapper()).
+			WithRuntimeObjects(template()).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Create: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+					return context.DeadlineExceeded
+				},
+			}).
+			Build()
+		v := NewIntegrationTemplateRefValidator(c, sharedNamespace)
+
+		err := authorize(v, asUser(),
+			workspaceRef(param("rayClusterName", "cluster-a"), param("rayClusterNamespace", workspaceNamespace)))
+		Expect(err).To(MatchError(ContainSubstring("authorizing access")))
+	})
+
+	It("skips authorization for a template with no resource references", func() {
+		reviewed := false
+		bare := &workspacev1alpha1.WorkspaceIntegrationTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: testIntegrationName, Namespace: workspaceNamespace},
+		}
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithRESTMapper(rayClusterMapper()).
+			WithRuntimeObjects(bare).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Create: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+					if _, ok := obj.(*authorizationv1.SubjectAccessReview); ok {
+						reviewed = true
+					}
+					return cl.Create(ctx, obj, opts...)
+				},
+			}).
+			Build()
+		v := NewIntegrationTemplateRefValidator(c, sharedNamespace)
+
+		err := authorize(v, asUser(), workspaceRef())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(reviewed).To(BeFalse())
 	})
 })

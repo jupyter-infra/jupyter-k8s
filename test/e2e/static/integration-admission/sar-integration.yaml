@@ -1,0 +1,20 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceIntegrationTemplate
+metadata:
+  name: sar-integration
+  namespace: default
+spec:
+  displayName: SAR Integration (authorization e2e)
+  # References a single Service resource. The integrationTemplateRef validator issues a get
+  # SubjectAccessReview for services/<serviceName> in the workspace namespace against the requesting
+  # user, so the referenced target's kind (Service) is what the impersonated user must be able to get.
+  # The Service need not exist -- admission authorizes the read, it does not perform it.
+  parameters:
+    - name: serviceName
+  resourceRefs:
+    - name: cache
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: "{{ .Parameters.serviceName }}"
+        namespace: "{{ .Workspace.Namespace }}"

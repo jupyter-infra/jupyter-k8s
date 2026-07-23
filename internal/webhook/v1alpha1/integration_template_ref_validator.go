@@ -13,12 +13,16 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	authenticationv1 "k8s.io/api/authentication/v1"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 )
 
 // IntegrationTemplateRefValidator validates a Workspace's integrationTemplateRefs at admission on three
@@ -53,13 +57,24 @@ func NewIntegrationTemplateRefValidator(c client.Client, sharedNamespace string)
 // Validate checks each integrationTemplateRef the workspace attaches (see validateRef), rejecting the
 // workspace on the first invalid one. It also returns non-blocking warnings (supplied parameters the
 // template does not declare) aggregated across all refs -- surfaced to the user without failing admission.
-func (v *IntegrationTemplateRefValidator) Validate(ctx context.Context, workspace *workspacev1alpha1.Workspace) (admission.Warnings, error) {
+//
+// authorize controls the per-ref permission check: when true, each ref's referenced resources are
+// authorized against the requesting user via SubjectAccessReview (the confused-deputy guard). The caller
+// passes false for the controller and cluster admins, who bypass permission checks -- they still get the
+// correctness checks (namespace scope, template existence, parameter completeness), which run for every
+// caller. The SubjectAccessReview reuses the template fetched for correctness in the same iteration, so
+// the referenced template is read exactly once per ref.
+func (v *IntegrationTemplateRefValidator) Validate(ctx context.Context, workspace *workspacev1alpha1.Workspace, authorize bool) (admission.Warnings, error) {
 	log := logf.FromContext(ctx).WithName("integration-template-ref-validator").
 		WithValues("workspace", workspace.GetName(), "namespace", workspace.GetNamespace())
+	req, err := admission.RequestFromContext(ctx)
+	if authorize && err != nil {
+		return nil, fmt.Errorf("cannot authorize integration resources without admission request context: %w", err)
+	}
 	var warnings admission.Warnings
 	for i := range workspace.Spec.IntegrationTemplateRefs {
 		ref := &workspace.Spec.IntegrationTemplateRefs[i]
-		refWarnings, err := v.validateRef(ctx, log, workspace, ref)
+		refWarnings, err := v.validateRef(ctx, log, workspace, ref, authorize, req.UserInfo)
 		if err != nil {
 			// Distinguish a template READ failure (API/transient -- not the user's fault) from an actual
 			// invalid ref, so the message and level match the cause instead of always claiming "invalid".
@@ -88,8 +103,14 @@ func (v *IntegrationTemplateRefValidator) Validate(ctx context.Context, workspac
 //
 // Supplied-but-undeclared parameters are returned as a warning (they are ignored at resolve time, so
 // they do not break the workspace, but often signal a typo).
+//
+// When authorize is true, after the correctness checks pass it also authorizes the requesting user for
+// every resource the template references (see authorizeReferencedResources), reusing the template fetched
+// above so the read happens once. authorize is false for the controller and admins, who skip this
+// permission check but still get the correctness checks.
 func (v *IntegrationTemplateRefValidator) validateRef(
 	ctx context.Context, log logr.Logger, workspace *workspacev1alpha1.Workspace, ref *workspacev1alpha1.IntegrationTemplateRef,
+	authorize bool, user authenticationv1.UserInfo,
 ) (admission.Warnings, error) {
 	if err := v.validateNamespaceScope(ref, workspace.Namespace); err != nil {
 		return nil, err
@@ -118,7 +139,114 @@ func (v *IntegrationTemplateRefValidator) validateRef(
 	if err := validateWorkspaceIntegrationParameters(ref, tmpl); err != nil {
 		return nil, err
 	}
+
+	// Permission check LAST, after the cheap in-memory correctness checks above, and only for non-exempt
+	// callers: issue a SubjectAccessReview per referenced resource so a user cannot reference a resource
+	// they themselves cannot get and have the operator read it on their behalf (confused-deputy guard).
+	// Reuses tmpl fetched above -- the referenced template is read once per ref.
+	if authorize {
+		if err := v.authorizeReferencedResources(ctx, workspace, ref, tmpl, user); err != nil {
+			return nil, err
+		}
+	}
+
 	return unusedParameterWarnings(ref, tmpl), nil
+}
+
+// +kubebuilder:rbac:groups=authorization.k8s.io,resources=subjectaccessreviews,verbs=create
+
+// authorizeReferencedResources issues a get SubjectAccessReview, as the requesting user, for each
+// resource the template references. It resolves each resourceRef's name/namespace from the workspace and
+// the ref's parameters using the SAME resolver the controller uses at reconcile, so admission authorizes
+// exactly the object reconcile will fetch (including the resolver's empty-value guards). It fails closed:
+// the first denied or unevaluable review rejects the workspace.
+func (v *IntegrationTemplateRefValidator) authorizeReferencedResources(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	ref *workspacev1alpha1.IntegrationTemplateRef,
+	tmpl *workspacev1alpha1.WorkspaceIntegrationTemplate,
+	user authenticationv1.UserInfo,
+) error {
+	// Metadata expressions may reference only .Workspace and .Parameters ({{ resource }} is rejected on
+	// metadata by template validation), so a resolver with no live-value provider is sufficient.
+	resolver := controller.NewIntegrationTemplateResolver(nil)
+	data := controller.IntegrationTemplateData{
+		Workspace:  controller.IntegrationWorkspaceData{Name: workspace.Name, Namespace: workspace.Namespace},
+		Parameters: ref.ParametersMap(),
+	}
+
+	for i := range tmpl.Spec.ResourceRefs {
+		resourceRef := &tmpl.Spec.ResourceRefs[i]
+
+		// The controller defaults an omitted resourceRef namespace to the workspace's namespace; resolve
+		// against that copy so the review targets the same object reconcile will fetch.
+		effectiveRef := *resourceRef
+		if effectiveRef.Metadata.Namespace == "" {
+			effectiveRef.Metadata.Namespace = workspace.Namespace
+		}
+		name, namespace, err := resolver.ResolveResourceRef(&effectiveRef, data)
+		if err != nil {
+			return fmt.Errorf("integrationTemplateRefs[%q]: %w", ref.Name, err)
+		}
+
+		resource, err := v.resourceForGVK(resourceRef.APIVersion, resourceRef.Kind)
+		if err != nil {
+			return fmt.Errorf("integrationTemplateRefs[%q]: %w", ref.Name, err)
+		}
+
+		// Namespace is always set here because every referenced kind is currently namespaced. If
+		// cluster-scoped ref support is ever added, gate Namespace on the resource's REST mapping scope
+		// (mapping.Scope == meta.RESTScopeNamespace) -- a cluster-scoped ref must omit Namespace or the
+		// SubjectAccessReview will not match the cluster-scoped resource.
+		review := &authorizationv1.SubjectAccessReview{
+			Spec: authorizationv1.SubjectAccessReviewSpec{
+				User:   user.Username,
+				Groups: user.Groups,
+				UID:    user.UID,
+				Extra:  convertUserExtraToAuthorization(user.Extra),
+				ResourceAttributes: &authorizationv1.ResourceAttributes{
+					Verb:      "get",
+					Group:     resource.Group,
+					Resource:  resource.Resource,
+					Namespace: namespace,
+					Name:      name,
+				},
+			},
+		}
+		if err := v.client.Create(ctx, review); err != nil {
+			return fmt.Errorf("integrationTemplateRefs[%q]: authorizing access to %s %q in namespace %q: %w",
+				ref.Name, resourceRef.Kind, name, namespace, err)
+		}
+		if !review.Status.Allowed {
+			return fmt.Errorf("integrationTemplateRefs[%q]: user %q may not get %s %q in namespace %q",
+				ref.Name, user.Username, resourceRef.Kind, name, namespace)
+		}
+	}
+	return nil
+}
+
+// resourceForGVK maps a resourceRef's apiVersion/kind to its API resource using the RESTMapper.
+func (v *IntegrationTemplateRefValidator) resourceForGVK(apiVersion, kind string) (schema.GroupVersionResource, error) {
+	gvk := schema.FromAPIVersionAndKind(apiVersion, kind)
+	mapping, err := v.client.RESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err != nil {
+		return schema.GroupVersionResource{}, fmt.Errorf("cannot map %s to an API resource: %w", gvk, err)
+	}
+	return mapping.Resource, nil
+}
+
+// convertUserExtraToAuthorization converts admission UserInfo extra attributes (authentication/v1) into
+// the SubjectAccessReview extra shape (authorization/v1) so the review carries the same identity the API
+// server would see on a direct request.
+func convertUserExtraToAuthorization(extra map[string]authenticationv1.ExtraValue) map[string]authorizationv1.ExtraValue {
+	if len(extra) == 0 {
+		return nil
+	}
+	out := make(map[string]authorizationv1.ExtraValue, len(extra))
+	for key, value := range extra {
+		out[key] = authorizationv1.ExtraValue(value)
+	}
+	return out
 }
 
 // validateNamespaceScope rejects an integrationTemplateRefs[].namespace that targets a namespace other

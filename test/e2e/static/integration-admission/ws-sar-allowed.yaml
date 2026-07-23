@@ -1,0 +1,23 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ws-sar-allowed
+  namespace: default
+spec:
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  # Identical to ws-sar-denied except it is submitted by sar-allowed-user, who additionally has get on
+  # services. The referenced-resource SubjectAccessReview therefore ALLOWs and the create is admitted.
+  integrationTemplateRefs:
+    - name: sar-integration
+      namespace: default
+      parameters:
+        - name: serviceName
+          value: shared-cache
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

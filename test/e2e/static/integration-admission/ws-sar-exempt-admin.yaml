@@ -1,0 +1,25 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ws-sar-exempt-admin
+  namespace: default
+spec:
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  # Submitted by an admin (system:masters, the webhook's DefaultAdminGroup). The integration resource
+  # authorization is SKIPPED for exempt callers, so this is admitted even though no explicit service-get
+  # RoleBinding is created for the admin -- proving the exempt bypass, and that the operator's own
+  # SubjectAccessReview-create grant is not required on the exempt path.
+  integrationTemplateRefs:
+    - name: sar-integration
+      namespace: default
+      parameters:
+        - name: serviceName
+          value: shared-cache
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
