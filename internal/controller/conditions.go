@@ -28,6 +28,11 @@ const (
 
 	// ConditionTypeDeleting indicates the Workspace is being deleted and resources are being cleaned up
 	ConditionTypeDeleting = "Deleting"
+
+	// IntegrationConditionTypeReady is the condition type on status.integrationStatuses[].conditions
+	// carrying an integration's probe verdict. Named after the positive state (Kubernetes convention),
+	// like ConditionTypeAvailable; its Status (True/False) holds the actual verdict.
+	IntegrationConditionTypeReady = "Ready"
 )
 
 // Condition reasons for Workspace resources
@@ -59,6 +64,18 @@ const (
 
 	// ConditionTypeDeleting reasons
 	ReasonDeletionInProgress = "DeletionInProgress"
+
+	// IntegrationConditionTypeReady reasons on status.integrationStatuses[].conditions (machine-readable, CamelCase).
+	IntegrationReasonReady       = "Ready"
+	IntegrationReasonProbeFailed = "ProbeFailed"
+	IntegrationReasonPodNotFound = "PodNotFound"
+	IntegrationReasonProbeError  = "ProbeError"
+	// IntegrationReasonNotResolved is reported on status.integrationStatuses[] for an attached
+	// integration that has no frozen resolution yet -- e.g. its first-attach capture failed because the
+	// referenced resource does not exist or the template is broken. Surfacing it (rather than logging
+	// only) lets an admin see an unresolved integration on the Workspace status. The detailed cause is
+	// in the operator logs (reconcileIntegrationFreeze); the status message points there.
+	IntegrationReasonNotResolved = "NotResolved"
 )
 
 // NewCondition creates a new condition with the specified status

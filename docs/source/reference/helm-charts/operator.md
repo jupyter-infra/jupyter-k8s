@@ -106,6 +106,10 @@ Chart version: 0.1.0 | App version: 0.1.0
   - string
   - `"5m"`
   -
+* - `integrationProbe.checkInterval`
+  - string
+  - `"5m"`
+  -
 * - `manager.affinity`
   - object
   - `{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"kubernetes.io/arch","operator":"In","values":["amd64","arm64","ppc64le","s390x"]},{"key":"kubernetes.io/os","operator":"In","values":["linux"]}]}]}}}`

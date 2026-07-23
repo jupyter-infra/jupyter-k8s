@@ -5283,6 +5283,8 @@ spec:
                       times out. Default: 5. Minimum: 1.'
                     format: int32
                     type: integer
+                required:
+                - exec
                 type: object
             required:
             - displayName
