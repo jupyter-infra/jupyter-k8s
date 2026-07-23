@@ -1,20 +1,34 @@
 {{- if .Values.extensionApi.enable }}
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRole
 metadata:
   labels:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/name: {{ include "jupyter-k8s.name" . }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     app.kubernetes.io/instance: {{ .Release.Name }}
-  name: jupyter-k8s-extension-api-auth
-  namespace: kube-system
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: extension-apiserver-authentication-reader
+  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "read-auth-configmap" "context" $) }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["extension-apiserver-authentication"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "jupyter-k8s.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "read-auth-configmap" "context" $) }}
 subjects:
-- kind: ServiceAccount
-  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "controller-manager" "context" $) }}
-  namespace: {{ .Release.Namespace }}
+  - kind: ServiceAccount
+    name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "controller-manager" "context" $) }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "read-auth-configmap" "context" $) }}
+  apiGroup: rbac.authorization.k8s.io
 {{- end }}
