@@ -43,3 +43,6 @@ const (
 
 // labelValueTrue is the string value used for boolean-style Kubernetes labels.
 const labelValueTrue = "true"
+
+// fieldStorageSize is the spec path for the primary storage size, used in violation field paths.
+const fieldStorageSize = "spec.storage.size"

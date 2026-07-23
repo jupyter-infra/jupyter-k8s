@@ -8,6 +8,17 @@ On **create and update**, the webhook rejects templates whose `defaultAccessStra
 
 On **update**, when constraint fields change, the webhook returns a **warning** telling the user that the template controller will re-validate affected workspaces.
 
+## Self-consistency
+
+On **create and update**, the webhook rejects a template whose own constraints are internally inconsistent:
+
+- `defaultImage` must be a member of `allowedImages` when that list is non-empty and `allowCustomImages` is false.
+- `primaryStorage.minSize` must not exceed `primaryStorage.maxSize`.
+- `resourceBounds` `min` must not exceed `max` for any resource.
+- `idleShutdownOverrides.minIdleTimeoutInMinutes` must not exceed `maxIdleTimeoutInMinutes`.
+- `idleShutdownOverrides.allow: false` requires a `defaultIdleShutdown` for workspaces to match against.
+- an enabled `defaultIdleShutdown.idleTimeoutInMinutes` must fall within the `idleShutdownOverrides` timeout bounds.
+
 ## Constraint fields
 
 Changes to any of the following fields trigger the warning:

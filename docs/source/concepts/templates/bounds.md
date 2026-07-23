@@ -60,11 +60,17 @@ spec:
     maxIdleTimeoutInMinutes: 480
 ```
 
-`allow` controls whether workspace users may disable idle shutdown, and whether the `idleShutdown` field of a workspace may diverge from the template's defined defaults. It matters because the `idleShutdown.detection` settings are deeply tied to the application running in the workspace. Misconfiguring the `idleShutdown.detection` field of a workspace may prevent the operator from shutting down idle workspaces.
+`allow` controls whether workspace users may disable idle shutdown.
+- when set to `false`: the workspace idle shutdown config must match the template's defaults exactly, except that `idleTimeoutInMinutes` may vary within certain bounds (see below).
+- when set to `true`: workspaces may disable idle shutdown, or vary any field of `idleShutdown`.
 
-The `minIdleTimeoutInMinutes` and `maxIdleTimeoutInMinutes` bounds are independent of `allow`: they cap `idleShutdown.idleTimeoutInMinutes` on any workspace with idle shutdown *enabled*, whether or not overrides are allowed. So even with `allow: false`, you can still permit users to tune the timeout within those bounds. If `allow: false` and `minIdleTimeoutInMinutes` is omitted, the enforced minimum falls back to the template's `spec.defaultIdleShutdown.idleTimeoutInMinutes`; `maxIdleTimeoutInMinutes` behaves the same way. When `allow: true`, an omitted bound simply leaves that side unbounded.
+```{note}
+`idleShutdown.detection` settings are deeply tied to the application running in the workspace. Misconfiguring the `idleShutdown.detection` field of a workspace may prevent the operator from shutting down idle workspaces. If workspace users are not familiar with such settings, it is safer to set `allow: false`.
+```
 
-A template with `allow: false` must define `defaultIdleShutdown`, or the template webhook rejects it.
+The `minIdleTimeoutInMinutes` and `maxIdleTimeoutInMinutes` are always enforced:
+- with `allow: false`: a workspace may set its own idle timeout within these bounds; if `min` and/or `max` is omitted, the implicit lower or upper bound is the template's default.
+- with `allow: true`: a workspace that enables idle shutdown must set its timeout within these bounds; if `min` and/or `max` is omitted, that side is unbounded.
 
 ## Environment and label requirements
 
