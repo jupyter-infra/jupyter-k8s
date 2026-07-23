@@ -8,8 +8,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -198,7 +200,7 @@ func proberResourceManager(objs ...client.Object) *ResourceManager {
 	c := fake.NewClientBuilder().WithScheme(proberTestScheme()).WithObjects(objs...).Build()
 	return NewResourceManager(
 		c, c.Scheme(),
-		NewDeploymentBuilder(c.Scheme(), WorkspaceControllerOptions{}, c),
+		NewDeploymentBuilder(c.Scheme(), WorkspaceControllerOptions{}),
 		NewServiceBuilder(c.Scheme()),
 		NewPVCBuilder(c.Scheme()),
 		NewAccessResourcesBuilder(),
@@ -434,4 +436,114 @@ func TestPreserveConditionTimestamp(t *testing.T) {
 			t.Errorf("no prior: timestamp must be untouched %v, got %v", t1, next.Conditions[0].LastTransitionTime)
 		}
 	})
+}
+
+// fakeExitError satisfies the local exitStatusError interface (mirrors k8s.io/.../exec.CodeExitError):
+// a command that ran and exited non-zero. It must classify as a real failure (ProbeFailed), never transient.
+type fakeExitError struct{ code int }
+
+func (e fakeExitError) Error() string {
+	return fmt.Sprintf("command terminated with exit code %d", e.code)
+}
+func (e fakeExitError) Exited() bool    { return true }
+func (e fakeExitError) ExitStatus() int { return e.code }
+
+// fakeNetError satisfies net.Error: a transport-level failure reaching the exec stream.
+type fakeNetError struct{}
+
+func (fakeNetError) Error() string   { return "dial tcp: connection refused" }
+func (fakeNetError) Timeout() bool   { return false }
+func (fakeNetError) Temporary() bool { return true }
+
+// TestIsTransientProbeError covers the ProbeError-vs-ProbeFailed classifier directly: transport/infra
+// failures (context deadline/cancel, net.Error) are transient (never got a verdict -> ProbeError), while a
+// real non-zero command exit (exec.CodeExitError-shaped) or any unclassified error is a genuine failure
+// (ProbeFailed). A nil error is not transient.
+func TestIsTransientProbeError(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil -> not transient", nil, false},
+		{"context deadline -> transient", context.DeadlineExceeded, true},
+		{"context cancelled -> transient", context.Canceled, true},
+		{"net error -> transient", fakeNetError{}, true},
+		{"wrapped net error -> transient", fmt.Errorf("exec stream: %w", fakeNetError{}), true},
+		{"non-zero exit -> not transient", fakeExitError{code: 1}, false},
+		{"wrapped non-zero exit -> not transient", fmt.Errorf("exec failed: %w", fakeExitError{code: 7}), false},
+		// A command that exited non-zero AND carries a wrapped deadline must still be a real failure:
+		// the exit-status check takes precedence over the context-error check.
+		{"exit error wrapping deadline -> not transient", fmt.Errorf("%w (%w)", fakeExitError{code: 1}, context.DeadlineExceeded), false},
+		{"plain unclassified error -> not transient (treated as real failure)", fmt.Errorf("something odd"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isTransientProbeError(tc.err); got != tc.want {
+				t.Errorf("isTransientProbeError(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestTruncateProbeMessage covers the CRD-ceiling guard: a short message passes through untouched, an
+// over-cap message is clipped to maxProbeMessageBytes (plus the marker) on a valid UTF-8 boundary so a
+// multi-byte rune is never split.
+func TestTruncateProbeMessage(t *testing.T) {
+	t.Run("under cap -> unchanged", func(t *testing.T) {
+		msg := "cannot connect to GCS"
+		if got := truncateProbeMessage(msg); got != msg {
+			t.Errorf("short message must pass through unchanged, got %q", got)
+		}
+	})
+
+	t.Run("over cap -> clipped with marker, stays valid UTF-8", func(t *testing.T) {
+		got := truncateProbeMessage(strings.Repeat("a", maxProbeMessageBytes+500))
+		if len(got) > maxProbeMessageBytes+len(" ...(truncated)") {
+			t.Errorf("clipped message exceeds cap+marker: len=%d", len(got))
+		}
+		if !strings.HasSuffix(got, " ...(truncated)") {
+			t.Errorf("clipped message must carry the truncation marker, got tail %q", got[len(got)-20:])
+		}
+		if !utf8.ValidString(got) {
+			t.Error("clipped message must remain valid UTF-8")
+		}
+	})
+
+	t.Run("over cap on a multi-byte boundary -> never splits a rune", func(t *testing.T) {
+		// Fill exactly up to one byte past the cap with 3-byte runes so the naive cut at
+		// maxProbeMessageBytes lands mid-rune; the boundary back-off must repair it.
+		msg := strings.Repeat("世", maxProbeMessageBytes) // each "世" is 3 bytes
+		got := truncateProbeMessage(msg)
+		if !utf8.ValidString(got) {
+			t.Error("truncation split a multi-byte rune -> invalid UTF-8")
+		}
+		if !strings.HasSuffix(got, " ...(truncated)") {
+			t.Error("multi-byte clip must still carry the truncation marker")
+		}
+	})
+}
+
+// TestIntegrationProber_EmptyExecCommand covers the defensive guard in Probe: a probe that reaches Probe
+// with a nil/empty Exec.Command reports ProbeError (not-ready) rather than panicking on the exec call.
+func TestIntegrationProber_EmptyExecCommand(t *testing.T) {
+	pod := runningWSPod(testNamespace, "empty-cmd-ws")
+	prober := NewIntegrationProber(fake.NewClientBuilder().WithScheme(scheme.Scheme).Build(), &fakeExec{}, DefaultIntegrationProbePeriod)
+
+	cases := map[string]*workspacev1alpha1.IntegrationStatusProbe{
+		"nil exec":      {Exec: nil},
+		"empty command": {Exec: &corev1.ExecAction{Command: []string{}}},
+	}
+	for name, probe := range cases {
+		t.Run(name, func(t *testing.T) {
+			st := prober.Probe(context.Background(), pod, "ray-integration", probe)
+			if st.State != IntegrationStateDegraded {
+				t.Errorf("%s: want Degraded, got state=%q", name, st.State)
+			}
+			cond := findReadyCond(st.Conditions)
+			if cond == nil || cond.Reason != IntegrationReasonProbeError {
+				t.Errorf("%s: want reason=%q, got %+v", name, IntegrationReasonProbeError, cond)
+			}
+		})
+	}
 }

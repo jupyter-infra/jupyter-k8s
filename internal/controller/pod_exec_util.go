@@ -95,8 +95,8 @@ func (p *PodExecUtil) ExecInPodWithStderr(ctx context.Context, pod *corev1.Pod, 
 }
 
 // ExecInPod executes a command in a specific container of a pod with optional stdin input, returning
-// only stdout. It delegates to ExecInPodWithStderr (the stderr is folded into the returned error there),
-// so both paths share one implementation.
+// only stdout and the exec error. It delegates to ExecInPodWithStderr and discards the separate stderr
+// return value (which that function logs at V(1) on failure), so both paths share one implementation.
 func (p *PodExecUtil) ExecInPod(ctx context.Context, pod *corev1.Pod, containerName string, cmd []string, stdin string) (string, error) {
 	stdout, _, err := p.ExecInPodWithStderr(ctx, pod, containerName, cmd, stdin)
 	return stdout, err

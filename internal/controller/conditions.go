@@ -64,6 +64,18 @@ const (
 
 	// ConditionTypeDeleting reasons
 	ReasonDeletionInProgress = "DeletionInProgress"
+
+	// IntegrationConditionTypeReady reasons on status.integrationStatuses[].conditions (machine-readable, CamelCase).
+	IntegrationReasonReady       = "Ready"
+	IntegrationReasonProbeFailed = "ProbeFailed"
+	IntegrationReasonPodNotFound = "PodNotFound"
+	IntegrationReasonProbeError  = "ProbeError"
+	// IntegrationReasonNotResolved is reported on status.integrationStatuses[] for an attached
+	// integration that has no frozen resolution yet -- e.g. its first-attach capture failed because the
+	// referenced resource does not exist or the template is broken. Surfacing it (rather than logging
+	// only) lets an admin see an unresolved integration on the Workspace status. The detailed cause is
+	// in the operator logs (reconcileIntegrationFreeze); the status message points there.
+	IntegrationReasonNotResolved = "NotResolved"
 )
 
 // NewCondition creates a new condition with the specified status

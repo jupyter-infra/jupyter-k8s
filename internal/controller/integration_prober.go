@@ -20,36 +20,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// Integration readiness probe reasons (machine-readable, CamelCase).
-const (
-	IntegrationReasonReady       = "Ready"
-	IntegrationReasonProbeFailed = "ProbeFailed"
-	IntegrationReasonPodNotFound = "PodNotFound"
-	IntegrationReasonProbeError  = "ProbeError"
-	// IntegrationReasonNotResolved is reported on status.integrationStatuses[] for an attached
-	// integration that has no frozen resolution yet -- e.g. its first-attach capture failed because the
-	// referenced resource does not exist or the template is broken. Surfacing it (rather than logging
-	// only) lets an admin see an unresolved integration on the Workspace status. The detailed cause is
-	// in the operator logs (reconcileIntegrationFreeze); the status message points there.
-	IntegrationReasonNotResolved = "NotResolved"
-
-	DefaultIntegrationProbeTimeoutSeconds = 5
-	// DefaultIntegrationProbePeriod is the default base re-probe cadence when the operator sets no
-	// --integration-probe-period. The period is an operator-level setting, not author-selectable per
-	// template. The Running reconcile has no watch on the referenced resource, so it requeues on this
-	// period to refresh report-only status -- kept coarse (5m) because integration health is reported,
-	// not gating, so it need not be tight. Mirrors DefaultIdleCheckInterval.
-	DefaultIntegrationProbePeriod = 5 * time.Minute
-	// MinIntegrationProbePeriod is the floor a configured --integration-probe-period is clamped up to, so
-	// a misconfigured tiny value cannot hot-loop the reconciler. Mirrors MinIdleCheckInterval.
-	MinIntegrationProbePeriod = 1 * time.Second
-
-	// maxProbeMessageBytes bounds the probe verdict message (built from the command's stderr/stdout)
-	// before it is written to a condition. The CRD caps conditions[].message at 32768 bytes, so a
-	// chatty probe that dumps kilobytes to stderr would otherwise fail the status write outright; we
-	// keep it small (a few KB is plenty to diagnose a failure) and well under the CRD ceiling.
-	maxProbeMessageBytes = 2048
-)
+// maxProbeMessageBytes bounds the probe verdict message (built from the command's stderr/stdout)
+// before it is written to a condition. The CRD caps conditions[].message at 32768 bytes, so a
+// chatty probe that dumps kilobytes to stderr would otherwise fail the status write outright; we
+// keep it small (a few KB is plenty to diagnose a failure) and well under the CRD ceiling.
+const maxProbeMessageBytes = 2048
 
 // The probe execs into the primary workspace container (PrimaryContainerName, defined in
 // constants.go) so it observes the pod's real network/auth context -- mirroring the idle detector --
@@ -130,12 +105,13 @@ func (p *IntegrationProber) Probe(
 		probeCtx, pod, PrimaryContainerName, probe.Exec.Command, "")
 	if execErr != nil {
 		msg := truncateProbeMessage(firstNonEmpty(stderr, stdout, execErr.Error()))
-		// Distinguish a genuine probe verdict from an infra hiccup so the requeue cadence is right:
+		// Distinguish a genuine unhealthy verdict from an infra hiccup so the reported reason is accurate:
 		//   - A transient/infra error (context deadline/cancellation, a network dial/timeout, or an API
-		//     transport failure) means we never got a command verdict. Report ProbeError, which retries
-		//     on the BASE cadence -- backing off would just delay recovery from a temporary blip.
-		//   - Only a real non-zero command exit (an exec.CodeExitError, or any other error we can't
-		//     classify) is a true "integration unhealthy" verdict -> ProbeFailed, which backs off.
+		//     transport failure) means we never got a command verdict -> ProbeError.
+		//   - A real non-zero command exit (an exec.CodeExitError, or any other error we can't classify)
+		//     is a true "integration unhealthy" verdict -> ProbeFailed.
+		// The classification sets only the reported reason (and the log line); it does not change the
+		// requeue cadence -- every verdict re-probes on the same flat ProbePeriod (see probeIntegrationStatus).
 		if isTransientProbeError(execErr) {
 			logger.V(1).Info("Integration status probe errored (transient)", "reason", IntegrationReasonProbeError, "message", msg)
 			return buildIntegrationStatus(integrationName, false, IntegrationReasonProbeError, msg)
@@ -148,9 +124,9 @@ func (p *IntegrationProber) Probe(
 }
 
 // isTransientProbeError reports whether an ExecInPodWithStderr error is an infrastructure/transport
-// failure (we never obtained a command verdict) rather than a genuine non-zero command exit. Transient
-// errors retry on the base cadence; a real command failure backs off. A non-zero exit surfaces as an
-// exec.CodeExitError (which reports Exited()==true), so anything satisfying that interface -- or any
+// failure (we never obtained a command verdict) rather than a genuine non-zero command exit. It selects
+// the reported reason only (ProbeError vs ProbeFailed), not the requeue cadence. A non-zero exit surfaces
+// as an exec.CodeExitError (which reports Exited()==true), so anything satisfying that interface -- or any
 // error not otherwise recognized as transport-level -- is treated as a real command failure.
 func isTransientProbeError(err error) bool {
 	if err == nil {
