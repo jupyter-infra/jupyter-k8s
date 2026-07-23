@@ -56,4 +56,21 @@ const (
 	urlProbeAPIStatus           = "http://10.96.0.1:8888/api/status"
 	testHostIP                  = "10.96.0.1"
 	timestampFixed              = "2024-01-01T00:00:00Z"
+
+	// Integration test literals, shared across the integration test files
+	// (deployment/resource-manager/prober). rayClusterKind and rayClusterNameKey already have consts in
+	// integration_template_resolver_test.go; the default namespace reuses testNamespace.
+	rayIntegrationName      = "ray-integration"
+	raySidecarName          = "ray-sidecar"
+	rayTmpVolume            = "ray-tmp"
+	rayClusterNamespaceKey  = "rayClusterNamespace"
+	rayGroup                = "ray.io"
+	rayAPIVersion           = "ray.io/v1"
+	rayAddressEnv           = "RAY_ADDRESS"
+	rayClusterNameExpr      = "{{ .Parameters.rayClusterName }}"
+	headServiceNameJSONPath = "{.status.head.serviceName}"
+	testSvcA                = "svc-a"
+	testClusterB            = "cluster-b"
+	testReasonReady         = "Ready"
+	testReadyMessage        = "ready"
 )

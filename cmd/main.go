@@ -147,6 +147,7 @@ func main() {
 	var newKeyUseDelay time.Duration
 	var pluginEndpointsFlag string
 	var idleCheckInterval time.Duration
+	var integrationProbePeriod time.Duration
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -192,6 +193,8 @@ func main() {
 		"Comma-separated list of plugin name=endpoint pairs (e.g. aws=http://localhost:8080)")
 	flag.DurationVar(&idleCheckInterval, "idle-check-interval", controller.DefaultIdleCheckInterval,
 		"Interval between idle status checks for running workspaces")
+	flag.DurationVar(&integrationProbePeriod, "integration-probe-period", controller.DefaultIntegrationProbePeriod,
+		"Base cadence for report-only integration status probes on running workspaces")
 	opts := zap.Options{
 		Development: false,
 	}
@@ -331,6 +334,7 @@ func main() {
 		DefaultTemplateNamespace:    defaultTemplateNamespace,
 		PluginEndpoints:             pluginEndpoints,
 		IdleCheckInterval:           idleCheckInterval,
+		IntegrationProbePeriod:      integrationProbePeriod,
 	}
 
 	// Convert parsed GVKWatches to controller.GVKWatch format
@@ -377,6 +381,14 @@ func main() {
 	if os.Getenv("ENABLE_WORKSPACE_TEMPLATE_WEBHOOK") != "false" {
 		if err := webhookv1alpha1.SetupWorkspaceTemplateWebhookWithManager(mgr, defaultTemplateNamespace); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "WorkspaceTemplate")
+			os.Exit(1)
+		}
+	}
+
+	// nolint:goconst
+	if os.Getenv("ENABLE_WORKSPACE_INTEGRATION_TEMPLATE_WEBHOOK") != "false" {
+		if err := webhookv1alpha1.SetupWorkspaceIntegrationTemplateWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "WorkspaceIntegrationTemplate")
 			os.Exit(1)
 		}
 	}

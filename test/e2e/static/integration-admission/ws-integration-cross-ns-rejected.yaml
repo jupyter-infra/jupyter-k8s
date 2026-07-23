@@ -1,0 +1,23 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ws-integration-cross-ns-rejected
+  namespace: default
+spec:
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  # Cross-namespace ref: targets namespace-team-b, which is neither the workspace's own namespace nor the
+  # configured shared namespace. The validating webhook must REJECT this (confused-deputy scope guard).
+  integrationTemplateRefs:
+    - name: valid-integration
+      namespace: namespace-team-b
+      parameters:
+        - name: serviceName
+          value: shared-cache
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

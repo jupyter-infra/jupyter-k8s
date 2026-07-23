@@ -56,6 +56,27 @@ webhooks:
     service:
       name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "controller-manager" "context" $) }}
       namespace: {{ .Release.Namespace }}
+      path: /validate-workspace-jupyter-org-v1alpha1-workspaceintegrationtemplate
+      port: 9443
+  failurePolicy: Ignore
+  name: vworkspaceintegrationtemplate-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - workspace.jupyter.org
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - workspaceintegrationtemplates
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ include "jupyter-k8s.resourceName" (dict "suffix" "controller-manager" "context" $) }}
+      namespace: {{ .Release.Namespace }}
       path: /validate-workspace-jupyter-org-v1alpha1-workspacetemplate
       port: 9443
   failurePolicy: Ignore
