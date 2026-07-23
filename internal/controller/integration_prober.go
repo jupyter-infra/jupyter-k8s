@@ -210,6 +210,70 @@ func preserveConditionTimestamp(prior, next *workspacev1alpha1.IntegrationStatus
 	}
 }
 
+// integrationEvent describes a Kubernetes Event to record for an integration status transition. A zero
+// value (Type == "") means "no event": the verdict did not transition in a way worth recording.
+type integrationEvent struct {
+	Type    string // corev1.EventTypeNormal or corev1.EventTypeWarning
+	Reason  string // IntegrationEventDegraded / IntegrationEventRecovered
+	Message string
+}
+
+// getIntegrationStatusEvent decides whether an integration's probe-verdict change warrants a Kubernetes
+// Event on the Workspace, and of what kind. It is EDGE-TRIGGERED to avoid event spam on the flat
+// report-only probe cadence: an event fires only on a verdict TRANSITION, never for an unchanged re-probe.
+//
+//   - newly-seen not-ready (no prior), Ready->not-ready, or a reason change while still not-ready
+//     (e.g. PodNotFound->ProbeFailed) -> Warning IntegrationDegraded.
+//   - not-ready -> Ready -> Normal IntegrationRecovered.
+//   - an unchanged verdict (same condition Status+Reason), or a healthy first attach (no prior, Ready)
+//     -> no event: a steady-state healthy integration is silent.
+//
+// Message is deliberately excluded from the change test (mirrors preserveConditionTimestamp): a failing
+// probe's stderr can vary run-to-run without the verdict changing, and must not trigger a fresh event.
+func getIntegrationStatusEvent(name string, prior, next *workspacev1alpha1.IntegrationStatus) integrationEvent {
+	if next == nil || len(next.Conditions) == 0 {
+		return integrationEvent{}
+	}
+	nextCond := next.Conditions[0]
+	nextReady := nextCond.Status == metav1.ConditionTrue
+
+	var hadPrior, priorReady bool
+	var priorReason string
+	if prior != nil && len(prior.Conditions) > 0 {
+		hadPrior = true
+		priorReady = prior.Conditions[0].Status == metav1.ConditionTrue
+		priorReason = prior.Conditions[0].Reason
+	}
+
+	if nextReady {
+		// Announce a RECOVERY only (was not-ready -> now Ready). A healthy first attach (no prior) or a
+		// steady-state Ready re-probe stays silent.
+		if hadPrior && !priorReady {
+			return integrationEvent{
+				Type:    corev1.EventTypeNormal,
+				Reason:  IntegrationEventRecovered,
+				Message: fmt.Sprintf("integration %q is ready", name),
+			}
+		}
+		return integrationEvent{}
+	}
+
+	// next is not ready. Skip an unchanged not-ready verdict (same reason); emit on newly-seen, a
+	// transition from Ready, or a reason change while still not-ready.
+	if hadPrior && !priorReady && priorReason == nextCond.Reason {
+		return integrationEvent{}
+	}
+	msg := fmt.Sprintf("integration %q is not ready (%s)", name, nextCond.Reason)
+	if nextCond.Message != "" {
+		msg = fmt.Sprintf("%s: %s", msg, nextCond.Message)
+	}
+	return integrationEvent{
+		Type:    corev1.EventTypeWarning,
+		Reason:  IntegrationEventDegraded,
+		Message: msg,
+	}
+}
+
 // FindRunningPod locates a running pod for the workspace by its labels (mirrors the idle checker).
 func (p *IntegrationProber) FindRunningPod(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.Pod, error) {
 	podList := &corev1.PodList{}
