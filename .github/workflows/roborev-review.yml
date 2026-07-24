@@ -45,4 +45,3 @@ jobs:
     with:
       pr: ${{ inputs.pr || '' }}
       smoke: ${{ inputs.smoke || false }}
-    secrets: inherit
