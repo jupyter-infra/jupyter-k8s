@@ -182,13 +182,11 @@ func (rm *ResourceManager) fetchReferencedResources(
 	refResolver *IntegrationTemplateResolver,
 ) (map[string]*unstructured.Unstructured, error) {
 	resources := make(map[string]*unstructured.Unstructured, len(template.Spec.ResourceRefs))
+	// A resourceRef is always resolved in the workspace's own namespace (there is no per-ref namespace).
+	resolvedNamespace := data.Workspace.Namespace
 	for i := range template.Spec.ResourceRefs {
 		ref := &template.Spec.ResourceRefs[i]
-		effectiveRef := *ref
-		if effectiveRef.Metadata.Namespace == "" {
-			effectiveRef.Metadata.Namespace = data.Workspace.Namespace
-		}
-		resolvedName, resolvedNamespace, err := refResolver.ResolveResourceRef(&effectiveRef, data)
+		resolvedName, err := refResolver.ResolveResourceRef(ref, data)
 		if err != nil {
 			return nil, err
 		}

@@ -139,25 +139,24 @@ func TestResolveTemplateExpression_FrozenReplayMissingKeyIsError(t *testing.T) {
 	}
 }
 
-func TestResolveResourceRef_TemplatedNameAndNamespace(t *testing.T) {
+func TestResolveResourceRef_TemplatedName(t *testing.T) {
 	r := NewIntegrationTemplateResolver(nil)
 	ref := &workspacev1alpha1.ResourceRef{
 		Name: rayClusterHandle, APIVersion: "ray.io/v1", Kind: rayClusterKind,
 		Metadata: workspacev1alpha1.ResourceRefMetadata{
-			Name:      "{{ .Parameters.rayClusterName }}",
-			Namespace: "{{ .Workspace.Namespace }}",
+			Name: "{{ .Parameters.rayClusterName }}",
 		},
 	}
 	data := IntegrationTemplateData{
 		Workspace:  IntegrationWorkspaceData{Namespace: testTeamNamespace},
 		Parameters: map[string]string{rayClusterNameKey: testClusterName},
 	}
-	name, ns, err := r.ResolveResourceRef(ref, data)
+	name, err := r.ResolveResourceRef(ref, data)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if name != testClusterName || ns != testTeamNamespace {
-		t.Fatalf("ResolveResourceRef = (%q,%q), want (demo,team-a)", name, ns)
+	if name != testClusterName {
+		t.Fatalf("ResolveResourceRef = %q, want %q", name, testClusterName)
 	}
 }
 
@@ -166,13 +165,12 @@ func TestResolveResourceRef_EmptyResolvedNameIsError(t *testing.T) {
 	ref := &workspacev1alpha1.ResourceRef{
 		Name: rayClusterHandle, APIVersion: "ray.io/v1", Kind: rayClusterKind,
 		Metadata: workspacev1alpha1.ResourceRefMetadata{
-			Name:      "{{ .Parameters.rayClusterName }}",
-			Namespace: "ns",
+			Name: "{{ .Parameters.rayClusterName }}",
 		},
 	}
 	// Parameter resolves to empty -> defense-in-depth empty check must fail.
 	data := IntegrationTemplateData{Parameters: map[string]string{rayClusterNameKey: ""}}
-	if _, _, err := r.ResolveResourceRef(ref, data); err == nil {
+	if _, err := r.ResolveResourceRef(ref, data); err == nil {
 		t.Fatal("expected an error when the resolved name is empty, got nil")
 	}
 }
