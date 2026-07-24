@@ -28,20 +28,17 @@ type ResourceRef struct {
 	// Kind of the target resource (e.g., "RayCluster")
 	Kind string `json:"kind"`
 
-	// Metadata identifies the specific object to fetch. Its name/namespace support template
-	// expressions: {{ .Workspace.Name }}, {{ .Parameters.X }}.
+	// Metadata identifies the specific object to fetch. Its name supports template
+	// expressions: {{ .Workspace.Name }}, {{ .Parameters.X }}. The object is always resolved in the
+	// referencing workspace's own namespace.
 	Metadata ResourceRefMetadata `json:"metadata"`
 }
 
-// ResourceRefMetadata is the templated object identity (name + optional namespace) of a ResourceRef.
+// ResourceRefMetadata is the templated object identity (name) of a ResourceRef. The object is always
+// looked up in the referencing workspace's namespace; a resourceRef cannot target another namespace.
 type ResourceRefMetadata struct {
 	// Name of the target object; supports template expressions.
 	Name string `json:"name"`
-
-	// Namespace of the target object; supports template expressions. Defaults to the workspace's
-	// namespace if omitted.
-	// +optional
-	Namespace string `json:"namespace,omitempty"`
 }
 
 // IntegrationTemplateParameter declares a single parameter a WorkspaceIntegrationTemplate consumes.

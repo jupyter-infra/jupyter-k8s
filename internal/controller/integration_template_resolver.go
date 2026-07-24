@@ -164,39 +164,27 @@ func (r *IntegrationTemplateResolver) ResolveTemplateExpression(templateExpressi
 	return buf.String(), nil
 }
 
-// ResolveResourceRef resolves template expressions in a resourceRef's name/namespace fields
-// and validates they don't resolve to empty strings. The ref's name/namespace templates may
-// only reference workspace metadata and parameters — not other resources — so resources is
-// not threaded in here.
+// ResolveResourceRef resolves the template expression in a resourceRef's name field and validates
+// it doesn't resolve to an empty string. The ref's name template may only reference workspace
+// metadata and parameters — not other resources — so resources is not threaded in here.
 //
-// Namespace is +optional on the CRD ("defaults to the workspace's namespace if omitted"), but
-// this function does NOT apply that default: it requires both name and namespace to resolve to
-// non-empty strings. The caller is responsible for pre-filling the namespace default (typically
-// the workspace namespace) before calling — see the freeze capture path (fetchResources), which
-// sets effectiveRef.Metadata.Namespace when the field is empty. The empty checks here are a
-// defense-in-depth guard against an un-defaulted ref or a template that evaluates to "".
-func (r *IntegrationTemplateResolver) ResolveResourceRef(ref *workspacev1alpha1.ResourceRef, data IntegrationTemplateData) (resolvedName, resolvedNamespace string, err error) {
+// There is no per-ref namespace: the referenced object is always looked up in the referencing
+// workspace's own namespace, which the caller supplies (see fetchReferencedResources). The empty
+// check is a defense-in-depth guard against a template that evaluates to "".
+func (r *IntegrationTemplateResolver) ResolveResourceRef(ref *workspacev1alpha1.ResourceRef, data IntegrationTemplateData) (resolvedName string, err error) {
 	if ref == nil {
-		return "", "", fmt.Errorf("resourceRef is nil")
+		return "", fmt.Errorf("resourceRef is nil")
 	}
 
 	resolvedName, err = r.ResolveTemplateExpression(ref.Metadata.Name, data)
 	if err != nil {
-		return "", "", fmt.Errorf("resourceRef %q metadata.name template: %w", ref.Name, err)
+		return "", fmt.Errorf("resourceRef %q metadata.name template: %w", ref.Name, err)
 	}
 	if resolvedName == "" {
-		return "", "", fmt.Errorf("resourceRef %q metadata.name resolved to empty string (template: %q)", ref.Name, ref.Metadata.Name)
+		return "", fmt.Errorf("resourceRef %q metadata.name resolved to empty string (template: %q)", ref.Name, ref.Metadata.Name)
 	}
 
-	resolvedNamespace, err = r.ResolveTemplateExpression(ref.Metadata.Namespace, data)
-	if err != nil {
-		return "", "", fmt.Errorf("resourceRef %q metadata.namespace template: %w", ref.Name, err)
-	}
-	if resolvedNamespace == "" {
-		return "", "", fmt.Errorf("resourceRef %q metadata.namespace resolved to empty string (template: %q)", ref.Name, ref.Metadata.Namespace)
-	}
-
-	return resolvedName, resolvedNamespace, nil
+	return resolvedName, nil
 }
 
 // ResolvePodModifications resolves all template expressions across the templatable string
