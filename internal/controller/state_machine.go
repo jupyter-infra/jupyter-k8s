@@ -400,8 +400,15 @@ func (sm *StateMachine) probeIntegrationStatus(
 	var statuses []workspacev1alpha1.IntegrationStatus
 	// appendStatus preserves the prior timestamp on an unchanged verdict and records the status. There is
 	// no per-verdict interval math: every integration re-probes on the same flat operator cadence (the
-	// prober's ProbePeriod), mirroring how the idle checker requeues on a flat CheckInterval.
+	// prober's ProbePeriod), mirroring how the idle checker requeues on a flat CheckInterval. It also
+	// records a Kubernetes Event on a verdict TRANSITION (edge-triggered: never on an unchanged re-probe),
+	// so a degraded/recovered integration is visible via `kubectl describe workspace`, not only in status.
 	appendStatus := func(s workspacev1alpha1.IntegrationStatus) {
+		if sm.recorder != nil {
+			if ev := getIntegrationStatusEvent(s.Name, prior[s.Name], &s); ev.Type != "" {
+				sm.recorder.Event(workspace, ev.Type, ev.Reason, ev.Message)
+			}
+		}
 		preserveConditionTimestamp(prior[s.Name], &s)
 		statuses = append(statuses, s)
 	}
