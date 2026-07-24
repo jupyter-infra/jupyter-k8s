@@ -394,6 +394,26 @@ func TestIntegrationFreeze_EndToEnd(t *testing.T) {
 	d = h.ensure("REPLAY-FAIL-CLOSED (must not surface an error to caller)")
 	h.assertSidecarArgs(d, "svc-b:6380", "REPLAY-FAIL-CLOSED (deleted template must PRESERVE running svc-b sidecar)")
 	t.Logf("REPLAY-FAIL-CLOSED PASS: sidecar preserved at %q despite template deletion", sidecarArgsOf(d))
+
+	// ---- REMOVE: drop the only integration ref. reconcileIntegrations runs UNCONDITIONALLY (it is not
+	// gated on "still has refs"), so removing the last ref must PRUNE the frozen status.resolvedIntegrations
+	// entry and re-render a base-only (sidecar-less) pod. Guards the prune-on-empty-refs regression: when the
+	// call was gated on hasIntegrationTemplateRefs, dropping the last ref skipped the reconcile and stranded
+	// the frozen record forever. ----
+	h.ws.Spec.IntegrationTemplateRefs = nil
+	d = h.ensure("REMOVE")
+	if hasSidecar(d) {
+		t.Fatalf("REMOVE: dropping the ref must re-render a base-only pod, but the sidecar is still present: containers=%d", len(d.Spec.Template.Spec.Containers))
+	}
+	if fr := findResolvedIntegration(&h.ws.Status, rayIntegrationName); fr != nil {
+		t.Fatalf("REMOVE: dropping the ref must prune its frozen resolvedIntegrations entry, got %+v", fr)
+	}
+	// Normalized to nil (not a zero-length slice) so the status-write diff does not churn on a no-integration
+	// workspace (see reconcileIntegrations).
+	if h.ws.Status.ResolvedIntegrations != nil {
+		t.Fatalf("REMOVE: empty resolvedIntegrations must normalize to nil, got %#v", h.ws.Status.ResolvedIntegrations)
+	}
+	t.Logf("REMOVE PASS: frozen entry pruned and sidecar removed after dropping the ref")
 }
 
 // TestIntegrationFreeze_SharedNamespaceStampedRef verifies that a WorkspaceIntegrationTemplate published

@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: other-cache
+  namespace: default
+spec:
+  clusterIP: None
+  ports:
+    - name: redis
+      port: 6380

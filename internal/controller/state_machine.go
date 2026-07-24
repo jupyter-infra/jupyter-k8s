@@ -236,14 +236,15 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	// frozen values and reuse the templates loaded here. Re-resolution happens only on an input-token
 	// change. A reconcile error is non-fatal (fail-closed -- preserve the running pod); the in-memory
 	// status it records is persisted by this reconcile's single status write below.
-	var integrationTemplates map[string]*workspacev1alpha1.WorkspaceIntegrationTemplate
-	if sm.resourceManager.hasIntegrationTemplateRefs(workspace) {
-		var integrationErr error
-		integrationTemplates, integrationErr = sm.resourceManager.reconcileIntegrations(ctx, workspace)
-		if integrationErr != nil {
-			logger.Error(integrationErr, "integration freeze reconcile reported an error; proceeding with preserved frozen values",
-				"workspace", workspace.Name)
-		}
+	//
+	// Called UNCONDITIONALLY (not gated on hasIntegrationTemplateRefs): when the last ref is removed,
+	// reconcileIntegrations is the step that prunes the now-stale status.resolvedIntegrations entry, so
+	// gating it on "still has refs" would strand the frozen record forever. With no refs it is a cheap
+	// no-op that clears the field to nil.
+	integrationTemplates, integrationErr := sm.resourceManager.reconcileIntegrations(ctx, workspace)
+	if integrationErr != nil {
+		logger.Error(integrationErr, "integration freeze reconcile reported an error; proceeding with preserved frozen values",
+			"workspace", workspace.Name)
 	}
 
 	// EnsureDeploymentExists creates deployment if missing, or returns existing deployment

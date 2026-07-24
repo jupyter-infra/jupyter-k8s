@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: shared-cache
+  namespace: default
+spec:
+  # ClusterIP is assigned dynamically, so the integration reads the stable name + declared port, never
+  # the IP. A headless service (clusterIP: None) keeps the fixture self-contained with no selector churn.
+  clusterIP: None
+  ports:
+    - name: redis
+      port: 6379
