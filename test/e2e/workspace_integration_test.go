@@ -35,6 +35,20 @@ func findResolvedIntegration(ws *workspacev1alpha1.Workspace, name string) *work
 	return nil
 }
 
+// resolvedIntegrationsNamed returns ALL frozen resolvedIntegrations entries matching name. Used to
+// assert there is exactly one (a duplicate would mean the freeze recorded the same integration twice).
+//
+//nolint:unparam // name is a general parameter; current specs all look up "service-integration"
+func resolvedIntegrationsNamed(ws *workspacev1alpha1.Workspace, name string) []workspacev1alpha1.ResolvedIntegration {
+	var out []workspacev1alpha1.ResolvedIntegration
+	for i := range ws.Status.ResolvedIntegrations {
+		if ws.Status.ResolvedIntegrations[i].Name == name {
+			out = append(out, ws.Status.ResolvedIntegrations[i])
+		}
+	}
+	return out
+}
+
 // findIntegrationStatus returns the status.integrationStatuses[] entry for the named template, or nil.
 func findIntegrationStatus(ws *workspacev1alpha1.Workspace, name string) *workspacev1alpha1.IntegrationStatus {
 	for i := range ws.Status.IntegrationStatuses {
@@ -88,7 +102,7 @@ func envValue(c *corev1.Container, name string) string {
 // changes), freezes the resolved substitution values into workspace.status.resolvedIntegrations, and
 // replays those frozen values on every subsequent reconcile WITHOUT re-reading the resource. The
 // deployment gets the resolved sidecar overlay; the report-only statusProbe surfaces integration health
-// in workspace.status.integrationStatuses[]. There is NO separate WorkspaceIntegration child object.
+// in workspace.status.integrationStatuses[].
 //
 // The referenced resource is a built-in Service (a "shared-cache" the workspace connects to). Using a
 // built-in kind keeps the suite CRD-free, and the operator already has get on Services, so no extra
@@ -125,10 +139,12 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 			var ws workspacev1alpha1.Workspace
 			Expect(kubectlGetInto("workspace", workspaceName, workspaceNamespace, &ws)).To(Succeed())
 
-			frozen := findResolvedIntegration(&ws, "service-integration")
-			Expect(frozen).NotTo(BeNil(),
-				"the operator must record a frozen resolvedIntegrations entry for the template")
-			Expect(frozen.ParametersHash).NotTo(BeEmpty(),
+			// Assert EXACTLY ONE frozen entry for the template: a plain "an entry named X exists" check is
+			// tautological (we filter by that name), and it would also miss a duplicate-overlay regression.
+			frozenMatches := resolvedIntegrationsNamed(&ws, "service-integration")
+			Expect(frozenMatches).To(HaveLen(1),
+				"the operator must record exactly one frozen resolvedIntegrations entry for the template")
+			Expect(frozenMatches[0].ParametersHash).NotTo(BeEmpty(),
 				"a frozen integration must carry a parametersHash (hash of templateRef+parameters)")
 
 			deploymentName := ws.Status.DeploymentName
@@ -455,8 +471,8 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 
 			By("waiting for the workspace to become Available despite the unresolvable integration")
 			// A first-attach failure is non-fatal: no frozen values exist yet, so the operator deploys
-			// the pod base-only and the base reconcile still succeeds. The workspace must NOT go Degraded
-			// (that was the old admission-child design).
+			// the pod base-only and the base reconcile still succeeds. The workspace must NOT go Degraded;
+			// the integration's failure is surfaced only in status.integrationStatuses[].
 			WaitForWorkspaceToReachCondition(
 				"workspace-missing-resource", workspaceNamespace, controller.ConditionTypeAvailable, ConditionTrue)
 
