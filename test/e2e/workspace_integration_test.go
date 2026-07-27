@@ -81,14 +81,14 @@ func envValue(c *corev1.Container, name string) string {
 	return ""
 }
 
-// Workspace Integration (Approach 2b: values-in-status freeze).
+// Workspace Integration: values-in-status freeze.
 //
 // These specs exercise the freeze path end to end against a real cluster: the operator resolves the
 // referenced resource ONCE (when the integration's parametersHash or observedIntegrationTemplateVersion
 // changes), freezes the resolved substitution values into workspace.status.resolvedIntegrations, and
 // replays those frozen values on every subsequent reconcile WITHOUT re-reading the resource. The
 // deployment gets the resolved sidecar overlay; the report-only statusProbe surfaces integration health
-// in workspace.status.integrationStatuses[]. There is NO WorkspaceIntegration child object in 2b.
+// in workspace.status.integrationStatuses[]. There is NO separate WorkspaceIntegration child object.
 //
 // The referenced resource is a built-in Service (a "shared-cache" the workspace connects to). Using a
 // built-in kind keeps the suite CRD-free, and the operator already has get on Services, so no extra
@@ -249,8 +249,8 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 			preGen := preDeploy.Generation
 
 			By("drifting the Service's port underneath the workspace")
-			// Same Service (shared-cache), new port. The integration's parametersHash is unchanged, so 2b
-			// must replay the frozen port 6379 and never read this value.
+			// Same Service (shared-cache), new port. The integration's parametersHash is unchanged, so the
+			// operator must replay the frozen port 6379 and never read this value.
 			applyIntegrationFixture("service-cache-drifted")
 
 			By("verifying the frozen value is REPLAYED and the deployment stays byte-stable over time")
@@ -454,7 +454,7 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 			createWorkspaceForTest("workspace-missing-resource", groupDir, "")
 
 			By("waiting for the workspace to become Available despite the unresolvable integration")
-			// 2b first-attach failure is non-fatal: no frozen values exist yet, so the operator deploys
+			// A first-attach failure is non-fatal: no frozen values exist yet, so the operator deploys
 			// the pod base-only and the base reconcile still succeeds. The workspace must NOT go Degraded
 			// (that was the old admission-child design).
 			WaitForWorkspaceToReachCondition(
