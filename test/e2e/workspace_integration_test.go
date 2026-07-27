@@ -15,10 +15,71 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 )
+
+// findResolvedIntegration returns the frozen resolvedIntegrations entry for the named template, or nil.
+//
+//nolint:unparam // name is a general parameter; current specs all look up "service-integration"
+func findResolvedIntegration(ws *workspacev1alpha1.Workspace, name string) *workspacev1alpha1.ResolvedIntegration {
+	for i := range ws.Status.ResolvedIntegrations {
+		if ws.Status.ResolvedIntegrations[i].Name == name {
+			return &ws.Status.ResolvedIntegrations[i]
+		}
+	}
+	return nil
+}
+
+// findIntegrationStatus returns the status.integrationStatuses[] entry for the named template, or nil.
+func findIntegrationStatus(ws *workspacev1alpha1.Workspace, name string) *workspacev1alpha1.IntegrationStatus {
+	for i := range ws.Status.IntegrationStatuses {
+		if ws.Status.IntegrationStatuses[i].Name == name {
+			return &ws.Status.IntegrationStatuses[i]
+		}
+	}
+	return nil
+}
+
+// conditionReason returns the Reason of the named condition on an integration status, or "".
+func conditionReason(is *workspacev1alpha1.IntegrationStatus, condType string) string {
+	if is == nil {
+		return ""
+	}
+	for _, c := range is.Conditions {
+		if c.Type == condType {
+			return c.Reason
+		}
+	}
+	return ""
+}
+
+// containerByName returns the named container from a pod spec, or nil.
+func containerByName(spec corev1.PodSpec, name string) *corev1.Container {
+	for i := range spec.Containers {
+		if spec.Containers[i].Name == name {
+			return &spec.Containers[i]
+		}
+	}
+	return nil
+}
+
+// envValue returns the value of the named env var on a container, or "".
+func envValue(c *corev1.Container, name string) string {
+	if c == nil {
+		return ""
+	}
+	for _, e := range c.Env {
+		if e.Name == name {
+			return e.Value
+		}
+	}
+	return ""
+}
 
 // Workspace Integration (Approach 2b: values-in-status freeze).
 //
@@ -58,70 +119,53 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 			WaitForWorkspaceToReachCondition(
 				workspaceName, workspaceNamespace, controller.ConditionTypeAvailable, ConditionTrue)
 
-			By("verifying the resolved values were FROZEN into status.resolvedIntegrations")
-			frozenName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.status.resolvedIntegrations[?(@.name=='service-integration')].name}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(frozenName).To(Equal("service-integration"),
+			By("fetching the workspace once and validating the frozen status against it")
+			// Get the whole Workspace object once (rather than a kubectl call per field) and assert on the
+			// decoded spec/status -- one round-trip, all workspace-side checks read from the same snapshot.
+			var ws workspacev1alpha1.Workspace
+			Expect(kubectlGetInto("workspace", workspaceName, workspaceNamespace, &ws)).To(Succeed())
+
+			frozen := findResolvedIntegration(&ws, "service-integration")
+			Expect(frozen).NotTo(BeNil(),
 				"the operator must record a frozen resolvedIntegrations entry for the template")
+			Expect(frozen.ParametersHash).NotTo(BeEmpty(),
+				"a frozen integration must carry a parametersHash (hash of templateRef+parameters)")
 
-			By("verifying the frozen record carries a parametersHash (hash of templateRef+parameters)")
-			frozenToken, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.status.resolvedIntegrations[?(@.name=='service-integration')].parametersHash}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(frozenToken).NotTo(BeEmpty(), "a frozen integration must carry a parametersHash")
-
-			By("retrieving deployment name from workspace status")
-			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.status.deploymentName}")
-			Expect(err).NotTo(HaveOccurred())
+			deploymentName := ws.Status.DeploymentName
 			Expect(deploymentName).NotTo(BeEmpty())
 
-			By("verifying the cache-proxy sidecar container was injected")
-			sidecarImage, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
-				"{.spec.template.spec.containers[?(@.name=='cache-proxy')].image}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(sidecarImage).To(Equal("busybox:1.36"),
-				"the sidecar must be injected with its pinned image")
+			By("fetching the deployment once and validating the injected overlay against it")
+			// Same idea for the deployment: one get, then assert every injected field against the decoded
+			// pod template.
+			var deploy appsv1.Deployment
+			Expect(kubectlGetInto("deployment", deploymentName, workspaceNamespace, &deploy)).To(Succeed())
+			podSpec := deploy.Spec.Template.Spec
 
-			By("verifying the sidecar args were resolved from the looked-up Service (name:port)")
-			sidecarArgs, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
-				"{.spec.template.spec.containers[?(@.name=='cache-proxy')].args[0]}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(sidecarArgs).To(ContainSubstring("shared-cache:6379"))
+			sidecar := containerByName(podSpec, "cache-proxy")
+			Expect(sidecar).NotTo(BeNil(), "the cache-proxy sidecar must be injected")
+			Expect(sidecar.Image).To(Equal("busybox:1.36"), "the sidecar must be injected with its pinned image")
+			Expect(sidecar.Args).NotTo(BeEmpty())
+			Expect(sidecar.Args[0]).To(ContainSubstring("shared-cache:6379"),
+				"the sidecar args must be resolved from the looked-up Service (name:port)")
 
-			By("verifying primary container env was merged with resolved values")
-			cacheHost, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
-				"{.spec.template.spec.containers[0].env[?(@.name=='CACHE_HOST')].value}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cacheHost).To(Equal("shared-cache"))
+			// The sidecar must carry NO readinessProbe: integration health is reported by the report-only
+			// statusProbe (status.integrationStatuses[]), never by gating pod readiness. A readinessProbe
+			// here would drop the Workspace to Available=False on a backing-service outage even though
+			// JupyterLab is fine. Lock that in so it cannot regress.
+			Expect(sidecar.ReadinessProbe).To(BeNil(),
+				"the sidecar must not gate readiness on backing-service connectivity")
 
-			cachePort, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
-				"{.spec.template.spec.containers[0].env[?(@.name=='CACHE_PORT')].value}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cachePort).To(Equal("6379"), "the port must be resolved from the Service's spec.ports")
+			primary := containerByName(podSpec, controller.PrimaryContainerName)
+			Expect(primary).NotTo(BeNil(), "the primary workspace container must be present")
+			Expect(envValue(primary, "CACHE_HOST")).To(Equal("shared-cache"))
+			Expect(envValue(primary, "CACHE_PORT")).To(Equal("6379"),
+				"the port must be resolved from the Service's spec.ports")
+			Expect(envValue(primary, "CACHE_SERVICE_NAME")).To(Equal("shared-cache"))
 
-			cacheNameEnv, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
-				"{.spec.template.spec.containers[0].env[?(@.name=='CACHE_SERVICE_NAME')].value}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cacheNameEnv).To(Equal("shared-cache"))
-
-			By("verifying the template's shareProcessNamespace was OR-reduced onto the pod")
-			podShareProcNs, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
-				"{.spec.template.spec.shareProcessNamespace}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(podShareProcNs).To(Equal("true"),
+			Expect(podSpec.ShareProcessNamespace).NotTo(BeNil(),
 				"the deployment builder must OR-reduce shareProcessNamespace onto the pod")
-
-			By("verifying the sidecar has NO readinessProbe (integration health must not gate pod/workspace readiness)")
-			// Integration health is reported by the report-only statusProbe (status.integrationStatuses[]),
-			// NOT by gating pod readiness. A container readinessProbe on the sidecar would drop the
-			// Workspace to Available=False on a backing-service outage even though JupyterLab is fine, so
-			// the sidecar must carry none. Lock that in here so it cannot regress.
-			sidecarReadiness, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
-				"{.spec.template.spec.containers[?(@.name=='cache-proxy')].readinessProbe}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(sidecarReadiness).To(BeEmpty(), "the sidecar must not gate readiness on backing-service connectivity")
+			Expect(*podSpec.ShareProcessNamespace).To(BeTrue(),
+				"the template's shareProcessNamespace must be OR-reduced onto the pod")
 
 			By("verifying the integration status probe reports ready in workspace.status.integrationStatuses[]")
 			Eventually(func(g Gomega) {
@@ -159,15 +203,13 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 
 			By("verifying the integration status flips to Degraded with reason ProbeFailed")
 			Eventually(func(g Gomega) {
-				state, err := kubectlGet("workspace", "workspace-failprobe", workspaceNamespace,
-					"{.status.integrationStatuses[?(@.name=='service-integration-failprobe')].state}")
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(state).To(Equal("Degraded"), "a failing statusProbe must report Degraded")
-
-				reason, err := kubectlGet("workspace", "workspace-failprobe", workspaceNamespace,
-					"{.status.integrationStatuses[?(@.name=='service-integration-failprobe')].conditions[?(@.type=='Ready')].reason}")
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(reason).To(Equal("ProbeFailed"), "the Ready condition reason must be ProbeFailed")
+				var ws workspacev1alpha1.Workspace
+				g.Expect(kubectlGetInto("workspace", "workspace-failprobe", workspaceNamespace, &ws)).To(Succeed())
+				is := findIntegrationStatus(&ws, "service-integration-failprobe")
+				g.Expect(is).NotTo(BeNil())
+				g.Expect(is.State).To(Equal("Degraded"), "a failing statusProbe must report Degraded")
+				g.Expect(conditionReason(is, "Ready")).To(Equal("ProbeFailed"),
+					"the Ready condition reason must be ProbeFailed")
 			}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 
 			By("verifying the workspace REMAINS Available while the integration is Degraded (report-only contract)")
@@ -193,17 +235,18 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 			WaitForWorkspaceToReachCondition(
 				workspaceName, workspaceNamespace, controller.ConditionTypeAvailable, ConditionTrue)
 
-			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.status.deploymentName}")
-			Expect(err).NotTo(HaveOccurred())
+			var ws workspacev1alpha1.Workspace
+			Expect(kubectlGetInto("workspace", workspaceName, workspaceNamespace, &ws)).To(Succeed())
+			deploymentName := ws.Status.DeploymentName
+			Expect(deploymentName).NotTo(BeEmpty())
 
 			By("capturing the pre-drift deployment generation")
 			// metadata.generation is the roll signal: it increments only when the operator patches the
 			// pod template. (pod-template-hash is NOT usable here -- it lives on the ReplicaSet and pods,
 			// never on deployment.spec.template.metadata.labels, so it would read empty on both sides.)
-			preGen, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
-				"{.metadata.generation}")
-			Expect(err).NotTo(HaveOccurred())
+			var preDeploy appsv1.Deployment
+			Expect(kubectlGetInto("deployment", deploymentName, workspaceNamespace, &preDeploy)).To(Succeed())
+			preGen := preDeploy.Generation
 
 			By("drifting the Service's port underneath the workspace")
 			// Same Service (shared-cache), new port. The integration's parametersHash is unchanged, so 2b
@@ -213,17 +256,13 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 			By("verifying the frozen value is REPLAYED and the deployment stays byte-stable over time")
 			// The env must remain the pre-drift frozen value, and the deployment generation must not
 			// change -- a bump would mean the operator re-rendered the pod template and rolled the pod.
+			// One deployment read per tick covers both checks.
 			Consistently(func(g Gomega) {
-				cachePort, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
-					"{.spec.template.spec.containers[0].env[?(@.name=='CACHE_PORT')].value}")
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(cachePort).To(Equal("6379"),
-					"drift must be ignored: the frozen port must be replayed")
-
-				postGen, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
-					"{.metadata.generation}")
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(postGen).To(Equal(preGen), "deployment generation must not change (no roll)")
+				var deploy appsv1.Deployment
+				g.Expect(kubectlGetInto("deployment", deploymentName, workspaceNamespace, &deploy)).To(Succeed())
+				g.Expect(envValue(containerByName(deploy.Spec.Template.Spec, controller.PrimaryContainerName), "CACHE_PORT")).
+					To(Equal("6379"), "drift must be ignored: the frozen port must be replayed")
+				g.Expect(deploy.Generation).To(Equal(preGen), "deployment generation must not change (no roll)")
 			}, 30*time.Second, 5*time.Second).Should(Succeed())
 		})
 	})
@@ -242,14 +281,14 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 			WaitForWorkspaceToReachCondition(
 				workspaceName, workspaceNamespace, controller.ConditionTypeAvailable, ConditionTrue)
 
-			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.status.deploymentName}")
-			Expect(err).NotTo(HaveOccurred())
-
-			By("capturing the original frozen input token")
-			tokenA, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.status.resolvedIntegrations[?(@.name=='service-integration')].parametersHash}")
-			Expect(err).NotTo(HaveOccurred())
+			By("capturing the deployment name and the original frozen input token from one workspace read")
+			var ws workspacev1alpha1.Workspace
+			Expect(kubectlGetInto("workspace", workspaceName, workspaceNamespace, &ws)).To(Succeed())
+			deploymentName := ws.Status.DeploymentName
+			Expect(deploymentName).NotTo(BeEmpty())
+			frozen := findResolvedIntegration(&ws, "service-integration")
+			Expect(frozen).NotTo(BeNil())
+			tokenA := frozen.ParametersHash
 			Expect(tokenA).NotTo(BeEmpty())
 
 			By("re-applying the workspace pointing at other-cache")
@@ -295,21 +334,19 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 			WaitForWorkspaceToReachCondition(
 				workspaceName, workspaceNamespace, controller.ConditionTypeAvailable, ConditionTrue)
 
-			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.status.deploymentName}")
-			Expect(err).NotTo(HaveOccurred())
-
-			By("capturing the pre-edit frozen parametersHash and observedIntegrationTemplateVersion")
+			By("capturing the deployment name and pre-edit frozen record from one workspace read")
 			// The workspace's parameters do not change in this spec, so parametersHash must stay fixed --
 			// only the template Generation (observedIntegrationTemplateVersion) moves. Capturing both lets
 			// the assertions prove the re-resolve was driven by the TEMPLATE edit, not a parameter change.
-			paramHashBefore, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.status.resolvedIntegrations[?(@.name=='service-integration')].parametersHash}")
-			Expect(err).NotTo(HaveOccurred())
+			var ws workspacev1alpha1.Workspace
+			Expect(kubectlGetInto("workspace", workspaceName, workspaceNamespace, &ws)).To(Succeed())
+			deploymentName := ws.Status.DeploymentName
+			Expect(deploymentName).NotTo(BeEmpty())
+			frozenBefore := findResolvedIntegration(&ws, "service-integration")
+			Expect(frozenBefore).NotTo(BeNil())
+			paramHashBefore := frozenBefore.ParametersHash
 			Expect(paramHashBefore).NotTo(BeEmpty())
-			tmplVersionBefore, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-				"{.status.resolvedIntegrations[?(@.name=='service-integration')].observedIntegrationTemplateVersion}")
-			Expect(err).NotTo(HaveOccurred())
+			tmplVersionBefore := frozenBefore.ObservedIntegrationTemplateVersion
 			Expect(tmplVersionBefore).NotTo(BeEmpty())
 
 			By("confirming the edit's env var is absent before the template is edited")
@@ -331,16 +368,13 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 
 			By("verifying observedIntegrationTemplateVersion bumped while parametersHash stayed the same")
 			Eventually(func(g Gomega) {
-				tmplVersionAfter, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-					"{.status.resolvedIntegrations[?(@.name=='service-integration')].observedIntegrationTemplateVersion}")
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(tmplVersionAfter).NotTo(Equal(tmplVersionBefore),
+				var wsAfter workspacev1alpha1.Workspace
+				g.Expect(kubectlGetInto("workspace", workspaceName, workspaceNamespace, &wsAfter)).To(Succeed())
+				frozenAfter := findResolvedIntegration(&wsAfter, "service-integration")
+				g.Expect(frozenAfter).NotTo(BeNil())
+				g.Expect(frozenAfter.ObservedIntegrationTemplateVersion).NotTo(Equal(tmplVersionBefore),
 					"editing the template must bump observedIntegrationTemplateVersion")
-
-				paramHashAfter, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
-					"{.status.resolvedIntegrations[?(@.name=='service-integration')].parametersHash}")
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(paramHashAfter).To(Equal(paramHashBefore),
+				g.Expect(frozenAfter.ParametersHash).To(Equal(paramHashBefore),
 					"parametersHash must NOT change: the re-resolve is driven by the template edit, not a parameter change")
 			}).WithTimeout(2 * time.Minute).WithPolling(3 * time.Second).Should(Succeed())
 
@@ -426,9 +460,10 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 			WaitForWorkspaceToReachCondition(
 				"workspace-missing-resource", workspaceNamespace, controller.ConditionTypeAvailable, ConditionTrue)
 
-			deploymentName, err := kubectlGet("workspace", "workspace-missing-resource", workspaceNamespace,
-				"{.status.deploymentName}")
-			Expect(err).NotTo(HaveOccurred())
+			By("reading the workspace once for the deployment name and frozen-record state")
+			var ws workspacev1alpha1.Workspace
+			Expect(kubectlGetInto("workspace", "workspace-missing-resource", workspaceNamespace, &ws)).To(Succeed())
+			deploymentName := ws.Status.DeploymentName
 			Expect(deploymentName).NotTo(BeEmpty())
 
 			By("verifying NO cache-proxy was injected (capture failed, so no overlay is applied)")
@@ -436,10 +471,7 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 
 			By("verifying no frozen values were recorded for the unresolvable integration")
 			// Capture never succeeded, so the freeze must not advance to a partial/empty frozen record.
-			frozenToken, err := kubectlGet("workspace", "workspace-missing-resource", workspaceNamespace,
-				"{.status.resolvedIntegrations[?(@.name=='service-integration')].parametersHash}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(frozenToken).To(BeEmpty(),
+			Expect(findResolvedIntegration(&ws, "service-integration")).To(BeNil(),
 				"an integration whose first-attach capture failed must not record frozen values")
 
 			By("verifying the unresolved integration surfaces a Degraded status (not logs-only)")

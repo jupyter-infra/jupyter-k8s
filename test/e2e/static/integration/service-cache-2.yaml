@@ -6,5 +6,5 @@ metadata:
 spec:
   clusterIP: None
   ports:
-    - name: redis
+    - name: cache
       port: 6380

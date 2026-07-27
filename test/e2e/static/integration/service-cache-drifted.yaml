@@ -8,5 +8,5 @@ spec:
   ports:
     # Same Service (shared-cache), drifted port. The integration's parametersHash is unchanged, so 2b
     # must replay the frozen port 6379 and never read this new value -- the pod must not roll.
-    - name: redis
+    - name: cache
       port: 6390
