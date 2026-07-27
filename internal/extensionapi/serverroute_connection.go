@@ -415,7 +415,7 @@ func validateWorkspaceConnectionRequest(req *connectionv1alpha1.WorkspaceConnect
 	case isRemoteConnectionType(connectionType):
 		// valid — known or unknown remote types are accepted
 	default:
-		return fmt.Errorf("invalid workspaceConnectionType: '%s'. Must be 'web-ui', 'websocket', or follow the '{ide}-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')", connectionType)
+		return fmt.Errorf("invalid workspaceConnectionType: '%s'. Must be 'web-ui', 'ssh-over-websocket', or follow the '{ide}-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')", connectionType)
 	}
 
 	return nil

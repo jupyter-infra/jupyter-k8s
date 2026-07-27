@@ -31,6 +31,8 @@ import (
 )
 
 const testUser = "test-user"
+const testWorkspaceMyWorkspace = "myworkspace"
+const testStrategyWebSocket = "ws-strategy"
 
 // mockSignerFactory for testing
 type mockSignerFactory struct {
@@ -128,7 +130,7 @@ func TestGenerateBearerTokenURL(t *testing.T) {
 
 func TestGenerateBearerTokenURL_SubdomainRouting(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "myworkspace", Namespace: namespaceDefault},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceMyWorkspace, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "subdomain-strategy"},
 		},
@@ -902,7 +904,7 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "invalid workspaceConnectionType: 'invalid-type'. Must be 'web-ui', 'websocket', or follow the '{ide}-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')",
+			errorMsg:    "invalid workspaceConnectionType: 'invalid-type'. Must be 'web-ui', 'ssh-over-websocket', or follow the '{ide}-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')",
 		},
 		{
 			name: "invalid connection type - bare remote",
@@ -913,7 +915,7 @@ func TestValidateWorkspaceConnectionRequest(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "invalid workspaceConnectionType: '-remote'. Must be 'web-ui', 'websocket', or follow the '{ide}-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')",
+			errorMsg:    "invalid workspaceConnectionType: '-remote'. Must be 'web-ui', 'ssh-over-websocket', or follow the '{ide}-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')",
 		},
 	}
 
@@ -1093,14 +1095,14 @@ func TestIsRemoteConnectionType(t *testing.T) {
 
 func TestGenerateWebSocketConnectionURL_Success(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "myworkspace", Namespace: namespaceDefault},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceMyWorkspace, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "ws-strategy"},
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: testStrategyWebSocket},
 		},
 	}
 
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{Name: "ws-strategy", Namespace: namespaceDefault},
+		ObjectMeta: metav1.ObjectMeta{Name: testStrategyWebSocket, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 			BearerAuthURLTemplate: "https://myworkspace-default.example.com/ssh-ws",
 		},
@@ -1133,15 +1135,15 @@ func TestGenerateWebSocketConnectionURL_Success(t *testing.T) {
 
 func TestGenerateWebSocketConnectionURL_StripsBearerAuth(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "myworkspace", Namespace: namespaceDefault},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceMyWorkspace, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: "ws-strategy"},
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: testStrategyWebSocket},
 		},
 	}
 
 	// Template with /bearer-auth suffix (shared with web UI)
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{Name: "ws-strategy", Namespace: namespaceDefault},
+		ObjectMeta: metav1.ObjectMeta{Name: testStrategyWebSocket, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 			BearerAuthURLTemplate: "https://myworkspace-default.example.com/bearer-auth",
 		},
@@ -1172,7 +1174,7 @@ func TestGenerateWebSocketConnectionURL_StripsBearerAuth(t *testing.T) {
 
 func TestGenerateWebSocketConnectionURL_NoAccessStrategy(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "myworkspace", Namespace: namespaceDefault},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceMyWorkspace, Namespace: namespaceDefault},
 	}
 
 	server := &ExtensionServer{
@@ -1192,11 +1194,11 @@ func TestGenerateWebSocketConnectionURL_NoAccessStrategy(t *testing.T) {
 
 func TestGenerateWebSocketConnectionURL_MissingUser(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "myworkspace", Namespace: namespaceDefault},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceMyWorkspace, Namespace: namespaceDefault},
 	}
 
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{Name: "ws-strategy", Namespace: namespaceDefault},
+		ObjectMeta: metav1.ObjectMeta{Name: testStrategyWebSocket, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 			BearerAuthURLTemplate: "https://myworkspace-default.example.com/ssh-ws",
 		},
@@ -1219,11 +1221,11 @@ func TestGenerateWebSocketConnectionURL_MissingUser(t *testing.T) {
 
 func TestGenerateWebSocketConnectionURL_MissingTemplate(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: "myworkspace", Namespace: namespaceDefault},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceMyWorkspace, Namespace: namespaceDefault},
 	}
 
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{Name: "ws-strategy", Namespace: namespaceDefault},
+		ObjectMeta: metav1.ObjectMeta{Name: testStrategyWebSocket, Namespace: namespaceDefault},
 		Spec:       workspacev1alpha1.WorkspaceAccessStrategySpec{},
 	}
 

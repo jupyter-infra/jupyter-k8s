@@ -19,7 +19,7 @@ const (
 	ConnectionTypeWebUI = "web-ui"
 
 	// ConnectionTypeWebSocket represents WebSocket remote connection type
-	ConnectionTypeWebSocket = "websocket"
+	ConnectionTypeWebSocket = "ssh-over-websocket"
 )
 
 // WorkspaceConnectionRequestSpec represents the spec of a workspace connection request
