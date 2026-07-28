@@ -167,7 +167,7 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 	})
 
 	Context("Backing-service drift under a stable integration input", func() {
-		It("replays the FROZEN values and does not roll the pod when the Service drifts", func() {
+		It("replays the FROZEN port with no restart while frozen, then rolls once a template edit frees it", func() {
 			By("creating the Service and template")
 			applyIntegrationFixture("service-cache")
 			applyIntegrationFixture("service-integration")
@@ -182,37 +182,50 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 			deploymentName := ws.Status.DeploymentName
 			Expect(deploymentName).NotTo(BeEmpty())
 
-			By("drifting the Service's port underneath the workspace")
-			// Same Service (shared-cache), new port. The integration's parametersHash is unchanged, so the
-			// operator must replay the frozen port 6379 and never read this drifted value.
+			originalPodUID := workspacePodUID(workspaceName, workspaceNamespace)
+			Expect(originalPodUID).NotTo(BeEmpty())
+
+			// --- Phase A: freeze holds -> drift is ignored AND the pod is never restarted --------------
+			By("drifting the Service's port underneath the workspace (6379 -> 6390)")
+			// Same Service, new port: the freeze key (parametersHash + template generation) is unchanged, so
+			// the operator must replay the frozen 6379 and never read this value.
 			applyIntegrationFixture("service-cache-drifted")
 
-			By("forcing a reconcile so the operator actually observes the drift")
-			// The drifted Service is not owned/watched by the controller, and after the workspace goes
-			// Available its only requeue is the integration-probe cadence (5m). Without a nudge no reconcile
-			// fires in the assertion window, so a "nothing changed" check would pass even if frozen-replay
-			// were broken -- it would be observing the ABSENCE of a trigger, not the replay path. Annotating
-			// the workspace enqueues a real reconcile that reads the drifted Service and must still replay
-			// the frozen port.
-			touchWorkspaceToForceReconcile(workspaceName, workspaceNamespace)
+			By("re-reconciling the drift without disturbing the pod (nudge the owned Deployment, not the workspace)")
+			// Forces a real reconcile (else the only requeue is the 5m cadence and the check below is vacuous).
+			// A Deployment-metadata nudge isn't in the pod template, so it can't roll the pod itself.
+			touchDeploymentToForceReconcile(deploymentName, workspaceNamespace)
 
-			By("verifying the reconcile REPLAYED the frozen port instead of re-reading the drifted Service")
-			// The frozen CACHE_PORT env on the pod template is the direct replay signal: it must stay 6379
-			// (the value frozen at first attach), NOT the drifted port -- proving the reconcile ignored the
-			// drifted Service and replayed the frozen values. Consistently holds the invariant across several
-			// further reconciles to catch a delayed re-resolve.
-			//
-			// NOTE: deployment.metadata.generation is deliberately NOT asserted here. The controller copies
-			// all workspace annotations onto the pod template (buildPodAnnotations), so the reconcile-nudge
-			// annotation itself bumps generation independently of any integration re-render -- generation is
-			// therefore not a clean "no roll" signal once a nudge is used. The frozen env value is the
-			// substantive proof that drift was ignored.
+			By("verifying the operator replays the frozen port AND never restarts the pod")
+			// Frozen CACHE_PORT stays 6379 (drift ignored) and the pod UID is unchanged (not recreated). UID,
+			// not deployment.generation, is the clean no-restart signal since nothing annotates the workspace.
 			Consistently(func(g Gomega) {
 				var deploy appsv1.Deployment
 				g.Expect(kubectlGetInto("deployment", deploymentName, workspaceNamespace, &deploy)).To(Succeed())
 				g.Expect(envValue(containerByName(deploy.Spec.Template.Spec, controller.PrimaryContainerName), "CACHE_PORT")).
 					To(Equal("6379"), "drift must be ignored: the frozen port must be replayed")
-			}, 30*time.Second, 5*time.Second).Should(Succeed())
+				g.Expect(workspacePodUID(workspaceName, workspaceNamespace)).
+					To(Equal(originalPodUID), "the running pod must NOT be restarted while the freeze holds")
+			}, 20*time.Second, 5*time.Second).Should(Succeed())
+
+			// --- Phase B (negative control): freeze released -> the SAME drift now rolls the pod ---------
+			// The drift (6390) was live all along. A generation-only edit (displayName; nothing new on the pod)
+			// flips hasIntegrationChanged, so the operator re-reads it and the pod adopts 6390 with a new UID.
+			// That proves the value was always reachable -- the freeze was Phase A's only reason, not vacuous.
+			By("editing the template to bump its generation (no rendered field changes)")
+			applyIntegrationFixture("service-integration-genbump")
+
+			By("verifying the freed reconcile re-reads the drifted Service and rolls the pod")
+			// WIT isn't watched, so nudge inside the poll to enqueue the reconcile that sees the bump.
+			Eventually(func(g Gomega) {
+				touchDeploymentToForceReconcile(deploymentName, workspaceNamespace)
+				var deploy appsv1.Deployment
+				g.Expect(kubectlGetInto("deployment", deploymentName, workspaceNamespace, &deploy)).To(Succeed())
+				g.Expect(envValue(containerByName(deploy.Spec.Template.Spec, controller.PrimaryContainerName), "CACHE_PORT")).
+					To(Equal("6390"), "once the freeze key moves, the operator must adopt the drifted port")
+				g.Expect(workspacePodUID(workspaceName, workspaceNamespace)).
+					NotTo(Equal(originalPodUID), "re-resolving the drifted port must roll the pod (freeze was Phase A's only reason)")
+			}).WithTimeout(2 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 		})
 	})
 

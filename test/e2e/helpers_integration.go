@@ -18,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 )
 
@@ -169,5 +170,30 @@ func deleteResourcesForIntegrationTest(workspaceNamespace string) {
 	cmd = exec.Command("kubectl", "delete", "service",
 		"shared-cache", "other-cache",
 		"-n", workspaceNamespace, "--ignore-not-found", "--wait=true", "--timeout=30s")
+	_, _ = utils.Run(cmd)
+}
+
+// workspacePodUID returns the UID of the workspace's single pod, or "" if none is found. The UID is the
+// ground-truth "same pod" signal: a roll creates a new pod with a new UID, so a stable UID across
+// reconciles proves the pod was never restarted.
+func workspacePodUID(workspaceName, namespace string) string {
+	ginkgo.GinkgoHelper()
+	uid, err := kubectlGetByLabels("pod",
+		fmt.Sprintf("%s=%s", controller.LabelWorkspaceName, workspaceName),
+		namespace, "{.items[0].metadata.uid}")
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	return uid
+}
+
+// touchDeploymentToForceReconcile annotates the workspace's OWNED Deployment metadata (NOT the pod
+// template, NOT the Workspace). The controller Owns Deployments, so this enqueues a reconcile -- but the
+// annotation never reaches the pod template (buildPodAnnotations copies only Workspace annotations), so
+// the nudge can't roll the pod itself. That lets a drift spec force reconciles while still asserting the
+// pod was never restarted. Best-effort: it only needs to enqueue, and callers poll.
+func touchDeploymentToForceReconcile(deploymentName, namespace string) {
+	ginkgo.GinkgoHelper()
+	patch := fmt.Sprintf(`{"metadata":{"annotations":{"e2e.jupyter.org/reconcile-nudge":"%d"}}}`, time.Now().UnixNano())
+	cmd := exec.Command("kubectl", "patch", "deployment", deploymentName, "-n", namespace,
+		"--type=merge", "-p", patch)
 	_, _ = utils.Run(cmd)
 }
