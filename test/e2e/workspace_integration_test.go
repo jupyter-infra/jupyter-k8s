@@ -9,91 +9,17 @@ Distributed under the terms of the MIT license
 package e2e
 
 import (
-	"fmt"
 	"os/exec"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 )
-
-// findResolvedIntegration returns the frozen resolvedIntegrations entry for the named template, or nil.
-//
-//nolint:unparam // name is a general parameter; current specs all look up "service-integration"
-func findResolvedIntegration(ws *workspacev1alpha1.Workspace, name string) *workspacev1alpha1.ResolvedIntegration {
-	for i := range ws.Status.ResolvedIntegrations {
-		if ws.Status.ResolvedIntegrations[i].Name == name {
-			return &ws.Status.ResolvedIntegrations[i]
-		}
-	}
-	return nil
-}
-
-// resolvedIntegrationsNamed returns ALL frozen resolvedIntegrations entries matching name. Used to
-// assert there is exactly one (a duplicate would mean the freeze recorded the same integration twice).
-//
-//nolint:unparam // name is a general parameter; current specs all look up "service-integration"
-func resolvedIntegrationsNamed(ws *workspacev1alpha1.Workspace, name string) []workspacev1alpha1.ResolvedIntegration {
-	var out []workspacev1alpha1.ResolvedIntegration
-	for i := range ws.Status.ResolvedIntegrations {
-		if ws.Status.ResolvedIntegrations[i].Name == name {
-			out = append(out, ws.Status.ResolvedIntegrations[i])
-		}
-	}
-	return out
-}
-
-// findIntegrationStatus returns the status.integrationStatuses[] entry for the named template, or nil.
-func findIntegrationStatus(ws *workspacev1alpha1.Workspace, name string) *workspacev1alpha1.IntegrationStatus {
-	for i := range ws.Status.IntegrationStatuses {
-		if ws.Status.IntegrationStatuses[i].Name == name {
-			return &ws.Status.IntegrationStatuses[i]
-		}
-	}
-	return nil
-}
-
-// conditionReason returns the Reason of the named condition on an integration status, or "".
-func conditionReason(is *workspacev1alpha1.IntegrationStatus, condType string) string {
-	if is == nil {
-		return ""
-	}
-	for _, c := range is.Conditions {
-		if c.Type == condType {
-			return c.Reason
-		}
-	}
-	return ""
-}
-
-// containerByName returns the named container from a pod spec, or nil.
-func containerByName(spec corev1.PodSpec, name string) *corev1.Container {
-	for i := range spec.Containers {
-		if spec.Containers[i].Name == name {
-			return &spec.Containers[i]
-		}
-	}
-	return nil
-}
-
-// envValue returns the value of the named env var on a container, or "".
-func envValue(c *corev1.Container, name string) string {
-	if c == nil {
-		return ""
-	}
-	for _, e := range c.Env {
-		if e.Name == name {
-			return e.Value
-		}
-	}
-	return ""
-}
 
 // Workspace Integration: values-in-status freeze.
 //
@@ -256,29 +182,36 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 			deploymentName := ws.Status.DeploymentName
 			Expect(deploymentName).NotTo(BeEmpty())
 
-			By("capturing the pre-drift deployment generation")
-			// metadata.generation is the roll signal: it increments only when the operator patches the
-			// pod template. (pod-template-hash is NOT usable here -- it lives on the ReplicaSet and pods,
-			// never on deployment.spec.template.metadata.labels, so it would read empty on both sides.)
-			var preDeploy appsv1.Deployment
-			Expect(kubectlGetInto("deployment", deploymentName, workspaceNamespace, &preDeploy)).To(Succeed())
-			preGen := preDeploy.Generation
-
 			By("drifting the Service's port underneath the workspace")
 			// Same Service (shared-cache), new port. The integration's parametersHash is unchanged, so the
-			// operator must replay the frozen port 6379 and never read this value.
+			// operator must replay the frozen port 6379 and never read this drifted value.
 			applyIntegrationFixture("service-cache-drifted")
 
-			By("verifying the frozen value is REPLAYED and the deployment stays byte-stable over time")
-			// The env must remain the pre-drift frozen value, and the deployment generation must not
-			// change -- a bump would mean the operator re-rendered the pod template and rolled the pod.
-			// One deployment read per tick covers both checks.
+			By("forcing a reconcile so the operator actually observes the drift")
+			// The drifted Service is not owned/watched by the controller, and after the workspace goes
+			// Available its only requeue is the integration-probe cadence (5m). Without a nudge no reconcile
+			// fires in the assertion window, so a "nothing changed" check would pass even if frozen-replay
+			// were broken -- it would be observing the ABSENCE of a trigger, not the replay path. Annotating
+			// the workspace enqueues a real reconcile that reads the drifted Service and must still replay
+			// the frozen port.
+			touchWorkspaceToForceReconcile(workspaceName, workspaceNamespace)
+
+			By("verifying the reconcile REPLAYED the frozen port instead of re-reading the drifted Service")
+			// The frozen CACHE_PORT env on the pod template is the direct replay signal: it must stay 6379
+			// (the value frozen at first attach), NOT the drifted port -- proving the reconcile ignored the
+			// drifted Service and replayed the frozen values. Consistently holds the invariant across several
+			// further reconciles to catch a delayed re-resolve.
+			//
+			// NOTE: deployment.metadata.generation is deliberately NOT asserted here. The controller copies
+			// all workspace annotations onto the pod template (buildPodAnnotations), so the reconcile-nudge
+			// annotation itself bumps generation independently of any integration re-render -- generation is
+			// therefore not a clean "no roll" signal once a nudge is used. The frozen env value is the
+			// substantive proof that drift was ignored.
 			Consistently(func(g Gomega) {
 				var deploy appsv1.Deployment
 				g.Expect(kubectlGetInto("deployment", deploymentName, workspaceNamespace, &deploy)).To(Succeed())
 				g.Expect(envValue(containerByName(deploy.Spec.Template.Spec, controller.PrimaryContainerName), "CACHE_PORT")).
 					To(Equal("6379"), "drift must be ignored: the frozen port must be replayed")
-				g.Expect(deploy.Generation).To(Equal(preGen), "deployment generation must not change (no roll)")
 			}, 30*time.Second, 5*time.Second).Should(Succeed())
 		})
 	})
@@ -307,11 +240,11 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 			tokenA := frozen.ParametersHash
 			Expect(tokenA).NotTo(BeEmpty())
 
-			By("re-applying the workspace pointing at other-cache")
-			// workspace-switch-cluster.yaml carries the SAME metadata.name (workspace-with-integration)
-			// with a different serviceName, so this apply UPDATES the existing workspace in place --
-			// it is a controlled parameter change, not a new workspace.
-			createWorkspaceForTest("workspace-switch-cluster", groupDir, "")
+			By("patching the workspace to point at other-cache")
+			// A merge patch updates the existing workspace's integrationTemplateRef in place -- a
+			// controlled parameter change (serviceName -> other-cache), not a new workspace.
+			patchWorkspaceFromFile(workspaceName, workspaceNamespace,
+				"test/e2e/static/integration/patch-workspace-switch-cluster.json")
 
 			By("verifying the frozen input token changed (a controlled re-resolve, not drift)")
 			Eventually(func(g Gomega) {
@@ -426,8 +359,10 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(sidecarName).To(Equal("cache-proxy"))
 
-			By("re-applying the workspace with no integrationTemplateRefs (drops the only integration)")
-			createWorkspaceForTest("workspace-no-integration", groupDir, "")
+			By("patching the workspace to drop its only integrationTemplateRef")
+			// A merge patch sets integrationTemplateRefs to [], removing the only integration in place.
+			patchWorkspaceFromFile(workspaceName, workspaceNamespace,
+				"test/e2e/static/integration/patch-workspace-remove-integration.json")
 
 			By("verifying the frozen resolvedIntegrations entry is pruned")
 			Eventually(func(g Gomega) {
@@ -534,66 +469,3 @@ var _ = Describe("Workspace Integration", Ordered, func() {
 		})
 	})
 })
-
-// touchWorkspaceToForceReconcile annotates the workspace with a changing value so the controller (which
-// watches Workspace but not WorkspaceIntegrationTemplate) reconciles immediately. Used after a template
-// edit so a spec need not wait for the periodic reconcile to observe the new template version.
-func touchWorkspaceToForceReconcile(name, namespace string) {
-	GinkgoHelper()
-	patch := fmt.Sprintf(`{"metadata":{"annotations":{"e2e.jupyter.org/reconcile-nudge":"%d"}}}`, time.Now().UnixNano())
-	cmd := exec.Command("kubectl", "patch", "workspace", name, "-n", namespace,
-		"--type=merge", "-p", patch)
-	_, err := utils.Run(cmd)
-	Expect(err).NotTo(HaveOccurred())
-}
-
-// applyIntegrationFixture applies a fixture YAML from the integration static dir.
-func applyIntegrationFixture(filename string) {
-	GinkgoHelper()
-	path := BuildTestResourcePath(filename, "integration", "")
-	By(fmt.Sprintf("applying fixture %s", path))
-	cmd := exec.Command("kubectl", "apply", "-f", path)
-	_, err := utils.Run(cmd)
-	Expect(err).NotTo(HaveOccurred())
-}
-
-// verifyNoSidecarInDeployment asserts (and keeps asserting) that no cache-proxy container exists on
-// the deployment's pod template -- used for the fail-closed base-only path.
-func verifyNoSidecarInDeployment(deploymentName, namespace string) {
-	GinkgoHelper()
-	Consistently(func(g Gomega) {
-		names, err := kubectlGet("deployment", deploymentName, namespace,
-			"{.spec.template.spec.containers[?(@.name=='cache-proxy')].name}")
-		g.Expect(err).NotTo(HaveOccurred())
-		g.Expect(names).To(BeEmpty(), "no cache-proxy overlay must be applied when capture failed")
-	}, 15*time.Second, 5*time.Second).Should(Succeed())
-}
-
-// deleteResourcesForIntegrationTest removes only the objects this Ordered suite creates, by explicit
-// name, so it can never nuke unrelated objects that happen to share the "default" namespace. The names
-// track the fixtures applied above (workspace-*, service-integration*, shared-cache/other-cache). This
-// suite is Ordered (serial), so a fixed, known name set is sufficient -- there are no other concurrent
-// specs creating integration objects in this namespace.
-func deleteResourcesForIntegrationTest(workspaceNamespace string) {
-	GinkgoHelper()
-	By("cleaning up workspaces")
-	cmd := exec.Command("kubectl", "delete", "workspace",
-		"workspace-with-integration", "workspace-failprobe", "workspace-missing-resource",
-		"-n", workspaceNamespace, "--ignore-not-found", "--wait=true", "--timeout=120s")
-	_, _ = utils.Run(cmd)
-
-	By("cleaning up integration templates")
-	cmd = exec.Command("kubectl", "delete", "workspaceintegrationtemplate",
-		"service-integration", "service-integration-failprobe",
-		"-n", workspaceNamespace, "--ignore-not-found", "--wait=true", "--timeout=30s")
-	_, _ = utils.Run(cmd)
-
-	// Wait for the Services to be fully gone (--wait=true) instead of sleeping a fixed interval: the
-	// next spec re-applies these same names, and applying while the prior object is still terminating
-	// would conflict. --wait=true is the same deletion-sync idiom used by the deletes above.
-	By("cleaning up Services")
-	cmd = exec.Command("kubectl", "delete", "service",
-		"shared-cache", "other-cache",
-		"-n", workspaceNamespace, "--ignore-not-found", "--wait=true", "--timeout=30s")
-	_, _ = utils.Run(cmd)
-}

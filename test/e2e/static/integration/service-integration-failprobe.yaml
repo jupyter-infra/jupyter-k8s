@@ -2,7 +2,7 @@ apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceIntegrationTemplate
 metadata:
   name: service-integration-failprobe
-  namespace: default
+  namespace: jupyter-k8s-shared
 spec:
   displayName: Shared Service Integration (failing status probe)
   parameters:

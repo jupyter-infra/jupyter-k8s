@@ -8,6 +8,7 @@ spec:
   image: jk8s-application-jupyter-uv:latest
   integrationTemplateRefs:
     - name: service-integration
+      namespace: jupyter-k8s-shared
       parameters:
         # Points at a Service that does not exist. First-attach capture fails, but resolution is
         # fail-closed AND non-fatal: no frozen values exist yet, so the operator deploys the pod base-only (no

@@ -10,7 +10,9 @@ spec:
   # RESOLVES (sidecar injected, values frozen) but its statusProbe exits non-zero. This exercises the
   # report-only contract -- Degraded on the integration status, Available still True on the workspace.
   integrationTemplateRefs:
+      # Template lives in the shared namespace (admin resource), named explicitly on the ref.
     - name: service-integration-failprobe
+      namespace: jupyter-k8s-shared
       parameters:
         - name: serviceName
           value: shared-cache

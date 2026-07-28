@@ -1,0 +1,13 @@
+{
+  "spec": {
+    "integrationTemplateRefs": [
+      {
+        "name": "service-integration",
+        "namespace": "jupyter-k8s-shared",
+        "parameters": [
+          { "name": "serviceName", "value": "other-cache" }
+        ]
+      }
+    ]
+  }
+}

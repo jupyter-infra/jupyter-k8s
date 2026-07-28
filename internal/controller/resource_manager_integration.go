@@ -127,12 +127,8 @@ func (rm *ResourceManager) reconcileIntegrations(
 			"observedIntegrationTemplateVersion", currentTemplateVersion, "valueCount", len(values))
 	}
 
-	// Record the reconciled set on the in-memory workspace so the build renders from it and the reconcile's
-	// single status write persists it. Pruned records (integration removed from spec) fall out naturally.
-	// Normalize an empty result to nil (not a zero-length slice): resolvedIntegrations is omitempty, so a
-	// freshly-read workspace has it nil; assigning []T{} would make the status-write diff (reflect.DeepEqual)
-	// see a phantom change and churn the status subresource on every reconcile of a no-integration workspace
-	// (this runs unconditionally now). nil round-trips cleanly and still prunes a removed integration.
+	// Record the reconciled set; normalize empty to nil so the omitempty status field doesn't churn on
+	// every no-integration reconcile (a zero-length slice would diff against a fresh read's nil).
 	if len(resolvedIntegrations) == 0 {
 		workspace.Status.ResolvedIntegrations = nil
 	} else {

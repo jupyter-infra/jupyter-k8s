@@ -2,7 +2,7 @@ apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceIntegrationTemplate
 metadata:
   name: service-integration
-  namespace: default
+  namespace: jupyter-k8s-shared
 spec:
   displayName: Shared Service Integration
   # Same metadata.name as service-integration.yaml, so applying this UPDATES the template in place. The
