@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -548,5 +549,140 @@ func TestIntegrationProber_EmptyExecCommand(t *testing.T) {
 				t.Errorf("%s: want reason=%q, got %+v", name, IntegrationReasonProbeError, cond)
 			}
 		})
+	}
+}
+
+// statusWithReason builds an IntegrationStatus carrying a single Ready condition of the given verdict, for
+// exercising the edge-triggered event decision. nil reason/ready combinations are the caller's choice.
+func statusWithReason(name string, ready bool, reason, msg string) *workspacev1alpha1.IntegrationStatus {
+	s := buildIntegrationStatus(name, ready, reason, msg)
+	return &s
+}
+
+// TestIntegrationStatusEvent covers the edge-triggered event decision directly: an event fires only on a
+// verdict TRANSITION (never on an unchanged re-probe), a healthy first attach is silent, a not-ready ->
+// Ready flip recovers, and a reason change while still not-ready re-warns. This is the anti-spam contract.
+func TestIntegrationStatusEvent(t *testing.T) {
+	const name = "ray"
+	ready := func(msg string) *workspacev1alpha1.IntegrationStatus {
+		return statusWithReason(name, true, IntegrationReasonReady, msg)
+	}
+	failed := func(reason, msg string) *workspacev1alpha1.IntegrationStatus {
+		return statusWithReason(name, false, reason, msg)
+	}
+
+	cases := []struct {
+		name       string
+		prior      *workspacev1alpha1.IntegrationStatus
+		next       *workspacev1alpha1.IntegrationStatus
+		wantType   string // "" means no event expected
+		wantReason string
+	}{
+		{"healthy first attach -> silent", nil, ready(""), "", ""},
+		{"steady-state Ready re-probe -> silent", ready(""), ready(""), "", ""},
+		{"first-seen not-ready -> Warning", nil, failed(IntegrationReasonProbeFailed, probeFailMsg), corev1.EventTypeWarning, IntegrationEventDegraded},
+		{"Ready -> not-ready -> Warning", ready(""), failed(IntegrationReasonProbeFailed, probeFailMsg), corev1.EventTypeWarning, IntegrationEventDegraded},
+		{"unchanged not-ready (same reason) -> silent", failed(IntegrationReasonProbeFailed, "at 10:00"), failed(IntegrationReasonProbeFailed, "at 10:05"), "", ""},
+		{"not-ready reason change -> Warning", failed(IntegrationReasonPodNotFound, ""), failed(IntegrationReasonProbeFailed, probeFailMsg), corev1.EventTypeWarning, IntegrationEventDegraded},
+		{"not-ready -> Ready -> Recovered", failed(IntegrationReasonProbeFailed, probeFailMsg), ready(""), corev1.EventTypeNormal, IntegrationEventRecovered},
+		{"nil next -> silent", ready(""), nil, "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ev := getIntegrationStatusEvent(name, tc.prior, tc.next)
+			if ev.Type != tc.wantType || ev.Reason != tc.wantReason {
+				t.Errorf("got type=%q reason=%q, want type=%q reason=%q", ev.Type, ev.Reason, tc.wantType, tc.wantReason)
+			}
+			if tc.wantType != "" && !strings.Contains(ev.Message, name) {
+				t.Errorf("event message must name the integration %q, got %q", name, ev.Message)
+			}
+		})
+	}
+}
+
+// drainRecorder collects all buffered events from a FakeRecorder without blocking (the channel is buffered),
+// so a spec can assert exactly which reasons fired across a sequence of probe cycles.
+func drainRecorder(r *record.FakeRecorder) []string {
+	var out []string
+	for {
+		select {
+		case e := <-r.Events:
+			out = append(out, e)
+		default:
+			return out
+		}
+	}
+}
+
+// TestProbeIntegrationStatus_EmitsEdgeTriggeredEvents drives the full state-machine probe path with a real
+// FakeRecorder to prove the anti-spam contract end-to-end: a degraded integration emits ONE Warning on the
+// transition and stays silent while it remains degraded, then emits ONE Normal event when it recovers.
+func TestProbeIntegrationStatus_EmitsEdgeTriggeredEvents(t *testing.T) {
+	ns, wsName := testNamespace, "event-ws"
+	rm := proberResourceManager(probeTemplate(intReadyName, ns, true))
+	pod := runningWSPod(ns, wsName)
+
+	newWS := func() *workspacev1alpha1.Workspace {
+		ws := &workspacev1alpha1.Workspace{
+			ObjectMeta: metav1.ObjectMeta{Name: wsName, Namespace: ns},
+			Spec:       workspacev1alpha1.WorkspaceSpec{IntegrationTemplateRefs: []workspacev1alpha1.IntegrationTemplateRef{ref(intReadyName)}},
+		}
+		ws.Status.ResolvedIntegrations = []workspacev1alpha1.ResolvedIntegration{{Name: intReadyName}}
+		return ws
+	}
+
+	recorder := record.NewFakeRecorder(10)
+	failVerdict := buildIntegrationStatus(intReadyName, false, IntegrationReasonProbeFailed, probeFailMsg)
+	mock := &mockIntegrationProber{pod: pod, probeByName: map[string]workspacev1alpha1.IntegrationStatus{intReadyName: failVerdict}}
+	sm := &StateMachine{resourceManager: rm, integrationProber: mock, recorder: recorder}
+
+	ws := newWS()
+
+	// Cycle 1: first probe returns ProbeFailed -> exactly one Warning IntegrationDegraded.
+	sm.probeIntegrationStatus(context.Background(), ws)
+	events := drainRecorder(recorder)
+	if len(events) != 1 || !strings.Contains(events[0], IntegrationEventDegraded) || !strings.Contains(events[0], "Warning") {
+		t.Fatalf("cycle 1: want one Warning %s event, got %v", IntegrationEventDegraded, events)
+	}
+
+	// Cycle 2: still ProbeFailed (unchanged verdict) -> NO new event (edge-triggered, not per-cadence).
+	sm.probeIntegrationStatus(context.Background(), ws)
+	if events := drainRecorder(recorder); len(events) != 0 {
+		t.Fatalf("cycle 2: unchanged degraded verdict must emit no event, got %v", events)
+	}
+
+	// Cycle 3: probe now returns Ready -> exactly one Normal IntegrationRecovered.
+	mock.probeByName[intReadyName] = buildIntegrationStatus(intReadyName, true, IntegrationReasonReady, "")
+	sm.probeIntegrationStatus(context.Background(), ws)
+	events = drainRecorder(recorder)
+	if len(events) != 1 || !strings.Contains(events[0], IntegrationEventRecovered) || !strings.Contains(events[0], "Normal") {
+		t.Fatalf("cycle 3: want one Normal %s event, got %v", IntegrationEventRecovered, events)
+	}
+
+	// Cycle 4: steady-state Ready re-probe -> silent.
+	sm.probeIntegrationStatus(context.Background(), ws)
+	if events := drainRecorder(recorder); len(events) != 0 {
+		t.Fatalf("cycle 4: steady-state Ready re-probe must emit no event, got %v", events)
+	}
+}
+
+// TestProbeIntegrationStatus_HealthyFirstAttachIsSilent guards the common case: a workspace whose
+// integration is Ready on the very first probe must not emit an event (no prior verdict to transition from).
+func TestProbeIntegrationStatus_HealthyFirstAttachIsSilent(t *testing.T) {
+	ns, wsName := testNamespace, "healthy-ws"
+	rm := proberResourceManager(probeTemplate(intReadyName, ns, true))
+	recorder := record.NewFakeRecorder(10)
+	mock := &mockIntegrationProber{pod: runningWSPod(ns, wsName)} // default Probe() returns Ready
+	sm := &StateMachine{resourceManager: rm, integrationProber: mock, recorder: recorder}
+
+	ws := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: wsName, Namespace: ns},
+		Spec:       workspacev1alpha1.WorkspaceSpec{IntegrationTemplateRefs: []workspacev1alpha1.IntegrationTemplateRef{ref(intReadyName)}},
+	}
+	ws.Status.ResolvedIntegrations = []workspacev1alpha1.ResolvedIntegration{{Name: intReadyName}}
+
+	sm.probeIntegrationStatus(context.Background(), ws)
+	if events := drainRecorder(recorder); len(events) != 0 {
+		t.Fatalf("healthy first attach must be silent, got %v", events)
 	}
 }
