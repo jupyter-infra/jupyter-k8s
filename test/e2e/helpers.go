@@ -9,6 +9,7 @@ Distributed under the terms of the MIT license
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -18,6 +19,30 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 )
+
+// kubectlGetInto retrieves a Kubernetes resource as full JSON (one `kubectl get -o json` call) and
+// unmarshals it into out. Prefer this over several single-field kubectlGet(jsonpath) calls when a test
+// asserts on multiple fields of the SAME object: it fetches the object once and validates against the
+// decoded value, instead of shelling out per field.
+//
+//nolint:unparam // namespace is a general parameter; current callers happen to share one namespace
+func kubectlGetInto(resource, name, namespace string, out interface{}) error {
+	ginkgo.GinkgoHelper()
+	args := []string{verbGet, resource}
+	if name != "" {
+		args = append(args, name)
+	}
+	if namespace != "" {
+		args = append(args, "-n", namespace)
+	}
+	args = append(args, "-o", "json")
+	cmd := exec.Command("kubectl", args...)
+	output, err := utils.Run(cmd)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal([]byte(output), out)
+}
 
 // kubectlGet retrieves a Kubernetes resource with optional JSONPath query
 func kubectlGet(resource, name, namespace, jsonpath string) (string, error) {
