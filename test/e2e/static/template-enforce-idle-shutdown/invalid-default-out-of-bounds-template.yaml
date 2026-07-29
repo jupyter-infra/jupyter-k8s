@@ -1,0 +1,24 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: invalid-default-out-of-bounds-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Invalid Default Out Of Bounds Idle Shutdown Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  # The enabled default timeout (5) is below minIdleTimeoutInMinutes (15). The defaulter would
+  # stamp this default onto any workspace that omits idleShutdown, and the workspace webhook would
+  # then reject it against the same bounds - making the template's own default un-creatable.
+  # The template admission webhook must reject this misconfiguration.
+  defaultIdleShutdown:
+    enabled: true
+    idleTimeoutInMinutes: 5
+    detection:
+      httpGet:
+        path: /api/status
+        port: 8888
+        transport: network
+  idleShutdownOverrides:
+    allow: true
+    minIdleTimeoutInMinutes: 15
+    maxIdleTimeoutInMinutes: 60

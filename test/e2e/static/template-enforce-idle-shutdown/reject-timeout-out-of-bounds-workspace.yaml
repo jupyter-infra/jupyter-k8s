@@ -1,0 +1,19 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: reject-timeout-out-of-bounds-workspace
+  namespace: default
+spec:
+  displayName: "Reject Timeout Out Of Bounds"
+  templateRef:
+    name: enforce-idle-template
+    namespace: jupyter-k8s-shared
+  # All fields match the default, but timeout 120 exceeds max 60.
+  idleShutdown:
+    enabled: true
+    idleTimeoutInMinutes: 120
+    detection:
+      httpGet:
+        path: /api/status
+        port: 8888
+        transport: network

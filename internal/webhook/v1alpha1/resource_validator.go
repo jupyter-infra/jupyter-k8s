@@ -103,6 +103,28 @@ func validateResourceListBounds(
 	return violations
 }
 
+// validateTemplateResourceBoundsConsistency rejects a template whose resource bounds are
+// self-contradictory (min > max for any resource). Such a bound can never admit any workspace
+// value for that resource. CEL cannot express this on resource.Quantity, so it is enforced at
+// template admission.
+func validateTemplateResourceBoundsConsistency(template *workspacev1alpha1.WorkspaceTemplate) error {
+	bounds := template.Spec.ResourceBounds
+	if bounds == nil || bounds.Resources == nil {
+		return nil
+	}
+
+	for resourceName, resourceRange := range bounds.Resources {
+		if resourceRange.Min.Cmp(resourceRange.Max) > 0 {
+			return fmt.Errorf(
+				"resourceBounds for %q has min %s greater than max %s: no value can satisfy these bounds (template %q)",
+				resourceName, resourceRange.Min.String(), resourceRange.Max.String(), template.GetName(),
+			)
+		}
+	}
+
+	return nil
+}
+
 // resourcesEqual compares two ResourceRequirements for equality
 func resourcesEqual(old, new *corev1.ResourceRequirements) bool {
 	if old == nil && new == nil {

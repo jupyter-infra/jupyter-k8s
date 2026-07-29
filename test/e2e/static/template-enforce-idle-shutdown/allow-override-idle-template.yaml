@@ -1,0 +1,28 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: allow-override-idle-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Allow-Override Idle Shutdown Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultResources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  defaultIdleShutdown:
+    enabled: true
+    idleTimeoutInMinutes: 30
+    detection:
+      httpGet:
+        path: /api/status
+        port: 8888
+        transport: network
+  idleShutdownOverrides:
+    # allow: true means bounds are advisory only; workspaces may override freely.
+    allow: true
+    minIdleTimeoutInMinutes: 15
+    maxIdleTimeoutInMinutes: 60

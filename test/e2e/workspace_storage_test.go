@@ -167,6 +167,31 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 				"workspace-storage", "/home/jovyan/data")
 		})
 
+		It("should reject shrinking storage size on update", func() {
+			workspaceFilename := baseWorkspaceName
+			workspaceName := baseWorkspaceName
+
+			By("creating a workspace with 2Gi storage")
+			createWorkspaceForTest(workspaceFilename, group, baseSubgroup)
+
+			By("waiting for the workspace to become Available (provisions the PVC at 2Gi)")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("attempting to shrink the storage size to 1Gi")
+			patchCmd := `{"spec":{"storage":{"size":"1Gi"}}}`
+			cmd := exec.Command("kubectl", "patch", "workspace", workspaceName,
+				"-n", workspaceNamespace, "--type=merge", "-p", patchCmd)
+			output, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "expected webhook to reject a storage size shrink")
+			Expect(output).To(ContainSubstring("shrinking"),
+				"rejection should explain that the storage size cannot shrink")
+		})
+
 		It("should delete pvc when workspace is deleted", func() {
 			workspaceFilename := baseWorkspaceName
 			workspaceName := baseWorkspaceName

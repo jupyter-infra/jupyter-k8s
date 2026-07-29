@@ -1,0 +1,20 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: allow-override-enabled-out-of-bounds-workspace
+  namespace: default
+spec:
+  displayName: "Allow Override Enabled Out Of Bounds"
+  templateRef:
+    name: allow-override-idle-template
+    namespace: jupyter-k8s-shared
+  # allow: true lets the workspace diverge structurally, but declared bounds still cap the
+  # timeout when idle shutdown is enabled: 999 exceeds max 60, so this is rejected.
+  idleShutdown:
+    enabled: true
+    idleTimeoutInMinutes: 999
+    detection:
+      httpGet:
+        path: /custom/idle
+        port: 8888
+        transport: podExec

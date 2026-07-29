@@ -1,0 +1,27 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: enforce-idle-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Enforced Idle Shutdown Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultResources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  defaultIdleShutdown:
+    enabled: true
+    idleTimeoutInMinutes: 30
+    detection:
+      httpGet:
+        path: /api/status
+        port: 8888
+        transport: network
+  idleShutdownOverrides:
+    allow: false
+    minIdleTimeoutInMinutes: 15
+    maxIdleTimeoutInMinutes: 60

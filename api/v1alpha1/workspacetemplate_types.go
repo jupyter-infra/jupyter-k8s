@@ -240,7 +240,7 @@ type ResourceBounds struct {
 
 // ResourceRange defines min and max for a resource
 // NOTE: CEL validation for min <= max is not possible due to resource.Quantity type limitations
-// Validation is enforced at runtime in the template resolver
+// Consistency (min <= max) is enforced by the WorkspaceTemplate validating webhook
 type ResourceRange struct {
 	// Min is the minimum allowed value
 	// +kubebuilder:validation:Required
@@ -253,7 +253,7 @@ type ResourceRange struct {
 
 // StorageConfig defines storage settings
 // NOTE: CEL validation for minSize <= maxSize is not possible due to resource.Quantity type limitations
-// Validation is enforced at runtime in the template resolver
+// Consistency (minSize <= maxSize) is enforced by the WorkspaceTemplate validating webhook
 type StorageConfig struct {
 	// DefaultSize is the default storage size
 	// +kubebuilder:default="10Gi"

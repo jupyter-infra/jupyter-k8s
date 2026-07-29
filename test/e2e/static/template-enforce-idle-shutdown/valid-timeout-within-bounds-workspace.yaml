@@ -1,0 +1,18 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: valid-timeout-within-bounds-workspace
+  namespace: default
+spec:
+  displayName: "Valid Timeout Within Bounds"
+  templateRef:
+    name: enforce-idle-template
+    namespace: jupyter-k8s-shared
+  idleShutdown:
+    enabled: true
+    idleTimeoutInMinutes: 45
+    detection:
+      httpGet:
+        path: /api/status
+        port: 8888
+        transport: network

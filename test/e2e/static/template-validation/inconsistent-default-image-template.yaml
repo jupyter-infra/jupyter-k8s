@@ -1,0 +1,14 @@
+# Self-inconsistent template: defaultImage is not a member of a non-empty allowedImages
+# (with allowCustomImages unset/false). The template webhook must reject this because the
+# template's own default would be un-creatable under its own image policy (issue #440).
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: inconsistent-default-image-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Inconsistent Default Image Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  allowedImages:
+    - some-other-image:latest
+    - yet-another-image:latest

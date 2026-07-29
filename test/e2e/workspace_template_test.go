@@ -422,6 +422,28 @@ var _ = Describe("Workspace Template", Ordered, func() {
 		})
 	})
 
+	Context("Self-consistency", func() {
+		It("should reject a template whose defaultImage is not in a non-empty allowedImages", func() {
+			templateFilename := "inconsistent-default-image-template"
+			templateName := "inconsistent-default-image-template"
+
+			By("attempting to create a template whose default image would be un-creatable")
+			path := BuildTestResourcePath(templateFilename, groupDir, subgroupValidation)
+			cmd := exec.Command("kubectl", "apply", "-f", path)
+			output, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "template webhook should reject a self-inconsistent image policy")
+			Expect(output).To(ContainSubstring("defaultImage"),
+				"rejection should explain the defaultImage / allowedImages inconsistency")
+
+			By("verifying the template was not created")
+			cmd = exec.Command("kubectl", verbGet, "workspacetemplate", templateName,
+				"-n", SharedNamespace, "--ignore-not-found")
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(BeEmpty(), "template should not exist after webhook rejection")
+		})
+	})
+
 	Context("Mutability and Deletion Protection", func() {
 		It("should prevent template deletion when workspace is using it", func() {
 			workspaceName := "deletion-protection-workspace"

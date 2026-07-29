@@ -13,7 +13,7 @@ import (
 )
 
 // handleBearerAuth handles bearer token authentication requests
-// Takes short lived JWT tokens from URL parameter and exchanges them for 6-hour session cookies
+// Takes short lived JWT tokens from Authorization header or URL parameter and exchanges them for session cookies
 func (s *Server) handleBearerAuth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -36,12 +36,23 @@ func (s *Server) handleBearerAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract token from forwarded URI query parameters
-	token := parsedURL.Query().Get("token")
+	// Extract token: prefer Authorization header, fall back to URL query parameter
+	var token string
+	if authHeader := r.Header.Get(HeaderAuthorization); authHeader != "" {
+		extracted, err := ExtractBearerToken(authHeader)
+		if err != nil {
+			s.logger.Error("Invalid Authorization header", "error", err)
+			http.Error(w, "Invalid Authorization header", http.StatusBadRequest)
+			return
+		}
+		token = extracted
+	} else {
+		token = parsedURL.Query().Get("token")
+	}
+
 	if token == "" {
-		s.logger.Error("Missing token parameter",
-			"forwarded_uri", forwardedURI,
-			"query_params", parsedURL.Query())
+		s.logger.Error("Missing token: provide Authorization: Bearer header or ?token= query parameter",
+			"forwarded_uri", forwardedURI)
 		http.Error(w, "Missing token parameter", http.StatusBadRequest)
 		return
 	}

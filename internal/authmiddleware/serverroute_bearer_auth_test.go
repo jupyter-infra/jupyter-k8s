@@ -84,6 +84,62 @@ func TestHandleBearerAuthMissingToken(t *testing.T) {
 	}
 }
 
+func TestHandleBearerAuthWithAuthorizationHeader(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	server := &Server{
+		logger: logger,
+		config: &Config{
+			PathRegexPattern:            DefaultPathRegexPattern,
+			RoutingMode:                 DefaultRoutingMode,
+			WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+			WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
+	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/")
+	req.Header.Set(HeaderForwardedHost, "test.example.com")
+	req.Header.Set(HeaderAuthorization, "Bearer valid-token")
+	w := httptest.NewRecorder()
+
+	server.handleBearerAuth(w, req)
+
+	// Should proceed past token extraction — will fail later at BearerTokenReview
+	// because no k8s client is configured, but the point is it didn't fail at token extraction
+	assert.NotContains(t, w.Body.String(), "Missing token parameter")
+	assert.NotContains(t, w.Body.String(), "Invalid Authorization header")
+}
+
+func TestHandleBearerAuthInvalidAuthorizationHeader(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	server := &Server{logger: logger}
+
+	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
+	req.Header.Set(HeaderForwardedURI, "/workspaces/default/workspace")
+	req.Header.Set(HeaderAuthorization, "Basic dXNlcjpwYXNz")
+	w := httptest.NewRecorder()
+
+	server.handleBearerAuth(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "Invalid Authorization header")
+}
+
+func TestHandleBearerAuthEmptyBearerToken(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	server := &Server{logger: logger}
+
+	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
+	req.Header.Set(HeaderForwardedURI, "/workspaces/default/workspace")
+	req.Header.Set(HeaderAuthorization, "Bearer ")
+	w := httptest.NewRecorder()
+
+	server.handleBearerAuth(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "Invalid Authorization header")
+}
+
 func TestHandleBearerAuthMissingForwardedHost(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server := &Server{

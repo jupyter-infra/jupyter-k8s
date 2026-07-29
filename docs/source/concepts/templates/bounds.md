@@ -60,6 +60,18 @@ spec:
     maxIdleTimeoutInMinutes: 480
 ```
 
+`allow` controls whether workspace users may disable idle shutdown.
+- when set to `false`: the workspace idle shutdown config must match the template's defaults exactly, except that `idleTimeoutInMinutes` may vary within certain bounds (see below).
+- when set to `true`: workspaces may disable idle shutdown, or vary any field of `idleShutdown`.
+
+```{note}
+`idleShutdown.detection` settings are deeply tied to the application running in the workspace. Misconfiguring the `idleShutdown.detection` field of a workspace may prevent the operator from shutting down idle workspaces. If workspace users are not familiar with such settings, it is safer to set `allow: false`.
+```
+
+The `minIdleTimeoutInMinutes` and `maxIdleTimeoutInMinutes` are always enforced:
+- with `allow: false`: a workspace may set its own idle timeout within these bounds; if `min` and/or `max` is omitted, the implicit lower or upper bound is the template's default.
+- with `allow: true`: a workspace that enables idle shutdown must set its timeout within these bounds; if `min` and/or `max` is omitted, that side is unbounded.
+
 ## Environment and label requirements
 
 Templates can require specific environment variables or labels with regex validation:

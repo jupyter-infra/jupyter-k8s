@@ -133,6 +133,11 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		violations = append(violations, envViolations...)
 	}
 
+	// Validate idle shutdown against the template's override policy
+	if idleViolations := validateIdleShutdownOverrides(workspace, template); len(idleViolations) > 0 {
+		violations = append(violations, idleViolations...)
+	}
+
 	if len(violations) > 0 {
 		return fmt.Errorf("workspace violates template '%s' constraints: %s", workspace.Spec.TemplateRef.Name, formatViolations(violations))
 	}

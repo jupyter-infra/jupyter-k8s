@@ -1,0 +1,14 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: invalid-locking-no-default-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Invalid Locking Idle Shutdown Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  # allow: false locks idle shutdown, but there is no defaultIdleShutdown to enforce against.
+  # The template admission webhook must reject this misconfiguration.
+  idleShutdownOverrides:
+    allow: false
+    minIdleTimeoutInMinutes: 15
+    maxIdleTimeoutInMinutes: 60
