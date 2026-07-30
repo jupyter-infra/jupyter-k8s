@@ -13,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
@@ -513,4 +514,115 @@ func TestWorkspaceNameExtraction(t *testing.T) {
 			}
 		})
 	}
+}
+
+// newPreemptionEvent builds a k8s Event that looks like a scheduler preemption of
+// the given pod.
+func newPreemptionEvent(podName, namespace string) *corev1.Event {
+	return &corev1.Event{
+		InvolvedObject: corev1.ObjectReference{
+			Kind:      KindPod,
+			Name:      podName,
+			Namespace: namespace,
+		},
+		Reason:  DesiredStateStopped,
+		Message: "Pod was Preempted by scheduler",
+	}
+}
+
+func TestHandleKubernetesEvents_IgnoresNonEventObject(t *testing.T) {
+	handler := &PodEventHandler{client: fake.NewClientBuilder().Build()}
+
+	// Passing a Pod (not an Event) should be ignored.
+	result := handler.HandleKubernetesEvents(context.Background(), &corev1.Pod{})
+
+	if result != nil {
+		t.Errorf("expected nil for non-Event object, got %v", result)
+	}
+}
+
+func TestHandleKubernetesEvents_NonPreemptionEventIgnored(t *testing.T) {
+	handler := &PodEventHandler{client: fake.NewClientBuilder().Build()}
+
+	event := &corev1.Event{
+		InvolvedObject: corev1.ObjectReference{Kind: KindPod, Name: "jupyter-ws-abc123-xyz789", Namespace: testNamespaceName},
+		Reason:         "Scheduled",
+		Message:        "Successfully assigned pod to node",
+	}
+
+	result := handler.HandleKubernetesEvents(context.Background(), event)
+
+	if result != nil {
+		t.Errorf("expected nil for non-preemption event, got %v", result)
+	}
+}
+
+func TestHandleKubernetesEvents_NonJupyterPodIgnored(t *testing.T) {
+	handler := &PodEventHandler{client: fake.NewClientBuilder().Build()}
+
+	result := handler.HandleKubernetesEvents(context.Background(), newPreemptionEvent("other-pod-abc123-xyz789", testNamespaceName))
+
+	if result != nil {
+		t.Errorf("expected nil for non-jupyter pod, got %v", result)
+	}
+}
+
+func TestHandleKubernetesEvents_TooFewNameParts(t *testing.T) {
+	handler := &PodEventHandler{client: fake.NewClientBuilder().Build()}
+
+	// "jupyter-ws-xyz789" splits into 3 parts (< 4), so it is skipped.
+	result := handler.HandleKubernetesEvents(context.Background(), newPreemptionEvent("jupyter-ws-xyz789", testNamespaceName))
+
+	if result != nil {
+		t.Errorf("expected nil when pod name has too few parts, got %v", result)
+	}
+}
+
+func TestHandleKubernetesEvents_PreemptionUpdatesWorkspace(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testWorkspaceName,
+			Namespace: testNamespaceName,
+		},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			DesiredStatus: DesiredStateRunning,
+		},
+	}
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(workspace).Build()
+	handler := &PodEventHandler{client: fakeClient}
+
+	// Pod name "jupyter-test-workspace-abc123-xyz789" → workspace "test-workspace".
+	event := newPreemptionEvent("jupyter-test-workspace-abc123-xyz789", testNamespaceName)
+
+	result := handler.HandleKubernetesEvents(context.Background(), event)
+
+	// Should return a reconcile request for the resolved workspace.
+	if len(result) != 1 {
+		t.Fatalf("expected 1 reconcile request, got %d", len(result))
+	}
+	if result[0].Name != testWorkspaceName || result[0].Namespace != testNamespaceName {
+		t.Errorf("unexpected reconcile request: %+v", result[0].NamespacedName)
+	}
+
+	// The workspace should be flipped to Stopped and annotated with the preemption reason.
+	updated := &workspacev1alpha1.Workspace{}
+	if err := fakeClient.Get(context.Background(), client.ObjectKey{Name: testWorkspaceName, Namespace: testNamespaceName}, updated); err != nil {
+		t.Fatalf("failed to get workspace: %v", err)
+	}
+	if updated.Spec.DesiredStatus != DesiredStateStopped {
+		t.Errorf("expected DesiredStatus %q, got %q", DesiredStateStopped, updated.Spec.DesiredStatus)
+	}
+	if updated.Annotations[PreemptionReasonAnnotation] != PreemptedReason {
+		t.Errorf("expected preemption annotation %q, got %q", PreemptedReason, updated.Annotations[PreemptionReasonAnnotation])
+	}
+}
+
+func TestUpdateWorkspaceDesiredStatus_WorkspaceNotFound(t *testing.T) {
+	// A missing workspace is logged and returns without error (no panic).
+	handler := &PodEventHandler{client: fake.NewClientBuilder().Build()}
+
+	handler.updateWorkspaceDesiredStatus(context.Background(), "missing-workspace", testNamespaceName, DesiredStateStopped)
 }

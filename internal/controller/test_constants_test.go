@@ -12,6 +12,8 @@ const (
 	testStrategyName             = "test-strategy"
 	accessStrategyNamespaceConst = "strategy-namespace"
 	testServiceName              = "test-service"
+	testUID                      = "test-uid"
+	testImage                    = "test-image"
 	testRouteName                = "test-route"
 	testRouteNameOne             = "test-route-1"
 	testWorkspaceDisplayName     = "Test Workspace"

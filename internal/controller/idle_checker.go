@@ -29,6 +29,20 @@ type IdleCheckResult struct {
 	ShouldRetry bool
 }
 
+// WorkspaceIdleCheckerInterface is the subset of WorkspaceIdleChecker behavior the
+// state machine depends on. It exists so tests can inject a mock idle checker
+// (mirroring AccessStartupProberInterface), since CheckWorkspaceIdle performs real
+// network / pod-exec I/O that is impractical to drive from a unit test.
+type WorkspaceIdleCheckerInterface interface {
+	CheckWorkspaceIdle(
+		ctx context.Context,
+		workspace *workspacev1alpha1.Workspace,
+		service *corev1.Service,
+		idleConfig *workspacev1alpha1.IdleShutdownSpec,
+	) (*IdleCheckResult, error)
+	CheckInterval() time.Duration
+}
+
 // WorkspaceIdleChecker provides utilities for checking workspace idle status
 type WorkspaceIdleChecker struct {
 	client        client.Client

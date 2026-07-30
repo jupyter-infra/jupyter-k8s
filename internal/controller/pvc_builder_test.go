@@ -167,7 +167,7 @@ func TestPVCBuilder_Metadata(t *testing.T) {
 func TestPVCBuilder_OwnerReference(t *testing.T) {
 	builder := setupPVCBuilder()
 	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespace, UID: "test-uid"},
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespace, UID: testUID},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			Storage: &workspacev1alpha1.StorageSpec{Size: resource.MustParse("5Gi")},
 		},

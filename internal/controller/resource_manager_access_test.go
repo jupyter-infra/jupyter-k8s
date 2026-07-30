@@ -78,11 +78,11 @@ var _ = Describe("ResourceManagerForAccess", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      testWorkspaceName,
 				Namespace: testNamespaceName,
-				UID:       "test-uid",
+				UID:       testUID,
 			},
 			Spec: workspacev1alpha1.WorkspaceSpec{
 				DisplayName: testWorkspaceDisplayName,
-				Image:       "test-image",
+				Image:       testImage,
 				AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
 					Name:      testStrategyName,
 					Namespace: accessStrategyNamespaceConst,

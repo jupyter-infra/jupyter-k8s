@@ -31,7 +31,7 @@ type StateMachine struct {
 	resourceManager     *ResourceManager
 	statusManager       *StatusManager
 	recorder            record.EventRecorder
-	idleChecker         *WorkspaceIdleChecker
+	idleChecker         WorkspaceIdleCheckerInterface
 	accessStartupProber AccessStartupProberInterface
 }
 
@@ -40,7 +40,7 @@ func NewStateMachine(
 	resourceManager *ResourceManager,
 	statusManager *StatusManager,
 	recorder record.EventRecorder,
-	idleChecker *WorkspaceIdleChecker,
+	idleChecker WorkspaceIdleCheckerInterface,
 	accessStartupProber AccessStartupProberInterface,
 ) *StateMachine {
 	return &StateMachine{
