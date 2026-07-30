@@ -1053,6 +1053,115 @@ func TestApplyAccessStrategyLabels(t *testing.T) {
 	}
 }
 
+func TestListActiveWorkspacesByTemplate(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = workspacev1alpha1.AddToScheme(scheme)
+
+	templateWorkspace := func(name string, opts func(*workspacev1alpha1.Workspace)) *workspacev1alpha1.Workspace {
+		ws := &workspacev1alpha1.Workspace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: defaultNamespace,
+				Labels: map[string]string{
+					LabelWorkspaceTemplate:          testTemplateName,
+					LabelWorkspaceTemplateNamespace: templateNamespace,
+				},
+			},
+			Spec: workspacev1alpha1.WorkspaceSpec{
+				TemplateRef: &workspacev1alpha1.TemplateRef{
+					Name:      testTemplateName,
+					Namespace: templateNamespace,
+				},
+			},
+		}
+		if opts != nil {
+			opts(ws)
+		}
+		return ws
+	}
+
+	t.Run("returns only active matching workspaces", func(t *testing.T) {
+		active1 := templateWorkspace(testWorkspace1Name, nil)
+		active2 := templateWorkspace(testWorkspace2Name, nil)
+		deleted := templateWorkspace("ws-deleted", func(ws *workspacev1alpha1.Workspace) {
+			now := metav1.Now()
+			ws.DeletionTimestamp = &now
+			ws.Finalizers = []string{testFinalizerName}
+		})
+		// A workspace carrying the label but with a nil templateRef (data-integrity guard).
+		nilRef := templateWorkspace("ws-nil-ref", func(ws *workspacev1alpha1.Workspace) {
+			ws.Name = "ws-nil-ref"
+			ws.Spec.TemplateRef = nil
+		})
+		// A workspace whose templateRef name drifts from the label.
+		mismatch := templateWorkspace("ws-mismatch", func(ws *workspacev1alpha1.Workspace) {
+			ws.Spec.TemplateRef.Name = "other-template"
+		})
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(active1, active2, deleted, nilRef, mismatch).
+			Build()
+
+		workspaces, nextToken, err := ListActiveWorkspacesByTemplate(
+			context.Background(), fakeClient, testTemplateName, templateNamespace, "", 0)
+
+		assert.NoError(t, err)
+		assert.Empty(t, nextToken)
+		names := make([]string, 0, len(workspaces))
+		for _, ws := range workspaces {
+			names = append(names, ws.Name)
+		}
+		assert.ElementsMatch(t, []string{testWorkspace1Name, testWorkspace2Name}, names)
+	})
+
+	t.Run("filters out workspaces whose namespace differs", func(t *testing.T) {
+		// Label matches but the resolved templateRef namespace is different.
+		otherNs := templateWorkspace("ws-other-ns", func(ws *workspacev1alpha1.Workspace) {
+			ws.Spec.TemplateRef.Namespace = "different-namespace"
+		})
+		fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(otherNs).Build()
+
+		workspaces, _, err := ListActiveWorkspacesByTemplate(
+			context.Background(), fakeClient, testTemplateName, templateNamespace, "", 0)
+
+		assert.NoError(t, err)
+		assert.Empty(t, workspaces)
+	})
+
+	t.Run("passes pagination options and returns error on List failure", func(t *testing.T) {
+		mockClient := &MockClient{ListError: fmt.Errorf("mock list error")}
+
+		workspaces, nextToken, err := ListActiveWorkspacesByTemplate(
+			context.Background(), mockClient, testTemplateName, templateNamespace, "token-1", 5)
+
+		assert.Error(t, err)
+		assert.Nil(t, workspaces)
+		assert.Empty(t, nextToken)
+		assert.Contains(t, err.Error(), "failed to list workspaces by template label")
+
+		// Verify the label / limit / continue options were forwarded.
+		var limit int64
+		var token string
+		labels := map[string]string{}
+		for _, opt := range mockClient.ListOptions {
+			optString := fmt.Sprintf("%v", opt)
+			for k, v := range getLabelsFromOption(optString) {
+				labels[k] = v
+			}
+			if l := getLimitFromOption(optString); l > 0 {
+				limit = l
+			}
+			if tk := getContinueFromOption(optString); tk != "" {
+				token = tk
+			}
+		}
+		assert.Equal(t, testTemplateName, labels[LabelWorkspaceTemplate])
+		assert.Equal(t, int64(5), limit)
+		assert.Equal(t, "token-1", token)
+	})
+}
+
 func TestHasActiveTemplatesWithAccessStrategy(t *testing.T) {
 	const (
 		asName = webAccessName
