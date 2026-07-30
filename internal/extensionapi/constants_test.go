@@ -51,4 +51,10 @@ const (
 
 	// errCannotFindNamespace is the expected error substring when a namespace is missing.
 	errCannotFindNamespace = "cannot find the namespace"
+
+	// strategyName is a placeholder access strategy resource name used in tests.
+	strategyName = "strategy"
+
+	// bearerAuthTestURL is a placeholder BearerAuthURLTemplate used in tests.
+	bearerAuthTestURL = "https://test.com/bearer-auth"
 )

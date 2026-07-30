@@ -6,6 +6,8 @@ Distributed under the terms of the MIT license
 package extensionapi
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -107,6 +109,43 @@ var _ = Describe("ExtensionConfig", func() {
 			config := NewConfig(WithAllowedOrigin(customOrigin))
 
 			Expect(config.AllowedOrigin).To(Equal(customOrigin))
+		})
+
+		It("Should allow to override PluginEndpoints", func() {
+			endpoints := map[string]string{"aws": "http://localhost:8080"}
+			config := NewConfig(WithPluginEndpoints(endpoints))
+
+			Expect(config.PluginEndpoints).To(Equal(endpoints))
+		})
+
+		It("Should allow to override ControllerNamespace", func() {
+			config := NewConfig(WithControllerNamespace("jupyter-system"))
+
+			Expect(config.ControllerNamespace).To(Equal("jupyter-system"))
+		})
+
+		It("Should allow to override JwtIssuer", func() {
+			config := NewConfig(WithJwtIssuer("custom-issuer"))
+
+			Expect(config.JwtIssuer).To(Equal("custom-issuer"))
+		})
+
+		It("Should allow to override JwtAudience", func() {
+			config := NewConfig(WithJwtAudience("custom-audience"))
+
+			Expect(config.JwtAudience).To(Equal("custom-audience"))
+		})
+
+		It("Should allow to override JwtTTL", func() {
+			config := NewConfig(WithJwtTTL(10 * time.Minute))
+
+			Expect(config.JwtTTL).To(Equal(10 * time.Minute))
+		})
+
+		It("Should allow to override NewKeyUseDelay", func() {
+			config := NewConfig(WithNewKeyUseDelay(15 * time.Second))
+
+			Expect(config.NewKeyUseDelay).To(Equal(15 * time.Second))
 		})
 
 	})
