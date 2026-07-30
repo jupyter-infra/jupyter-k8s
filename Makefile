@@ -116,7 +116,27 @@ vet: ## Run go vet against code.
 
 .PHONY: test
 test: manifests generate fmt vet setup-envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v /test/helm) -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /test/) -coverprofile cover.out
+	# Drop machine-generated files (zz_generated*) from the profile;
+	@awk 'NR==1 || $$0 !~ /zz_generated/' cover.out > cover.out.tmp && mv cover.out.tmp cover.out
+
+# COVERAGE_THRESHOLD is the minimum acceptable aggregate statement coverage.
+# `make cover` prints the aggregate and fails if it drops below this value.
+# Raise it over time as coverage improves (ratchet).
+COVERAGE_THRESHOLD ?= 80
+
+.PHONY: cover
+cover: test cover-check ## Run tests, then print and enforce aggregate coverage.
+
+.PHONY: cover-check
+cover-check: ## Print aggregate coverage from an existing cover.out and enforce COVERAGE_THRESHOLD.
+	@test -f cover.out || { echo "cover.out not found; run 'make test' first"; exit 1; }
+	@total=$$(go tool cover -func=cover.out | awk 'END {gsub("%","",$$NF); print $$NF}'); \
+	echo "Total coverage: $${total}% (threshold: $(COVERAGE_THRESHOLD)%)"; \
+	awk -v t="$${total}" -v min="$(COVERAGE_THRESHOLD)" 'BEGIN { exit (t+0 < min+0) }' || { \
+		echo "FAIL: coverage $${total}% is below threshold $(COVERAGE_THRESHOLD)%"; \
+		exit 1; \
+	}
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.

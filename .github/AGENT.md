@@ -5,7 +5,8 @@
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `lint.yml` | push/PR | golangci-lint + helm lint |
-| `test.yml` | push/PR | Unit tests |
+| `test.yml` | push/PR | Unit tests + coverage (read-only): job summary, coverage artifact, `make cover-check` gate at `COVERAGE_THRESHOLD` (80%) |
+| `coverage.yml` | `workflow_run` (after Tests) | Posts sticky coverage comment on the PR; runs in trusted base context with `pull-requests: write`, so it works for fork PRs without granting write to the job that runs PR code |
 | `verify-generated.yml` | push/PR | Regenerate manifests, chart, install.yaml, reference docs; fail on drift (`make verify-generated`) |
 | `test-chart.yml` | push/PR | Helm install on Kind (operator-only chart) |
 | `test-e2e.yml` | push/PR/dispatch | Full E2E on Kind |
