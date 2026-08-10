@@ -1599,6 +1599,16 @@ spec:
                           - name
                           type: object
                         type: array
+                      exposedPorts:
+                        description: ExposedPorts lists the container port names to
+                          publish on the workspace Service (opt-in).
+                        items:
+                          maxLength: 15
+                          minLength: 1
+                          pattern: ^[a-z0-9-]+$
+                          type: string
+                        type: array
+                        x-kubernetes-list-type: set
                       initContainers:
                         description: InitContainers to add to the pod
                         items:

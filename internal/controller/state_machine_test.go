@@ -63,7 +63,7 @@ func newStateMachineWithClient(c client.Client, scheme *runtime.Scheme) *StateMa
 	rm := NewResourceManager(
 		c,
 		scheme,
-		NewDeploymentBuilder(scheme, WorkspaceControllerOptions{}, c),
+		NewDeploymentBuilder(scheme, WorkspaceControllerOptions{}),
 		NewServiceBuilder(scheme),
 		NewPVCBuilder(scheme),
 		NewAccessResourcesBuilder(),
@@ -84,8 +84,9 @@ func TestNewStateMachine(t *testing.T) {
 	rm := NewResourceManager(c, scheme, nil, nil, nil, nil, statusManager)
 	idleChecker := NewWorkspaceIdleChecker(c, time.Minute)
 	prober := &mockAccessStartupProber{}
+	integrationProber := &mockIntegrationProber{}
 
-	sm := NewStateMachine(rm, statusManager, record.NewFakeRecorder(1), idleChecker, prober)
+	sm := NewStateMachine(rm, statusManager, record.NewFakeRecorder(1), idleChecker, prober, integrationProber)
 
 	require.NotNil(t, sm)
 	assert.Same(t, rm, sm.resourceManager)

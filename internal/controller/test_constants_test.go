@@ -47,6 +47,8 @@ const (
 
 	containerNameMain = "main"
 	literalTest       = "test"
+	literalFirst      = "first"
+	literalSecond     = "second"
 
 	conditionTypeExisting = "Existing"
 	conditionTypeToUpdate = "ToUpdate"

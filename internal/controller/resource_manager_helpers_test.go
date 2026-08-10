@@ -60,7 +60,7 @@ func newResourceManagerForCRUD(c client.Client, scheme *runtime.Scheme) *Resourc
 	return NewResourceManager(
 		c,
 		scheme,
-		NewDeploymentBuilder(scheme, WorkspaceControllerOptions{}, c),
+		NewDeploymentBuilder(scheme, WorkspaceControllerOptions{}),
 		NewServiceBuilder(scheme),
 		NewPVCBuilder(scheme),
 		NewAccessResourcesBuilder(),
@@ -80,7 +80,7 @@ func newResourceManagerBrokenBuilders(c client.Client) *ResourceManager {
 	return NewResourceManager(
 		c,
 		broken,
-		NewDeploymentBuilder(broken, WorkspaceControllerOptions{}, c),
+		NewDeploymentBuilder(broken, WorkspaceControllerOptions{}),
 		NewServiceBuilder(broken),
 		NewPVCBuilder(broken),
 		NewAccessResourcesBuilder(),
