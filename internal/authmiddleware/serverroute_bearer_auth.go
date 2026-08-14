@@ -93,8 +93,10 @@ func (s *Server) handleBearerAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if reviewStatus.Path != appPath {
-		s.logger.Error("Token path mismatch", "token_path", reviewStatus.Path, "request_path", appPath)
+	tokenAppPath := ExtractAppPath(reviewStatus.Path, s.config.PathRegexPattern)
+	if tokenAppPath != appPath {
+		s.logger.Error("Token path mismatch", "token_path", reviewStatus.Path,
+			"token_app_path", tokenAppPath, "request_path", appPath)
 		http.Error(w, "Token path mismatch", http.StatusForbidden)
 		return
 	}

@@ -297,6 +297,59 @@ func TestHandleBearerAuth_BearerTokenReview_PathMismatch(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "Token path mismatch")
 }
 
+func TestHandleBearerAuth_BearerTokenReview_SubPathClaim(t *testing.T) {
+	mockServer := NewMockK8sServer(t)
+	defer mockServer.Close()
+
+	response := CreateBearerTokenReviewResponse(
+		TestDefaultNamespace,
+		true,
+		"/workspaces/default/myworkspace/ssh-ws", // token scoped to a sub-path of the workspace
+		testUserValue, testUIDValue, []string{testUsersValue}, nil,
+		"",
+	)
+	mockServer.SetupServerBearerTokenReview200OK(response)
+
+	restClient, err := mockServer.CreateRESTClient()
+	require.NoError(t, err)
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	jwtHandler := &MockJWTHandler{
+		GenerateTokenFunc: func(_ string, _ []string, _ string, _ map[string][]string, path string, _ string, _ string) (string, error) {
+			assert.Equal(t, "/workspaces/default/myworkspace", path)
+			return "session-token", nil
+		},
+	}
+	var cookieSet bool
+	cookieHandler := &MockCookieHandler{
+		SetCookieFunc: func(_ http.ResponseWriter, _ string, _ string, _ string) {
+			cookieSet = true
+		},
+	}
+	server := &Server{
+		logger:        logger,
+		restClient:    restClient,
+		jwtManager:    jwtHandler,
+		cookieManager: cookieHandler,
+		config: &Config{
+			PathRegexPattern:            DefaultPathRegexPattern,
+			RoutingMode:                 DefaultRoutingMode,
+			WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+			WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
+	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/ssh-ws?token=valid-token")
+	req.Header.Set(HeaderForwardedHost, testDomainValue)
+	w := httptest.NewRecorder()
+
+	server.handleBearerAuth(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, cookieSet, "sub-path claim under the same workspace should authenticate")
+}
+
 func TestHandleBearerAuth_BearerTokenReview_Success(t *testing.T) {
 	mockServer := NewMockK8sServer(t)
 	defer mockServer.Close()
