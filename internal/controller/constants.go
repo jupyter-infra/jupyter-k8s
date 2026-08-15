@@ -62,6 +62,13 @@ const (
 	// DesiredStateStopped indicates the workspace is stopped
 	DesiredStateStopped = "Stopped"
 
+	// IntegrationStateReady is the coarse rollup reported in status.integrationStatuses[].state when an
+	// integration's last probe succeeded.
+	IntegrationStateReady = "Ready"
+	// IntegrationStateDegraded is the coarse rollup reported in status.integrationStatuses[].state when
+	// an integration's last probe failed.
+	IntegrationStateDegraded = "Degraded"
+
 	// PreemptedReason is the reason for preempted workspaces
 	PreemptedReason = "Workspace preempted due to resource contention"
 
@@ -116,6 +123,20 @@ const (
 	// IdleProbeTimeout is the per-request timeout for network-based idle detection probes
 	IdleProbeTimeout = 10 * time.Second
 
+	// DefaultIntegrationProbeTimeoutSeconds is the default per-exec timeout for an integration status probe.
+	DefaultIntegrationProbeTimeoutSeconds = 5
+
+	// DefaultIntegrationProbePeriod is the default base re-probe cadence when the operator sets no
+	// --integration-probe-period. The period is an operator-level setting, not author-selectable per
+	// template. The Running reconcile has no watch on the referenced resource, so it requeues on this
+	// period to refresh report-only status -- kept coarse (5m) because integration health is reported,
+	// not gating, so it need not be tight. Mirrors DefaultIdleCheckInterval.
+	DefaultIntegrationProbePeriod = 5 * time.Minute
+
+	// MinIntegrationProbePeriod is the floor a configured --integration-probe-period is clamped up to, so
+	// a misconfigured tiny value cannot hot-loop the reconciler. Mirrors MinIdleCheckInterval.
+	MinIntegrationProbePeriod = 1 * time.Second
+
 	// WorkspaceFinalizerName is the finalizer name for workspace cleanup protection
 	WorkspaceFinalizerName = "workspace.jupyter.org/workspace-protection"
 
@@ -127,6 +148,9 @@ const (
 
 	// ResourcePrefix is the prefix for workspace resource names
 	ResourcePrefix = "workspace"
+
+	// PrimaryContainerName is the name of the workspace's primary application container in the pod.
+	PrimaryContainerName = "workspace"
 
 	// ReservedMetadataPrefix is the prefix reserved for system-managed labels and annotations
 	ReservedMetadataPrefix = "workspace.jupyter.org/"

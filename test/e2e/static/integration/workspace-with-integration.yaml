@@ -1,0 +1,23 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-with-integration
+  namespace: default
+spec:
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  integrationTemplateRefs:
+      # The template is an admin resource in the shared namespace, so the ref names that namespace
+      # explicitly (an omitted namespace resolves to the workspace's own namespace only, no fallback).
+    - name: service-integration
+      namespace: jupyter-k8s-shared
+      parameters:
+        - name: serviceName
+          value: shared-cache
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

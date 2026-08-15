@@ -68,6 +68,10 @@ type WorkspaceControllerOptions struct {
 	// IdleCheckInterval is the interval between idle status checks for running workspaces.
 	// Zero means use the default (5m).
 	IdleCheckInterval time.Duration
+
+	// IntegrationProbePeriod is the base re-probe cadence for report-only integration status checks on
+	// running workspaces. Zero means use the default (5m); a too-small value is raised to the floor.
+	IntegrationProbePeriod time.Duration
 }
 
 // WorkspaceReconciler reconciles a Workspace object
@@ -335,7 +339,7 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	resourceManager := NewResourceManager(
 		k8sClient,
 		scheme,
-		NewDeploymentBuilder(scheme, options, k8sClient),
+		NewDeploymentBuilder(scheme, options),
 		NewServiceBuilder(scheme),
 		NewPVCBuilder(scheme),
 		NewAccessResourcesBuilder(),
@@ -346,7 +350,19 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
 	idleChecker := NewWorkspaceIdleChecker(k8sClient, options.IdleCheckInterval)
 	accessStartupProber := NewAccessStartupProber(NewAccessResourcesBuilder())
-	stateMachine := NewStateMachine(resourceManager, statusManager, eventRecorder, idleChecker, accessStartupProber)
+
+	// Integration status prober (report-only). If pod-exec config is unavailable, leave it nil so the
+	// probe step is skipped rather than failing controller setup -- the freeze/overlay path is unaffected.
+	var integrationProber IntegrationProberInterface
+	if execUtil, execErr := NewPodExecUtil(); execErr != nil {
+		logf.Log.WithName("workspace-controller").Error(execErr,
+			"pod exec unavailable; integration status probes disabled")
+	} else {
+		integrationProber = NewIntegrationProber(k8sClient, execUtil, options.IntegrationProbePeriod)
+	}
+
+	stateMachine := NewStateMachine(
+		resourceManager, statusManager, eventRecorder, idleChecker, accessStartupProber, integrationProber)
 
 	// Create plugin clients for pod event handling (if configured)
 	pluginClients := map[string]plugin.RemoteAccessPluginApis{}

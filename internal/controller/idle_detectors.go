@@ -91,8 +91,8 @@ func (h *PodExecHTTPGetDetector) CheckIdle(ctx context.Context, workspace *works
 
 	logger.V(1).Info("Calling idle endpoint via podExec", "url", probeURL)
 
-	const workspaceContainerName = ResourcePrefix
-	output, err := h.execUtil.ExecInPod(ctx, h.pod, workspaceContainerName, cmd, "")
+	// Always execute in the primary workspace container
+	output, err := h.execUtil.ExecInPod(ctx, h.pod, PrimaryContainerName, cmd, "")
 	if err != nil {
 		// curl exit code 7 = connection refused (temporary failure)
 		if strings.Contains(err.Error(), "exit code 7") {

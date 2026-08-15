@@ -42,7 +42,7 @@ var _ = Describe("DeploymentBuilderForAccess", func() {
 			ApplicationImagesRegistry:   "quay.io",
 		}
 
-		deploymentBuilder = NewDeploymentBuilder(scheme, options, nil)
+		deploymentBuilder = NewDeploymentBuilder(scheme, options)
 
 		// Create test workspace
 		testWorkspace = &workspacev1alpha1.Workspace{

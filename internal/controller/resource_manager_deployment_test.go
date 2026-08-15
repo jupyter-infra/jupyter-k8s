@@ -57,7 +57,7 @@ func TestResourceManager_createDeployment(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 		rm := newResourceManagerForCRUD(c, scheme)
 
-		dep, err := rm.createDeployment(context.Background(), ws, nil)
+		dep, err := rm.createDeployment(context.Background(), ws, nil, nil)
 
 		require.NoError(t, err)
 		assert.Equal(t, GenerateDeploymentName(ws.Name), dep.Name)
@@ -73,7 +73,7 @@ func TestResourceManager_createDeployment(t *testing.T) {
 		}
 		rm := newResourceManagerForCRUD(mock, scheme)
 
-		_, err := rm.createDeployment(context.Background(), ws, nil)
+		_, err := rm.createDeployment(context.Background(), ws, nil, nil)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to create deployment")
@@ -134,7 +134,7 @@ func TestResourceManager_ensureDeploymentUpToDate(t *testing.T) {
 			},
 		}
 
-		got, err := rm.ensureDeploymentUpToDate(context.Background(), existing, crudWorkspace(false), nil)
+		got, err := rm.ensureDeploymentUpToDate(context.Background(), existing, crudWorkspace(false), nil, nil)
 
 		require.NoError(t, err)
 		assert.Same(t, existing, got)
@@ -146,13 +146,13 @@ func TestResourceManager_ensureDeploymentUpToDate(t *testing.T) {
 		stale := crudWorkspace(true)
 		stale.Spec.Image = "old-image"
 		rmBuild := newResourceManagerForCRUD(fake.NewClientBuilder().WithScheme(scheme).Build(), scheme)
-		staleDep, err := rmBuild.deploymentBuilder.BuildDeploymentWithAccessStrategy(context.Background(), stale, nil)
+		staleDep, err := rmBuild.deploymentBuilder.BuildWorkspaceDeployment(context.Background(), stale, nil, nil)
 		require.NoError(t, err)
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(staleDep).Build()
 		rm := newResourceManagerForCRUD(c, scheme)
 
-		got, err := rm.ensureDeploymentUpToDate(context.Background(), staleDep, ws, nil)
+		got, err := rm.ensureDeploymentUpToDate(context.Background(), staleDep, ws, nil, nil)
 
 		require.NoError(t, err)
 		require.NotNil(t, got)
@@ -169,7 +169,7 @@ func TestResourceManager_ensureDeploymentUpToDate(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(dep).Build()
 		rm := newResourceManagerBrokenBuilders(c)
 
-		_, err := rm.ensureDeploymentUpToDate(context.Background(), dep, ws, nil)
+		_, err := rm.ensureDeploymentUpToDate(context.Background(), dep, ws, nil, nil)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to check if deployment needs update")
@@ -190,7 +190,7 @@ func TestResourceManager_updateDeployment(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(dep).Build()
 		rm := newResourceManagerBrokenBuilders(c)
 
-		_, err := rm.updateDeployment(context.Background(), dep, ws, nil)
+		_, err := rm.updateDeployment(context.Background(), dep, ws, nil, nil)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to build updated deployment")

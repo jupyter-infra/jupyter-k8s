@@ -1,0 +1,24 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: ws-integration-shared-explicit
+  namespace: default
+spec:
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  # The template lives only in the shared namespace, so the ref names that namespace explicitly. An omitted
+  # namespace would resolve to the workspace's own namespace only (no shared fallback), so the shared
+  # namespace must be set on the ref to reach it.
+  integrationTemplateRefs:
+    - name: valid-integration
+      namespace: jupyter-k8s-shared
+      parameters:
+        - name: serviceName
+          value: shared-cache
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

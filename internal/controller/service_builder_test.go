@@ -282,9 +282,9 @@ var _ = Describe("ServiceBuilder sidecar ports", func() {
 		})
 
 		It("errors when two exposed ports target the same number", func() {
-			_, err := serviceBuilder.BuildService(workspace, accessStrategy([]string{"first", "second"},
-				corev1.Container{Name: "a", Ports: []corev1.ContainerPort{{Name: "first", ContainerPort: 8080}}},
-				corev1.Container{Name: "b", Ports: []corev1.ContainerPort{{Name: "second", ContainerPort: 8080}}},
+			_, err := serviceBuilder.BuildService(workspace, accessStrategy([]string{literalFirst, literalSecond},
+				corev1.Container{Name: "a", Ports: []corev1.ContainerPort{{Name: literalFirst, ContainerPort: 8080}}},
+				corev1.Container{Name: "b", Ports: []corev1.ContainerPort{{Name: literalSecond, ContainerPort: 8080}}},
 			))
 			Expect(err).To(MatchError(ContainSubstring("both target port 8080")))
 		})

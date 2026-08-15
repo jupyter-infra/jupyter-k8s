@@ -126,7 +126,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 		rm := NewResourceManager(
 			k8sClient,
 			scheme.Scheme,
-			NewDeploymentBuilder(scheme.Scheme, WorkspaceControllerOptions{}, k8sClient),
+			NewDeploymentBuilder(scheme.Scheme, WorkspaceControllerOptions{}),
 			NewServiceBuilder(scheme.Scheme),
 			NewPVCBuilder(scheme.Scheme),
 			NewAccessResourcesBuilder(),
