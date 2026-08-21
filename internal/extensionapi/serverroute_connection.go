@@ -171,8 +171,16 @@ func (s *ExtensionServer) generateWebSocketConnectionURL(r *http.Request, ws *wo
 	if accessStrategy == nil {
 		return "", fmt.Errorf("no AccessStrategy configured for workspace")
 	}
-	if accessStrategy.Spec.BearerAuthURLTemplate == "" {
-		return "", fmt.Errorf("BearerAuthURLTemplate not configured in AccessStrategy")
+
+	// Prefer WebSocketURLTemplate; fall back to BearerAuthURLTemplate (stripping /bearer-auth).
+	urlTemplate := accessStrategy.Spec.WebSocketURLTemplate
+	stripBearerAuthSuffix := false
+	if urlTemplate == "" {
+		urlTemplate = accessStrategy.Spec.BearerAuthURLTemplate
+		stripBearerAuthSuffix = true
+	}
+	if urlTemplate == "" {
+		return "", fmt.Errorf("neither WebSocketURLTemplate nor BearerAuthURLTemplate configured in AccessStrategy")
 	}
 
 	// Create signer based on access strategy
@@ -181,42 +189,28 @@ func (s *ExtensionServer) generateWebSocketConnectionURL(r *http.Request, ws *wo
 		return "", fmt.Errorf("failed to create signer: %w", err)
 	}
 
-	// Generate URL from template (reuses the same BearerAuthURLTemplate)
-	wsURL, err := s.renderBearerAuthURL(accessStrategy.Spec.BearerAuthURLTemplate, ws, accessStrategy)
+	renderedURL, err := s.renderBearerAuthURL(urlTemplate, ws, accessStrategy)
 	if err != nil {
 		return "", fmt.Errorf("failed to render WebSocket URL: %w", err)
 	}
 
-	// Parse URL to extract domain and path for JWT claims
-	parsedURL, err := url.Parse(wsURL)
+	parsedURL, err := url.Parse(renderedURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse generated URL: %w", err)
 	}
 
-	domain := parsedURL.Host
-	path := parsedURL.Path
-
-	// Strip /bearer-auth suffix if present (template may be shared with web UI)
-	if strings.HasSuffix(path, "/bearer-auth") {
-		path = strings.TrimSuffix(path, "/bearer-auth")
-		if path == "" {
-			path = "/"
-		}
-	}
-
-	// Generate JWT token for the WebSocket connection
-	token, err := signer.GenerateToken(user, groups, user, extra, path, domain, jwt.TokenTypeBootstrap, true)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate JWT token: %w", err)
-	}
-
-	// Replace scheme with wss:// and strip /bearer-auth from the URL
 	parsedURL.Scheme = "wss"
-	if strings.HasSuffix(parsedURL.Path, "/bearer-auth") {
+	if stripBearerAuthSuffix {
 		parsedURL.Path = strings.TrimSuffix(parsedURL.Path, "/bearer-auth")
 		if parsedURL.Path == "" {
 			parsedURL.Path = "/"
 		}
+	}
+
+	// Token is scoped to the WebSocket path; the auth middleware normalizes it to the app path.
+	token, err := signer.GenerateToken(user, groups, user, extra, parsedURL.Path, parsedURL.Host, jwt.TokenTypeBootstrap, true)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate JWT token: %w", err)
 	}
 
 	return fmt.Sprintf("%s?token=%s", parsedURL.String(), token), nil

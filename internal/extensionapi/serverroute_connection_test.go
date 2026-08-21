@@ -31,6 +31,7 @@ import (
 const testUser = "test-user"
 const testWorkspaceMyWorkspace = "myworkspace"
 const testStrategyWebSocket = "ws-strategy"
+const testWebSocketURL = "https://myworkspace-default.example.com/ssh-ws"
 
 // mockSignerFactory for testing
 type mockSignerFactory struct {

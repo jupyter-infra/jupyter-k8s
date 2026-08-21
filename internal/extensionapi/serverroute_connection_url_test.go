@@ -263,7 +263,7 @@ func TestGenerateWebSocketConnectionURL_Success(t *testing.T) {
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{Name: testStrategyWebSocket, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			BearerAuthURLTemplate: "https://myworkspace-default.example.com/ssh-ws",
+			BearerAuthURLTemplate: testWebSocketURL,
 		},
 	}
 
@@ -331,6 +331,47 @@ func TestGenerateWebSocketConnectionURL_StripsBearerAuth(t *testing.T) {
 	}
 }
 
+func TestGenerateWebSocketConnectionURL_UsesWebSocketURLTemplate(t *testing.T) {
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceMyWorkspace, Namespace: namespaceDefault},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: testStrategyWebSocket},
+		},
+	}
+
+	// WebSocketURLTemplate takes precedence and is used as-is (no /bearer-auth stripping).
+	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+		ObjectMeta: metav1.ObjectMeta{Name: testStrategyWebSocket, Namespace: namespaceDefault},
+		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+			BearerAuthURLTemplate: "https://myworkspace-default.example.com/bearer-auth",
+			WebSocketURLTemplate:  testWebSocketURL,
+		},
+	}
+
+	server := &ExtensionServer{
+		config:        &ExtensionConfig{},
+		signerFactory: &mockSignerFactory{signer: &mockSigner{token: testToken}},
+	}
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	req.Header.Set("X-Remote-User", testUser)
+
+	connURL, err := server.generateWebSocketConnectionURL(req, workspace, accessStrategy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.HasPrefix(connURL, "wss://") {
+		t.Errorf("expected wss:// scheme, got: %s", connURL)
+	}
+	if !strings.Contains(connURL, "/ssh-ws") {
+		t.Errorf("expected /ssh-ws path from WebSocketURLTemplate, got: %s", connURL)
+	}
+	if strings.Contains(connURL, "/bearer-auth") {
+		t.Errorf("WebSocketURLTemplate should be used verbatim, not the bearer-auth template, got: %s", connURL)
+	}
+}
+
 func TestGenerateWebSocketConnectionURL_NoAccessStrategy(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceMyWorkspace, Namespace: namespaceDefault},
@@ -359,7 +400,7 @@ func TestGenerateWebSocketConnectionURL_MissingUser(t *testing.T) {
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{Name: testStrategyWebSocket, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			BearerAuthURLTemplate: "https://myworkspace-default.example.com/ssh-ws",
+			BearerAuthURLTemplate: testWebSocketURL,
 		},
 	}
 

@@ -158,6 +158,10 @@ type WorkspaceAccessStrategySpec struct {
 	// +optional
 	BearerAuthURLTemplate string `json:"bearerAuthURLTemplate,omitempty"`
 
+	// WebSocketURLTemplate constructs the WebSocket (ssh-over-websocket) connection URL; if unset, it falls back to BearerAuthURLTemplate with /bearer-auth stripped. Template vars: .Workspace, .AccessStrategy.
+	// +optional
+	WebSocketURLTemplate string `json:"webSocketURLTemplate,omitempty"`
+
 	// CreateConnectionHandler specifies the default handler for connection creation (e.g., "k8s-native").
 	// Used as fallback when CreateConnectionHandlerMap does not contain the requested connection type.
 	// +optional
