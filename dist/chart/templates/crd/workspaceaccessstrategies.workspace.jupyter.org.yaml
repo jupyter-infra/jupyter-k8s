@@ -5290,8 +5290,8 @@ spec:
                 type: string
               webSocketURLTemplate:
                 description: 'WebSocketURLTemplate constructs the WebSocket (ssh-over-websocket)
-                  connection URL; if unset, it falls back to BearerAuthURLTemplate
-                  with /bearer-auth stripped. Template vars: .Workspace, .AccessStrategy.'
+                  connection URL; required to enable WebSocket connections. Template
+                  vars: .Workspace, .AccessStrategy.'
                 type: string
             required:
             - accessResourceTemplates

@@ -263,7 +263,7 @@ func TestGenerateWebSocketConnectionURL_Success(t *testing.T) {
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{Name: testStrategyWebSocket, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			BearerAuthURLTemplate: testWebSocketURL,
+			WebSocketURLTemplate: testWebSocketURL,
 		},
 	}
 
@@ -292,7 +292,7 @@ func TestGenerateWebSocketConnectionURL_Success(t *testing.T) {
 	}
 }
 
-func TestGenerateWebSocketConnectionURL_StripsBearerAuth(t *testing.T) {
+func TestGenerateWebSocketConnectionURL_UsesWebSocketURLTemplateVerbatim(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceMyWorkspace, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceSpec{
@@ -300,46 +300,7 @@ func TestGenerateWebSocketConnectionURL_StripsBearerAuth(t *testing.T) {
 		},
 	}
 
-	// Template with /bearer-auth suffix (shared with web UI)
-	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
-		ObjectMeta: metav1.ObjectMeta{Name: testStrategyWebSocket, Namespace: namespaceDefault},
-		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			BearerAuthURLTemplate: "https://myworkspace-default.example.com/bearer-auth",
-		},
-	}
-
-	server := &ExtensionServer{
-		config:        &ExtensionConfig{},
-		signerFactory: &mockSignerFactory{signer: &mockSigner{token: testToken}},
-	}
-
-	req := httptest.NewRequest("POST", "/test", nil)
-	req.Header.Set("X-Remote-User", testUser)
-
-	url, err := server.generateWebSocketConnectionURL(req, workspace, accessStrategy)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Should strip /bearer-auth from the URL
-	if strings.Contains(url, "/bearer-auth") {
-		t.Errorf("expected /bearer-auth to be stripped, got: %s", url)
-	}
-	if !strings.HasPrefix(url, "wss://") {
-		t.Errorf("expected wss:// scheme, got: %s", url)
-	}
-}
-
-func TestGenerateWebSocketConnectionURL_UsesWebSocketURLTemplate(t *testing.T) {
-	workspace := &workspacev1alpha1.Workspace{
-		ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceMyWorkspace, Namespace: namespaceDefault},
-		Spec: workspacev1alpha1.WorkspaceSpec{
-			AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: testStrategyWebSocket},
-		},
-	}
-
-	// WebSocketURLTemplate takes precedence and is used as-is (no /bearer-auth stripping).
+	// WebSocketURLTemplate is used as-is; the bearer-auth template is not consulted.
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{Name: testStrategyWebSocket, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
@@ -400,7 +361,7 @@ func TestGenerateWebSocketConnectionURL_MissingUser(t *testing.T) {
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		ObjectMeta: metav1.ObjectMeta{Name: testStrategyWebSocket, Namespace: namespaceDefault},
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			BearerAuthURLTemplate: testWebSocketURL,
+			WebSocketURLTemplate: testWebSocketURL,
 		},
 	}
 
@@ -440,6 +401,6 @@ func TestGenerateWebSocketConnectionURL_MissingTemplate(t *testing.T) {
 	_, err := server.generateWebSocketConnectionURL(req, workspace, accessStrategy)
 
 	if err == nil {
-		t.Error("expected error for missing BearerAuthURLTemplate")
+		t.Error("expected error for missing WebSocketURLTemplate")
 	}
 }

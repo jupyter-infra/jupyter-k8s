@@ -171,16 +171,8 @@ func (s *ExtensionServer) generateWebSocketConnectionURL(r *http.Request, ws *wo
 	if accessStrategy == nil {
 		return "", fmt.Errorf("no AccessStrategy configured for workspace")
 	}
-
-	// Prefer WebSocketURLTemplate; fall back to BearerAuthURLTemplate (stripping /bearer-auth).
-	urlTemplate := accessStrategy.Spec.WebSocketURLTemplate
-	stripBearerAuthSuffix := false
-	if urlTemplate == "" {
-		urlTemplate = accessStrategy.Spec.BearerAuthURLTemplate
-		stripBearerAuthSuffix = true
-	}
-	if urlTemplate == "" {
-		return "", fmt.Errorf("neither WebSocketURLTemplate nor BearerAuthURLTemplate configured in AccessStrategy")
+	if accessStrategy.Spec.WebSocketURLTemplate == "" {
+		return "", fmt.Errorf("WebSocketURLTemplate not configured in AccessStrategy")
 	}
 
 	// Create signer based on access strategy
@@ -189,7 +181,7 @@ func (s *ExtensionServer) generateWebSocketConnectionURL(r *http.Request, ws *wo
 		return "", fmt.Errorf("failed to create signer: %w", err)
 	}
 
-	renderedURL, err := s.renderBearerAuthURL(urlTemplate, ws, accessStrategy)
+	renderedURL, err := s.renderBearerAuthURL(accessStrategy.Spec.WebSocketURLTemplate, ws, accessStrategy)
 	if err != nil {
 		return "", fmt.Errorf("failed to render WebSocket URL: %w", err)
 	}
@@ -198,14 +190,7 @@ func (s *ExtensionServer) generateWebSocketConnectionURL(r *http.Request, ws *wo
 	if err != nil {
 		return "", fmt.Errorf("failed to parse generated URL: %w", err)
 	}
-
 	parsedURL.Scheme = "wss"
-	if stripBearerAuthSuffix {
-		parsedURL.Path = strings.TrimSuffix(parsedURL.Path, "/bearer-auth")
-		if parsedURL.Path == "" {
-			parsedURL.Path = "/"
-		}
-	}
 
 	// Token is scoped to the WebSocket path; the auth middleware normalizes it to the app path.
 	token, err := signer.GenerateToken(user, groups, user, extra, parsedURL.Path, parsedURL.Host, jwt.TokenTypeBootstrap, true)
@@ -330,6 +315,10 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 		responseType = connectionv1alpha1.ConnectionTypeWebUI
 
 	case connectionv1alpha1.ConnectionTypeWebSocket:
+		if !hasWebSocketEnabled(accessStrategy) {
+			WriteKubernetesError(w, http.StatusBadRequest, "WebSocket access is not enabled for this workspace")
+			return
+		}
 		responseURL, err = s.generateWebSocketConnectionURL(r, ws, accessStrategy)
 		responseType = connectionv1alpha1.ConnectionTypeWebSocket
 
@@ -341,6 +330,10 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 			return
 		}
 		if pluginName == handlerK8sNative {
+			if !hasWebSocketEnabled(accessStrategy) {
+				WriteKubernetesError(w, http.StatusBadRequest, "WebSocket access is not enabled for this workspace")
+				return
+			}
 			responseURL, err = s.generateWebSocketConnectionURL(r, ws, accessStrategy)
 			responseType = connectionType
 		} else {
@@ -431,6 +424,14 @@ func hasWebUIEnabled(accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) 
 		return false
 	}
 	return accessStrategy.Spec.BearerAuthURLTemplate != ""
+}
+
+// hasWebSocketEnabled checks if WebSocketURLTemplate is defined in the access strategy.
+func hasWebSocketEnabled(accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) bool {
+	if accessStrategy == nil {
+		return false
+	}
+	return accessStrategy.Spec.WebSocketURLTemplate != ""
 }
 
 // renderBearerAuthURL renders the BearerAuthURLTemplate with workspace variables

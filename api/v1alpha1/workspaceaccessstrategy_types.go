@@ -158,7 +158,7 @@ type WorkspaceAccessStrategySpec struct {
 	// +optional
 	BearerAuthURLTemplate string `json:"bearerAuthURLTemplate,omitempty"`
 
-	// WebSocketURLTemplate constructs the WebSocket (ssh-over-websocket) connection URL; if unset, it falls back to BearerAuthURLTemplate with /bearer-auth stripped. Template vars: .Workspace, .AccessStrategy.
+	// WebSocketURLTemplate constructs the WebSocket (ssh-over-websocket) connection URL; required to enable WebSocket connections. Template vars: .Workspace, .AccessStrategy.
 	// +optional
 	WebSocketURLTemplate string `json:"webSocketURLTemplate,omitempty"`
 

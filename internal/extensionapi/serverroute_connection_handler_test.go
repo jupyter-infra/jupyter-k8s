@@ -361,7 +361,7 @@ func TestHandleConnectionCreate_WebUISuccess(t *testing.T) {
 
 func TestHandleConnectionCreate_WebSocketSuccess(t *testing.T) {
 	ws, strategy := availableWorkspaceWithStrategy(workspacev1alpha1.WorkspaceAccessStrategySpec{
-		BearerAuthURLTemplate: "https://test.com/workspaces/ns/ws/bearer-auth",
+		WebSocketURLTemplate: "https://test.com/workspaces/ns/ws/ssh-ws",
 	})
 	server := newConnectionServer(t, ws, strategy)
 
@@ -372,6 +372,17 @@ func TestHandleConnectionCreate_WebSocketSuccess(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, connectionv1alpha1.ConnectionTypeWebSocket, resp.Status.WorkspaceConnectionType)
 	assert.Contains(t, resp.Status.WorkspaceConnectionURL, "wss://")
+}
+
+func TestHandleConnectionCreate_WebSocketNotEnabled(t *testing.T) {
+	// Available workspace + strategy, but no WebSocketURLTemplate → WebSocket disabled.
+	ws, strategy := availableWorkspaceWithStrategy(workspacev1alpha1.WorkspaceAccessStrategySpec{})
+	server := newConnectionServer(t, ws, strategy)
+
+	w := postConnection(t, server, connectionv1alpha1.ConnectionTypeWebSocket)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "WebSocket access is not enabled")
 }
 
 func TestHandleConnectionCreate_WebUINotEnabled(t *testing.T) {
