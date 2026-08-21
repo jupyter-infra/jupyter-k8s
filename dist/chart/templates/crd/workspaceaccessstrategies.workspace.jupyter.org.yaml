@@ -5288,6 +5288,11 @@ spec:
                   PodEventsHandler specifies the handler for pod lifecycle events in "plugin:action" format.
                   Example: "aws:ssm-remote-access"
                 type: string
+              webSocketURLTemplate:
+                description: 'WebSocketURLTemplate constructs the WebSocket (ssh-over-websocket)
+                  connection URL; required to enable WebSocket connections. Template
+                  vars: .Workspace, .AccessStrategy.'
+                type: string
             required:
             - accessResourceTemplates
             - displayName
