@@ -350,6 +350,46 @@ func TestHandleBearerAuth_BearerTokenReview_SubPathClaim(t *testing.T) {
 	assert.True(t, cookieSet, "sub-path claim under the same workspace should authenticate")
 }
 
+func TestHandleBearerAuth_BearerTokenReview_SubPathClaimDifferentWorkspace(t *testing.T) {
+	mockServer := NewMockK8sServer(t)
+	defer mockServer.Close()
+
+	response := CreateBearerTokenReviewResponse(
+		TestDefaultNamespace,
+		true,
+		"/workspaces/default/otherworkspace/ssh-ws", // sub-path token scoped to a DIFFERENT workspace
+		testUserValue, testUIDValue, []string{testUsersValue}, nil,
+		"",
+	)
+	mockServer.SetupServerBearerTokenReview200OK(response)
+
+	restClient, err := mockServer.CreateRESTClient()
+	require.NoError(t, err)
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	server := &Server{
+		logger:     logger,
+		restClient: restClient,
+		config: &Config{
+			PathRegexPattern:            DefaultPathRegexPattern,
+			RoutingMode:                 DefaultRoutingMode,
+			WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+			WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
+	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/ssh-ws?token=valid-token")
+	req.Header.Set(HeaderForwardedHost, testDomainValue)
+	w := httptest.NewRecorder()
+
+	server.handleBearerAuth(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "Token path mismatch",
+		"a sub-path token for a different workspace must not authenticate")
+}
+
 func TestHandleBearerAuth_BearerTokenReview_Success(t *testing.T) {
 	mockServer := NewMockK8sServer(t)
 	defer mockServer.Close()
