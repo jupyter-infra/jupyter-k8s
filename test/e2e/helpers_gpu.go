@@ -40,15 +40,29 @@ const (
 var fakeGPUResource = corev1.ResourceName(fakeGPUResourceName)
 
 // setupFakeGPUNode advertises fake GPU capacity on the cluster's first node and labels it for
-// nodeSelector-based placement. Returns the node name. Capacity and allocatable are patched
-// together: the kubelet only recomputes allocatable from capacity on its periodic status sync,
-// too slow for a test to wait on.
+// nodeSelector-based placement. Returns the node name.
 func setupFakeGPUNode() string {
 	ginkgo.GinkgoHelper()
 
 	nodeName, err := kubectlGet("nodes", "", "", "{.items[0].metadata.name}")
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	gomega.Expect(nodeName).NotTo(gomega.BeEmpty(), "expected at least one node in the cluster")
+
+	advertiseFakeGPU(nodeName)
+
+	ginkgo.By(fmt.Sprintf("labeling node %s with %s=true", nodeName, fakeGPUNodeLabel))
+	cmd := exec.Command("kubectl", "label", "--overwrite", "node", nodeName, fakeGPUNodeLabel+"=true")
+	_, err = utils.Run(cmd)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
+	return nodeName
+}
+
+// advertiseFakeGPU patches fake GPU capacity onto the node status. Capacity and allocatable are
+// patched together: the kubelet only recomputes allocatable from capacity on its periodic status
+// sync, too slow for a test to wait on.
+func advertiseFakeGPU(nodeName string) {
+	ginkgo.GinkgoHelper()
 
 	ginkgo.By(fmt.Sprintf("advertising %s=%s on node %s", fakeGPUResourceName, fakeGPUCapacity, nodeName))
 	patch := fmt.Sprintf(
@@ -57,20 +71,29 @@ func setupFakeGPUNode() string {
 		jsonPatchEscapedGPUResource(), fakeGPUCapacity)
 	cmd := exec.Command("kubectl", "patch", "node", nodeName,
 		"--subresource=status", "--type=json", "-p", patch)
-	_, err = utils.Run(cmd)
+	_, err := utils.Run(cmd)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	ginkgo.By("verifying the node reports the fake GPU allocatable")
 	var node corev1.Node
 	gomega.Expect(kubectlGetInto("node", nodeName, "", &node)).To(gomega.Succeed())
 	gomega.Expect(node.Status.Allocatable).To(gomega.HaveKey(fakeGPUResource))
+}
 
-	ginkgo.By(fmt.Sprintf("labeling node %s with %s=true", nodeName, fakeGPUNodeLabel))
-	cmd = exec.Command("kubectl", "label", "--overwrite", "node", nodeName, fakeGPUNodeLabel+"=true")
-	_, err = utils.Run(cmd)
+// removeFakeGPUAdvertisement removes the fake GPU capacity and allocatable from the node status,
+// leaving the node label in place.
+func removeFakeGPUAdvertisement(nodeName string) {
+	ginkgo.GinkgoHelper()
+
+	ginkgo.By(fmt.Sprintf("removing the %s advertisement from node %s", fakeGPUResourceName, nodeName))
+	patch := fmt.Sprintf(
+		`[{"op":"remove","path":"/status/capacity/%[1]s"},`+
+			`{"op":"remove","path":"/status/allocatable/%[1]s"}]`,
+		jsonPatchEscapedGPUResource())
+	cmd := exec.Command("kubectl", "patch", "node", nodeName,
+		"--subresource=status", "--type=json", "-p", patch)
+	_, err := utils.Run(cmd)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-
-	return nodeName
 }
 
 // teardownFakeGPUNode removes the fake GPU advertisement and label. Best-effort: CI deletes the

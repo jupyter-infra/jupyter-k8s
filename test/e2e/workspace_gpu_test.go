@@ -9,12 +9,15 @@ Distributed under the terms of the MIT license
 package e2e
 
 import (
+	"fmt"
 	"os/exec"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
@@ -213,6 +216,74 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 			Expect(ok).To(BeFalse())
 			_, ok = gpuQuantity(primary.Resources.Limits)
 			Expect(ok).To(BeFalse())
+		})
+	})
+
+	Context("Unschedulable compute", func() {
+		It("should surface Degraded with the scheduling failure and recover when capacity appears", func() {
+			workspaceName := "gpu-default-workspace"
+
+			removeFakeGPUAdvertisement(gpuNodeName)
+
+			By("creating the GPU template")
+			createTemplateForTest(gpuTemplateName, groupDir, "")
+
+			By("creating a workspace requesting a GPU no node advertises")
+			createWorkspaceForTest(workspaceName, groupDir, "")
+
+			deploymentName := controller.GenerateDeploymentName(workspaceName)
+			By("waiting for the workspace deployment to exist")
+			WaitForResourceToExist("deployment", deploymentName, workspaceNamespace,
+				"{.metadata.name}", 60*time.Second, 2*time.Second)
+
+			By("lowering the deployment progress deadline so the stall surfaces quickly")
+			// the operator's update path compares only the pod template, so the patch persists
+			cmd := exec.Command("kubectl", "patch", "deployment", deploymentName,
+				"-n", workspaceNamespace, "--type=merge", "-p", `{"spec":{"progressDeadlineSeconds":30}}`)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for the workspace to report Degraded=True with the scheduler's verdict")
+			Eventually(func(g Gomega) {
+				var ws workspacev1alpha1.Workspace
+				g.Expect(kubectlGetInto("workspace", workspaceName, workspaceNamespace, &ws)).To(Succeed())
+				degraded := meta.FindStatusCondition(ws.Status.Conditions, controller.ConditionTypeDegraded)
+				g.Expect(degraded).NotTo(BeNil())
+				g.Expect(string(degraded.Status)).To(Equal(ConditionTrue))
+				g.Expect(degraded.Reason).To(Equal(controller.ReasonComputeStalled))
+				g.Expect(degraded.Message).To(ContainSubstring("Insufficient nvidia.com/gpu"))
+				progressing := meta.FindStatusCondition(ws.Status.Conditions, controller.ConditionTypeProgressing)
+				g.Expect(progressing).NotTo(BeNil())
+				g.Expect(string(progressing.Status)).To(Equal(ConditionFalse))
+			}).WithTimeout(3 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
+
+			By("verifying a Warning event was recorded on the workspace")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", verbGet, "events", "-n", workspaceNamespace,
+					"--field-selector", fmt.Sprintf(
+						"involvedObject.name=%s,involvedObject.kind=Workspace,reason=%s",
+						workspaceName, controller.EventWorkspaceComputeStalled),
+					"-o", "jsonpath={.items[*].type}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(ContainSubstring("Warning"))
+			}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+
+			By("advertising GPU capacity so the pending pod can schedule")
+			advertiseFakeGPU(gpuNodeName)
+
+			By("waiting for the workspace to recover to Available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName, workspaceNamespace, controller.ConditionTypeAvailable, ConditionTrue)
+
+			By("verifying Degraded cleared after recovery")
+			VerifyWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
+				controller.ConditionTypeProgressing: ConditionFalse,
+				controller.ConditionTypeDegraded:    ConditionFalse,
+				controller.ConditionTypeAvailable:   ConditionTrue,
+				controller.ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:               ConditionFalse,
+			})
 		})
 	})
 })
