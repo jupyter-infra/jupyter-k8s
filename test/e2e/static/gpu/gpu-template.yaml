@@ -1,0 +1,40 @@
+# GPU workspace template: bounded nvidia.com/gpu resources plus placement
+# defaults pinning pods to the fake-GPU node (see helpers_gpu.go)
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: gpu-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "GPU Jupyter Notebook"
+  description: "Notebook with bounded GPU resources, pinned to GPU nodes"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultResources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+      nvidia.com/gpu: "1"
+    limits:
+      cpu: 500m
+      memory: 512Mi
+      nvidia.com/gpu: "1"
+  resourceBounds:
+    resources:
+      cpu:
+        min: 100m
+        max: 2
+      memory:
+        min: 128Mi
+        max: 4Gi
+      nvidia.com/gpu:
+        min: "0"
+        max: "2"
+  defaultNodeSelector:
+    e2e.jupyter.org/fake-gpu: "true"
+  defaultTolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+  primaryStorage:
+    defaultSize: 1Gi
+  appType: jupyter
