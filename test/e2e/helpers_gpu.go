@@ -22,7 +22,7 @@ import (
 )
 
 // Helpers for the Workspace GPU e2e suite (workspace_gpu_test.go). Kind nodes have no GPUs, so the
-// suite advertises nvidia.com/gpu on a node through the status subresource — the documented way to
+// suite advertises nvidia.com/gpu on a node through the status subresource, the documented way to
 // advertise an extended resource without a device plugin. The scheduler fits pods against the
 // patched allocatable and the kubelet runs them; only CUDA itself would need real hardware.
 
