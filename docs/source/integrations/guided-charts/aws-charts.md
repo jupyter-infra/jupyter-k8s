@@ -38,6 +38,7 @@ Users connect either a/ from their web browser using bearer token URL or b/ from
 **What it deploys:**
 - **Jupyter K8s** controller with the [AWS Plugin](../plugins/aws-plugin) sidecar
 - Preconfigured access strategies for SSM-based remote access (VS Code, Cursor)
+- A Ray integration template that attaches workspaces to an existing `RayCluster` (see [AWS-HyperPod Ray Integration Template](#aws-hyperpod-ray-integration-template) below)
 
 Optionally, components for Web UI with:
 - [Traefik](https://doc.traefik.io/traefik/)
@@ -52,6 +53,14 @@ Optionally, components for Web UI with:
 |---|---|
 | Package | `oci://ghcr.io/jupyter-infra/charts/jupyter-k8s-aws-hyperpod` |
 | Source | [charts/aws-hyperpod](https://github.com/jupyter-infra/jupyter-k8s-aws/tree/main/charts/aws-hyperpod) |
+
+### AWS-HyperPod Ray Integration Template
+
+The chart ships a [`WorkspaceIntegrationTemplate`](../../concepts/integration-templates/index) named `ray-integration` that attaches a workspace to an existing `RayCluster`. When a workspace references it and supplies the `rayClusterName` parameter, the controller injects a Ray sidecar (matched to the cluster's head image) that joins as a zero-resource client node, mounts the shared session directories, and sets `RAY_ADDRESS=auto` plus `RAY_CLUSTER_NAME` in the workspace container, so `ray.init()` connects with no manual address.
+
+- **Enable:** `--set rayIntegration.enabled=true`
+- **Source:** [ray-integration-template.yaml](https://github.com/jupyter-infra/jupyter-k8s-aws/blob/main/charts/aws-hyperpod/templates/ray-integration-template.yaml)
+- **Concept and authoring guide:** [Integration Templates](../../concepts/integration-templates/index)
 
 ## Dive deeper
 
