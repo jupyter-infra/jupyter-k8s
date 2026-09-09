@@ -9,6 +9,7 @@ Distributed under the terms of the MIT license
 package e2e
 
 import (
+	"fmt"
 	"os/exec"
 	"time"
 
@@ -256,6 +257,83 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 			RestartWorkspacePod(workspaceName, workspaceNamespace)
 
 			By("verifying the data was persisted")
+			VerifyHomeVolumeDataPersisted(workspaceName, workspaceNamespace)
+		})
+
+		It("should retain the PVC and persist data across Stopped and back to Running", func() {
+			workspaceFilename := baseWorkspaceName
+			workspaceName := baseWorkspaceName
+
+			By("creating a workspace with a pvc")
+			createWorkspaceForTest(workspaceFilename, group, baseSubgroup)
+
+			By("waiting for the workspace to become Available")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("capturing the deployment and service names before stopping")
+			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.status.deploymentName}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deploymentName).NotTo(BeEmpty())
+			serviceName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.status.serviceName}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(serviceName).NotTo(BeEmpty())
+
+			By("writing data to the home volume")
+			VerifyPodCanAccessHomeVolume(workspaceName, workspaceNamespace)
+
+			By("changing desiredStatus to Stopped")
+			UpdateWorkspaceDesiredState(workspaceName, workspaceNamespace, "Stopped")
+
+			By("waiting for the Stopped condition to become True")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				ConditionTypeStopped,
+				ConditionTrue,
+			)
+
+			By("verifying the deployment and service are deleted")
+			WaitForResourceToNotExist("deployment", deploymentName, workspaceNamespace,
+				60*time.Second, 3*time.Second)
+			WaitForResourceToNotExist("service", serviceName, workspaceNamespace,
+				60*time.Second, 3*time.Second)
+
+			By("verifying no pods remain")
+			Eventually(func(g Gomega) {
+				output, err := kubectlGetByLabels("pod",
+					fmt.Sprintf("%s=%s", WorkspaceLabelName, workspaceName),
+					workspaceNamespace, "{.items[*].metadata.name}")
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(BeEmpty())
+			}).WithTimeout(60 * time.Second).WithPolling(3 * time.Second).Should(Succeed())
+
+			By("verifying the PVC is retained and still bound")
+			pvcName := controller.GeneratePVCName(workspaceName)
+			Expect(ResourceExists("pvc", pvcName, workspaceNamespace, "{.metadata.name}")).
+				To(BeTrue(), "the PVC must survive the Stopped state")
+			phase, err := kubectlGet("pvc", pvcName, workspaceNamespace, jsonPathStatusPhase)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(phase).To(Equal(phaseBound))
+
+			By("changing desiredStatus back to Running")
+			UpdateWorkspaceDesiredState(workspaceName, workspaceNamespace, "Running")
+
+			By("waiting for the workspace to become Available again")
+			WaitForWorkspaceToReachCondition(
+				workspaceName,
+				workspaceNamespace,
+				ConditionTypeAvailable,
+				ConditionTrue,
+			)
+
+			By("verifying the data written before the stop is still there")
 			VerifyHomeVolumeDataPersisted(workspaceName, workspaceNamespace)
 		})
 	})

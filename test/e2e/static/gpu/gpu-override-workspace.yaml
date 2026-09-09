@@ -1,0 +1,19 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: gpu-override-workspace
+spec:
+  displayName: "GPU Override Test"
+  templateRef:
+    name: gpu-template
+    namespace: jupyter-k8s-shared
+  ownershipType: Public
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+      nvidia.com/gpu: "2"  # At the template max of 2
+    limits:
+      cpu: 500m
+      memory: 512Mi
+      nvidia.com/gpu: "2"
