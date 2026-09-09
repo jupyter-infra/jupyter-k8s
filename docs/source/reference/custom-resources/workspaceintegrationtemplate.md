@@ -8,7 +8,7 @@ WorkspaceIntegrationTemplate is the Schema for the workspaceintegrationtemplates
 It defines a declarative, template-driven integration for adding runtime capabilities
 (sidecars, volumes, env vars) to workspace pods with dynamic resource lookup and
 template expression resolution. A Workspace may attach several of these via
-spec.integrationRefs.
+spec.integrationTemplateRefs.
 
 | Field | Value or Description |
 | --- | --- |

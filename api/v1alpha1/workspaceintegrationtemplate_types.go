@@ -143,7 +143,7 @@ type IntegrationStatusProbe struct {
 // It defines a declarative, template-driven integration for adding runtime capabilities
 // (sidecars, volumes, env vars) to workspace pods with dynamic resource lookup and
 // template expression resolution. A Workspace may attach several of these via
-// spec.integrationRefs.
+// spec.integrationTemplateRefs.
 type WorkspaceIntegrationTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
