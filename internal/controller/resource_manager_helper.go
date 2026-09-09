@@ -6,11 +6,18 @@ Distributed under the terms of the MIT license
 package controller
 
 import (
+	"context"
+
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// deploymentTimedOutReason is the reason the deployment controller sets on Progressing=False when
+// progressDeadlineSeconds is exceeded; k8s.io/api does not export the constant.
+const deploymentTimedOutReason = "ProgressDeadlineExceeded"
 
 // IsWorkspaceAvailable checks if the workspace is in Available=True state
 func (rm *ResourceManager) IsWorkspaceAvailable(workspace *workspacev1alpha1.Workspace) bool {
@@ -41,6 +48,53 @@ func (rm *ResourceManager) IsDeploymentAvailable(deployment *appsv1.Deployment) 
 	// This is useful if the conditions aren't updated yet but replicas are running
 	return deployment.Status.AvailableReplicas > 0 &&
 		deployment.Status.ReadyReplicas >= *deployment.Spec.Replicas
+}
+
+// IsDeploymentProgressDeadlineExceeded reports whether the deployment controller has declared the
+// rollout stalled (Progressing=False with reason ProgressDeadlineExceeded), and returns the
+// condition's message.
+func (rm *ResourceManager) IsDeploymentProgressDeadlineExceeded(deployment *appsv1.Deployment) (bool, string) {
+	if deployment == nil {
+		return false, ""
+	}
+	for _, condition := range deployment.Status.Conditions {
+		if condition.Type == appsv1.DeploymentProgressing {
+			if condition.Status == corev1.ConditionFalse && condition.Reason == deploymentTimedOutReason {
+				return true, condition.Message
+			}
+			return false, ""
+		}
+	}
+	return false, ""
+}
+
+// WorkspacePodSchedulingMessage returns the PodScheduled=False condition message of a workspace
+// pod (the scheduler's verdict, e.g. "0/1 nodes are available: 1 Insufficient nvidia.com/gpu."),
+// or "" when no pod carries one.
+func (rm *ResourceManager) WorkspacePodSchedulingMessage(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+) string {
+	podList := &corev1.PodList{}
+	if err := rm.client.List(ctx, podList,
+		client.InNamespace(workspace.Namespace),
+		client.MatchingLabels(GenerateLabels(workspace.Name)),
+	); err != nil {
+		return ""
+	}
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
+		for _, condition := range pod.Status.Conditions {
+			if condition.Type == corev1.PodScheduled &&
+				condition.Status == corev1.ConditionFalse && condition.Message != "" {
+				return condition.Message
+			}
+		}
+	}
+	return ""
 }
 
 // IsDeploymentMissingOrDeleting checks if the Deployment is either missing (nil)

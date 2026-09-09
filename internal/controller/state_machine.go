@@ -13,6 +13,7 @@ import (
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -302,7 +303,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		case ProbeAlreadySucceeded:
 			accessResourcesReady = true
 		case ProbeFailureThresholdExceeded:
-			if statusErr := sm.statusManager.UpdatePermanentDegradedRunningStatus(
+			if statusErr := sm.statusManager.UpdateDegradedRunningStatus(
 				ctx, workspace, ReasonAccessProbeThresholdExceeded, ReasonAccessNotReady,
 				"Access startup probe failed: threshold exceeded",
 				snapshotStatus); statusErr != nil {
@@ -338,6 +339,28 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		}
 		result.RequeueAfter = getShorterInterval(result.RequeueAfter, integrationProbeInterval)
 		return result, nil
+	}
+
+	// Rollout stalled (deployment controller exceeded its progress deadline, e.g. an unschedulable
+	// pod): surface Degraded with the scheduler's verdict instead of an indefinite "starting".
+	if stalled, deploymentMessage := sm.resourceManager.IsDeploymentProgressDeadlineExceeded(deployment); stalled {
+		message := sm.resourceManager.WorkspacePodSchedulingMessage(ctx, workspace)
+		if message == "" {
+			message = deploymentMessage
+		}
+		degraded := FindCondition(&workspace.Status.Conditions, ConditionTypeDegraded)
+		if degraded == nil || degraded.Status != metav1.ConditionTrue {
+			sm.recorder.Event(workspace, corev1.EventTypeWarning, EventWorkspaceComputeStalled, message)
+		}
+		workspace.Status.DeploymentName = deployment.GetName()
+		workspace.Status.ServiceName = service.GetName()
+		if err := sm.statusManager.UpdateDegradedRunningStatus(
+			ctx, workspace, ReasonComputeStalled, ReasonComputeStalled, message, snapshotStatus); err != nil {
+			return ctrl.Result{}, err
+		}
+		// Keep requeueing: the pod stays pending and schedules if capacity appears,
+		// after which the ready path resets the conditions.
+		return ctrl.Result{RequeueAfter: requeueDelay}, nil
 	}
 
 	// Resources are being created/started but not fully ready yet

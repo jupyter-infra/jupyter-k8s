@@ -233,6 +233,186 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 		})
 	})
 
+	Context("stalled rollout", func() {
+		const deploymentStalledMessage = "ReplicaSet has timed out progressing."
+
+		markDeploymentStalled := func(dep *appsv1.Deployment) {
+			dep.Status.Conditions = []appsv1.DeploymentCondition{{
+				Type:    appsv1.DeploymentProgressing,
+				Status:  corev1.ConditionFalse,
+				Reason:  deploymentTimedOutReason,
+				Message: deploymentStalledMessage,
+			}}
+			Expect(k8sClient.Status().Update(ctx, dep)).To(Succeed())
+		}
+
+		createUnschedulablePod := func(ws *workspacev1alpha1.Workspace, message string) *corev1.Pod {
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("%s-pod", ws.Name),
+					Namespace: ws.Namespace,
+					Labels:    GenerateLabels(ws.Name),
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: containerNameMain, Image: imageBaseNotebook}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+			pod.Status.Phase = corev1.PodPending
+			pod.Status.Conditions = []corev1.PodCondition{{
+				Type:    corev1.PodScheduled,
+				Status:  corev1.ConditionFalse,
+				Reason:  "Unschedulable",
+				Message: message,
+			}}
+			Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+			return pod
+		}
+
+		buildStateMachineWithRecorder := func() (*StateMachine, *record.FakeRecorder) {
+			recorder := record.NewFakeRecorder(10)
+			statusManager := NewStatusManager(k8sClient)
+			rm := NewResourceManager(
+				k8sClient,
+				scheme.Scheme,
+				NewDeploymentBuilder(scheme.Scheme, WorkspaceControllerOptions{}),
+				NewServiceBuilder(scheme.Scheme),
+				NewPVCBuilder(scheme.Scheme),
+				NewAccessResourcesBuilder(),
+				statusManager,
+			)
+			return &StateMachine{
+				resourceManager:     rm,
+				statusManager:       statusManager,
+				accessStartupProber: mockProber,
+				recorder:            recorder,
+			}, recorder
+		}
+
+		It("should surface Degraded=ComputeStalled with the pod's scheduling message", func() {
+			workspace := newWorkspace()
+			dep := createNotReadyDeployment(workspace)
+			svc := createService(workspace)
+			schedulingMessage := "0/1 nodes are available: 1 Insufficient nvidia.com/gpu."
+			pod := createUnschedulablePod(workspace, schedulingMessage)
+			defer func() { _ = k8sClient.Delete(ctx, pod) }()
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+			markDeploymentStalled(dep)
+
+			sm, recorder := buildStateMachineWithRecorder()
+			result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(PollRequeueDelay))
+
+			degraded := getCondition(workspace, ConditionTypeDegraded)
+			Expect(degraded).NotTo(BeNil())
+			Expect(degraded.Status).To(Equal(metav1.ConditionTrue))
+			Expect(degraded.Reason).To(Equal(ReasonComputeStalled))
+			Expect(degraded.Message).To(Equal(schedulingMessage))
+
+			available := getCondition(workspace, ConditionTypeAvailable)
+			Expect(available).NotTo(BeNil())
+			Expect(available.Status).To(Equal(metav1.ConditionFalse))
+			Expect(available.Reason).To(Equal(ReasonComputeStalled))
+
+			progressing := getCondition(workspace, ConditionTypeProgressing)
+			Expect(progressing).NotTo(BeNil())
+			Expect(progressing.Status).To(Equal(metav1.ConditionFalse))
+			Expect(progressing.Reason).To(Equal(ReasonComputeStalled))
+
+			Expect(recorder.Events).To(Receive(SatisfyAll(
+				ContainSubstring(corev1.EventTypeWarning),
+				ContainSubstring(EventWorkspaceComputeStalled),
+				ContainSubstring(schedulingMessage),
+			)))
+		})
+
+		It("should fall back to the deployment message when no pod reports a scheduling failure", func() {
+			workspace := newWorkspace()
+			dep := createNotReadyDeployment(workspace)
+			svc := createService(workspace)
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+			markDeploymentStalled(dep)
+
+			sm, _ := buildStateMachineWithRecorder()
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			degraded := getCondition(workspace, ConditionTypeDegraded)
+			Expect(degraded).NotTo(BeNil())
+			Expect(degraded.Status).To(Equal(metav1.ConditionTrue))
+			Expect(degraded.Message).To(Equal(deploymentStalledMessage))
+		})
+
+		It("should emit the stall event only on the transition to Degraded", func() {
+			workspace := newWorkspace()
+			dep := createNotReadyDeployment(workspace)
+			svc := createService(workspace)
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+			markDeploymentStalled(dep)
+
+			sm, recorder := buildStateMachineWithRecorder()
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+			// refresh so the second reconcile sees the Degraded condition, as the real reconciler would
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+			_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(recorder.Events).To(HaveLen(1))
+		})
+
+		It("should clear Degraded and mark Available once the deployment becomes ready", func() {
+			workspace := newWorkspace()
+			dep := createNotReadyDeployment(workspace)
+			svc := createService(workspace)
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+			markDeploymentStalled(dep)
+
+			sm, _ := buildStateMachineWithRecorder()
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+			degraded := getCondition(workspace, ConditionTypeDegraded)
+			Expect(degraded).NotTo(BeNil())
+			Expect(degraded.Status).To(Equal(metav1.ConditionTrue))
+
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(dep), dep)).To(Succeed())
+			dep.Status.AvailableReplicas = 1
+			dep.Status.ReadyReplicas = 1
+			dep.Status.Replicas = 1
+			dep.Status.Conditions = []appsv1.DeploymentCondition{{
+				Type:   appsv1.DeploymentAvailable,
+				Status: corev1.ConditionTrue,
+			}, {
+				Type:   appsv1.DeploymentProgressing,
+				Status: corev1.ConditionTrue,
+				Reason: "NewReplicaSetAvailable",
+			}}
+			Expect(k8sClient.Status().Update(ctx, dep)).To(Succeed())
+
+			_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			available := getCondition(workspace, ConditionTypeAvailable)
+			Expect(available).NotTo(BeNil())
+			Expect(available.Status).To(Equal(metav1.ConditionTrue))
+			Expect(available.Reason).To(Equal(ReasonResourcesReady))
+
+			degraded = getCondition(workspace, ConditionTypeDegraded)
+			Expect(degraded).NotTo(BeNil())
+			Expect(degraded.Status).To(Equal(metav1.ConditionFalse))
+			Expect(degraded.Reason).To(Equal(ReasonNoError))
+		})
+	})
+
 	Context("ensure resource errors", func() {
 		It("should propagate EnsureDeploymentExists error", func() {
 			// Workspace not persisted to etcd — has no UID, causing SetControllerReference to fail

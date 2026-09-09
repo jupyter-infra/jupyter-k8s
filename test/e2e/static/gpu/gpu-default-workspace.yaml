@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: gpu-default-workspace
+spec:
+  displayName: "GPU Defaults Test"
+  templateRef:
+    name: gpu-template
+    namespace: jupyter-k8s-shared
+  ownershipType: Public
