@@ -260,7 +260,10 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 			VerifyHomeVolumeDataPersisted(workspaceName, workspaceNamespace)
 		})
 
-		It("should retain the PVC and persist data across Stopped and back to Running", func() {
+		// Data written to the home volume must survive a stop and start. Stopping deletes the
+		// Deployment and Service and keeps the PVC; starting must mount the same PVC again. The
+		// spec above covers a pod restart while the workspace stays Running; this one covers Stopped.
+		It("should keep the PVC and its data across Stopped and back to Running", func() {
 			workspaceFilename := baseWorkspaceName
 			workspaceName := baseWorkspaceName
 
@@ -275,6 +278,9 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 				ConditionTrue,
 			)
 
+			By("writing a file to the home volume")
+			VerifyPodCanAccessHomeVolume(workspaceName, workspaceNamespace)
+
 			By("capturing the deployment and service names before stopping")
 			deploymentName, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
 				"{.status.deploymentName}")
@@ -285,10 +291,7 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(serviceName).NotTo(BeEmpty())
 
-			By("writing data to the home volume")
-			VerifyPodCanAccessHomeVolume(workspaceName, workspaceNamespace)
-
-			By("changing desiredStatus to Stopped")
+			By("stopping the workspace (desiredStatus Stopped)")
 			UpdateWorkspaceDesiredState(workspaceName, workspaceNamespace, "Stopped")
 
 			By("waiting for the Stopped condition to become True")
@@ -299,7 +302,7 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 				ConditionTrue,
 			)
 
-			By("verifying the deployment and service are deleted")
+			By("verifying the stop deleted the deployment and service")
 			WaitForResourceToNotExist("deployment", deploymentName, workspaceNamespace,
 				60*time.Second, 3*time.Second)
 			WaitForResourceToNotExist("service", serviceName, workspaceNamespace,
@@ -314,7 +317,7 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 				g.Expect(output).To(BeEmpty())
 			}).WithTimeout(60 * time.Second).WithPolling(3 * time.Second).Should(Succeed())
 
-			By("verifying the PVC is retained and still bound")
+			By("verifying the PVC is kept and still Bound while stopped")
 			pvcName := controller.GeneratePVCName(workspaceName)
 			Expect(ResourceExists("pvc", pvcName, workspaceNamespace, "{.metadata.name}")).
 				To(BeTrue(), "the PVC must survive the Stopped state")
@@ -322,7 +325,7 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(phase).To(Equal(phaseBound))
 
-			By("changing desiredStatus back to Running")
+			By("starting the workspace again (desiredStatus Running)")
 			UpdateWorkspaceDesiredState(workspaceName, workspaceNamespace, "Running")
 
 			By("waiting for the workspace to become Available again")
@@ -333,7 +336,7 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 				ConditionTrue,
 			)
 
-			By("verifying the data written before the stop is still there")
+			By("verifying the file written before the stop is still there")
 			VerifyHomeVolumeDataPersisted(workspaceName, workspaceNamespace)
 		})
 	})
