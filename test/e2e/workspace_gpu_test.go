@@ -10,6 +10,7 @@ package e2e
 
 import (
 	"os/exec"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -132,6 +133,53 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 
 			By("verifying the pod scheduled onto the GPU-advertising node")
 			Expect(pod.Spec.NodeName).To(Equal(gpuNodeName))
+		})
+	})
+
+	Context("Updates", func() {
+		It("should roll the pod on an in-bounds GPU change and reject an out-of-bounds one", func() {
+			workspaceName := "gpu-default-workspace"
+
+			By("creating the GPU template")
+			createTemplateForTest(gpuTemplateName, groupDir, "")
+
+			By("creating a workspace that takes the template default of 1 GPU")
+			createWorkspaceForTest(workspaceName, groupDir, "")
+			WaitForWorkspaceToReachCondition(
+				workspaceName, workspaceNamespace, controller.ConditionTypeAvailable, ConditionTrue)
+
+			By("raising the workspace GPU request and limit to 2 (the template max)")
+			patchWorkspaceGPU(workspaceName, workspaceNamespace, "2")
+
+			By("verifying the rollout replaces the pod with one requesting 2 GPUs")
+			Eventually(func(g Gomega) {
+				pods, err := workspacePods(workspaceName, workspaceNamespace)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(pods).To(HaveLen(1), "the previous pod must be gone")
+				g.Expect(pods[0].Status.Phase).To(Equal(corev1.PodRunning))
+				primary := containerByName(pods[0].Spec, controller.PrimaryContainerName)
+				g.Expect(primary).NotTo(BeNil())
+				gpus, ok := gpuQuantity(primary.Resources.Requests)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(gpus).To(Equal(int64(2)))
+				gpus, ok = gpuQuantity(primary.Resources.Limits)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(gpus).To(Equal(int64(2)))
+			}).WithTimeout(180 * time.Second).WithPolling(3 * time.Second).Should(Succeed())
+			WaitForWorkspaceToReachCondition(
+				workspaceName, workspaceNamespace, controller.ConditionTypeAvailable, ConditionTrue)
+
+			By("attempting to raise the GPU request to 3 (bounds max is 2)")
+			output, err := tryPatchWorkspaceGPU(workspaceName, workspaceNamespace, "3")
+			Expect(err).To(HaveOccurred(), "webhook should reject a GPU update above the template max")
+			Expect(output).To(ContainSubstring(fakeGPUResourceName),
+				"the rejection should name the violating GPU resource")
+
+			By("verifying the workspace kept its 2-GPU request")
+			request, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				"{.spec.resources.requests.nvidia\\.com/gpu}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(request).To(Equal("2"))
 		})
 	})
 

@@ -133,6 +133,43 @@ func workspacePod(workspaceName, namespace string) *corev1.Pod {
 	return &pod
 }
 
+// workspacePods returns the workspace's pods, decoded. Errors are returned rather than asserted so
+// callers can poll: a pod listed during a rollout may be gone by the time it is read.
+func workspacePods(workspaceName, namespace string) ([]corev1.Pod, error) {
+	names, err := kubectlGetByLabels("pod",
+		fmt.Sprintf("%s=%s", controller.LabelWorkspaceName, workspaceName),
+		namespace, "{.items[*].metadata.name}")
+	if err != nil {
+		return nil, err
+	}
+	var pods []corev1.Pod
+	for _, name := range strings.Fields(names) {
+		var pod corev1.Pod
+		if err := kubectlGetInto("pod", name, namespace, &pod); err != nil {
+			return nil, err
+		}
+		pods = append(pods, pod)
+	}
+	return pods, nil
+}
+
+// tryPatchWorkspaceGPU sets the workspace's nvidia.com/gpu request and limit to gpus with a merge
+// patch, leaving cpu and memory as they are, and returns kubectl's output and error.
+func tryPatchWorkspaceGPU(workspaceName, namespace, gpus string) (string, error) {
+	patch := fmt.Sprintf(`{"spec":{"resources":{"requests":{%[1]q:%[2]q},"limits":{%[1]q:%[2]q}}}}`,
+		fakeGPUResourceName, gpus)
+	cmd := exec.Command("kubectl", "patch", "workspace", workspaceName,
+		"-n", namespace, "--type=merge", "-p", patch)
+	return utils.Run(cmd)
+}
+
+// patchWorkspaceGPU is tryPatchWorkspaceGPU asserting success.
+func patchWorkspaceGPU(workspaceName, namespace, gpus string) {
+	ginkgo.GinkgoHelper()
+	_, err := tryPatchWorkspaceGPU(workspaceName, namespace, gpus)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+}
+
 // deleteResourcesForGPUTest removes only the objects this Ordered suite creates, by explicit name,
 // so it can never nuke unrelated objects sharing the "default" namespace.
 func deleteResourcesForGPUTest(workspaceNamespace string) {
