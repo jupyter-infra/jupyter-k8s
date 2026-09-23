@@ -90,7 +90,9 @@ func teardownFakeGPUNode(nodeName string) {
 	_, _ = utils.Run(cmd)
 }
 
-// jsonPatchEscapedGPUResource returns fakeGPUResourceName with '/' escaped as '~1' (RFC 6901).
+// jsonPatchEscapedGPUResource returns fakeGPUResourceName as a JSON patch path segment. A path
+// like /status/capacity/nvidia.com/gpu would read the '/' as a separator, so it is written '~1'
+// (JSON Pointer, RFC 6901).
 func jsonPatchEscapedGPUResource() string {
 	return strings.ReplaceAll(fakeGPUResourceName, "/", "~1")
 }
@@ -152,21 +154,15 @@ func workspacePods(workspaceName, namespace string) ([]corev1.Pod, error) {
 	return pods, nil
 }
 
-// tryPatchWorkspaceGPU sets the workspace's nvidia.com/gpu request and limit to gpus with a merge
-// patch, leaving cpu and memory as they are, and returns kubectl's output and error.
-func tryPatchWorkspaceGPU(workspaceName, namespace, gpus string) (string, error) {
+// patchWorkspaceGPU sets the workspace's nvidia.com/gpu request and limit to gpus with a merge
+// patch, leaving cpu and memory as they are. Returns kubectl's output and error so callers can
+// assert either acceptance or the webhook's rejection.
+func patchWorkspaceGPU(workspaceName, namespace, gpus string) (string, error) {
 	patch := fmt.Sprintf(`{"spec":{"resources":{"requests":{%[1]q:%[2]q},"limits":{%[1]q:%[2]q}}}}`,
 		fakeGPUResourceName, gpus)
 	cmd := exec.Command("kubectl", "patch", "workspace", workspaceName,
 		"-n", namespace, "--type=merge", "-p", patch)
 	return utils.Run(cmd)
-}
-
-// patchWorkspaceGPU is tryPatchWorkspaceGPU asserting success.
-func patchWorkspaceGPU(workspaceName, namespace, gpus string) {
-	ginkgo.GinkgoHelper()
-	_, err := tryPatchWorkspaceGPU(workspaceName, namespace, gpus)
-	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 }
 
 // deleteResourcesForGPUTest removes only the objects this Ordered suite creates, by explicit name,

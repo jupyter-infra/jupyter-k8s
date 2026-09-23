@@ -148,7 +148,8 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 				workspaceName, workspaceNamespace, controller.ConditionTypeAvailable, ConditionTrue)
 
 			By("raising the workspace GPU request and limit to 2 (the template max)")
-			patchWorkspaceGPU(workspaceName, workspaceNamespace, "2")
+			_, err := patchWorkspaceGPU(workspaceName, workspaceNamespace, "2")
+			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying the rollout replaces the pod with one requesting 2 GPUs")
 			Eventually(func(g Gomega) {
@@ -169,7 +170,7 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 				workspaceName, workspaceNamespace, controller.ConditionTypeAvailable, ConditionTrue)
 
 			By("attempting to raise the GPU request to 3 (bounds max is 2)")
-			output, err := tryPatchWorkspaceGPU(workspaceName, workspaceNamespace, "3")
+			output, err := patchWorkspaceGPU(workspaceName, workspaceNamespace, "3")
 			Expect(err).To(HaveOccurred(), "webhook should reject a GPU update above the template max")
 			Expect(output).To(ContainSubstring(fakeGPUResourceName),
 				"the rejection should name the violating GPU resource")
