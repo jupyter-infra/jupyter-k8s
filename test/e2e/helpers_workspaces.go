@@ -46,9 +46,10 @@ func WaitForWorkspaceToReachCondition(
 	}).WithTimeout(5 * time.Minute).WithPolling(5 * time.Second).Should(gomega.Succeed())
 }
 
-// VerifyWorkspaceConditions verifies workspace status conditions exactly.
-// expectedConditions is a map of condition type to expected status (e.g., "Progressing" -> "True").
-// The workspace must have exactly the conditions specified — no more, no less.
+// VerifyWorkspaceConditions polls until the workspace has exactly the conditions in
+// expectedConditions (condition type to status, e.g. "Progressing" -> "True"), no more, no less.
+// The controller re-evaluates readiness on every reconcile and rewrites the whole condition set,
+// so a single read right after a transition can land on an intermediate set.
 func VerifyWorkspaceConditions(
 	workspaceName string,
 	namespace string,
@@ -56,31 +57,27 @@ func VerifyWorkspaceConditions(
 ) {
 	ginkgo.GinkgoHelper()
 
-	// Get all condition statuses in a single kubectl call
 	// Format: "Type=Status Type=Status ..."
 	jsonPath := "{range .status.conditions[*]}{.type}{\"=\"}{.status}{\" \"}{end}"
-	output, err := kubectlGet("workspace", workspaceName, namespace, jsonPath)
-	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	gomega.Eventually(func(g gomega.Gomega) {
+		output, err := kubectlGet("workspace", workspaceName, namespace, jsonPath)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	// Parse conditions from output (format: "Type=Status Type=Status ...")
-	actualConditions := make(map[string]string)
-	pairs := strings.Fields(output)
-	for _, pair := range pairs {
-		parts := strings.Split(pair, "=")
-		if len(parts) == 2 {
-			actualConditions[parts[0]] = parts[1]
+		actualConditions := make(map[string]string)
+		for _, pair := range strings.Fields(output) {
+			parts := strings.Split(pair, "=")
+			if len(parts) == 2 {
+				actualConditions[parts[0]] = parts[1]
+			}
 		}
-	}
 
-	// Verify the number of conditions matches
-	gomega.Expect(actualConditions).To(gomega.HaveLen(len(expectedConditions)),
-		"Expected %d conditions but found %d", len(expectedConditions), len(actualConditions))
-
-	// Assert on each expected condition
-	for conditionType, expectedStatus := range expectedConditions {
-		gomega.Expect(actualConditions[conditionType]).To(gomega.Equal(expectedStatus),
-			"%s condition should be %s but got %s", conditionType, expectedStatus, actualConditions[conditionType])
-	}
+		g.Expect(actualConditions).To(gomega.HaveLen(len(expectedConditions)),
+			"Expected %d conditions but found %d", len(expectedConditions), len(actualConditions))
+		for conditionType, expectedStatus := range expectedConditions {
+			g.Expect(actualConditions[conditionType]).To(gomega.Equal(expectedStatus),
+				"%s condition should be %s but got %s", conditionType, expectedStatus, actualConditions[conditionType])
+		}
+	}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(gomega.Succeed())
 }
 
 // VerifyConsistentWorkspaceConditions polls workspace conditions for the given duration
