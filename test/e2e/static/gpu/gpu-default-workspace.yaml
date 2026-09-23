@@ -1,3 +1,7 @@
+# The basic user flow: the user sets no resources or placement and the template's defaults apply.
+# A workspace created from a GPU template in the web UI with no explicit GPU choice arrives exactly
+# like this, with no resources in the request. workspace_gpu_test.go asserts the 1-GPU request and
+# the placement on the workspace and its pod; the explicit request case is gpu-override-workspace.yaml.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
