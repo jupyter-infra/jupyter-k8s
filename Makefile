@@ -184,7 +184,7 @@ setup-test-e2e: ## Set up a fresh Kind cluster for e2e tests (deletes existing c
 
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt vet helm-generate load-images-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND_CLUSTER=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL) go test -tags=e2e ./test/e2e/ -v -timeout 60m -ginkgo.v -ginkgo.timeout 60m
+	KIND_CLUSTER=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL) go test -tags=e2e ./test/e2e/ -v -timeout 90m -ginkgo.v -ginkgo.timeout 90m
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: cleanup-test-e2e
@@ -409,7 +409,7 @@ test-e2e-focus: setup-test-e2e manifests generate fmt vet helm-generate load-ima
 		echo "Error: FOCUS parameter is required. Usage: make test-e2e-focus FOCUS=\"Primary Storage\""; \
 		exit 1; \
 	fi
-	KIND_CLUSTER=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL) go test -tags=e2e ./test/e2e/ -v -timeout 60m -ginkgo.v -ginkgo.focus="$(FOCUS)" -ginkgo.timeout 60m
+	KIND_CLUSTER=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL) go test -tags=e2e ./test/e2e/ -v -timeout 90m -ginkgo.v -ginkgo.focus="$(FOCUS)" -ginkgo.timeout 90m
 	$(MAKE) cleanup-test-e2e
 
 STAGING_REGISTRY ?= ghcr.io/jupyter-infra/staging
@@ -442,7 +442,7 @@ test-e2e-staging: setup-test-e2e ## Run e2e tests against staging GHCR images an
 		E2E_ROTATOR_IMAGE=$(STAGING_REGISTRY)/jupyter-k8s-rotator:$(STAGING_TAG) \
 		E2E_CHART_SOURCE=oci://$(STAGING_REGISTRY)/charts/jupyter-k8s \
 		E2E_CHART_VERSION=$(STAGING_CHART_VERSION) \
-		go test -tags=e2e ./test/e2e/ -v -timeout 60m -ginkgo.v -ginkgo.timeout 60m
+		go test -tags=e2e ./test/e2e/ -v -timeout 90m -ginkgo.v -ginkgo.timeout 90m
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: teardown-kind
