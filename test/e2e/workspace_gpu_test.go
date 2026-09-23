@@ -134,7 +134,7 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 	})
 
 	Context("Updates", func() {
-		It("should roll the pod on an in-bounds GPU change and reject an out-of-bounds one", func() {
+		It("should restart with the new GPU count on an in-bounds change and reject an out-of-bounds one", func() {
 			workspaceName := "gpu-default-workspace"
 
 			By("creating the GPU template")
@@ -151,7 +151,7 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 			_, err := patchWorkspaceGPU(workspaceName, workspaceNamespace, "2")
 			Expect(err).NotTo(HaveOccurred())
 
-			By("verifying the rollout replaces the pod with one requesting 2 GPUs")
+			By("verifying the pod is replaced by one requesting 2 GPUs")
 			Eventually(func(g Gomega) {
 				pods, err := workspacePods(workspaceName, workspaceNamespace)
 				g.Expect(err).NotTo(HaveOccurred())
