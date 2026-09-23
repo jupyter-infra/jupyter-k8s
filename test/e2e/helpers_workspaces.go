@@ -49,7 +49,7 @@ func WaitForWorkspaceToReachCondition(
 // VerifyWorkspaceConditions polls until the workspace has exactly the conditions in
 // expectedConditions (condition type to status, e.g. "Progressing" -> "True"), no more, no less.
 // The controller re-evaluates readiness on every reconcile and rewrites the whole condition set,
-// so a single read right after a transition can land on an intermediate set.
+// so a single read right after a transition may not see the settled set (#350).
 func VerifyWorkspaceConditions(
 	workspaceName string,
 	namespace string,
@@ -71,12 +71,8 @@ func VerifyWorkspaceConditions(
 			}
 		}
 
-		g.Expect(actualConditions).To(gomega.HaveLen(len(expectedConditions)),
-			"Expected %d conditions but found %d", len(expectedConditions), len(actualConditions))
-		for conditionType, expectedStatus := range expectedConditions {
-			g.Expect(actualConditions[conditionType]).To(gomega.Equal(expectedStatus),
-				"%s condition should be %s but got %s", conditionType, expectedStatus, actualConditions[conditionType])
-		}
+		g.Expect(actualConditions).To(gomega.Equal(expectedConditions),
+			"conditions of workspace %s/%s", namespace, workspaceName)
 	}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(gomega.Succeed())
 }
 
