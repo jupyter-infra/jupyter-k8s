@@ -23,8 +23,7 @@ import (
 
 // Helpers for the Workspace GPU e2e suite (workspace_gpu_test.go). Kind nodes have no GPUs, so the
 // suite advertises nvidia.com/gpu on a node through the status subresource, the documented way to
-// advertise an extended resource without a device plugin. The scheduler fits pods against the
-// patched allocatable and the kubelet runs them; only CUDA itself would need real hardware.
+// advertise an extended resource without a device plugin; the scheduler then fits pods against it.
 
 const (
 	// fakeGPUResourceName is the extended resource advertised on the fake GPU node.
@@ -171,7 +170,7 @@ func patchWorkspaceGPU(workspaceName, namespace, gpus string) {
 }
 
 // deleteResourcesForGPUTest removes only the objects this Ordered suite creates, by explicit name,
-// so it can never nuke unrelated objects sharing the "default" namespace.
+// so it can never delete unrelated objects sharing the "default" namespace.
 func deleteResourcesForGPUTest(workspaceNamespace string) {
 	ginkgo.GinkgoHelper()
 

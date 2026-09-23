@@ -111,7 +111,7 @@ var _ = Describe("Workspace Drift Repair", Ordered, func() {
 })
 
 // deleteResourcesForDriftTest removes only the objects this Ordered suite creates, by
-// explicit name, so it can never nuke unrelated objects sharing the "default" namespace.
+// explicit name, so it can never delete unrelated objects sharing the "default" namespace.
 func deleteResourcesForDriftTest(workspaceNamespace string) {
 	By("cleaning up the drift test workspace")
 	cmd := exec.Command("kubectl", "delete", "workspace", "workspace-drift",

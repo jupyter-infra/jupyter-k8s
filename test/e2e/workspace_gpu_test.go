@@ -22,12 +22,9 @@ import (
 	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 )
 
-// Workspace GPU: template-driven GPU resources and placement, end to end on a fake GPU node.
-//
-// Kind has no GPUs, so the suite advertises nvidia.com/gpu on the node (helpers_gpu.go) and
-// exercises the operator's contract: template defaultResources, defaultNodeSelector and
-// defaultTolerations reach the workspace pod, the pod schedules against the advertised capacity,
-// resourceBounds reject out-of-bounds GPU requests, and non-GPU workspaces stay GPU-free.
+// Workspace GPU: the operator's GPU contract on a node advertising fake nvidia.com/gpu capacity
+// (helpers_gpu.go): template GPU defaults and placement reach the pod, requests are bounded at
+// create and on update, and workspaces without GPU settings get none.
 var _ = Describe("Workspace GPU", Ordered, func() {
 	const (
 		workspaceNamespace = "default"
@@ -145,6 +142,8 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 
 			By("creating a workspace that takes the template default of 1 GPU")
 			createWorkspaceForTest(workspaceName, groupDir, "")
+
+			By("waiting for the workspace to become available")
 			WaitForWorkspaceToReachCondition(
 				workspaceName, workspaceNamespace, controller.ConditionTypeAvailable, ConditionTrue)
 
