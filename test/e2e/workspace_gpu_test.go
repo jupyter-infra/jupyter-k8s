@@ -230,6 +230,12 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 				"resource defaulting is all-or-nothing; explicit CPU-only resources must not gain a GPU")
 			_, ok = gpuQuantity(primary.Resources.Limits)
 			Expect(ok).To(BeFalse())
+
+			By("verifying the override's cpu and memory did reach the pod")
+			Expect(primary.Resources.Requests.Cpu().String()).To(Equal("200m"))
+			Expect(primary.Resources.Requests.Memory().String()).To(Equal("256Mi"))
+			Expect(primary.Resources.Limits.Cpu().String()).To(Equal("500m"))
+			Expect(primary.Resources.Limits.Memory().String()).To(Equal("512Mi"))
 		})
 
 		It("should leave a workspace without a template free of GPU resources and placement", func() {
