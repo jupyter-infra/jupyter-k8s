@@ -11,6 +11,8 @@ package e2e
 import (
 	"fmt"
 	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -87,13 +89,13 @@ var _ = Describe("Workspace Drift Repair", Ordered, func() {
 		originalImage, err := kubectlGet("deployment", deploymentName, workspaceNamespace, imageJSONPath)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(originalImage).NotTo(BeEmpty())
+		generationBefore, err := deploymentGeneration(deploymentName, workspaceNamespace)
+		Expect(err).NotTo(HaveOccurred())
 
 		By("mutating the primary container image out of band")
-		patch := fmt.Sprintf(
-			`{"spec":{"template":{"spec":{"containers":[{"name":"%s","image":"drifted-image:latest"}]}}}}`,
-			controller.PrimaryContainerName)
-		cmd := exec.Command("kubectl", "patch", "deployment", deploymentName,
-			"-n", workspaceNamespace, "--type=strategic", "-p", patch)
+		// kubectl set image fails when the container name does not exist; a merge patch would append one.
+		cmd := exec.Command("kubectl", "set", "image", "deployment/"+deploymentName,
+			controller.PrimaryContainerName+"=drifted-image:latest", "-n", workspaceNamespace)
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -102,6 +104,10 @@ var _ = Describe("Workspace Drift Repair", Ordered, func() {
 			image, err := kubectlGet("deployment", deploymentName, workspaceNamespace, imageJSONPath)
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(image).To(Equal(originalImage))
+			// The mutation and the revert are two spec changes, so the generation advanced twice.
+			generation, err := deploymentGeneration(deploymentName, workspaceNamespace)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(generation).To(BeNumerically(">=", generationBefore+2))
 		}).WithTimeout(60 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
 
 		By("verifying the workspace settles Available after the revert")
@@ -117,4 +123,14 @@ func deleteResourcesForDriftTest(workspaceNamespace string) {
 	cmd := exec.Command("kubectl", "delete", "workspace", "workspace-drift",
 		"-n", workspaceNamespace, "--ignore-not-found", "--wait=true", "--timeout=120s")
 	_, _ = utils.Run(cmd)
+}
+
+// deploymentGeneration returns metadata.generation, which the API server increments on every
+// spec change.
+func deploymentGeneration(name, namespace string) (int64, error) {
+	output, err := kubectlGet("deployment", name, namespace, "{.metadata.generation}")
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseInt(strings.TrimSpace(output), 10, 64)
 }
