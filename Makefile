@@ -183,6 +183,7 @@ setup-test-e2e: ## Set up a fresh Kind cluster for e2e tests (deletes existing c
 	fi
 
 .PHONY: test-e2e
+# go test's timeout sits above Ginkgo's so a run over budget ends with Ginkgo's report and cleanup, not a go test panic.
 test-e2e: setup-test-e2e manifests generate fmt vet helm-generate load-images-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
 	KIND_CLUSTER=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL) go test -tags=e2e ./test/e2e/ -v -timeout 100m -ginkgo.v -ginkgo.timeout 90m
 	$(MAKE) cleanup-test-e2e
