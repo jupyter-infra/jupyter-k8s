@@ -32,26 +32,29 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 		gpuTemplateName    = "gpu-template"
 	)
 
-	var gpuNodeName string
+	var (
+		gpuNodeName   string
+		workspaceName string
+	)
 
 	BeforeAll(func() {
 		gpuNodeName = setupFakeGPUNode()
+		createTemplateForTest(gpuTemplateName, groupDir, "")
 	})
 
 	AfterAll(func() {
+		deleteGPUTemplate(gpuTemplateName)
 		teardownFakeGPUNode(gpuNodeName)
 	})
 
 	AfterEach(func() {
-		deleteResourcesForGPUTest(workspaceNamespace)
+		deleteGPUWorkspace(workspaceName, workspaceNamespace)
+		workspaceName = ""
 	})
 
 	Context("Template propagation", func() {
 		It("should propagate template GPU defaults and placement to the pod and schedule it", func() {
-			workspaceName := "gpu-default-workspace"
-
-			By("creating the GPU template")
-			createTemplateForTest(gpuTemplateName, groupDir, "")
+			workspaceName = "gpu-default-workspace"
 
 			By("creating a workspace with no resources or scheduling fields")
 			createWorkspaceForTest(workspaceName, groupDir, "")
@@ -105,10 +108,7 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 		})
 
 		It("should honor a workspace GPU request within template bounds", func() {
-			workspaceName := "gpu-override-workspace"
-
-			By("creating the GPU template")
-			createTemplateForTest(gpuTemplateName, groupDir, "")
+			workspaceName = "gpu-override-workspace"
 
 			By("creating a workspace requesting 2 GPUs (the template max)")
 			createWorkspaceForTest(workspaceName, groupDir, "")
@@ -135,10 +135,7 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 
 	Context("Updates", func() {
 		It("should restart with the new GPU count on an in-bounds change and reject an out-of-bounds one", func() {
-			workspaceName := "gpu-default-workspace"
-
-			By("creating the GPU template")
-			createTemplateForTest(gpuTemplateName, groupDir, "")
+			workspaceName = "gpu-default-workspace"
 
 			By("creating a workspace that takes the template default of 1 GPU")
 			createWorkspaceForTest(workspaceName, groupDir, "")
@@ -185,10 +182,7 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 
 	Context("Validation", func() {
 		It("should reject a workspace requesting GPUs above the template bound", func() {
-			workspaceName := "gpu-exceed-workspace"
-
-			By("creating the GPU template")
-			createTemplateForTest(gpuTemplateName, groupDir, "")
+			workspaceName = "gpu-exceed-workspace"
 
 			By("attempting to create a workspace requesting 3 GPUs (bounds max is 2)")
 			path := BuildTestResourcePath(workspaceName, groupDir, "")
@@ -209,10 +203,7 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 
 	Context("GPU-off path", func() {
 		It("should not inject GPU defaults when a workspace overrides resources with CPU-only values", func() {
-			workspaceName := "gpu-cpu-only-workspace"
-
-			By("creating the GPU template")
-			createTemplateForTest(gpuTemplateName, groupDir, "")
+			workspaceName = "gpu-cpu-only-workspace"
 
 			By("creating a workspace overriding resources with cpu/memory only")
 			createWorkspaceForTest(workspaceName, groupDir, "")
@@ -239,7 +230,7 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 		})
 
 		It("should leave a workspace without a template free of GPU resources and placement", func() {
-			workspaceName := "gpu-no-template-workspace"
+			workspaceName = "gpu-no-template-workspace"
 
 			By("creating a workspace with no template reference")
 			createWorkspaceForTest(workspaceName, groupDir, "")
