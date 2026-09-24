@@ -18,6 +18,7 @@ spec:
       cpu: 500m
       memory: 512Mi
       nvidia.com/gpu: "1"
+  # Bounds apply only to the resource names listed here; a request for any other resource is admitted unbounded.
   resourceBounds:
     resources:
       cpu:
