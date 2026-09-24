@@ -38,16 +38,21 @@ const (
 // fakeGPUResource is fakeGPUResourceName as a typed key into ResourceList maps.
 var fakeGPUResource = corev1.ResourceName(fakeGPUResourceName)
 
-// setupFakeGPUNode advertises fake GPU capacity on the cluster's first node and labels it for
+// setupFakeGPUNode advertises fake GPU capacity on the first schedulable node and labels it for
 // nodeSelector-based placement. Returns the node name. Capacity and allocatable are patched
 // together: the kubelet only recomputes allocatable from capacity on its periodic status sync,
 // too slow for a test to wait on.
 func setupFakeGPUNode() string {
 	ginkgo.GinkgoHelper()
 
-	nodeName, err := kubectlGet("nodes", "", "", "{.items[0].metadata.name}")
-	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	gomega.Expect(nodeName).NotTo(gomega.BeEmpty(), "expected at least one node in the cluster")
+	node := firstSchedulableNode()
+	nodeName := node.Name
+	// A JSON patch "add" on an existing path overwrites it. Capacity advertised by a node that does
+	// not carry this suite's label comes from real hardware or a device plugin, not from an earlier run.
+	if node.Labels[fakeGPUNodeLabel] != valueTrue {
+		gomega.Expect(node.Status.Capacity).NotTo(gomega.HaveKey(fakeGPUResource),
+			"node %s already advertises %s; refusing to overwrite real GPU capacity", nodeName, fakeGPUResourceName)
+	}
 
 	ginkgo.By(fmt.Sprintf("advertising %s=%s on node %s", fakeGPUResourceName, fakeGPUCapacity, nodeName))
 	patch := fmt.Sprintf(
@@ -56,13 +61,13 @@ func setupFakeGPUNode() string {
 		jsonPatchEscapedGPUResource(), fakeGPUCapacity)
 	cmd := exec.Command("kubectl", "patch", "node", nodeName,
 		"--subresource=status", "--type=json", "-p", patch)
-	_, err = utils.Run(cmd)
+	_, err := utils.Run(cmd)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	ginkgo.By("verifying the node reports the fake GPU allocatable")
-	var node corev1.Node
-	gomega.Expect(kubectlGetInto("node", nodeName, "", &node)).To(gomega.Succeed())
-	gomega.Expect(node.Status.Allocatable).To(gomega.HaveKey(fakeGPUResource))
+	var patched corev1.Node
+	gomega.Expect(kubectlGetInto("node", nodeName, "", &patched)).To(gomega.Succeed())
+	gomega.Expect(patched.Status.Allocatable).To(gomega.HaveKey(fakeGPUResource))
 
 	ginkgo.By(fmt.Sprintf("labeling node %s with %s=true", nodeName, fakeGPUNodeLabel))
 	cmd = exec.Command("kubectl", "label", "--overwrite", "node", nodeName, fakeGPUNodeLabel+"=true")
@@ -88,6 +93,31 @@ func teardownFakeGPUNode(nodeName string) {
 	_, _ = utils.Run(cmd)
 	cmd = exec.Command("kubectl", "label", "node", nodeName, fakeGPUNodeLabel+"-")
 	_, _ = utils.Run(cmd)
+}
+
+// firstSchedulableNode returns the first node without a NoSchedule or NoExecute taint. On a
+// multi-node Kind cluster the first listed node is the tainted control plane, which the GPU
+// template's tolerations do not cover.
+func firstSchedulableNode() *corev1.Node {
+	ginkgo.GinkgoHelper()
+	var nodes corev1.NodeList
+	gomega.Expect(kubectlGetInto("nodes", "", "", &nodes)).To(gomega.Succeed())
+	for i := range nodes.Items {
+		if !hasSchedulingTaint(nodes.Items[i].Spec.Taints) {
+			return &nodes.Items[i]
+		}
+	}
+	ginkgo.Fail("no schedulable node in the cluster")
+	return nil
+}
+
+func hasSchedulingTaint(taints []corev1.Taint) bool {
+	for _, t := range taints {
+		if t.Effect == corev1.TaintEffectNoSchedule || t.Effect == corev1.TaintEffectNoExecute {
+			return true
+		}
+	}
+	return false
 }
 
 // jsonPatchEscapedGPUResource returns fakeGPUResourceName as a JSON patch path segment. A path
