@@ -41,10 +41,6 @@ var _ = Describe("Workspace Status", Ordered, func() {
 			By("creating workspace with desiredStatus=Running")
 			createWorkspaceForTest(runningWorkspace, statusGroupDir, statusSubgroupDir)
 
-			// NOTE: We intentionally do NOT assert Progressing=True immediately after creation.
-			// The controller sets .status.conditions asynchronously, so on slow/loaded CI runners
-			// the conditions may still be empty when checked, causing flaky failures.
-			// See https://github.com/jupyter-infra/jupyter-k8s/issues/350
 			By("waiting for Available condition to become True")
 			WaitForWorkspaceToReachCondition(
 				runningWorkspace,
