@@ -93,7 +93,6 @@ var _ = Describe("Workspace Drift Repair", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		By("mutating the primary container image out of band")
-		// kubectl set image fails when the container name does not exist; a merge patch would append one.
 		cmd := exec.Command("kubectl", "set", "image", "deployment/"+deploymentName,
 			controller.PrimaryContainerName+"=drifted-image:latest", "-n", workspaceNamespace)
 		_, err = utils.Run(cmd)
