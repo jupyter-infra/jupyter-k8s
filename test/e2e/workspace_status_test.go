@@ -41,6 +41,8 @@ var _ = Describe("Workspace Status", Ordered, func() {
 			By("creating workspace with desiredStatus=Running")
 			createWorkspaceForTest(runningWorkspace, statusGroupDir, statusSubgroupDir)
 
+			// Progressing=True is transient and VerifyWorkspaceConditions waits for a settled set,
+			// so the Starting phase is not asserted.
 			By("waiting for Available condition to become True")
 			WaitForWorkspaceToReachCondition(
 				runningWorkspace,
