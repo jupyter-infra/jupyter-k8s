@@ -2,6 +2,8 @@
 
 `spec.deploymentModifications.podModifications` declares what the integration adds to the workspace pod: `additionalContainers`, `initContainers`, `volumes`, `primaryContainerModifications.volumeMounts`, and `primaryContainerModifications.mergeEnv`. These fields take the same shape as the block of the same name on an access strategy; see [Access Strategies: Deployment Modifications](../access-strategies/deployment-modifications) for the field-by-field reference.
 
+`exposedPorts` is part of that shared shape but is not supported on an integration template. Publishing a sidecar port on the workspace Service is an access strategy's job. The schema currently admits the field here and the port is never published, so do not set it.
+
 String values within these fields may carry template expressions — `{{ resource "<handle>" "<jsonpath>" }}`, `{{ .Parameters.<name> }}`, and `{{ .Workspace.* }}`. See [Template expressions](template-expressions).
 
 ## What re-renders, and when

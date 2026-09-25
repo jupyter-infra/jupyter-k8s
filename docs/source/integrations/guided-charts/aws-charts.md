@@ -38,7 +38,8 @@ Users connect either a/ from their web browser using bearer token URL or b/ from
 **What it deploys:**
 - **Jupyter K8s** controller with the [AWS Plugin](../plugins/aws-plugin) sidecar
 - Preconfigured access strategies for SSM-based remote access (VS Code, Cursor)
-- A Ray integration template that attaches workspaces to an existing `RayCluster` (see [AWS-HyperPod Ray Integration Template](#aws-hyperpod-ray-integration-template) below)
+
+Optionally, a Ray integration template that attaches workspaces to an existing `RayCluster` — see [AWS-HyperPod Ray Integration Template](#aws-hyperpod-ray-integration-template) below.
 
 Optionally, components for Web UI with:
 - [Traefik](https://doc.traefik.io/traefik/)
@@ -59,6 +60,8 @@ Optionally, components for Web UI with:
 The chart ships a [`WorkspaceIntegrationTemplate`](../../concepts/integration-templates/index) named `ray-integration` that attaches a workspace to an existing `RayCluster`. When a workspace references it and supplies the `rayClusterName` parameter, the controller injects a Ray sidecar (matched to the cluster's head image) that joins as a zero-resource client node, mounts the shared session directories, and sets `RAY_ADDRESS=auto` plus `RAY_CLUSTER_NAME` in the workspace container, so `ray.init()` connects with no manual address.
 
 - **Enable:** `--set rayIntegration.enabled=true`
+- **Provide the operator's read access to `ray.io/rayclusters`:** grant it alongside enabling the template — see [Permissions for the operator](../../concepts/integration-templates/index.md#permissions-for-the-operator) for the role to apply.
+- **Reference the template by namespace:** it installs into the chart's namespace, `jupyter-k8s-system`, so a workspace in another namespace must set `integrationTemplateRefs[].namespace` to it. That namespace must also be the operator's configured shared namespace (`--default-template-namespace`), which is the only namespace other than its own that a workspace may reference. See [Usage](../../concepts/integration-templates/index.md#usage).
 - **Source:** [ray-integration-template.yaml](https://github.com/jupyter-infra/jupyter-k8s-aws/blob/main/charts/aws-hyperpod/templates/ray-integration-template.yaml)
 - **Concept and authoring guide:** [Integration Templates](../../concepts/integration-templates/index)
 

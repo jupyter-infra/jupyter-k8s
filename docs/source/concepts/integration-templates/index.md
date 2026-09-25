@@ -70,12 +70,15 @@ spec:
   image: my-repository/my-image:my-tag
   integrationTemplateRefs:
     - name: ray-integration
+      namespace: jupyter-k8s-system   # where the template lives; omit when it is in the workspace's own namespace
       parameters:
         - name: rayClusterName
           value: team-ray
 ```
 
-`spec.integrationTemplateRefs` is capped at one entry for now. The reference resolves within the workspace's own namespace. As with templates and access strategies, a workspace may also reference an integration template in the [shared namespace](../templates/shared-namespace), a special namespace identified at the **Jupyter K8s** operator level.
+`spec.integrationTemplateRefs` is capped at one entry for now.
+
+`namespace` selects where the template is read from, and admission accepts exactly three values: unset, the workspace's own namespace, or the [shared namespace](../templates/shared-namespace) configured at the **Jupyter K8s** operator level. An omitted `namespace` means the workspace's own namespace. Anything else is rejected before the template is read.
 
 An `integrationTemplateRefs` entry only declares which template to attach and the parameter values to use; it does not contain the injected sidecars, volumes, or environment variables. The controller computes those during reconciliation and records the resolved result in the workspace status. The workspace user does not author the template or write template expressions; they only choose a template and supply its parameter values.
 
