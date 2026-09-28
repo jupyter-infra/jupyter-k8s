@@ -70,7 +70,7 @@ spec:
   image: my-repository/my-image:my-tag
   integrationTemplateRefs:
     - name: ray-integration
-      namespace: jupyter-k8s-system   # where the template lives; omit when it is in the workspace's own namespace
+      namespace: jupyter-k8s-shared   # the shared namespace; omit when the template is in the workspace's own namespace
       parameters:
         - name: rayClusterName
           value: team-ray
