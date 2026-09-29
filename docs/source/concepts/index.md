@@ -2,10 +2,11 @@
 
 How the components of **Jupyter K8s** fit together — from custom resources to network routing.
 
-**Jupyter K8s** manages three custom resources:
+**Jupyter K8s** manages four custom resources:
 - **Workspace**: Represents a single compute environment — a pod with dedicated storage and possibly a unique URL.
 - **WorkspaceTemplate**: Provides default configuration to a workspace, and enforces bounds for variations.
 - **WorkspaceAccessStrategy**: Configures a workspace so that the routing layers can connect to it.
+- **WorkspaceIntegrationTemplate**: Injects runtime capabilities (sidecars, volumes, env vars) into a workspace pod, resolved dynamically from a referenced resource.
 
 ## 10k View
 
@@ -53,5 +54,6 @@ workspaces/index
 routing/index
 access-strategies/index
 templates/index
+integration-templates/index
 connections/index
 ```
