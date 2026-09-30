@@ -199,6 +199,11 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 		return true
 	}
 
+	// Check sharedMemory changes
+	if !equality.Semantic.DeepEqual(oldSpec.SharedMemory, newSpec.SharedMemory) {
+		return true
+	}
+
 	return false
 }
 
@@ -274,7 +279,23 @@ func validateTemplateConsistency(template *workspacev1alpha1.WorkspaceTemplate) 
 	}
 
 	// idleShutdownOverrides bounds must be consistent, and a locked policy needs a default.
-	return validateIdleShutdownPolicyConsistency(template)
+	if err := validateIdleShutdownPolicyConsistency(template); err != nil {
+		return err
+	}
+
+	// sharedMemory.sizeLimit must be a positive quantity.
+	return validateTemplateSharedMemoryConsistency(template)
+}
+
+// validateTemplateSharedMemoryConsistency rejects a sharedMemory.sizeLimit of zero or less, which
+// the kubelet would ignore, leaving every workspace from the template with an uncapped volume.
+func validateTemplateSharedMemoryConsistency(template *workspacev1alpha1.WorkspaceTemplate) error {
+	sm := template.Spec.SharedMemory
+	if sm == nil || sm.SizeLimit == nil || sm.SizeLimit.Sign() > 0 {
+		return nil
+	}
+	return fmt.Errorf("sharedMemory.sizeLimit %s must be greater than zero (template %q)",
+		sm.SizeLimit.String(), template.GetName())
 }
 
 // validateIdleShutdownPolicyConsistency rejects a template whose idle shutdown policy is

@@ -118,6 +118,11 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		violations = append(violations, *violation)
 	}
 
+	// Validate shared memory against the template's setting
+	if sharedMemoryViolations := validateSharedMemory(workspace, template); len(sharedMemoryViolations) > 0 {
+		violations = append(violations, sharedMemoryViolations...)
+	}
+
 	// Validate init containers
 	if violation := validateInitContainers(workspace.Spec.InitContainers, template); violation != nil {
 		violations = append(violations, *violation)

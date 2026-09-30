@@ -39,6 +39,8 @@ const (
 	ViolationTypeEnvRequired                    = "EnvRequired"
 	ViolationTypeEnvRegexMismatch               = "EnvRegexMismatch"
 	ViolationTypeInitContainersNotAllowed       = "InitContainersNotAllowed"
+	ViolationTypeSharedMemoryNotAllowed         = "SharedMemoryNotAllowed"
+	ViolationTypeSharedMemoryExceeded           = "SharedMemoryExceeded"
 )
 
 // labelValueTrue is the string value used for boolean-style Kubernetes labels.
