@@ -1,0 +1,11 @@
+# Admitted although the template forbids secondary volumes: the /dev/shm volume is the operator's.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-no-secondary-workspace
+spec:
+  displayName: "shm-no-secondary-workspace"
+  templateRef:
+    name: shm-template-no-secondary
+    namespace: jupyter-k8s-shared
+  ownershipType: Public

@@ -235,3 +235,34 @@ func VerifyHomeVolumeDataPersisted(workspaceName, namespace string) {
 	}, 60*time.Second, 2*time.Second).Should(gomega.Succeed(),
 		fmt.Sprintf("Failed to verify persisted file %s after retries", filepath))
 }
+
+// VerifyShmSize runs `df -k /dev/shm` in the workspace's primary container and checks the size column,
+// in KiB. tmpfs reports its size limit exactly, so the value is the volume's sizeLimit, or 65536 for
+// the 64MiB container default when no volume is mounted there. Retried because the pod may be
+// mid-restart after a spec change. No-op when using Finch (known cgroup exec issues in Kind).
+func VerifyShmSize(workspaceName, namespace string, expectedKiB int64) {
+	ginkgo.GinkgoHelper()
+
+	if isUsingFinch() {
+		ginkgo.By("skipping exec-based /dev/shm size check (Finch has known cgroup access issues)")
+		return
+	}
+
+	ginkgo.By(fmt.Sprintf("verifying /dev/shm in workspace %s reports %d KiB", workspaceName, expectedKiB))
+	podSelector := fmt.Sprintf("%s=%s", WorkspaceLabelName, workspaceName)
+	gomega.Eventually(func(g gomega.Gomega) {
+		podName, err := kubectlGetByLabels("pod", podSelector, namespace, "{.items[0].metadata.name}")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(podName).NotTo(gomega.BeEmpty())
+
+		cmd := exec.Command("kubectl", "exec", podName, "-n", namespace,
+			"-c", controller.PrimaryContainerName, "--", "df", "-k", "/dev/shm")
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(gomega.HaveOccurred(), output)
+		lines := strings.Split(strings.TrimSpace(output), "\n")
+		g.Expect(lines).To(gomega.HaveLen(2), output)
+		fields := strings.Fields(lines[1])
+		g.Expect(len(fields)).To(gomega.BeNumerically(">=", 2), output)
+		g.Expect(fields[1]).To(gomega.Equal(fmt.Sprintf("%d", expectedKiB)), output)
+	}, 120*time.Second, 5*time.Second).Should(gomega.Succeed())
+}

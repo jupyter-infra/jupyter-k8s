@@ -1,0 +1,11 @@
+# The template's 128Mi cap is copied onto the workspace and reaches the pod.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-capped-workspace
+spec:
+  displayName: "shm-capped-workspace"
+  templateRef:
+    name: shm-template-capped
+    namespace: jupyter-k8s-shared
+  ownershipType: Public

@@ -1,0 +1,13 @@
+# Rejected: 256Mi exceeds the template's 128Mi cap.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-over-cap-workspace
+spec:
+  displayName: "shm-over-cap-workspace"
+  templateRef:
+    name: shm-template-capped
+    namespace: jupyter-k8s-shared
+  ownershipType: Public
+  sharedMemory:
+    sizeLimit: 256Mi

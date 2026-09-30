@@ -1,0 +1,11 @@
+# Without a template the workspace's own off switch is honored as is.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-no-template-disabled-workspace
+spec:
+  displayName: "shm-no-template-disabled-workspace"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  sharedMemory:
+    enabled: false

@@ -1,0 +1,13 @@
+# Rejected: the template disables the volume.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-enable-under-disabled-workspace
+spec:
+  displayName: "shm-enable-under-disabled-workspace"
+  templateRef:
+    name: shm-template-disabled
+    namespace: jupyter-k8s-shared
+  ownershipType: Public
+  sharedMemory:
+    enabled: true

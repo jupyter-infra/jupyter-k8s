@@ -1,0 +1,11 @@
+# Second workspace from shm-template, created after the template gains a cap.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-default-workspace-b
+spec:
+  displayName: "shm-default-workspace-b"
+  templateRef:
+    name: shm-template
+    namespace: jupyter-k8s-shared
+  ownershipType: Public

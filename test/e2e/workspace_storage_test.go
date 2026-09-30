@@ -463,6 +463,13 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 				"{.spec.template.spec.volumes[?(@.name=='shm')].emptyDir.sizeLimit}")
 			Expect(sizeLimitErr).NotTo(HaveOccurred())
 			Expect(sizeLimit).To(Equal("1Gi"))
+
+			By("verifying the operator's /dev/shm volume yields to the user's")
+			volumeNames, volumeNamesErr := kubectlGet("deployment", deploymentName, workspaceNamespace,
+				"{.spec.template.spec.volumes[*].name}")
+			Expect(volumeNamesErr).NotTo(HaveOccurred())
+			Expect(volumeNames).NotTo(ContainSubstring("workspace-shm"))
+			VerifyShmSize(workspaceName, workspaceNamespace, 1024*1024)
 		})
 
 		It("should mount PVC and emptyDir volumes together", func() {

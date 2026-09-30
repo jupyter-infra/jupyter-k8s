@@ -166,6 +166,8 @@ func workspacePod(workspaceName, namespace string) *corev1.Pod {
 
 // workspacePods returns the workspace's pods, decoded. Errors are returned rather than asserted so
 // callers can poll: a pod listed while the workspace restarts may be gone by the time it is read.
+//
+//nolint:unparam // helper kept general; current callers happen to share the namespace
 func workspacePods(workspaceName, namespace string) ([]corev1.Pod, error) {
 	names, err := kubectlGetByLabels("pod",
 		fmt.Sprintf("%s=%s", controller.LabelWorkspaceName, workspaceName),

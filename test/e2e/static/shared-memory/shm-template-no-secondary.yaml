@@ -1,0 +1,28 @@
+# Template forbidding user volumes; the /dev/shm volume is not one, so workspaces are still admitted.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: shm-template-no-secondary
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Shared memory without secondary volumes"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultResources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  resourceBounds:
+    resources:
+      cpu:
+        min: 100m
+        max: "2"
+      memory:
+        min: 128Mi
+        max: 4Gi
+  primaryStorage:
+    defaultSize: 1Gi
+  appType: jupyter
+  allowSecondaryStorages: false

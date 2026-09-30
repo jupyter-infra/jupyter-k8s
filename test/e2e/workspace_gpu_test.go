@@ -16,6 +16,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
@@ -105,6 +106,15 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 			By("verifying the pod scheduled onto the GPU-advertising node")
 			Expect(pod.Spec.NodeName).To(Equal(gpuNodeName))
 			Expect(pod.Status.Phase).To(Equal(corev1.PodRunning))
+
+			By("verifying the /dev/shm volume is sized to the template's 512Mi memory limit")
+			shm := volumeByName(pod.Spec, "workspace-shm")
+			Expect(shm).NotTo(BeNil())
+			Expect(shm.EmptyDir).NotTo(BeNil())
+			Expect(shm.EmptyDir.Medium).To(Equal(corev1.StorageMediumMemory))
+			Expect(shm.EmptyDir.SizeLimit.Cmp(resource.MustParse("512Mi"))).To(BeZero())
+			Expect(mountByPath(*primary, "/dev/shm")).NotTo(BeNil())
+			VerifyShmSize(workspaceName, workspaceNamespace, 512*1024)
 		})
 
 		It("should honor a workspace GPU request within template bounds", func() {
