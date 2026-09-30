@@ -33,6 +33,21 @@ type VolumeSpec struct {
 	EmptyDir *corev1.EmptyDirVolumeSource `json:"emptyDir,omitempty"`
 }
 
+// SharedMemorySpec configures the memory-backed /dev/shm volume the operator mounts into the
+// workspace container. Containers otherwise get the 64Mi default, which is too small for PyTorch
+// DataLoader workers and NCCL.
+type SharedMemorySpec struct {
+	// Enabled mounts the volume. Defaults to true.
+	// +kubebuilder:default=true
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// SizeLimit caps the volume. Defaults to the workspace container's memory limit, which is also
+	// the ceiling: a larger value is lowered to the limit, since the volume's contents count against it.
+	// +optional
+	SizeLimit *resource.Quantity `json:"sizeLimit,omitempty"`
+}
+
 // ContainerConfig defines container command and args configuration
 type ContainerConfig struct {
 	// Command specifies the container command
@@ -175,7 +190,14 @@ type WorkspaceSpec struct {
 	// Volumes specifies additional volumes to mount from existing PersistentVolumeClaims
 	// or emptyDir sources.
 	// +kubebuilder:validation:XValidation:rule="!self.exists(v, v.name == 'workspace-storage')",message="volume name 'workspace-storage' is reserved"
+	// +kubebuilder:validation:XValidation:rule="!self.exists(v, v.name == 'workspace-shm')",message="volume name 'workspace-shm' is reserved"
 	Volumes []VolumeSpec `json:"volumes,omitempty"`
+
+	// SharedMemory configures the memory-backed /dev/shm volume mounted into the workspace container.
+	// Defaulted from the template's sharedMemory; a workspace may keep or tighten the template's
+	// setting but not raise or re-enable it. A volume the workspace declares at /dev/shm takes precedence.
+	// +optional
+	SharedMemory *SharedMemorySpec `json:"sharedMemory,omitempty"`
 
 	// ContainerConfig specifies container command and args configuration
 	ContainerConfig *ContainerConfig `json:"containerConfig,omitempty"`

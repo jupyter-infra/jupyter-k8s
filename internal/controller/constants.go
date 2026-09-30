@@ -167,6 +167,12 @@ const (
 	// volumeNameWorkspaceStorage is the volume name for workspace storage
 	volumeNameWorkspaceStorage = "workspace-storage"
 
+	// volumeNameWorkspaceSharedMemory is the reserved name of the memory-backed /dev/shm volume
+	volumeNameWorkspaceSharedMemory = "workspace-shm"
+
+	// sharedMemoryMountPath is where the workspace container expects shared memory
+	sharedMemoryMountPath = "/dev/shm"
+
 	// kindIngressRoute is the Traefik IngressRoute resource kind
 	kindIngressRoute = "IngressRoute"
 	// kindMiddleware is the Traefik Middleware resource kind

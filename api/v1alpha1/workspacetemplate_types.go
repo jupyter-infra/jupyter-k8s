@@ -83,6 +83,12 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultVolumes []VolumeSpec `json:"defaultVolumes,omitempty"`
 
+	// SharedMemory sets the default and the bound for the memory-backed /dev/shm volume of workspaces
+	// using this template: enabled: false turns the volume off, sizeLimit caps it below the container
+	// memory limit. Copied onto workspaces that set nothing; a workspace may only tighten it.
+	// +optional
+	SharedMemory *SharedMemorySpec `json:"sharedMemory,omitempty"`
+
 	// DefaultNodeSelector specifies default node selection constraints
 	// +optional
 	DefaultNodeSelector map[string]string `json:"defaultNodeSelector,omitempty"`
