@@ -57,3 +57,20 @@ spec:
 The volume name `workspace-storage` is reserved for the primary volume.
 
 Templates can disallow secondary volumes with `allowSecondaryStorages: false`, or provide default volumes via `defaultVolumes`.
+
+## Shared memory
+
+`/dev/shm` is shared memory, the slice of RAM that processes on one machine use to hand large data to each other without copying it. PyTorch's DataLoader workers and NCCL depend on it, and a container gets only 64MiB unless something mounts a larger one.
+
+**Jupyter K8s** mounts a memory-backed `emptyDir` volume named `workspace-shm` at `/dev/shm` in every workspace container. Its `sizeLimit` is the container's memory limit, so the volume adds no memory to the workspace: whatever a process writes into it counts against the same limit. A workspace that declares its own volume at `/dev/shm` keeps it, and the volume name `workspace-shm` is reserved.
+
+A template sets the default and the bound with `sharedMemory`:
+
+```yaml
+spec:
+  sharedMemory:
+    enabled: true
+    sizeLimit: 4Gi
+```
+
+`enabled: false` turns the volume off for the template's workspaces. `sizeLimit` caps it below the container memory limit; a cap above the limit is lowered to the limit. The webhook copies the template's `sharedMemory` onto `workspace.spec.sharedMemory` and lets a workspace keep or tighten it: a workspace cannot enable the volume when the template disables it, nor set a `sizeLimit` above the template's cap.
