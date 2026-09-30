@@ -62,13 +62,13 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify volume is added
-			Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(1))
+			Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(2)) // workspace-storage + workspace-shm
 			Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(volumeNameWorkspaceStorage))
 			Expect(deployment.Spec.Template.Spec.Volumes[0].VolumeSource.PersistentVolumeClaim.ClaimName).To(Equal(GeneratePVCName(workspace.Name)))
 
 			// Verify volume mount is added to container
 			container := deployment.Spec.Template.Spec.Containers[0]
-			Expect(container.VolumeMounts).To(HaveLen(1))
+			Expect(container.VolumeMounts).To(HaveLen(2)) // workspace-storage + workspace-shm
 			Expect(container.VolumeMounts[0].Name).To(Equal(volumeNameWorkspaceStorage))
 			Expect(container.VolumeMounts[0].MountPath).To(Equal(DefaultMountPath))
 		})
@@ -90,9 +90,9 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify volume is added from workspace spec
-			Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(1))
+			Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(2)) // workspace-storage + workspace-shm
 			container := deployment.Spec.Template.Spec.Containers[0]
-			Expect(container.VolumeMounts).To(HaveLen(1))
+			Expect(container.VolumeMounts).To(HaveLen(2)) // workspace-storage + workspace-shm
 		})
 	})
 
@@ -129,7 +129,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			container := deployment.Spec.Template.Spec.Containers[0]
 
 			// Check volume mounts
-			Expect(container.VolumeMounts).To(HaveLen(3)) // workspace-storage + 2 additional
+			Expect(container.VolumeMounts).To(HaveLen(4)) // workspace-storage + 2 additional + workspace-shm
 
 			volumeMountMap := make(map[string]string)
 			for _, vm := range container.VolumeMounts {
@@ -140,7 +140,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(volumeMountMap["shared-volume"]).To(Equal("/shared"))
 
 			// Check volumes
-			Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(3)) // workspace-storage + 2 additional
+			Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(4)) // workspace-storage + 2 additional + workspace-shm
 
 			volumeMap := make(map[string]string)
 			for _, v := range deployment.Spec.Template.Spec.Volumes {

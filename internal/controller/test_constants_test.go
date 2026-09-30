@@ -17,6 +17,7 @@ const (
 	testRouteName                = "test-route"
 	testRouteNameOne             = "test-route-1"
 	testWorkspaceDisplayName     = "Test Workspace"
+	testImageRegistry            = "quay.io"
 	testStrategyDisplayName      = "Test Strategy"
 	testTemplateDisplayName      = "Test Template"
 

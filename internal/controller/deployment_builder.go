@@ -191,8 +191,8 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 
 	// Add additional volumes from spec
 	for _, vol := range workspace.Spec.Volumes {
-		if vol.Name == volumeNameWorkspaceStorage {
-			// Skip if name conflicts with primary storage
+		if vol.Name == volumeNameWorkspaceStorage || vol.Name == volumeNameWorkspaceSharedMemory {
+			// Skip the operator's reserved volume names
 			continue
 		}
 		volumeSource := corev1.VolumeSource{
@@ -207,6 +207,10 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 			Name:         vol.Name,
 			VolumeSource: volumeSource,
 		})
+	}
+
+	if sharedMemoryEnabled(workspace) {
+		podSpec.Volumes = append(podSpec.Volumes, sharedMemoryVolume(workspace, resources))
 	}
 
 	// Set scheduling fields from workspace spec
@@ -286,13 +290,20 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 
 	// Add additional volume mounts from spec
 	for _, vol := range workspace.Spec.Volumes {
-		if vol.Name == volumeNameWorkspaceStorage {
-			// Skip if name conflicts with primary storage
+		if vol.Name == volumeNameWorkspaceStorage || vol.Name == volumeNameWorkspaceSharedMemory {
+			// Skip the operator's reserved volume names
 			continue
 		}
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 			Name:      vol.Name,
 			MountPath: vol.MountPath,
+		})
+	}
+
+	if sharedMemoryEnabled(workspace) {
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      volumeNameWorkspaceSharedMemory,
+			MountPath: sharedMemoryMountPath,
 		})
 	}
 
