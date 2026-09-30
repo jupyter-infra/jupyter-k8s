@@ -8,7 +8,7 @@ The `jupyter-k8s-aws` [GitHub repository](https://github.com/jupyter-infra/jupyt
 A full web-access stack for EKS clusters. Users access the applications running in their workspaces from their browser via OIDC authentication.
 
 **What it deploys:**
-- [Traefik](https://doc.traefik.io/traefik/) with [Let's Encrypt](https://letsencrypt.org/) issued TLS certificates
+- [Traefik](https://doc.traefik.io/traefik/) with [Amazon Certificate Manager](https://docs.aws.amazon.com/acm/latest/userguide/acm-overview.html) issued TLS certificates
 - [Dex](https://dexidp.io/docs/getting-started/) as the OIDC identity provider
 - [OAuth2-Proxy](https://oauth2-proxy.github.io/oauth2-proxy/) to manage workspace-wide cookies
 - **Auth middleware** configured to verify the OIDC token from `dex`
