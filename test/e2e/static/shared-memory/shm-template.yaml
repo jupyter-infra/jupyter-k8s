@@ -22,6 +22,4 @@ spec:
       memory:
         min: 128Mi
         max: 4Gi
-  primaryStorage:
-    defaultSize: 1Gi
   appType: jupyter

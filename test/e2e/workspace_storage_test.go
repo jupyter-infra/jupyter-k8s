@@ -469,7 +469,7 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 				"{.spec.template.spec.volumes[*].name}")
 			Expect(volumeNamesErr).NotTo(HaveOccurred())
 			Expect(volumeNames).NotTo(ContainSubstring("workspace-shm"))
-			VerifyShmSize(workspaceName, workspaceNamespace, 1024*1024)
+			VerifyShmSize(workspaceName, workspaceNamespace, "1Gi")
 		})
 
 		It("should mount PVC and emptyDir volumes together", func() {

@@ -15,10 +15,14 @@ import (
 	"strings"
 	"time"
 
+	"strconv"
+
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // isUsingFinch detects if the test environment is using Finch container runtime
@@ -236,11 +240,33 @@ func VerifyHomeVolumeDataPersisted(workspaceName, namespace string) {
 		fmt.Sprintf("Failed to verify persisted file %s after retries", filepath))
 }
 
-// VerifyShmSize runs `df -k /dev/shm` in the workspace's primary container and checks the size column,
-// in KiB. tmpfs reports its size limit exactly, so the value is the volume's sizeLimit, or 65536 for
-// the 64MiB container default when no volume is mounted there. Retried because the pod may be
-// mid-restart after a spec change. No-op when using Finch (known cgroup exec issues in Kind).
-func VerifyShmSize(workspaceName, namespace string, expectedKiB int64) {
+// volumeByName returns the pod volume with the given name, or nil.
+func volumeByName(spec corev1.PodSpec, name string) *corev1.Volume {
+	for i := range spec.Volumes {
+		if spec.Volumes[i].Name == name {
+			return &spec.Volumes[i]
+		}
+	}
+	return nil
+}
+
+// mountByPath returns the container's volume mount at the given path, or nil.
+func mountByPath(container corev1.Container, mountPath string) *corev1.VolumeMount {
+	for i := range container.VolumeMounts {
+		if container.VolumeMounts[i].MountPath == mountPath {
+			return &container.VolumeMounts[i]
+		}
+	}
+	return nil
+}
+
+// VerifyShmSize runs `df -k /dev/shm` in the workspace's primary container and checks that the reported
+// size equals size, a Kubernetes quantity. The kubelet sizes the tmpfs to the smaller of the volume's
+// sizeLimit and the pod's memory limit, and tmpfs reports that size exactly; 64Mi is the container
+// default when no volume is mounted there. The pod is resolved once; only the exec is retried, for the
+// transient OCI errors described on VerifyPodCanAccessExternalVolumes. No-op when using Finch (known
+// cgroup exec issues in Kind).
+func VerifyShmSize(workspaceName, namespace, size string) {
 	ginkgo.GinkgoHelper()
 
 	if isUsingFinch() {
@@ -248,13 +274,15 @@ func VerifyShmSize(workspaceName, namespace string, expectedKiB int64) {
 		return
 	}
 
-	ginkgo.By(fmt.Sprintf("verifying /dev/shm in workspace %s reports %d KiB", workspaceName, expectedKiB))
-	podSelector := fmt.Sprintf("%s=%s", WorkspaceLabelName, workspaceName)
-	gomega.Eventually(func(g gomega.Gomega) {
-		podName, err := kubectlGetByLabels("pod", podSelector, namespace, "{.items[0].metadata.name}")
-		g.Expect(err).NotTo(gomega.HaveOccurred())
-		g.Expect(podName).NotTo(gomega.BeEmpty())
+	expected := resource.MustParse(size)
+	expectedKiB := strconv.FormatInt(expected.Value()/1024, 10)
+	ginkgo.By(fmt.Sprintf("verifying /dev/shm in workspace %s reports %s", workspaceName, size))
+	podName, err := kubectlGetByLabels("pod", fmt.Sprintf("%s=%s", WorkspaceLabelName, workspaceName),
+		namespace, "{.items[0].metadata.name}")
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	gomega.Expect(podName).NotTo(gomega.BeEmpty())
 
+	gomega.Eventually(func(g gomega.Gomega) {
 		cmd := exec.Command("kubectl", "exec", podName, "-n", namespace,
 			"-c", controller.PrimaryContainerName, "--", "df", "-k", "/dev/shm")
 		output, err := utils.Run(cmd)
@@ -263,6 +291,51 @@ func VerifyShmSize(workspaceName, namespace string, expectedKiB int64) {
 		g.Expect(lines).To(gomega.HaveLen(2), output)
 		fields := strings.Fields(lines[1])
 		g.Expect(len(fields)).To(gomega.BeNumerically(">=", 2), output)
-		g.Expect(fields[1]).To(gomega.Equal(fmt.Sprintf("%d", expectedKiB)), output)
-	}, 120*time.Second, 5*time.Second).Should(gomega.Succeed())
+		g.Expect(fields[1]).To(gomega.Equal(expectedKiB), output)
+	}, 60*time.Second, 2*time.Second).Should(gomega.Succeed())
+}
+
+// VerifyWorkspaceSharedMemory waits until the workspace has exactly one Running pod carrying the
+// operator's /dev/shm volume at size, mounted in the primary container, then checks df inside it.
+// Polling covers the Recreate roll after a spec change.
+func VerifyWorkspaceSharedMemory(workspaceName, namespace, size string) {
+	ginkgo.GinkgoHelper()
+
+	gomega.Eventually(func(g gomega.Gomega) {
+		pods, err := workspacePods(workspaceName, namespace)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(pods).To(gomega.HaveLen(1))
+		pod := pods[0]
+		g.Expect(pod.Status.Phase).To(gomega.Equal(corev1.PodRunning))
+		volume := volumeByName(pod.Spec, SharedMemoryVolumeName)
+		g.Expect(volume).NotTo(gomega.BeNil(), "the pod must carry the %s volume", SharedMemoryVolumeName)
+		g.Expect(volume.EmptyDir).NotTo(gomega.BeNil())
+		g.Expect(volume.EmptyDir.Medium).To(gomega.Equal(corev1.StorageMediumMemory))
+		g.Expect(volume.EmptyDir.SizeLimit).NotTo(gomega.BeNil())
+		g.Expect(volume.EmptyDir.SizeLimit.Cmp(resource.MustParse(size))).To(gomega.BeZero(),
+			"sizeLimit %s, expected %s", volume.EmptyDir.SizeLimit.String(), size)
+		primary := containerByName(pod.Spec, controller.PrimaryContainerName)
+		g.Expect(primary).NotTo(gomega.BeNil())
+		mount := mountByPath(*primary, SharedMemoryMountPath)
+		g.Expect(mount).NotTo(gomega.BeNil())
+		g.Expect(mount.Name).To(gomega.Equal(SharedMemoryVolumeName))
+	}, 180*time.Second, 3*time.Second).Should(gomega.Succeed())
+
+	VerifyShmSize(workspaceName, namespace, size)
+}
+
+// VerifyWorkspaceNoSharedMemory waits until the workspace's one Running pod carries no operator /dev/shm
+// volume, then checks that df inside it reports the 64Mi container default.
+func VerifyWorkspaceNoSharedMemory(workspaceName, namespace string) {
+	ginkgo.GinkgoHelper()
+
+	gomega.Eventually(func(g gomega.Gomega) {
+		pods, err := workspacePods(workspaceName, namespace)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(pods).To(gomega.HaveLen(1))
+		g.Expect(pods[0].Status.Phase).To(gomega.Equal(corev1.PodRunning))
+		g.Expect(volumeByName(pods[0].Spec, SharedMemoryVolumeName)).To(gomega.BeNil())
+	}, 180*time.Second, 3*time.Second).Should(gomega.Succeed())
+
+	VerifyShmSize(workspaceName, namespace, "64Mi")
 }

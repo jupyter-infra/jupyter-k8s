@@ -261,3 +261,27 @@ func deleteWorkspaceAsUser(name, user string, groups []string) error {
 	_, err := utils.Run(cmd)
 	return err
 }
+
+// deleteWorkspaceForTest removes one workspace by name, so it can never delete unrelated objects
+// sharing the namespace. A missing workspace is not an error.
+//
+//nolint:unparam // helper kept general; current callers happen to share the namespace
+func deleteWorkspaceForTest(workspaceName, namespace string) {
+	ginkgo.GinkgoHelper()
+	if workspaceName == "" {
+		return
+	}
+	ginkgo.By(fmt.Sprintf("cleaning up workspace %s", workspaceName))
+	cmd := exec.Command("kubectl", "delete", "workspace", workspaceName,
+		"-n", namespace, "--ignore-not-found", "--wait=true", "--timeout=120s")
+	_, _ = utils.Run(cmd)
+}
+
+// deleteTemplateForTest removes one template from the shared namespace by name.
+func deleteTemplateForTest(templateName string) {
+	ginkgo.GinkgoHelper()
+	ginkgo.By(fmt.Sprintf("cleaning up template %s", templateName))
+	cmd := exec.Command("kubectl", "delete", "workspacetemplate", templateName,
+		"-n", SharedNamespace, "--ignore-not-found", "--wait=true", "--timeout=60s")
+	_, _ = utils.Run(cmd)
+}

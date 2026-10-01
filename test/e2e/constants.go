@@ -99,3 +99,9 @@ func GetWorkspaceCrds() []string {
 		"workspaceaccessstrategies.workspace.jupyter.org",
 	}
 }
+
+// SharedMemoryVolumeName and SharedMemoryMountPath identify the operator's /dev/shm volume on a pod.
+const (
+	SharedMemoryVolumeName = "workspace-shm"
+	SharedMemoryMountPath  = "/dev/shm"
+)

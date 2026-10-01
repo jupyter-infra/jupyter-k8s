@@ -6,6 +6,15 @@ spec:
   displayName: "Workspace with emptyDir Volume"
   desiredStatus: Running
   image: jk8s-application-jupyter-uv:latest
+  # A 2Gi limit keeps the kubelet from shrinking the 1Gi volume below its sizeLimit, so df shows
+  # the user's size and not the limit-sized volume the operator would have mounted.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 2Gi
   storage:
     size: 1Gi
   volumes:
