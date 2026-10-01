@@ -303,7 +303,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 	if sharedMemoryEnabled(workspace) {
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 			Name:      volumeNameWorkspaceSharedMemory,
-			MountPath: sharedMemoryMountPath,
+			MountPath: SharedMemoryMountPath,
 		})
 	}
 

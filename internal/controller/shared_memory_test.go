@@ -94,7 +94,7 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 			Expect(volume.EmptyDir.SizeLimit).NotTo(BeNil())
 			Expect(volume.EmptyDir.SizeLimit.Cmp(resource.MustParse(size))).To(BeZero())
 		}
-		mount := findMount(deployment.Spec.Template.Spec.Containers[0], sharedMemoryMountPath)
+		mount := findMount(deployment.Spec.Template.Spec.Containers[0], SharedMemoryMountPath)
 		Expect(mount).NotTo(BeNil())
 		Expect(mount.Name).To(Equal(volumeNameWorkspaceSharedMemory))
 	}
@@ -181,7 +181,7 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 		userSize := resource.MustParse("1Gi")
 		workspace.Spec.Volumes = []workspacev1alpha1.VolumeSpec{{
 			Name:      testUserShmVolume,
-			MountPath: sharedMemoryMountPath,
+			MountPath: SharedMemoryMountPath,
 			EmptyDir:  &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory, SizeLimit: &userSize},
 		}}
 		deployment := build(workspace)
@@ -190,14 +190,14 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 		Expect(userVolume).NotTo(BeNil())
 		Expect(userVolume.EmptyDir.SizeLimit).NotTo(BeNil())
 		Expect(userVolume.EmptyDir.SizeLimit.Cmp(userSize)).To(BeZero())
-		Expect(findMount(deployment.Spec.Template.Spec.Containers[0], sharedMemoryMountPath).Name).To(Equal(testUserShmVolume))
+		Expect(findMount(deployment.Spec.Template.Spec.Containers[0], SharedMemoryMountPath).Name).To(Equal(testUserShmVolume))
 	})
 
 	It("treats a user volume at /dev/shm/ as a volume at /dev/shm", func() {
 		workspace := newWorkspace(memoryLimited("2Gi"))
 		workspace.Spec.Volumes = []workspacev1alpha1.VolumeSpec{{
 			Name:      testUserShmVolume,
-			MountPath: sharedMemoryMountPath + "/",
+			MountPath: SharedMemoryMountPath + "/",
 			EmptyDir:  &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory},
 		}}
 		expectNoShm(build(workspace))
@@ -215,7 +215,7 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 							VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory}},
 						}},
 						PrimaryContainerModifications: &workspacev1alpha1.PrimaryContainerModifications{
-							VolumeMounts: []corev1.VolumeMount{{Name: "strategy-shm", MountPath: sharedMemoryMountPath}},
+							VolumeMounts: []corev1.VolumeMount{{Name: "strategy-shm", MountPath: SharedMemoryMountPath}},
 						},
 					},
 				},
@@ -226,7 +226,7 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 		expectNoShm(deployment)
 		mounts := 0
 		for _, mount := range deployment.Spec.Template.Spec.Containers[0].VolumeMounts {
-			if mount.MountPath == sharedMemoryMountPath {
+			if mount.MountPath == SharedMemoryMountPath {
 				mounts++
 				Expect(mount.Name).To(Equal("strategy-shm"))
 			}
@@ -251,7 +251,7 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 		workspace := newWorkspace(memoryLimited("2Gi"))
 		workspace.Spec.Volumes = []workspacev1alpha1.VolumeSpec{{
 			Name:      volumeNameWorkspaceSharedMemory,
-			MountPath: sharedMemoryMountPath,
+			MountPath: SharedMemoryMountPath,
 			EmptyDir:  &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory},
 		}}
 		deployment := build(workspace)
@@ -294,7 +294,7 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 		Expect(err).NotTo(HaveOccurred())
 		expectShm(deployment, "2Gi")
 		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(2))
-		Expect(findMount(deployment.Spec.Template.Spec.Containers[1], sharedMemoryMountPath)).To(BeNil())
+		Expect(findMount(deployment.Spec.Template.Spec.Containers[1], SharedMemoryMountPath)).To(BeNil())
 	})
 
 	It("reports an existing Deployment without the volume as needing an update", func() {

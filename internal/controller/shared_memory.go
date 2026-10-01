@@ -20,10 +20,11 @@ func isReservedVolumeName(name string) bool {
 	return name == volumeNameWorkspaceStorage || name == volumeNameWorkspaceSharedMemory
 }
 
-// mountsSharedMemoryPath reports whether a mount path is /dev/shm, ignoring a trailing slash or a
-// doubled separator, which Kubernetes would otherwise treat as a distinct path.
-func mountsSharedMemoryPath(mountPath string) bool {
-	return path.Clean(mountPath) == sharedMemoryMountPath
+// MountsSharedMemoryPath reports whether a mount path is /dev/shm, ignoring a trailing slash or a
+// doubled separator, which Kubernetes would otherwise treat as a distinct path. The admission webhook
+// uses the same test so policy and pod build agree on what counts as /dev/shm.
+func MountsSharedMemoryPath(mountPath string) bool {
+	return path.Clean(mountPath) == SharedMemoryMountPath
 }
 
 // sharedMemoryEnabled reports whether the pod gets the operator's /dev/shm volume: on unless the
@@ -37,7 +38,7 @@ func sharedMemoryEnabled(workspace *workspacev1alpha1.Workspace) bool {
 		if isReservedVolumeName(vol.Name) {
 			continue
 		}
-		if mountsSharedMemoryPath(vol.MountPath) {
+		if MountsSharedMemoryPath(vol.MountPath) {
 			return false
 		}
 	}
@@ -93,7 +94,7 @@ func dropShadowedSharedMemory(podSpec *corev1.PodSpec) {
 	primary := &podSpec.Containers[0]
 	shadowed := false
 	for _, mount := range primary.VolumeMounts {
-		if mount.Name != volumeNameWorkspaceSharedMemory && mountsSharedMemoryPath(mount.MountPath) {
+		if mount.Name != volumeNameWorkspaceSharedMemory && MountsSharedMemoryPath(mount.MountPath) {
 			shadowed = true
 			break
 		}

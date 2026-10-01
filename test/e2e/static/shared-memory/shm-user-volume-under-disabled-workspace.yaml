@@ -1,0 +1,17 @@
+# Rejected: the template disables shared memory, so no volume may be mounted at /dev/shm.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-user-volume-under-disabled-workspace
+spec:
+  displayName: "shm-user-volume-under-disabled-workspace"
+  templateRef:
+    name: shm-template-disabled
+    namespace: jupyter-k8s-shared
+  ownershipType: Public
+  volumes:
+    - name: shm
+      mountPath: /dev/shm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 64Mi

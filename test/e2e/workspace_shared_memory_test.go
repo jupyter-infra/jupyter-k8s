@@ -178,6 +178,24 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 				"shm-enable-under-disabled-workspace", workspaceNamespace)
 		})
 
+		It("applies the template's setting to a workspace's own /dev/shm volume", func() {
+			create("shm-user-volume-workspace")
+			Eventually(func(g Gomega) {
+				pods, err := workspacePods("shm-user-volume-workspace", workspaceNamespace)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(pods).To(HaveLen(1))
+				g.Expect(volumeByName(pods[0].Spec, SharedMemoryVolumeName)).To(BeNil(),
+					"the user's volume replaces the operator's")
+				g.Expect(volumeByName(pods[0].Spec, "shm")).NotTo(BeNil())
+			}).WithTimeout(60 * time.Second).WithPolling(3 * time.Second).Should(Succeed())
+			VerifyShmSize("shm-user-volume-workspace", workspaceNamespace, "96Mi")
+
+			VerifyCreateWorkspaceRejectedByWebhook("shm-user-volume-over-limit-workspace", groupDir, "",
+				"shm-user-volume-over-limit-workspace", workspaceNamespace)
+			VerifyCreateWorkspaceRejectedByWebhook("shm-user-volume-under-disabled-workspace", groupDir, "",
+				"shm-user-volume-under-disabled-workspace", workspaceNamespace)
+		})
+
 		It("admits a workspace under a template that forbids secondary volumes", func() {
 			create("shm-no-secondary-workspace")
 			VerifyWorkspaceSharedMemory("shm-no-secondary-workspace", workspaceNamespace, "512Mi")

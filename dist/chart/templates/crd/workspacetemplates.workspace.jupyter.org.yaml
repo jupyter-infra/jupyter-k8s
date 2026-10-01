@@ -3994,8 +3994,8 @@ spec:
                   SharedMemory sets the default and the bound for the memory-backed /dev/shm volume of workspaces
                   using this template: enabled: false turns the volume off, sizeLimit sets a maximum below the
                   container memory limit. Copied onto workspaces that leave it unset; a workspace may only lower it.
-                  It governs the operator's volume only: a workspace's own volume at /dev/shm is a secondary volume,
-                  which allowSecondaryStorages controls.
+                  The setting also applies to a volume the workspace itself mounts at /dev/shm: none is allowed when
+                  enabled is false, and under sizeLimit it must be a memory-backed emptyDir within that size.
                 properties:
                   enabled:
                     description: Enabled mounts the volume. Unset means true.

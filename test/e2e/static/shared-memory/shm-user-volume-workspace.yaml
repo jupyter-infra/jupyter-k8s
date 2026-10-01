@@ -1,0 +1,17 @@
+# The workspace's own /dev/shm volume replaces the operator's and stays within the template's 128Mi size limit.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-user-volume-workspace
+spec:
+  displayName: "shm-user-volume-workspace"
+  templateRef:
+    name: shm-template-capped
+    namespace: jupyter-k8s-shared
+  ownershipType: Public
+  volumes:
+    - name: shm
+      mountPath: /dev/shm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 96Mi

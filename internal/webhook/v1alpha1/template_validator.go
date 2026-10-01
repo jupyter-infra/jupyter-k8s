@@ -118,9 +118,13 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		violations = append(violations, *violation)
 	}
 
-	// Validate shared memory against the template's setting
+	// Validate shared memory against the template's setting, for the operator's volume and for any
+	// volume the workspace mounts at /dev/shm itself
 	if sharedMemoryViolations := validateSharedMemory(workspace, template); len(sharedMemoryViolations) > 0 {
 		violations = append(violations, sharedMemoryViolations...)
+	}
+	if volumeViolations := validateSharedMemoryVolumes(workspace, template); len(volumeViolations) > 0 {
+		violations = append(violations, volumeViolations...)
 	}
 
 	// Validate init containers

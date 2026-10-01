@@ -8,6 +8,7 @@ package v1alpha1
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
@@ -86,6 +87,66 @@ var _ = Describe("SharedMemoryValidator", func() {
 			template := newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("1Gi")})
 			workspace := newWorkspace(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)})
 			Expect(validateSharedMemory(workspace, template)).To(BeEmpty())
+		})
+	})
+
+	Context("validateSharedMemoryVolumes", func() {
+		shmVolume := func(name, mountPath string, source workspacev1alpha1.VolumeSpec) *workspacev1alpha1.Workspace {
+			source.Name = name
+			source.MountPath = mountPath
+			return &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName},
+				Spec:       workspacev1alpha1.WorkspaceSpec{Volumes: []workspacev1alpha1.VolumeSpec{source}},
+			}
+		}
+		memoryEmptyDir := func(size string) workspacev1alpha1.VolumeSpec {
+			return workspacev1alpha1.VolumeSpec{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory, SizeLimit: qtyPtr(size)}}
+		}
+
+		It("ignores volumes when the template sets nothing", func() {
+			Expect(validateSharedMemoryVolumes(shmVolume("shm", "/dev/shm", memoryEmptyDir("64Gi")), newTemplate(nil))).To(BeEmpty())
+		})
+
+		It("ignores volumes mounted elsewhere", func() {
+			template := newTemplate(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)})
+			Expect(validateSharedMemoryVolumes(shmVolume("data", "/data", memoryEmptyDir("64Gi")), template)).To(BeEmpty())
+		})
+
+		It("rejects a volume at /dev/shm when the template disables shared memory", func() {
+			template := newTemplate(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)})
+			for _, mountPath := range []string{"/dev/shm", "/dev/shm/"} {
+				violations := validateSharedMemoryVolumes(shmVolume("shm", mountPath, memoryEmptyDir("64Mi")), template)
+				Expect(violations).To(HaveLen(1))
+				Expect(violations[0].Type).To(Equal(ViolationTypeSharedMemoryNotAllowed))
+				Expect(violations[0].Field).To(Equal("spec.volumes[shm].mountPath"))
+			}
+		})
+
+		It("bounds a memory-backed volume at /dev/shm by the template sizeLimit", func() {
+			template := newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("1Gi")})
+			Expect(validateSharedMemoryVolumes(shmVolume("shm", "/dev/shm", memoryEmptyDir("1Gi")), template)).To(BeEmpty())
+			Expect(validateSharedMemoryVolumes(shmVolume("shm", "/dev/shm", memoryEmptyDir("512Mi")), template)).To(BeEmpty())
+
+			violations := validateSharedMemoryVolumes(shmVolume("shm", "/dev/shm", memoryEmptyDir("2Gi")), template)
+			Expect(violations).To(HaveLen(1))
+			Expect(violations[0].Type).To(Equal(ViolationTypeSharedMemoryExceeded))
+			Expect(violations[0].Field).To(Equal("spec.volumes[shm].emptyDir.sizeLimit"))
+			Expect(violations[0].Actual).To(Equal("2Gi"))
+		})
+
+		It("rejects an unbounded volume at /dev/shm under a template sizeLimit", func() {
+			template := newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("1Gi")})
+			unbounded := []workspacev1alpha1.VolumeSpec{
+				{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory}},
+				{EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: qtyPtr("512Mi")}},
+				{PersistentVolumeClaimName: "shm-pvc"},
+			}
+			for _, source := range unbounded {
+				violations := validateSharedMemoryVolumes(shmVolume("shm", "/dev/shm", source), template)
+				Expect(violations).To(HaveLen(1))
+				Expect(violations[0].Type).To(Equal(ViolationTypeSharedMemoryExceeded))
+				Expect(violations[0].Actual).To(Equal(actualUnbounded))
+			}
 		})
 	})
 
