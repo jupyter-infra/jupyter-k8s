@@ -19,6 +19,9 @@ import (
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
 
+// testUserShmVolume is the name a workspace gives its own /dev/shm volume in these tests.
+const testUserShmVolume = "shm"
+
 // The /dev/shm volume contract (#484): every workspace container gets a memory-backed emptyDir
 // named workspace-shm at /dev/shm sized to its memory limit, unless the workspace disables it or
 // mounts its own volume there; a smaller sizeLimit lowers the size and a larger one never raises it.
@@ -155,6 +158,15 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 		Entry("zero, which the kubelet would ignore", "2Gi", "0", "2Gi"),
 	)
 
+	It("lets an explicit sizeLimit exceed the memory request when there is no limit", func() {
+		workspace := newWorkspace(&corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("384Mi")},
+		})
+		quantity := resource.MustParse("4Gi")
+		workspace.Spec.SharedMemory = &workspacev1alpha1.SharedMemorySpec{SizeLimit: &quantity}
+		expectShm(build(workspace), "4Gi")
+	})
+
 	It("applies the sizeLimit when the workspace has no memory limit", func() {
 		workspace := newWorkspace(&corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m")},
@@ -168,16 +180,58 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 		workspace := newWorkspace(memoryLimited("2Gi"))
 		userSize := resource.MustParse("1Gi")
 		workspace.Spec.Volumes = []workspacev1alpha1.VolumeSpec{{
-			Name:      "shm",
+			Name:      testUserShmVolume,
 			MountPath: sharedMemoryMountPath,
 			EmptyDir:  &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory, SizeLimit: &userSize},
 		}}
 		deployment := build(workspace)
 		expectNoShm(deployment)
-		userVolume := findVolume(deployment, "shm")
+		userVolume := findVolume(deployment, testUserShmVolume)
 		Expect(userVolume).NotTo(BeNil())
+		Expect(userVolume.EmptyDir.SizeLimit).NotTo(BeNil())
 		Expect(userVolume.EmptyDir.SizeLimit.Cmp(userSize)).To(BeZero())
-		Expect(findMount(deployment.Spec.Template.Spec.Containers[0], sharedMemoryMountPath).Name).To(Equal("shm"))
+		Expect(findMount(deployment.Spec.Template.Spec.Containers[0], sharedMemoryMountPath).Name).To(Equal(testUserShmVolume))
+	})
+
+	It("treats a user volume at /dev/shm/ as a volume at /dev/shm", func() {
+		workspace := newWorkspace(memoryLimited("2Gi"))
+		workspace.Spec.Volumes = []workspacev1alpha1.VolumeSpec{{
+			Name:      testUserShmVolume,
+			MountPath: sharedMemoryMountPath + "/",
+			EmptyDir:  &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory},
+		}}
+		expectNoShm(build(workspace))
+	})
+
+	It("drops its volume when an access strategy mounts /dev/shm into the primary container", func() {
+		workspace := newWorkspace(memoryLimited("2Gi"))
+		accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+			ObjectMeta: metav1.ObjectMeta{Name: "shm-strategy", Namespace: testNamespace},
+			Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+				DeploymentModifications: &workspacev1alpha1.DeploymentModifications{
+					PodModifications: &workspacev1alpha1.PodModifications{
+						Volumes: []corev1.Volume{{
+							Name:         "strategy-shm",
+							VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory}},
+						}},
+						PrimaryContainerModifications: &workspacev1alpha1.PrimaryContainerModifications{
+							VolumeMounts: []corev1.VolumeMount{{Name: "strategy-shm", MountPath: sharedMemoryMountPath}},
+						},
+					},
+				},
+			},
+		}
+		deployment, err := builder.BuildWorkspaceDeployment(ctx, workspace, accessStrategy, nil)
+		Expect(err).NotTo(HaveOccurred())
+		expectNoShm(deployment)
+		mounts := 0
+		for _, mount := range deployment.Spec.Template.Spec.Containers[0].VolumeMounts {
+			if mount.MountPath == sharedMemoryMountPath {
+				mounts++
+				Expect(mount.Name).To(Equal("strategy-shm"))
+			}
+		}
+		Expect(mounts).To(Equal(1))
 	})
 
 	It("skips a user volume that takes the reserved name", func() {

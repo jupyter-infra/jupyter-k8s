@@ -87,6 +87,10 @@ spec:
       required: true
 ```
 
+## Shared memory
+
+A template's `sharedMemory` turns the operator's `/dev/shm` volume off or sets its maximum size, and a workspace may only lower what the template set. See [Storage](../workspaces/storage.md#shared-memory).
+
 ## Enforcement model
 
 The **[workspace validating webhook](../../dive-deeper/webhooks/workspace-validation.md)** enforces the bounds **lazily** — only during workspace CREATE and UPDATE operations.

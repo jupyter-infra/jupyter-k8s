@@ -37,14 +37,13 @@ type VolumeSpec struct {
 // workspace container. Containers otherwise get the 64Mi default, which is too small for PyTorch
 // DataLoader workers and NCCL.
 type SharedMemorySpec struct {
-	// Enabled mounts the volume. Defaults to true.
-	// +kubebuilder:default=true
+	// Enabled mounts the volume. Unset means true.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
 
-	// SizeLimit is the volume's maximum size. Defaults to the workspace container's memory limit, which
-	// is also the most it can be: a larger value is lowered to the limit, since the volume's contents
-	// count against that limit.
+	// SizeLimit is the volume's maximum size. Defaults to the workspace container's memory limit, or to
+	// its memory request when the container has no limit. The memory limit is also the most it can be: a
+	// larger value is lowered to the limit, since the volume's contents count against that limit.
 	// +optional
 	SizeLimit *resource.Quantity `json:"sizeLimit,omitempty"`
 }

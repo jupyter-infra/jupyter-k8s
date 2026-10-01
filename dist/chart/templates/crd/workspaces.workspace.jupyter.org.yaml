@@ -3760,17 +3760,16 @@ spec:
                   but not raise or re-enable it. A volume the workspace declares at /dev/shm takes precedence.
                 properties:
                   enabled:
-                    default: true
-                    description: Enabled mounts the volume. Defaults to true.
+                    description: Enabled mounts the volume. Unset means true.
                     type: boolean
                   sizeLimit:
                     anyOf:
                     - type: integer
                     - type: string
                     description: |-
-                      SizeLimit is the volume's maximum size. Defaults to the workspace container's memory limit, which
-                      is also the most it can be: a larger value is lowered to the limit, since the volume's contents
-                      count against that limit.
+                      SizeLimit is the volume's maximum size. Defaults to the workspace container's memory limit, or to
+                      its memory request when the container has no limit. The memory limit is also the most it can be: a
+                      larger value is lowered to the limit, since the volume's contents count against that limit.
                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                     x-kubernetes-int-or-string: true
                 type: object

@@ -40,6 +40,7 @@ var _ = Describe("SharedMemoryDefaulter", func() {
 
 		Expect(workspace.Spec.SharedMemory).NotTo(BeNil())
 		Expect(workspace.Spec.SharedMemory.Enabled).To(HaveValue(BeTrue()))
+		Expect(workspace.Spec.SharedMemory.SizeLimit).NotTo(BeNil())
 		Expect(workspace.Spec.SharedMemory.SizeLimit.Cmp(templateSize)).To(BeZero())
 		Expect(workspace.Spec.SharedMemory).NotTo(BeIdenticalTo(template.Spec.SharedMemory))
 	})
@@ -50,6 +51,7 @@ var _ = Describe("SharedMemoryDefaulter", func() {
 		applySharedMemoryDefaults(workspace, template)
 
 		Expect(workspace.Spec.SharedMemory.Enabled).To(HaveValue(BeFalse()))
+		Expect(workspace.Spec.SharedMemory.SizeLimit).NotTo(BeNil())
 		Expect(workspace.Spec.SharedMemory.SizeLimit.Cmp(templateSize)).To(BeZero())
 	})
 
@@ -60,6 +62,7 @@ var _ = Describe("SharedMemoryDefaulter", func() {
 		applySharedMemoryDefaults(workspace, template)
 
 		Expect(workspace.Spec.SharedMemory.Enabled).To(HaveValue(BeTrue()))
+		Expect(workspace.Spec.SharedMemory.SizeLimit).NotTo(BeNil())
 		Expect(workspace.Spec.SharedMemory.SizeLimit.Cmp(workspaceSize)).To(BeZero())
 	})
 
@@ -70,6 +73,7 @@ var _ = Describe("SharedMemoryDefaulter", func() {
 		applySharedMemoryDefaults(workspace, template)
 
 		Expect(workspace.Spec.SharedMemory.Enabled).To(HaveValue(BeFalse()))
+		Expect(workspace.Spec.SharedMemory.SizeLimit).NotTo(BeNil())
 		Expect(workspace.Spec.SharedMemory.SizeLimit.Cmp(workspaceSize)).To(BeZero())
 	})
 

@@ -224,8 +224,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled mounts the volume. Defaults to true. | true | Optional: \{\} <br /> |
-| `sizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#quantity-resource-api)_ | SizeLimit is the volume's maximum size. Defaults to the workspace container's memory limit, which<br />is also the most it can be: a larger value is lowered to the limit, since the volume's contents<br />count against that limit. |  | Optional: \{\} <br /> |
+| `enabled` _boolean_ | Enabled mounts the volume. Unset means true. |  | Optional: \{\} <br /> |
+| `sizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#quantity-resource-api)_ | SizeLimit is the volume's maximum size. Defaults to the workspace container's memory limit, or to<br />its memory request when the container has no limit. The memory limit is also the most it can be: a<br />larger value is lowered to the limit, since the volume's contents count against that limit. |  | Optional: \{\} <br /> |
 
 
 

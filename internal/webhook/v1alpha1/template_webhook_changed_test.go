@@ -85,6 +85,18 @@ func TestConstraintsChanged(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "shared memory changed",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{SharedMemory: &workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)}},
+			want: true,
+		},
+		{
+			name: "shared memory unchanged",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{SharedMemory: &workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("1Gi")}},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{SharedMemory: &workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("1Gi")}},
+			want: false,
+		},
+		{
 			name: "env requirements changed",
 			old:  workspacev1alpha1.WorkspaceTemplateSpec{EnvRequirements: []workspacev1alpha1.EnvRequirement{{Name: "FOO"}}},
 			new:  workspacev1alpha1.WorkspaceTemplateSpec{EnvRequirements: []workspacev1alpha1.EnvRequirement{{Name: "BAR"}}},

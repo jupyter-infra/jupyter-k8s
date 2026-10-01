@@ -430,6 +430,11 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldWorksp
 		return nil, nil
 	}
 
+	// Validate the shared memory setting on its own (applies to all users)
+	if err := validateSharedMemorySpec(newWorkspace); err != nil {
+		return nil, err
+	}
+
 	// Controller or admin users bypass validation
 	isAdmin := isControllerOrAdminUser(ctx)
 
@@ -487,11 +492,6 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldWorksp
 		if err := validateOwnershipPermission(ctx, oldWorkspace); err != nil {
 			return nil, err
 		}
-	}
-
-	// Validate the shared memory setting on its own
-	if err := validateSharedMemorySpec(newWorkspace); err != nil {
-		return nil, err
 	}
 
 	// Validate template constraints for new workspace (only changed fields)

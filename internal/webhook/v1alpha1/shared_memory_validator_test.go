@@ -8,18 +8,12 @@ package v1alpha1
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
 
 var _ = Describe("SharedMemoryValidator", func() {
-	quantity := func(value string) *resource.Quantity {
-		q := resource.MustParse(value)
-		return &q
-	}
-
 	newTemplate := func(sharedMemory *workspacev1alpha1.SharedMemorySpec) *workspacev1alpha1.WorkspaceTemplate {
 		return &workspacev1alpha1.WorkspaceTemplate{
 			ObjectMeta: metav1.ObjectMeta{Name: testTemplateName},
@@ -36,7 +30,7 @@ var _ = Describe("SharedMemoryValidator", func() {
 
 	Context("validateSharedMemory", func() {
 		It("accepts any workspace setting when the template sets none", func() {
-			workspace := newWorkspace(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(true), SizeLimit: quantity("64Gi")})
+			workspace := newWorkspace(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(true), SizeLimit: qtyPtr("64Gi")})
 			Expect(validateSharedMemory(workspace, newTemplate(nil))).To(BeEmpty())
 		})
 
@@ -49,7 +43,7 @@ var _ = Describe("SharedMemoryValidator", func() {
 			template := newTemplate(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)})
 			for _, workspace := range []*workspacev1alpha1.Workspace{
 				newWorkspace(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(true)}),
-				newWorkspace(&workspacev1alpha1.SharedMemorySpec{SizeLimit: quantity("1Gi")}),
+				newWorkspace(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("1Gi")}),
 			} {
 				violations := validateSharedMemory(workspace, template)
 				Expect(violations).To(HaveLen(1))
@@ -60,13 +54,13 @@ var _ = Describe("SharedMemoryValidator", func() {
 
 		It("accepts a disabled workspace under a disabling template", func() {
 			template := newTemplate(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)})
-			workspace := newWorkspace(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false), SizeLimit: quantity("64Gi")})
+			workspace := newWorkspace(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false), SizeLimit: qtyPtr("64Gi")})
 			Expect(validateSharedMemory(workspace, template)).To(BeEmpty())
 		})
 
 		It("rejects a sizeLimit above the template sizeLimit", func() {
-			template := newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: quantity("1Gi")})
-			violations := validateSharedMemory(newWorkspace(&workspacev1alpha1.SharedMemorySpec{SizeLimit: quantity("2Gi")}), template)
+			template := newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("1Gi")})
+			violations := validateSharedMemory(newWorkspace(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("2Gi")}), template)
 			Expect(violations).To(HaveLen(1))
 			Expect(violations[0].Type).To(Equal(ViolationTypeSharedMemoryExceeded))
 			Expect(violations[0].Field).To(Equal("spec.sharedMemory.sizeLimit"))
@@ -74,7 +68,7 @@ var _ = Describe("SharedMemoryValidator", func() {
 		})
 
 		It("rejects an unset sizeLimit under a template sizeLimit", func() {
-			template := newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: quantity("1Gi")})
+			template := newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("1Gi")})
 			violations := validateSharedMemory(newWorkspace(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(true)}), template)
 			Expect(violations).To(HaveLen(1))
 			Expect(violations[0].Type).To(Equal(ViolationTypeSharedMemoryExceeded))
@@ -82,14 +76,14 @@ var _ = Describe("SharedMemoryValidator", func() {
 		})
 
 		It("accepts a sizeLimit at or below the template sizeLimit", func() {
-			template := newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: quantity("1Gi")})
+			template := newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("1Gi")})
 			for _, size := range []string{"1Gi", "512Mi", "1G"} {
-				Expect(validateSharedMemory(newWorkspace(&workspacev1alpha1.SharedMemorySpec{SizeLimit: quantity(size)}), template)).To(BeEmpty())
+				Expect(validateSharedMemory(newWorkspace(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr(size)}), template)).To(BeEmpty())
 			}
 		})
 
 		It("ignores the template sizeLimit for a workspace that disables the volume", func() {
-			template := newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: quantity("1Gi")})
+			template := newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("1Gi")})
 			workspace := newWorkspace(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)})
 			Expect(validateSharedMemory(workspace, template)).To(BeEmpty())
 		})
@@ -98,14 +92,14 @@ var _ = Describe("SharedMemoryValidator", func() {
 	Context("validateSharedMemorySpec", func() {
 		It("rejects a zero or negative sizeLimit", func() {
 			for _, size := range []string{"0", "-1Gi"} {
-				err := validateSharedMemorySpec(newWorkspace(&workspacev1alpha1.SharedMemorySpec{SizeLimit: quantity(size)}))
+				err := validateSharedMemorySpec(newWorkspace(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr(size)}))
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("must be greater than zero"))
 			}
 		})
 
 		It("accepts a positive or unset sizeLimit", func() {
-			Expect(validateSharedMemorySpec(newWorkspace(&workspacev1alpha1.SharedMemorySpec{SizeLimit: quantity("1Gi")}))).To(Succeed())
+			Expect(validateSharedMemorySpec(newWorkspace(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("1Gi")}))).To(Succeed())
 			Expect(validateSharedMemorySpec(newWorkspace(&workspacev1alpha1.SharedMemorySpec{}))).To(Succeed())
 			Expect(validateSharedMemorySpec(newWorkspace(nil))).To(Succeed())
 		})
@@ -114,31 +108,16 @@ var _ = Describe("SharedMemoryValidator", func() {
 	Context("validateTemplateSharedMemoryConsistency", func() {
 		It("rejects a zero or negative sizeLimit", func() {
 			for _, size := range []string{"0", "-512Mi"} {
-				err := validateTemplateSharedMemoryConsistency(newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: quantity(size)}))
+				err := validateTemplateSharedMemoryConsistency(newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr(size)}))
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("must be greater than zero"))
 			}
 		})
 
 		It("accepts a positive sizeLimit, an off switch alone, and no setting", func() {
-			Expect(validateTemplateSharedMemoryConsistency(newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: quantity("4Gi")}))).To(Succeed())
+			Expect(validateTemplateSharedMemoryConsistency(newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("4Gi")}))).To(Succeed())
 			Expect(validateTemplateSharedMemoryConsistency(newTemplate(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)}))).To(Succeed())
 			Expect(validateTemplateSharedMemoryConsistency(newTemplate(nil))).To(Succeed())
-		})
-	})
-
-	Context("constraintsChanged", func() {
-		It("reports a sharedMemory change as a constraint change", func() {
-			oldTemplate := newTemplate(nil)
-			Expect(constraintsChanged(oldTemplate, newTemplate(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)}))).To(BeTrue())
-			Expect(constraintsChanged(oldTemplate, newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: quantity("1Gi")}))).To(BeTrue())
-		})
-
-		It("reports no change for an equal sharedMemory", func() {
-			Expect(constraintsChanged(
-				newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: quantity("1Gi")}),
-				newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: quantity("1Gi")}),
-			)).To(BeFalse())
 		})
 	})
 })

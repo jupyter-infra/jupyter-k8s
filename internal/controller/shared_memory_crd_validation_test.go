@@ -29,7 +29,7 @@ var _ = Describe("Shared memory CRD validation", func() {
 		Expect(err.Error()).To(ContainSubstring("volume name 'workspace-shm' is reserved"))
 	})
 
-	It("should store sharedMemory on templates and workspaces and default enabled to true", func() {
+	It("should store sharedMemory on templates and workspaces as written", func() {
 		sizeLimit := resource.MustParse("512Mi")
 		template := &workspacev1alpha1.WorkspaceTemplate{
 			ObjectMeta: metav1.ObjectMeta{Name: "shm-crd-template", Namespace: testNamespace},
@@ -41,6 +41,11 @@ var _ = Describe("Shared memory CRD validation", func() {
 		}
 		Expect(k8sClient.Create(ctx, template)).To(Succeed())
 		DeferCleanup(func() { _ = k8sClient.Delete(ctx, template) })
+		storedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: template.Name, Namespace: testNamespace}, storedTemplate)).To(Succeed())
+		Expect(storedTemplate.Spec.SharedMemory).NotTo(BeNil())
+		Expect(storedTemplate.Spec.SharedMemory.SizeLimit).NotTo(BeNil())
+		Expect(storedTemplate.Spec.SharedMemory.SizeLimit.Cmp(sizeLimit)).To(BeZero())
 
 		workspace := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{Name: "shm-crd-workspace", Namespace: testNamespace},
@@ -55,7 +60,8 @@ var _ = Describe("Shared memory CRD validation", func() {
 		stored := &workspacev1alpha1.Workspace{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: workspace.Name, Namespace: testNamespace}, stored)).To(Succeed())
 		Expect(stored.Spec.SharedMemory).NotTo(BeNil())
-		Expect(stored.Spec.SharedMemory.Enabled).To(HaveValue(BeTrue()))
+		Expect(stored.Spec.SharedMemory.Enabled).To(BeNil(), "no CRD default: the webhook fills enabled from the template")
+		Expect(stored.Spec.SharedMemory.SizeLimit).NotTo(BeNil())
 		Expect(stored.Spec.SharedMemory.SizeLimit.Cmp(sizeLimit)).To(BeZero())
 	})
 })

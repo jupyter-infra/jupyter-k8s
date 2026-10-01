@@ -18,6 +18,7 @@ On **create and update**, the webhook rejects a template whose own constraints a
 - `idleShutdownOverrides.minIdleTimeoutInMinutes` must not exceed `maxIdleTimeoutInMinutes`.
 - `idleShutdownOverrides.allow: false` requires a `defaultIdleShutdown` for workspaces to match against.
 - an enabled `defaultIdleShutdown.idleTimeoutInMinutes` must fall within the `idleShutdownOverrides` timeout bounds.
+- `sharedMemory.sizeLimit` must be greater than zero.
 
 ## Constraint fields
 
@@ -28,6 +29,7 @@ Changes to any of the following fields trigger the warning:
 - `primaryStorage` (min/max size)
 - `idleShutdownOverrides` (allow, min/max timeout)
 - `envRequirements`
+- `sharedMemory`
 
 ## Deletion
 

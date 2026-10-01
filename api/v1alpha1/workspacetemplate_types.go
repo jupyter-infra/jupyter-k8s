@@ -86,6 +86,8 @@ type WorkspaceTemplateSpec struct {
 	// SharedMemory sets the default and the bound for the memory-backed /dev/shm volume of workspaces
 	// using this template: enabled: false turns the volume off, sizeLimit sets a maximum below the
 	// container memory limit. Copied onto workspaces that leave it unset; a workspace may only lower it.
+	// It governs the operator's volume only: a workspace's own volume at /dev/shm is a secondary volume,
+	// which allowSecondaryStorages controls.
 	// +optional
 	SharedMemory *SharedMemorySpec `json:"sharedMemory,omitempty"`
 

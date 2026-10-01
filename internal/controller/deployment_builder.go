@@ -84,6 +84,8 @@ func (db *DeploymentBuilder) BuildWorkspaceDeployment(
 		}
 	}
 
+	dropShadowedSharedMemory(&deployment.Spec.Template.Spec)
+
 	return deployment, nil
 }
 
@@ -191,8 +193,7 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 
 	// Add additional volumes from spec
 	for _, vol := range workspace.Spec.Volumes {
-		if vol.Name == volumeNameWorkspaceStorage || vol.Name == volumeNameWorkspaceSharedMemory {
-			// Skip the operator's reserved volume names
+		if isReservedVolumeName(vol.Name) {
 			continue
 		}
 		volumeSource := corev1.VolumeSource{
@@ -290,8 +291,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 
 	// Add additional volume mounts from spec
 	for _, vol := range workspace.Spec.Volumes {
-		if vol.Name == volumeNameWorkspaceStorage || vol.Name == volumeNameWorkspaceSharedMemory {
-			// Skip the operator's reserved volume names
+		if isReservedVolumeName(vol.Name) {
 			continue
 		}
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
