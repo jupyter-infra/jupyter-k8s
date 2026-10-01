@@ -1,4 +1,4 @@
-# The template's 128Mi cap is copied onto the workspace and reaches the pod.
+# The template's 128Mi size limit is copied onto the workspace and reaches the pod.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:

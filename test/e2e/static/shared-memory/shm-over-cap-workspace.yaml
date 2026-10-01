@@ -1,4 +1,4 @@
-# Rejected: 256Mi exceeds the template's 128Mi cap.
+# Rejected: 256Mi exceeds the template's 128Mi size limit.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:

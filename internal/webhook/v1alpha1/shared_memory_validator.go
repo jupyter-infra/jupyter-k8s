@@ -12,8 +12,9 @@ import (
 )
 
 // validateSharedMemory keeps a workspace's sharedMemory within the template's: the workspace may not
-// enable the /dev/shm volume when the template disables it, nor exceed the template's sizeLimit cap.
-// An unset workspace sizeLimit means the container memory limit, so under a cap it counts as exceeding.
+// enable the /dev/shm volume when the template disables it, nor set a sizeLimit above the template's.
+// An unset workspace sizeLimit means the container memory limit, so it counts as exceeding a template
+// sizeLimit.
 func validateSharedMemory(workspace *workspacev1alpha1.Workspace, template *workspacev1alpha1.WorkspaceTemplate) []TemplateViolation {
 	tpl := template.Spec.SharedMemory
 	ws := workspace.Spec.SharedMemory
@@ -42,7 +43,7 @@ func validateSharedMemory(workspace *workspacev1alpha1.Workspace, template *work
 			violations = append(violations, TemplateViolation{
 				Type:    ViolationTypeSharedMemoryExceeded,
 				Field:   "spec.sharedMemory.sizeLimit",
-				Message: fmt.Sprintf("Template '%s' caps the /dev/shm volume at %s, but the workspace sets no sizeLimit, which means the container memory limit", template.Name, tpl.SizeLimit.String()),
+				Message: fmt.Sprintf("Template '%s' limits the /dev/shm volume to %s, but the workspace sets no sizeLimit, which means the container memory limit", template.Name, tpl.SizeLimit.String()),
 				Allowed: "<= " + tpl.SizeLimit.String(),
 				Actual:  "unset",
 			})
@@ -50,7 +51,7 @@ func validateSharedMemory(workspace *workspacev1alpha1.Workspace, template *work
 			violations = append(violations, TemplateViolation{
 				Type:    ViolationTypeSharedMemoryExceeded,
 				Field:   "spec.sharedMemory.sizeLimit",
-				Message: fmt.Sprintf("Workspace /dev/shm sizeLimit %s exceeds template '%s' cap %s", ws.SizeLimit.String(), template.Name, tpl.SizeLimit.String()),
+				Message: fmt.Sprintf("Workspace /dev/shm sizeLimit %s exceeds template '%s' sizeLimit %s", ws.SizeLimit.String(), template.Name, tpl.SizeLimit.String()),
 				Allowed: "<= " + tpl.SizeLimit.String(),
 				Actual:  ws.SizeLimit.String(),
 			})
@@ -61,7 +62,7 @@ func validateSharedMemory(workspace *workspacev1alpha1.Workspace, template *work
 }
 
 // validateSharedMemorySpec rejects a sharedMemory.sizeLimit of zero or less, which the kubelet
-// ignores, leaving the volume capped only by the container memory limit.
+// ignores, leaving the volume bounded only by the pod's memory limit.
 func validateSharedMemorySpec(workspace *workspacev1alpha1.Workspace) error {
 	sm := workspace.Spec.SharedMemory
 	if sm == nil || sm.SizeLimit == nil || sm.SizeLimit.Sign() > 0 {

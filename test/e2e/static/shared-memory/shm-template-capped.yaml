@@ -1,4 +1,4 @@
-# Template that caps the /dev/shm volume below the 512Mi memory limit.
+# Template that limits the /dev/shm volume below the 512Mi memory limit.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:

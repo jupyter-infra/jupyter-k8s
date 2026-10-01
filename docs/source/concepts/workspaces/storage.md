@@ -73,4 +73,4 @@ spec:
     sizeLimit: 4Gi
 ```
 
-`enabled: false` turns the volume off for the template's workspaces. `sizeLimit` caps it below the container memory limit; a cap above the limit is lowered to the limit. The webhook copies the template's `sharedMemory` onto `workspace.spec.sharedMemory` and lets a workspace keep or tighten it: a workspace cannot enable the volume when the template disables it, nor set a `sizeLimit` above the template's cap.
+`enabled: false` turns the volume off for the template's workspaces. `sizeLimit` sets a maximum below the container memory limit; a value above the limit is lowered to the limit. The webhook copies the template's `sharedMemory` onto `workspace.spec.sharedMemory` and lets a workspace keep or lower it: a workspace cannot enable the volume when the template disables it, nor set a `sizeLimit` above the template's.

@@ -14429,8 +14429,8 @@ spec:
               sharedMemory:
                 description: |-
                   SharedMemory configures the memory-backed /dev/shm volume mounted into the workspace container.
-                  Defaulted from the template's sharedMemory; a workspace may keep or tighten the template's
-                  setting but not raise or re-enable it. A volume the workspace declares at /dev/shm takes precedence.
+                  Defaulted from the template's sharedMemory; a workspace may keep or lower the template's setting
+                  but not raise or re-enable it. A volume the workspace declares at /dev/shm takes precedence.
                 properties:
                   enabled:
                     default: true
@@ -14441,8 +14441,9 @@ spec:
                     - type: integer
                     - type: string
                     description: |-
-                      SizeLimit caps the volume. Defaults to the workspace container's memory limit, which is also
-                      the ceiling: a larger value is lowered to the limit, since the volume's contents count against it.
+                      SizeLimit is the volume's maximum size. Defaults to the workspace container's memory limit, which
+                      is also the most it can be: a larger value is lowered to the limit, since the volume's contents
+                      count against that limit.
                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                     x-kubernetes-int-or-string: true
                 type: object
@@ -18881,8 +18882,8 @@ spec:
               sharedMemory:
                 description: |-
                   SharedMemory sets the default and the bound for the memory-backed /dev/shm volume of workspaces
-                  using this template: enabled: false turns the volume off, sizeLimit caps it below the container
-                  memory limit. Copied onto workspaces that set nothing; a workspace may only tighten it.
+                  using this template: enabled: false turns the volume off, sizeLimit sets a maximum below the
+                  container memory limit. Copied onto workspaces that leave it unset; a workspace may only lower it.
                 properties:
                   enabled:
                     default: true
@@ -18893,8 +18894,9 @@ spec:
                     - type: integer
                     - type: string
                     description: |-
-                      SizeLimit caps the volume. Defaults to the workspace container's memory limit, which is also
-                      the ceiling: a larger value is lowered to the limit, since the volume's contents count against it.
+                      SizeLimit is the volume's maximum size. Defaults to the workspace container's memory limit, which
+                      is also the most it can be: a larger value is lowered to the limit, since the volume's contents
+                      count against that limit.
                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                     x-kubernetes-int-or-string: true
                 type: object

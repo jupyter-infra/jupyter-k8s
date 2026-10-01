@@ -288,7 +288,8 @@ func validateTemplateConsistency(template *workspacev1alpha1.WorkspaceTemplate) 
 }
 
 // validateTemplateSharedMemoryConsistency rejects a sharedMemory.sizeLimit of zero or less, which
-// the kubelet would ignore, leaving every workspace from the template with an uncapped volume.
+// the kubelet would ignore, leaving every workspace from the template with a volume bounded only by
+// the pod's memory limit.
 func validateTemplateSharedMemoryConsistency(template *workspacev1alpha1.WorkspaceTemplate) error {
 	sm := template.Spec.SharedMemory
 	if sm == nil || sm.SizeLimit == nil || sm.SizeLimit.Sign() > 0 {

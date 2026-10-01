@@ -13,12 +13,16 @@ import (
 )
 
 // sharedMemoryEnabled reports whether the pod gets the operator's /dev/shm volume: on unless the
-// workspace disables it or already mounts one of its own volumes at /dev/shm.
+// workspace disables it or one of its own volumes already mounts /dev/shm. A volume carrying the
+// reserved name does not count, since the builder drops it.
 func sharedMemoryEnabled(workspace *workspacev1alpha1.Workspace) bool {
 	if sm := workspace.Spec.SharedMemory; sm != nil && sm.Enabled != nil && !*sm.Enabled {
 		return false
 	}
 	for _, vol := range workspace.Spec.Volumes {
+		if vol.Name == volumeNameWorkspaceSharedMemory {
+			continue
+		}
 		if vol.MountPath == sharedMemoryMountPath {
 			return false
 		}
@@ -26,9 +30,9 @@ func sharedMemoryEnabled(workspace *workspacev1alpha1.Workspace) bool {
 	return true
 }
 
-// sharedMemorySizeLimit returns the /dev/shm volume's sizeLimit: the container's memory limit,
-// lowered to the workspace's sharedMemory.sizeLimit when that is smaller. Without a limit the memory
-// request stands in; without either the kubelet caps the volume at the pod or node level.
+// sharedMemorySizeLimit returns the /dev/shm volume's sizeLimit: the container's memory limit, or the
+// workspace's sharedMemory.sizeLimit when that is smaller. A container without a memory limit uses its
+// memory request; with neither the result is nil and the kubelet applies the pod or node bound.
 func sharedMemorySizeLimit(workspace *workspacev1alpha1.Workspace, resources corev1.ResourceRequirements) *resource.Quantity {
 	var size *resource.Quantity
 	if limit, ok := resources.Limits[corev1.ResourceMemory]; ok {

@@ -42,8 +42,9 @@ type SharedMemorySpec struct {
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
 
-	// SizeLimit caps the volume. Defaults to the workspace container's memory limit, which is also
-	// the ceiling: a larger value is lowered to the limit, since the volume's contents count against it.
+	// SizeLimit is the volume's maximum size. Defaults to the workspace container's memory limit, which
+	// is also the most it can be: a larger value is lowered to the limit, since the volume's contents
+	// count against that limit.
 	// +optional
 	SizeLimit *resource.Quantity `json:"sizeLimit,omitempty"`
 }
@@ -194,8 +195,8 @@ type WorkspaceSpec struct {
 	Volumes []VolumeSpec `json:"volumes,omitempty"`
 
 	// SharedMemory configures the memory-backed /dev/shm volume mounted into the workspace container.
-	// Defaulted from the template's sharedMemory; a workspace may keep or tighten the template's
-	// setting but not raise or re-enable it. A volume the workspace declares at /dev/shm takes precedence.
+	// Defaulted from the template's sharedMemory; a workspace may keep or lower the template's setting
+	// but not raise or re-enable it. A volume the workspace declares at /dev/shm takes precedence.
 	// +optional
 	SharedMemory *SharedMemorySpec `json:"sharedMemory,omitempty"`
 

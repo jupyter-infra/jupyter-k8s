@@ -1,10 +1,10 @@
-# A workspace may tighten the template's 128Mi cap.
+# A workspace may lower the template's 128Mi size limit.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
-  name: shm-tightened-workspace
+  name: shm-lowered-workspace
 spec:
-  displayName: "shm-tightened-workspace"
+  displayName: "shm-lowered-workspace"
   templateRef:
     name: shm-template-capped
     namespace: jupyter-k8s-shared

@@ -25,8 +25,8 @@ import (
 )
 
 // Workspace shared memory (#484): every workspace pod gets the operator's memory-backed /dev/shm
-// volume sized to the container memory limit; templates turn it off or cap it, workspaces may only
-// tighten what the template set, a user volume at /dev/shm wins, sidecars stay out of it, and the
+// volume sized to the container memory limit; templates turn it off or limit it, workspaces may only
+// lower what the template set, a user volume at /dev/shm wins, sidecars stay out of it, and the
 // operator restores the volume when it is removed out of band. Sizes are checked in the Deployment,
 // on the pod, and with df inside the container.
 var _ = Describe("Workspace shared memory", Ordered, func() {
@@ -218,14 +218,14 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			waitPodNoShm("shm-disabled-workspace")
 		})
 
-		It("caps the volume at the template's sizeLimit", func() {
+		It("limits the volume to the template's sizeLimit", func() {
 			create("shm-capped-workspace")
 			waitPodShm("shm-capped-workspace", "128Mi", 128*kibPerMi)
 		})
 
-		It("lets a workspace tighten the template's setting and rejects loosening it", func() {
-			create("shm-tightened-workspace")
-			waitPodShm("shm-tightened-workspace", "96Mi", 96*kibPerMi)
+		It("lets a workspace lower the template's size limit and rejects raising it", func() {
+			create("shm-lowered-workspace")
+			waitPodShm("shm-lowered-workspace", "96Mi", 96*kibPerMi)
 
 			VerifyCreateWorkspaceRejectedByWebhook("shm-over-cap-workspace", groupDir, "",
 				"shm-over-cap-workspace", workspaceNamespace)
@@ -276,7 +276,7 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			waitPodShm("shm-default-workspace", "256Mi", 256*kibPerMi)
 		})
 
-		It("applies a cap added to the template to new workspaces, and to existing ones at their next change", func() {
+		It("applies a size limit added to the template to new workspaces, and to existing ones at their next change", func() {
 			create("shm-default-workspace")
 			waitPodShm("shm-default-workspace", "512Mi", 512*kibPerMi)
 
@@ -293,7 +293,7 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			create("shm-default-workspace-b")
 			waitPodShm("shm-default-workspace-b", "128Mi", 128*kibPerMi)
 
-			By("changing the existing workspace so it adopts the template's cap")
+			By("changing the existing workspace so it adopts the template's size limit")
 			_, err := patchWorkspace("shm-default-workspace",
 				`{"spec":{"resources":{"requests":{"memory":"512Mi"},"limits":{"memory":"1Gi"}}}}`)
 			Expect(err).NotTo(HaveOccurred())
@@ -315,7 +315,7 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 				g.Expect(sizeLimit).To(Equal("128Mi"))
 			}).WithTimeout(15 * time.Second).WithPolling(3 * time.Second).Should(Succeed())
 
-			By("verifying a change that keeps the old cap is rejected")
+			By("verifying a change that keeps the old size limit is rejected")
 			output, err := patchWorkspace("shm-capped-workspace",
 				`{"spec":{"resources":{"requests":{"memory":"512Mi"},"limits":{"memory":"1Gi"}}}}`)
 			Expect(err).To(HaveOccurred(), output)
@@ -326,7 +326,7 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			WaitForWorkspaceToReachCondition("shm-capped-workspace", workspaceNamespace,
 				controller.ConditionTypeStopped, ConditionTrue)
 
-			By("verifying the workspace is accepted once it fits the new cap")
+			By("verifying the workspace is accepted once it fits the new size limit")
 			_, err = patchWorkspace("shm-capped-workspace",
 				fmt.Sprintf(`{"spec":{"desiredStatus":%q,"sharedMemory":{"sizeLimit":"32Mi"}}}`, controller.DesiredStateRunning))
 			Expect(err).NotTo(HaveOccurred())

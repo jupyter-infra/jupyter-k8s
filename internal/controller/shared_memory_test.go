@@ -193,6 +193,18 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 		Expect(findMount(deployment.Spec.Template.Spec.Containers[0], "/scratch")).To(BeNil())
 	})
 
+	It("does not let a reserved-name user volume at /dev/shm suppress the operator's volume", func() {
+		workspace := newWorkspace(memoryLimited("2Gi"))
+		workspace.Spec.Volumes = []workspacev1alpha1.VolumeSpec{{
+			Name:      volumeNameWorkspaceSharedMemory,
+			MountPath: sharedMemoryMountPath,
+			EmptyDir:  &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory},
+		}}
+		deployment := build(workspace)
+		expectShm(deployment, "2Gi")
+		Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(2))
+	})
+
 	It("mounts alongside a user PVC volume", func() {
 		workspace := newWorkspace(memoryLimited("2Gi"))
 		workspace.Spec.Volumes = []workspacev1alpha1.VolumeSpec{{
