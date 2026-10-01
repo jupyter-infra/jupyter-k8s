@@ -78,4 +78,6 @@ const (
 	testClusterB            = "cluster-b"
 	testReasonReady         = "Ready"
 	testReadyMessage        = "ready"
+	// testIntegrationTemplateVersion is the frozen integration template version test records carry.
+	testIntegrationTemplateVersion = "uid.1"
 )

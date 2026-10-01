@@ -20,10 +20,10 @@ import (
 	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 )
 
-// Workspace shared memory (#484): every workspace pod gets the operator's memory-backed /dev/shm
-// volume sized to the container memory limit; templates turn it off or limit it, workspaces may only
-// lower what the template set, sidecars stay out of it, and the operator restores the volume when it
-// is removed out of band.
+// Workspace shared memory (#484): the primary container of every workspace gets the operator's
+// memory-backed /dev/shm volume sized to its memory limit; templates set the default and bound what
+// workspaces may change, sidecars stay out of it unless an integration shares its own volume, and the
+// operator restores the volume when it is removed out of band.
 var _ = Describe("Workspace shared memory", Ordered, func() {
 	const (
 		workspaceNamespace = "default"
@@ -199,6 +199,45 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 		It("admits a workspace under a template that forbids secondary volumes", func() {
 			create("shm-no-secondary-workspace")
 			VerifyWorkspaceSharedMemory("shm-no-secondary-workspace", workspaceNamespace, "512Mi")
+		})
+
+		It("yields to an integration that mounts its own /dev/shm into the workspace and its sidecar", func() {
+			// The jupyter-k8s-aws Ray integration shares one memory-backed volume between its sidecar and
+			// the workspace container this way; the fixture reproduces that shape with a busybox sidecar.
+			const name = "workspace-with-shm-integration"
+			applyIntegrationFixture("service-cache")
+			applyIntegrationFixture("shm-integration")
+			DeferCleanup(func() {
+				deleteWorkspaceForTest(name, workspaceNamespace)
+				cmd := exec.Command("kubectl", "delete", "workspaceintegrationtemplate", "shm-integration",
+					"-n", SharedNamespace, "--ignore-not-found", "--wait=true", "--timeout=30s")
+				_, _ = utils.Run(cmd)
+				cmd = exec.Command("kubectl", "delete", "service", "shared-cache",
+					"-n", workspaceNamespace, "--ignore-not-found", "--wait=true", "--timeout=30s")
+				_, _ = utils.Run(cmd)
+			})
+			createWorkspaceForTest(name, "integration", "")
+			WaitForWorkspaceToReachCondition(name, workspaceNamespace, controller.ConditionTypeAvailable, ConditionTrue)
+
+			pods, err := workspacePods(name, workspaceNamespace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pods).To(HaveLen(1))
+			podSpec := pods[0].Spec
+			Expect(volumeByName(podSpec, SharedMemoryVolumeName)).To(BeNil(),
+				"the operator must add no volume of its own when the integration mounts /dev/shm")
+			Expect(volumeByName(podSpec, "dshm")).NotTo(BeNil())
+			Expect(podSpec.Containers).To(HaveLen(2))
+			for _, container := range podSpec.Containers {
+				mounts := 0
+				for _, mount := range container.VolumeMounts {
+					if mount.MountPath == SharedMemoryMountPath {
+						mounts++
+						Expect(mount.Name).To(Equal("dshm"), container.Name)
+					}
+				}
+				Expect(mounts).To(Equal(1), container.Name)
+			}
+			VerifyShmSize(name, workspaceNamespace, "192Mi")
 		})
 
 		It("rejects a user volume that takes the reserved name", func() {

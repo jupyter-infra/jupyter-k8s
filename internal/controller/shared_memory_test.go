@@ -22,9 +22,10 @@ import (
 // testUserShmVolume is the name a workspace gives its own /dev/shm volume in these tests.
 const testUserShmVolume = "shm"
 
-// The /dev/shm volume contract (#484): every workspace container gets a memory-backed emptyDir
-// named workspace-shm at /dev/shm sized to its memory limit, unless the workspace disables it or
-// mounts its own volume there; a smaller sizeLimit lowers the size and a larger one never raises it.
+// The /dev/shm volume contract (#484): the primary container of every workspace gets a memory-backed
+// emptyDir named workspace-shm at /dev/shm sized to its memory limit, unless the workspace disables it
+// or something mounts another volume there; a smaller sizeLimit lowers the size and a larger one never
+// raises it.
 var _ = Describe("DeploymentBuilder shared memory", func() {
 	var (
 		ctx     context.Context
@@ -232,6 +233,61 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 			}
 		}
 		Expect(mounts).To(Equal(1))
+	})
+
+	It("yields to an integration that mounts its own /dev/shm into the workspace and its sidecar", func() {
+		// The Ray integration in jupyter-k8s-aws shares one memory-backed volume between the Ray
+		// sidecar and the workspace container this way.
+		const integrationShm = "ray-dshm"
+		integrationSize := resource.MustParse("1Gi")
+		workspace := newWorkspace(memoryLimited("2Gi"))
+		workspace.Spec.IntegrationTemplateRefs = []workspacev1alpha1.IntegrationTemplateRef{{Name: rayIntegrationName}}
+		workspace.Status.ResolvedIntegrations = []workspacev1alpha1.ResolvedIntegration{{
+			Name:                               rayIntegrationName,
+			ParametersHash:                     getIntegrationParametersHash(&workspace.Spec.IntegrationTemplateRefs[0]),
+			ObservedIntegrationTemplateVersion: testIntegrationTemplateVersion,
+			Values:                             map[string]string{},
+		}}
+		integration := &workspacev1alpha1.WorkspaceIntegrationTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: rayIntegrationName, Namespace: testNamespace},
+			Spec: workspacev1alpha1.WorkspaceIntegrationTemplateSpec{
+				DeploymentModifications: &workspacev1alpha1.DeploymentModifications{
+					PodModifications: &workspacev1alpha1.PodModifications{
+						Volumes: []corev1.Volume{{
+							Name: integrationShm,
+							VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{
+								Medium: corev1.StorageMediumMemory, SizeLimit: &integrationSize,
+							}},
+						}},
+						AdditionalContainers: []corev1.Container{{
+							Name:         raySidecarName,
+							Image:        "ray:latest",
+							VolumeMounts: []corev1.VolumeMount{{Name: integrationShm, MountPath: SharedMemoryMountPath}},
+						}},
+						PrimaryContainerModifications: &workspacev1alpha1.PrimaryContainerModifications{
+							VolumeMounts: []corev1.VolumeMount{{Name: integrationShm, MountPath: SharedMemoryMountPath}},
+						},
+					},
+				},
+			},
+		}
+
+		deployment, err := builder.BuildWorkspaceDeployment(ctx, workspace, nil, integrationTemplatesFor(integration))
+		Expect(err).NotTo(HaveOccurred())
+
+		expectNoShm(deployment)
+		Expect(findVolume(deployment, integrationShm)).NotTo(BeNil())
+		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(2))
+		for _, container := range deployment.Spec.Template.Spec.Containers {
+			mounts := 0
+			for _, mount := range container.VolumeMounts {
+				if mount.MountPath == SharedMemoryMountPath {
+					mounts++
+					Expect(mount.Name).To(Equal(integrationShm), container.Name)
+				}
+			}
+			Expect(mounts).To(Equal(1), container.Name)
+		}
 	})
 
 	It("skips a user volume that takes the reserved name", func() {
