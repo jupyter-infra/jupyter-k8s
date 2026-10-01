@@ -199,8 +199,8 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 		return true
 	}
 
-	// Check sharedMemory changes
-	if !equality.Semantic.DeepEqual(oldSpec.SharedMemory, newSpec.SharedMemory) {
+	// Check sharedMemoryOverrides changes
+	if !equality.Semantic.DeepEqual(oldSpec.SharedMemoryOverrides, newSpec.SharedMemoryOverrides) {
 		return true
 	}
 
@@ -283,20 +283,41 @@ func validateTemplateConsistency(template *workspacev1alpha1.WorkspaceTemplate) 
 		return err
 	}
 
-	// sharedMemory.sizeLimit must be a positive quantity.
+	// defaultSharedMemory and sharedMemoryOverrides must agree, and a maximum needs a default under it.
 	return validateTemplateSharedMemoryConsistency(template)
 }
 
-// validateTemplateSharedMemoryConsistency rejects a sharedMemory.sizeLimit of zero or less, which
-// the kubelet would ignore, leaving every workspace from the template with a volume bounded only by
-// the pod's memory limit.
+// validateTemplateSharedMemoryConsistency rejects a shared memory policy the template's own default
+// cannot satisfy: a sizeLimit or maxSizeLimit of zero or less, which the kubelet would ignore, or a
+// maxSizeLimit without a defaultSharedMemory that is disabled or sized at or below it, since an unset
+// default size means the container memory limit and would exceed the maximum on its own.
 func validateTemplateSharedMemoryConsistency(template *workspacev1alpha1.WorkspaceTemplate) error {
-	sm := template.Spec.SharedMemory
-	if sm == nil || sm.SizeLimit == nil || sm.SizeLimit.Sign() > 0 {
+	def := template.Spec.DefaultSharedMemory
+	if def != nil && def.SizeLimit != nil && def.SizeLimit.Sign() <= 0 {
+		return fmt.Errorf("defaultSharedMemory.sizeLimit %s must be greater than zero (template %q)",
+			def.SizeLimit.String(), template.GetName())
+	}
+	policy := template.Spec.SharedMemoryOverrides
+	if policy == nil || policy.MaxSizeLimit == nil {
 		return nil
 	}
-	return fmt.Errorf("sharedMemory.sizeLimit %s must be greater than zero (template %q)",
-		sm.SizeLimit.String(), template.GetName())
+	if policy.MaxSizeLimit.Sign() <= 0 {
+		return fmt.Errorf("sharedMemoryOverrides.maxSizeLimit %s must be greater than zero (template %q)",
+			policy.MaxSizeLimit.String(), template.GetName())
+	}
+	if def != nil && def.Enabled != nil && !*def.Enabled {
+		return nil
+	}
+	if def == nil || def.SizeLimit == nil {
+		return fmt.Errorf("sharedMemoryOverrides.maxSizeLimit %s requires a defaultSharedMemory with a sizeLimit at or below it, "+
+			"since an unset sizeLimit means the container memory limit (template %q)",
+			policy.MaxSizeLimit.String(), template.GetName())
+	}
+	if def.SizeLimit.Cmp(*policy.MaxSizeLimit) > 0 {
+		return fmt.Errorf("defaultSharedMemory.sizeLimit %s exceeds sharedMemoryOverrides.maxSizeLimit %s (template %q)",
+			def.SizeLimit.String(), policy.MaxSizeLimit.String(), template.GetName())
+	}
+	return nil
 }
 
 // validateIdleShutdownPolicyConsistency rejects a template whose idle shutdown policy is

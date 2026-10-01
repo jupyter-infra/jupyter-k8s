@@ -3752,9 +3752,9 @@ spec:
                 type: string
               sharedMemory:
                 description: |-
-                  SharedMemory configures the memory-backed /dev/shm volume mounted into the workspace container.
-                  Defaulted from the template's sharedMemory; a workspace may keep or lower the template's setting
-                  but not raise or re-enable it. A volume the workspace declares at /dev/shm takes precedence.
+                  SharedMemory configures the memory-backed /dev/shm volume mounted into the workspace's primary
+                  container. Defaulted from the template's defaultSharedMemory when unset and bounded by its
+                  sharedMemoryOverrides. A volume the workspace declares at /dev/shm takes precedence.
                 properties:
                   enabled:
                     description: Enabled mounts the volume. Unset means true.

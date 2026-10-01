@@ -1,4 +1,4 @@
-# Rejected: the template disables shared memory, so no volume may be mounted at /dev/shm.
+# Rejected: the template allows no shared memory override, so no volume may be mounted at /dev/shm.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:

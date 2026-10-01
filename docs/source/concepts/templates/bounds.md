@@ -89,7 +89,7 @@ spec:
 
 ## Shared memory
 
-A template's `sharedMemory` turns the operator's `/dev/shm` volume off or sets its maximum size, and a workspace may only lower what the template set. See [Storage](../workspaces/storage.md#shared-memory).
+A template's `sharedMemoryOverrides` controls whether workspaces may change the `/dev/shm` volume that `defaultSharedMemory` gives them (`allow`) and the most they may give it (`maxSizeLimit`). See [Storage](../workspaces/storage.md#shared-memory).
 
 ## Enforcement model
 

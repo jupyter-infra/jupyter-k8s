@@ -1,4 +1,4 @@
-# The workspace's own /dev/shm volume replaces the operator's and stays within the template's 128Mi size limit.
+# The workspace's own /dev/shm volume replaces the operator's and stays within the template's 128Mi maximum.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:

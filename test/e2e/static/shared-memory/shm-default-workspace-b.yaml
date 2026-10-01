@@ -1,4 +1,4 @@
-# Second workspace from shm-template, created after the template gains a cap.
+# Second workspace from shm-template, created after the template gains a 128Mi default and maximum.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:

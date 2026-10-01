@@ -215,8 +215,8 @@ _Appears in:_
 
 
 SharedMemorySpec configures the memory-backed /dev/shm volume the operator mounts into the
-workspace container. Containers otherwise get the 64Mi default, which is too small for PyTorch
-DataLoader workers and NCCL.
+workspace's primary container. Containers otherwise get the 64Mi default, which is too small for
+PyTorch DataLoader workers and NCCL.
 
 _Appears in:_
 - [WorkspaceSpec](#workspacespec)
@@ -300,7 +300,7 @@ _Appears in:_
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#resourcerequirements-v1-core)_ | Resources specifies the resource requirements |  |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage specifies the storage configuration |  |  |
 | `volumes` _[VolumeSpec](#volumespec) array_ | Volumes specifies additional volumes to mount from existing PersistentVolumeClaims<br />or emptyDir sources. |  |  |
-| `sharedMemory` _[SharedMemorySpec](#sharedmemoryspec)_ | SharedMemory configures the memory-backed /dev/shm volume mounted into the workspace container.<br />Defaulted from the template's sharedMemory; a workspace may keep or lower the template's setting<br />but not raise or re-enable it. A volume the workspace declares at /dev/shm takes precedence. |  | Optional: \{\} <br /> |
+| `sharedMemory` _[SharedMemorySpec](#sharedmemoryspec)_ | SharedMemory configures the memory-backed /dev/shm volume mounted into the workspace's primary<br />container. Defaulted from the template's defaultSharedMemory when unset and bounded by its<br />sharedMemoryOverrides. A volume the workspace declares at /dev/shm takes precedence. |  | Optional: \{\} <br /> |
 | `containerConfig` _[ContainerConfig](#containerconfig)_ | ContainerConfig specifies container command and args configuration |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#envvar-v1-core) array_ | Env specifies environment variables for the workspace container<br />When a template is used, template's BaseEnv vars are merged (workspace vars take precedence by name) |  | Optional: \{\} <br /> |
 | `nodeSelector` _object (keys:string, values:string)_ | NodeSelector specifies node selection constraints for the workspace pod |  |  |

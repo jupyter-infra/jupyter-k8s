@@ -210,8 +210,9 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 	Context("Changes after creation", func() {
 		// Two specs below edit the shared templates; restore them before the Describe-level cleanup runs.
 		AfterEach(func() {
-			patchTemplate(defaultTemplate, `{"spec":{"sharedMemory":null}}`)
-			patchTemplate(cappedTemplate, `{"spec":{"sharedMemory":{"sizeLimit":"128Mi"}}}`)
+			patchTemplate(defaultTemplate, `{"spec":{"defaultSharedMemory":null,"sharedMemoryOverrides":null}}`)
+			patchTemplate(cappedTemplate,
+				`{"spec":{"defaultSharedMemory":{"sizeLimit":"128Mi"},"sharedMemoryOverrides":{"maxSizeLimit":"128Mi"}}}`)
 		})
 
 		It("resizes the volume when the workspace memory limit changes", func() {
@@ -249,7 +250,8 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			create("shm-default-workspace")
 			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "512Mi")
 
-			patchTemplate(defaultTemplate, `{"spec":{"sharedMemory":{"sizeLimit":"128Mi"}}}`)
+			patchTemplate(defaultTemplate,
+				`{"spec":{"defaultSharedMemory":{"sizeLimit":"128Mi"},"sharedMemoryOverrides":{"maxSizeLimit":"128Mi"}}}`)
 
 			By("verifying the running workspace keeps its volume")
 			Consistently(func(g Gomega) {
@@ -269,11 +271,12 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "128Mi")
 		})
 
-		It("rejects a workspace whose copied setting a tightened template no longer allows", func() {
+		It("rejects a workspace whose copied setting a lowered template maximum no longer allows", func() {
 			create("shm-capped-workspace")
 			VerifyWorkspaceSharedMemory("shm-capped-workspace", workspaceNamespace, "128Mi")
 
-			patchTemplate(cappedTemplate, `{"spec":{"sharedMemory":{"sizeLimit":"32Mi"}}}`)
+			patchTemplate(cappedTemplate,
+				`{"spec":{"defaultSharedMemory":{"sizeLimit":"32Mi"},"sharedMemoryOverrides":{"maxSizeLimit":"32Mi"}}}`)
 
 			By("verifying the running workspace keeps its volume")
 			Consistently(func(g Gomega) {

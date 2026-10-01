@@ -62,9 +62,9 @@ Templates can disallow secondary volumes with `allowSecondaryStorages: false`, o
 
 `/dev/shm` is shared memory, the slice of RAM that processes on one machine use to hand large data to each other without copying it. PyTorch's DataLoader workers and NCCL depend on it, and a container gets only 64MiB unless something mounts a larger one.
 
-**Jupyter K8s** mounts a memory-backed `emptyDir` volume named `workspace-shm` at `/dev/shm` in every workspace container. Its `sizeLimit` is the container's memory limit, or the memory request when the container sets no limit; a container that declares neither gets no volume and keeps the 64MiB default. The volume adds no memory to the workspace: whatever a process writes into it counts against the container's memory. A workspace that declares its own volume at `/dev/shm` keeps it, and the volume name `workspace-shm` is reserved.
+**Jupyter K8s** mounts a memory-backed `emptyDir` volume named `workspace-shm` at `/dev/shm` in the primary container of every workspace. Its `sizeLimit` is the container's memory limit, or the memory request when the container sets no limit; a container that declares neither gets no volume and keeps the 64MiB default. The volume adds no memory to the workspace: whatever a process writes into it counts against the container's memory. A workspace that declares its own volume at `/dev/shm` keeps it, and the volume name `workspace-shm` is reserved.
 
-A template sets the default and the bound with `sharedMemory`:
+A workspace sets its own volume with `sharedMemory`:
 
 ```yaml
 spec:
@@ -73,4 +73,17 @@ spec:
     sizeLimit: 4Gi
 ```
 
-`enabled: false` turns the volume off for the template's workspaces. `sizeLimit` sets a maximum below the container memory limit; a value above the limit is lowered to the limit. The admission webhook copies the template's `sharedMemory` onto `workspace.spec.sharedMemory` and lets a workspace keep or lower it: a workspace cannot enable the volume when the template disables it, nor set a `sizeLimit` above the template's. The same setting applies to a volume the workspace itself mounts at `/dev/shm`, which replaces the operator's: none is allowed when the template disables shared memory, and under a template `sizeLimit` it must be a memory-backed `emptyDir` whose `sizeLimit` does not exceed the template's.
+`enabled: false` turns the volume off. `sizeLimit` sets a size below the container memory limit; a value above the limit is lowered to the limit.
+
+A template sets the default with `defaultSharedMemory`, which the admission webhook copies onto a workspace that sets no `sharedMemory`, and bounds what workspaces may set with `sharedMemoryOverrides`:
+
+```yaml
+spec:
+  defaultSharedMemory:
+    sizeLimit: 2Gi
+  sharedMemoryOverrides:
+    allow: true
+    maxSizeLimit: 4Gi
+```
+
+`allow: false` holds every workspace to the template default: the webhook rejects a `sharedMemory` that differs from it and any volume the workspace mounts at `/dev/shm` itself. `maxSizeLimit` is the most a workspace may give its `/dev/shm`: an enabled `sharedMemory` must carry a `sizeLimit` at or below it, and a volume the workspace mounts at `/dev/shm` itself must be a memory-backed `emptyDir` whose `sizeLimit` does not exceed it. A template that sets `maxSizeLimit` needs a `defaultSharedMemory` that is disabled or has a `sizeLimit` within it, since an unset `sizeLimit` means the container memory limit.

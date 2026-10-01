@@ -1,4 +1,4 @@
-# Template without sharedMemory: workspaces get the /dev/shm volume sized to their 512Mi memory limit.
+# Template without defaultSharedMemory: workspaces get the /dev/shm volume sized to their 512Mi memory limit.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:

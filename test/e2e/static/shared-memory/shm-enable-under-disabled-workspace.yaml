@@ -1,4 +1,4 @@
-# Rejected: the template disables the volume.
+# Rejected: the template disables the volume and allows no override.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:

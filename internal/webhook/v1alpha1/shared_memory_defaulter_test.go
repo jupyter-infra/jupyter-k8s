@@ -26,7 +26,7 @@ var _ = Describe("SharedMemoryDefaulter", func() {
 		template = &workspacev1alpha1.WorkspaceTemplate{
 			ObjectMeta: metav1.ObjectMeta{Name: testTemplateName},
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
-				SharedMemory: &workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(true), SizeLimit: &templateSize},
+				DefaultSharedMemory: &workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(true), SizeLimit: &templateSize},
 			},
 		}
 		workspace = &workspacev1alpha1.Workspace{
@@ -35,50 +35,32 @@ var _ = Describe("SharedMemoryDefaulter", func() {
 		}
 	})
 
-	It("copies the template setting when the workspace has none", func() {
+	It("copies the template default when the workspace sets none", func() {
 		applySharedMemoryDefaults(workspace, template)
 
 		Expect(workspace.Spec.SharedMemory).NotTo(BeNil())
 		Expect(workspace.Spec.SharedMemory.Enabled).To(HaveValue(BeTrue()))
 		Expect(workspace.Spec.SharedMemory.SizeLimit).NotTo(BeNil())
 		Expect(workspace.Spec.SharedMemory.SizeLimit.Cmp(templateSize)).To(BeZero())
-		Expect(workspace.Spec.SharedMemory).NotTo(BeIdenticalTo(template.Spec.SharedMemory))
+		Expect(workspace.Spec.SharedMemory).NotTo(BeIdenticalTo(template.Spec.DefaultSharedMemory))
 	})
 
-	It("fills the sizeLimit the workspace left unset", func() {
-		workspace.Spec.SharedMemory = &workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)}
+	It("leaves a workspace setting alone, even a partial one", func() {
+		for _, own := range []*workspacev1alpha1.SharedMemorySpec{
+			{Enabled: boolPtr(false)},
+			{SizeLimit: qtyPtr("256Mi")},
+			{},
+		} {
+			workspace.Spec.SharedMemory = own.DeepCopy()
 
-		applySharedMemoryDefaults(workspace, template)
+			applySharedMemoryDefaults(workspace, template)
 
-		Expect(workspace.Spec.SharedMemory.Enabled).To(HaveValue(BeFalse()))
-		Expect(workspace.Spec.SharedMemory.SizeLimit).NotTo(BeNil())
-		Expect(workspace.Spec.SharedMemory.SizeLimit.Cmp(templateSize)).To(BeZero())
+			Expect(workspace.Spec.SharedMemory).To(Equal(own))
+		}
 	})
 
-	It("fills the enabled flag the workspace left unset", func() {
-		workspaceSize := resource.MustParse("256Mi")
-		workspace.Spec.SharedMemory = &workspacev1alpha1.SharedMemorySpec{SizeLimit: &workspaceSize}
-
-		applySharedMemoryDefaults(workspace, template)
-
-		Expect(workspace.Spec.SharedMemory.Enabled).To(HaveValue(BeTrue()))
-		Expect(workspace.Spec.SharedMemory.SizeLimit).NotTo(BeNil())
-		Expect(workspace.Spec.SharedMemory.SizeLimit.Cmp(workspaceSize)).To(BeZero())
-	})
-
-	It("keeps a complete workspace setting", func() {
-		workspaceSize := resource.MustParse("256Mi")
-		workspace.Spec.SharedMemory = &workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false), SizeLimit: &workspaceSize}
-
-		applySharedMemoryDefaults(workspace, template)
-
-		Expect(workspace.Spec.SharedMemory.Enabled).To(HaveValue(BeFalse()))
-		Expect(workspace.Spec.SharedMemory.SizeLimit).NotTo(BeNil())
-		Expect(workspace.Spec.SharedMemory.SizeLimit.Cmp(workspaceSize)).To(BeZero())
-	})
-
-	It("does nothing when the template sets no sharedMemory", func() {
-		template.Spec.SharedMemory = nil
+	It("does nothing when the template sets no default", func() {
+		template.Spec.DefaultSharedMemory = nil
 
 		applySharedMemoryDefaults(workspace, template)
 

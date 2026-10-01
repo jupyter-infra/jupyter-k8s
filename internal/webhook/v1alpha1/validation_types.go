@@ -41,6 +41,7 @@ const (
 	ViolationTypeInitContainersNotAllowed       = "InitContainersNotAllowed"
 	ViolationTypeSharedMemoryNotAllowed         = "SharedMemoryNotAllowed"
 	ViolationTypeSharedMemoryExceeded           = "SharedMemoryExceeded"
+	ViolationTypeSharedMemoryOverrideNotAllowed = "SharedMemoryOverrideNotAllowed"
 )
 
 // actualUnbounded is the Actual value of a violation for a volume with no size limit.

@@ -1,4 +1,4 @@
-# Template that limits the /dev/shm volume below the 512Mi memory limit.
+# Template that gives workspaces a /dev/shm volume below the 512Mi memory limit and lets none of them raise it.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
@@ -23,5 +23,7 @@ spec:
         min: 128Mi
         max: 4Gi
   appType: jupyter
-  sharedMemory:
+  defaultSharedMemory:
     sizeLimit: 128Mi
+  sharedMemoryOverrides:
+    maxSizeLimit: 128Mi

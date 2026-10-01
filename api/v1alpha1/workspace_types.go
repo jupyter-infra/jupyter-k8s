@@ -34,8 +34,8 @@ type VolumeSpec struct {
 }
 
 // SharedMemorySpec configures the memory-backed /dev/shm volume the operator mounts into the
-// workspace container. Containers otherwise get the 64Mi default, which is too small for PyTorch
-// DataLoader workers and NCCL.
+// workspace's primary container. Containers otherwise get the 64Mi default, which is too small for
+// PyTorch DataLoader workers and NCCL.
 type SharedMemorySpec struct {
 	// Enabled mounts the volume. Unset means true.
 	// +optional
@@ -194,9 +194,9 @@ type WorkspaceSpec struct {
 	// +kubebuilder:validation:XValidation:rule="!self.exists(v, v.name == 'workspace-shm')",message="volume name 'workspace-shm' is reserved"
 	Volumes []VolumeSpec `json:"volumes,omitempty"`
 
-	// SharedMemory configures the memory-backed /dev/shm volume mounted into the workspace container.
-	// Defaulted from the template's sharedMemory; a workspace may keep or lower the template's setting
-	// but not raise or re-enable it. A volume the workspace declares at /dev/shm takes precedence.
+	// SharedMemory configures the memory-backed /dev/shm volume mounted into the workspace's primary
+	// container. Defaulted from the template's defaultSharedMemory when unset and bounded by its
+	// sharedMemoryOverrides. A volume the workspace declares at /dev/shm takes precedence.
 	// +optional
 	SharedMemory *SharedMemorySpec `json:"sharedMemory,omitempty"`
 

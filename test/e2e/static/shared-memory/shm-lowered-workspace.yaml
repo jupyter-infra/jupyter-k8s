@@ -1,4 +1,4 @@
-# A workspace may lower the template's 128Mi size limit.
+# A workspace may set its own size within the template's 128Mi maximum.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:

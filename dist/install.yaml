@@ -14428,9 +14428,9 @@ spec:
                 type: string
               sharedMemory:
                 description: |-
-                  SharedMemory configures the memory-backed /dev/shm volume mounted into the workspace container.
-                  Defaulted from the template's sharedMemory; a workspace may keep or lower the template's setting
-                  but not raise or re-enable it. A volume the workspace declares at /dev/shm takes precedence.
+                  SharedMemory configures the memory-backed /dev/shm volume mounted into the workspace's primary
+                  container. Defaulted from the template's defaultSharedMemory when unset and bounded by its
+                  sharedMemoryOverrides. A volume the workspace declares at /dev/shm takes precedence.
                 properties:
                   enabled:
                     description: Enabled mounts the volume. Unset means true.
@@ -18621,6 +18621,27 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              defaultSharedMemory:
+                description: |-
+                  DefaultSharedMemory is the /dev/shm volume setting for workspaces using this template.
+                  Copied in whole onto a workspace that sets no sharedMemory; applied only if the workspace does not
+                  specify its own.
+                properties:
+                  enabled:
+                    description: Enabled mounts the volume. Unset means true.
+                    type: boolean
+                  sizeLimit:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      SizeLimit is the volume's maximum size. Defaults to the workspace container's memory limit, or to
+                      its memory request when the container has no limit; a container with neither gets no volume and
+                      keeps the container default. The memory limit is also the most it can be: a larger value is
+                      lowered to the limit, since the volume's contents count against that limit.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                type: object
               defaultTolerations:
                 description: DefaultTolerations specifies default tolerations for
                   scheduling on nodes with taints
@@ -18879,26 +18900,25 @@ spec:
                       Custom accelerators follow the pattern: vendor.example/resource-name
                     type: object
                 type: object
-              sharedMemory:
+              sharedMemoryOverrides:
                 description: |-
-                  SharedMemory sets the default and the bound for the memory-backed /dev/shm volume of workspaces
-                  using this template: enabled: false turns the volume off, sizeLimit sets a maximum below the
-                  container memory limit. Copied onto workspaces that leave it unset; a workspace may only lower it.
-                  The setting also applies to a volume the workspace itself mounts at /dev/shm: none is allowed when
-                  enabled is false, and under sizeLimit it must be a memory-backed emptyDir within that size.
+                  SharedMemoryOverrides controls whether and how far a workspace may deviate from
+                  DefaultSharedMemory, including with a volume it mounts at /dev/shm itself.
                 properties:
-                  enabled:
-                    description: Enabled mounts the volume. Unset means true.
+                  allow:
+                    default: true
+                    description: |-
+                      Allow controls whether workspaces may set their own sharedMemory or mount their own volume at
+                      /dev/shm. When false, workspaces get DefaultSharedMemory and nothing else.
                     type: boolean
-                  sizeLimit:
+                  maxSizeLimit:
                     anyOf:
                     - type: integer
                     - type: string
                     description: |-
-                      SizeLimit is the volume's maximum size. Defaults to the workspace container's memory limit, or to
-                      its memory request when the container has no limit; a container with neither gets no volume and
-                      keeps the container default. The memory limit is also the most it can be: a larger value is
-                      lowered to the limit, since the volume's contents count against that limit.
+                      MaxSizeLimit is the most a workspace may give its /dev/shm volume, through sharedMemory.sizeLimit
+                      or a volume of its own at /dev/shm. Requires a DefaultSharedMemory that is disabled or has a
+                      sizeLimit at or below it, since an unset sizeLimit means the container memory limit.
                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                     x-kubernetes-int-or-string: true
                 type: object

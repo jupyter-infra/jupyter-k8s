@@ -1,4 +1,4 @@
-# Template that turns the /dev/shm volume off for its workspaces.
+# Template that turns the /dev/shm volume off for its workspaces and lets none of them turn it back on.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
@@ -23,5 +23,7 @@ spec:
         min: 128Mi
         max: 4Gi
   appType: jupyter
-  sharedMemory:
+  defaultSharedMemory:
     enabled: false
+  sharedMemoryOverrides:
+    allow: false
