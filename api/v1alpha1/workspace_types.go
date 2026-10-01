@@ -42,8 +42,9 @@ type SharedMemorySpec struct {
 	Enabled *bool `json:"enabled,omitempty"`
 
 	// SizeLimit is the volume's maximum size. Defaults to the workspace container's memory limit, or to
-	// its memory request when the container has no limit. The memory limit is also the most it can be: a
-	// larger value is lowered to the limit, since the volume's contents count against that limit.
+	// its memory request when the container has no limit; a container with neither gets no volume and
+	// keeps the container default. The memory limit is also the most it can be: a larger value is
+	// lowered to the limit, since the volume's contents count against that limit.
 	// +optional
 	SizeLimit *resource.Quantity `json:"sizeLimit,omitempty"`
 }

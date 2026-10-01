@@ -3765,8 +3765,9 @@ spec:
                     - type: string
                     description: |-
                       SizeLimit is the volume's maximum size. Defaults to the workspace container's memory limit, or to
-                      its memory request when the container has no limit. The memory limit is also the most it can be: a
-                      larger value is lowered to the limit, since the volume's contents count against that limit.
+                      its memory request when the container has no limit; a container with neither gets no volume and
+                      keeps the container default. The memory limit is also the most it can be: a larger value is
+                      lowered to the limit, since the volume's contents count against that limit.
                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                     x-kubernetes-int-or-string: true
                 type: object

@@ -121,11 +121,11 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 		expectShm(build(workspace), "512Mi")
 	})
 
-	It("leaves the size unset when the workspace declares no memory", func() {
+	It("mounts no volume when the workspace declares no memory", func() {
 		workspace := newWorkspace(&corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m")},
 		})
-		expectShm(build(workspace), "")
+		expectNoShm(build(workspace))
 	})
 
 	It("sizes the volume to the default memory when the workspace sets no resources", func() {

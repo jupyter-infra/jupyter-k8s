@@ -210,7 +210,7 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 		})
 	}
 
-	if sharedMemoryEnabled(workspace) {
+	if sharedMemoryMounted(workspace, resources) {
 		podSpec.Volumes = append(podSpec.Volumes, sharedMemoryVolume(workspace, resources))
 	}
 
@@ -300,7 +300,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 		})
 	}
 
-	if sharedMemoryEnabled(workspace) {
+	if sharedMemoryMounted(workspace, resources) {
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 			Name:      volumeNameWorkspaceSharedMemory,
 			MountPath: SharedMemoryMountPath,

@@ -48,7 +48,8 @@ func sharedMemoryEnabled(workspace *workspacev1alpha1.Workspace) bool {
 // sharedMemorySizeLimit returns the /dev/shm volume's sizeLimit. An explicit sharedMemory.sizeLimit is
 // used as given, lowered to the container's memory limit when it exceeds it, since the volume's contents
 // count against that limit. Without one, the size is the memory limit, or the memory request when the
-// container has no limit; with neither the result is nil and the kubelet applies the pod or node bound.
+// container has no limit; with neither the result is nil and no volume is mounted, because a tmpfs
+// without a size would be bounded only by the node.
 func sharedMemorySizeLimit(workspace *workspacev1alpha1.Workspace, resources corev1.ResourceRequirements) *resource.Quantity {
 	limit, hasLimit := resources.Limits[corev1.ResourceMemory]
 
@@ -69,6 +70,12 @@ func sharedMemorySizeLimit(workspace *workspacev1alpha1.Workspace, resources cor
 	}
 	copied := size.DeepCopy()
 	return &copied
+}
+
+// sharedMemoryMounted reports whether the pod gets the operator's /dev/shm volume: enabled for the
+// workspace and with a size that can be derived from it.
+func sharedMemoryMounted(workspace *workspacev1alpha1.Workspace, resources corev1.ResourceRequirements) bool {
+	return sharedMemoryEnabled(workspace) && sharedMemorySizeLimit(workspace, resources) != nil
 }
 
 // sharedMemoryVolume builds the memory-backed emptyDir volume mounted at /dev/shm.
