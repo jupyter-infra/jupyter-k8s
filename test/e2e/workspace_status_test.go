@@ -376,6 +376,56 @@ var _ = Describe("Workspace Status", Ordered, func() {
 		})
 	})
 
+	Context("Degraded State", func() {
+		const (
+			unpullableWorkspace = "workspace-unpullable-image"
+			unpullableImage     = "jk8s-e2e-missing-image"
+		)
+
+		It("should report Degraded at the progress deadline, clear it on stop, and start once the image is fixed", func() {
+			By("creating a workspace whose image exists nowhere")
+			createWorkspaceForTest(unpullableWorkspace, statusGroupDir, statusSubgroupDir)
+			deploymentName := GetWorkspaceDeploymentName(unpullableWorkspace, statusTestNamespace)
+			setDeploymentProgressDeadline(deploymentName, statusTestNamespace, stallDeadlineSeconds)
+
+			By("waiting for Degraded=True with reason ComputeStalled naming the image")
+			waitForWorkspaceStalled(unpullableWorkspace, statusTestNamespace, ContainSubstring(unpullableImage))
+			expectSingleStallEvent(unpullableWorkspace, statusTestNamespace, ContainSubstring(unpullableImage))
+			VerifyWorkspaceConditions(unpullableWorkspace, statusTestNamespace, map[string]string{
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionTrue,
+				ConditionTypeAvailable:   ConditionFalse,
+				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionFalse,
+			})
+
+			By("stopping the workspace")
+			UpdateWorkspaceDesiredState(unpullableWorkspace, statusTestNamespace, "Stopped")
+			WaitForWorkspaceToReachCondition(unpullableWorkspace, statusTestNamespace, ConditionTypeStopped, ConditionTrue)
+			VerifyWorkspaceConditions(unpullableWorkspace, statusTestNamespace, map[string]string{
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionFalse,
+				ConditionTypeAvailable:   ConditionFalse,
+				ConditionTypeStopped:     ConditionTrue,
+				ConditionTypeDeleting:    ConditionFalse,
+			})
+
+			By("fixing the image and starting the workspace again")
+			cmd := exec.Command("kubectl", "patch", "workspace", unpullableWorkspace, "-n", statusTestNamespace,
+				"--type=merge", "-p", `{"spec":{"image":"jk8s-application-jupyter-uv:latest","desiredStatus":"Running"}}`)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			WaitForWorkspaceToReachCondition(unpullableWorkspace, statusTestNamespace, ConditionTypeAvailable, ConditionTrue)
+			VerifyWorkspaceConditions(unpullableWorkspace, statusTestNamespace, map[string]string{
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionFalse,
+				ConditionTypeAvailable:   ConditionTrue,
+				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionFalse,
+			})
+		})
+	})
+
 	Context("Deleting State", func() {
 		const deletionWorkspace = "workspace-deletion-test"
 

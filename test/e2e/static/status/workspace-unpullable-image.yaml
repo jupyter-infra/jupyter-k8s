@@ -1,0 +1,22 @@
+# A workspace whose image exists nowhere: the pod is scheduled but its container never starts, the
+# kubelet reports the pull failure, and the Deployment's progress deadline passes. The Degraded State
+# spec in workspace_status_test.go asserts the workspace reports that reason, clears it when stopped,
+# and starts once the image is fixed.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-unpullable-image
+  namespace: default
+spec:
+  displayName: "Status Test - Unpullable Image"
+  image: jk8s-e2e-missing-image:latest
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  storage:
+    size: 1Gi

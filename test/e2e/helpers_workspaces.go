@@ -9,15 +9,25 @@ Distributed under the terms of the MIT license
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
 	"time"
 
-	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
+	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 )
+
+// stallDeadlineSeconds is the progress deadline the stall specs set on a workspace Deployment. The
+// operator leaves the Kubernetes default of 600s in place; a spec cannot wait that long.
+const stallDeadlineSeconds = 30
 
 // WaitForWorkspaceToReachCondition polls a Workspace.status till a condition reaches the expected status
 // nolint:unparam // namespace is always "default" now but may change in future tests
@@ -224,6 +234,95 @@ func WaitForWorkspaceDeletion(workspaceName, namespace string) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(strings.TrimSpace(output)).To(gomega.BeEmpty(), "workspace should no longer exist")
 	}).WithTimeout(2 * time.Minute).WithPolling(3 * time.Second).Should(gomega.Succeed())
+}
+
+// GetWorkspaceDeploymentName waits until the Workspace reports the Deployment it owns and returns its name.
+func GetWorkspaceDeploymentName(workspaceName, namespace string) string {
+	ginkgo.GinkgoHelper()
+
+	var deploymentName string
+	gomega.Eventually(func(g gomega.Gomega) {
+		name, err := kubectlGet("workspace", workspaceName, namespace, "{.status.deploymentName}")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(name).NotTo(gomega.BeEmpty(), "workspace.status.deploymentName should be set")
+		deploymentName = name
+	}, 2*time.Minute, 2*time.Second).Should(gomega.Succeed())
+
+	return deploymentName
+}
+
+// setDeploymentProgressDeadline patches progressDeadlineSeconds on a workspace Deployment. The patch
+// survives reconciles: the operator rewrites a Deployment only when its pod template drifted.
+func setDeploymentProgressDeadline(deploymentName, namespace string, seconds int) {
+	ginkgo.GinkgoHelper()
+
+	ginkgo.By(fmt.Sprintf("setting progressDeadlineSeconds=%d on deployment %s", seconds, deploymentName))
+	cmd := exec.Command("kubectl", "patch", "deployment", deploymentName, "-n", namespace,
+		"--type=merge", "-p", fmt.Sprintf(`{"spec":{"progressDeadlineSeconds":%d}}`, seconds))
+	_, err := utils.Run(cmd)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+}
+
+// waitForWorkspaceStalled polls until the workspace reports Degraded=True with reason ComputeStalled and
+// a message matching messageMatcher, and Available=False and Progressing=False under the same reason
+// and message.
+func waitForWorkspaceStalled(workspaceName, namespace string, messageMatcher gomega.OmegaMatcher) {
+	ginkgo.GinkgoHelper()
+
+	gomega.Eventually(func(g gomega.Gomega) {
+		var ws workspacev1alpha1.Workspace
+		g.Expect(kubectlGetInto("workspace", workspaceName, namespace, &ws)).To(gomega.Succeed())
+		degraded := meta.FindStatusCondition(ws.Status.Conditions, ConditionTypeDegraded)
+		g.Expect(degraded).NotTo(gomega.BeNil())
+		g.Expect(string(degraded.Status)).To(gomega.Equal(ConditionTrue))
+		g.Expect(degraded.Reason).To(gomega.Equal(controller.ReasonComputeStalled))
+		g.Expect(degraded.Message).To(messageMatcher)
+		for _, conditionType := range []string{ConditionTypeAvailable, ConditionTypeProgressing} {
+			condition := meta.FindStatusCondition(ws.Status.Conditions, conditionType)
+			g.Expect(condition).NotTo(gomega.BeNil(), conditionType)
+			g.Expect(string(condition.Status)).To(gomega.Equal(ConditionFalse), conditionType)
+			g.Expect(condition.Reason).To(gomega.Equal(controller.ReasonComputeStalled), conditionType)
+			g.Expect(condition.Message).To(gomega.Equal(degraded.Message), conditionType)
+		}
+	}).WithTimeout(2 * time.Minute).WithPolling(3 * time.Second).Should(gomega.Succeed())
+}
+
+// workspaceStallEvents returns the WorkspaceComputeStalled events recorded on the workspace with the
+// given UID. Events outlive the object they were recorded on, so a selection by name would also return
+// the events of an earlier workspace of the same name, which specs reuse across runs.
+func workspaceStallEvents(workspaceUID, namespace string) ([]corev1.Event, error) {
+	cmd := exec.Command("kubectl", verbGet, "events", "-n", namespace,
+		"--field-selector", fmt.Sprintf("involvedObject.uid=%s,reason=%s",
+			workspaceUID, controller.EventWorkspaceComputeStalled),
+		"-o", "json")
+	output, err := utils.Run(cmd)
+	if err != nil {
+		return nil, err
+	}
+	var events corev1.EventList
+	if err := json.Unmarshal([]byte(output), &events); err != nil {
+		return nil, err
+	}
+	return events.Items, nil
+}
+
+// expectSingleStallEvent asserts that exactly one Warning WorkspaceComputeStalled event is recorded on
+// the workspace, once, with a message matching messageMatcher.
+func expectSingleStallEvent(workspaceName, namespace string, messageMatcher gomega.OmegaMatcher) {
+	ginkgo.GinkgoHelper()
+
+	workspaceUID, err := kubectlGet("workspace", workspaceName, namespace, "{.metadata.uid}")
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	gomega.Expect(workspaceUID).NotTo(gomega.BeEmpty())
+
+	gomega.Eventually(func(g gomega.Gomega) {
+		events, err := workspaceStallEvents(workspaceUID, namespace)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(events).To(gomega.HaveLen(1))
+		g.Expect(events[0].Type).To(gomega.Equal(corev1.EventTypeWarning))
+		g.Expect(events[0].Count).To(gomega.BeNumerically("<=", 1))
+		g.Expect(events[0].Message).To(messageMatcher)
+	}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(gomega.Succeed())
 }
 
 // GetWorkspaceServiceName waits until the Workspace reports the Service it owns and returns its name.
