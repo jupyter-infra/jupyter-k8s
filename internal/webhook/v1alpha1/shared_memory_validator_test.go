@@ -207,6 +207,11 @@ var _ = Describe("SharedMemoryValidator", func() {
 			}
 		})
 
+		It("rejects a locked policy without a default", func() {
+			err := validateTemplateSharedMemoryConsistency(newTemplate(nil, noOverrides()))
+			Expect(err).To(MatchError(ContainSubstring("defaultSharedMemory is not set")))
+		})
+
 		It("rejects maxSizeLimit without an enabled default sized within it", func() {
 			for _, def := range []*workspacev1alpha1.SharedMemorySpec{nil, {}, {Enabled: boolPtr(true)}} {
 				err := validateTemplateSharedMemoryConsistency(newTemplate(def, maxSize("1Gi")))
@@ -221,7 +226,7 @@ var _ = Describe("SharedMemoryValidator", func() {
 			Expect(validateTemplateSharedMemoryConsistency(newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("512Mi")}, maxSize("1Gi")))).To(Succeed())
 			Expect(validateTemplateSharedMemoryConsistency(newTemplate(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)}, maxSize("1Gi")))).To(Succeed())
 			Expect(validateTemplateSharedMemoryConsistency(newTemplate(&workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("4Gi")}, nil))).To(Succeed())
-			Expect(validateTemplateSharedMemoryConsistency(newTemplate(nil, noOverrides()))).To(Succeed())
+			Expect(validateTemplateSharedMemoryConsistency(newTemplate(&workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)}, noOverrides()))).To(Succeed())
 			Expect(validateTemplateSharedMemoryConsistency(newTemplate(nil, nil))).To(Succeed())
 		})
 	})

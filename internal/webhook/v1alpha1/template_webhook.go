@@ -288,9 +288,10 @@ func validateTemplateConsistency(template *workspacev1alpha1.WorkspaceTemplate) 
 }
 
 // validateTemplateSharedMemoryConsistency rejects a shared memory policy the template's own default
-// cannot satisfy: a sizeLimit or maxSizeLimit of zero or less, which the kubelet would ignore, or a
-// maxSizeLimit without a defaultSharedMemory that is disabled or sized at or below it, since an unset
-// default size means the container memory limit and would exceed the maximum on its own.
+// cannot satisfy: a locked policy without a defaultSharedMemory for workspaces to match, a sizeLimit or
+// maxSizeLimit of zero or less, which the kubelet would ignore, or a maxSizeLimit without a
+// defaultSharedMemory that is disabled or sized at or below it, since an unset default size means the
+// container memory limit and would exceed the maximum on its own.
 func validateTemplateSharedMemoryConsistency(template *workspacev1alpha1.WorkspaceTemplate) error {
 	def := template.Spec.DefaultSharedMemory
 	if def != nil && def.SizeLimit != nil && def.SizeLimit.Sign() <= 0 {
@@ -298,7 +299,18 @@ func validateTemplateSharedMemoryConsistency(template *workspacev1alpha1.Workspa
 			def.SizeLimit.String(), template.GetName())
 	}
 	policy := template.Spec.SharedMemoryOverrides
-	if policy == nil || policy.MaxSizeLimit == nil {
+	if policy == nil {
+		return nil
+	}
+	// A locked policy (allow=false) needs a default for workspaces to match against.
+	if policy.Allow != nil && !*policy.Allow && def == nil {
+		return fmt.Errorf(
+			"sharedMemoryOverrides.allow is false but defaultSharedMemory is not set: "+
+				"a locked shared memory policy requires a defaultSharedMemory for workspaces to match (template %q)",
+			template.GetName(),
+		)
+	}
+	if policy.MaxSizeLimit == nil {
 		return nil
 	}
 	if policy.MaxSizeLimit.Sign() <= 0 {

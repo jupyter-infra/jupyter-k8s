@@ -246,6 +246,23 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 		})
 	})
 
+	Context("Template-level policy consistency", func() {
+		It("rejects a template that locks shared memory without a default", func() {
+			const templateName = "shm-template-invalid-locked-no-default"
+			path := BuildTestResourcePath(templateName, groupDir, "")
+			cmd := exec.Command("kubectl", "apply", "-f", path)
+			output, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "the template webhook should reject a locked policy with no default")
+			Expect(output).To(ContainSubstring("defaultSharedMemory is not set"))
+
+			cmd = exec.Command("kubectl", verbGet, "workspacetemplate", templateName,
+				"-n", SharedNamespace, "--ignore-not-found")
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(BeEmpty(), "the template must not exist after the rejection")
+		})
+	})
+
 	Context("Changes after creation", func() {
 		// Two specs below edit the shared templates; restore them before the Describe-level cleanup runs.
 		AfterEach(func() {

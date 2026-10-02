@@ -18,6 +18,7 @@ On **create and update**, the webhook rejects a template whose own constraints a
 - `idleShutdownOverrides.minIdleTimeoutInMinutes` must not exceed `maxIdleTimeoutInMinutes`.
 - `idleShutdownOverrides.allow: false` requires a `defaultIdleShutdown` for workspaces to match against.
 - an enabled `defaultIdleShutdown.idleTimeoutInMinutes` must fall within the `idleShutdownOverrides` timeout bounds.
+- `sharedMemoryOverrides.allow: false` requires a `defaultSharedMemory` for workspaces to match against.
 - `defaultSharedMemory.sizeLimit` and `sharedMemoryOverrides.maxSizeLimit` must be greater than zero.
 - `sharedMemoryOverrides.maxSizeLimit` requires a `defaultSharedMemory` that is disabled or has a `sizeLimit` at or below it.
 
