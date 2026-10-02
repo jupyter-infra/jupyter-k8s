@@ -1,0 +1,13 @@
+# Overrides are allowed, so the workspace may turn the volume on against the template's default.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-enabled-under-default-off-workspace
+spec:
+  displayName: "shm-enabled-under-default-off-workspace"
+  templateRef:
+    name: shm-template-default-off
+    namespace: jupyter-k8s-shared
+  ownershipType: Public
+  sharedMemory:
+    enabled: true

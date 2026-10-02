@@ -24,8 +24,7 @@ const testUserShmVolume = "shm"
 
 // The /dev/shm volume contract (#484): the primary container of every workspace gets a memory-backed
 // emptyDir named workspace-shm at /dev/shm sized to its memory limit, unless the workspace disables it
-// or something mounts another volume there; a smaller sizeLimit lowers the size and a larger one never
-// raises it.
+// or something mounts another volume there.
 var _ = Describe("DeploymentBuilder shared memory", func() {
 	var (
 		ctx     context.Context
@@ -42,10 +41,10 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 		})
 	})
 
-	memoryLimited := func(limit string) *corev1.ResourceRequirements {
+	memoryLimited := func() *corev1.ResourceRequirements {
 		return &corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("256Mi")},
-			Limits:   corev1.ResourceList{corev1.ResourceMemory: resource.MustParse(limit)},
+			Limits:   corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("2Gi")},
 		}
 	}
 
@@ -109,7 +108,7 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 	}
 
 	It("mounts a memory-backed volume at /dev/shm sized to the memory limit", func() {
-		deployment := build(newWorkspace(memoryLimited("2Gi")))
+		deployment := build(newWorkspace(memoryLimited()))
 		expectShm(deployment, "2Gi")
 		Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(2))
 		Expect(deployment.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
@@ -134,51 +133,19 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 	})
 
 	It("omits the volume when the workspace disables it", func() {
-		workspace := newWorkspace(memoryLimited("2Gi"))
+		workspace := newWorkspace(memoryLimited())
 		workspace.Spec.SharedMemory = &workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)}
 		expectNoShm(build(workspace))
 	})
 
 	It("treats an empty sharedMemory as the default", func() {
-		workspace := newWorkspace(memoryLimited("2Gi"))
+		workspace := newWorkspace(memoryLimited())
 		workspace.Spec.SharedMemory = &workspacev1alpha1.SharedMemorySpec{}
 		expectShm(build(workspace), "2Gi")
 	})
 
-	DescribeTable("applies a sizeLimit only when it lowers the size",
-		func(limit, sizeLimit, expected string) {
-			workspace := newWorkspace(memoryLimited(limit))
-			quantity := resource.MustParse(sizeLimit)
-			workspace.Spec.SharedMemory = &workspacev1alpha1.SharedMemorySpec{SizeLimit: &quantity}
-			expectShm(build(workspace), expected)
-		},
-		Entry("below the limit", "2Gi", "512Mi", "512Mi"),
-		Entry("above the limit", "2Gi", "8Gi", "2Gi"),
-		Entry("equal to the limit", "2Gi", "2Gi", "2Gi"),
-		Entry("in another unit", "1Gi", "1G", "1G"),
-		Entry("zero, which the kubelet would ignore", "2Gi", "0", "2Gi"),
-	)
-
-	It("lets an explicit sizeLimit exceed the memory request when there is no limit", func() {
-		workspace := newWorkspace(&corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("384Mi")},
-		})
-		quantity := resource.MustParse("4Gi")
-		workspace.Spec.SharedMemory = &workspacev1alpha1.SharedMemorySpec{SizeLimit: &quantity}
-		expectShm(build(workspace), "4Gi")
-	})
-
-	It("applies the sizeLimit when the workspace has no memory limit", func() {
-		workspace := newWorkspace(&corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m")},
-		})
-		quantity := resource.MustParse("1Gi")
-		workspace.Spec.SharedMemory = &workspacev1alpha1.SharedMemorySpec{SizeLimit: &quantity}
-		expectShm(build(workspace), "1Gi")
-	})
-
 	It("keeps a volume the workspace declares at /dev/shm", func() {
-		workspace := newWorkspace(memoryLimited("2Gi"))
+		workspace := newWorkspace(memoryLimited())
 		userSize := resource.MustParse("1Gi")
 		workspace.Spec.Volumes = []workspacev1alpha1.VolumeSpec{{
 			Name:      testUserShmVolume,
@@ -195,7 +162,7 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 	})
 
 	It("treats a user volume at /dev/shm/ as a volume at /dev/shm", func() {
-		workspace := newWorkspace(memoryLimited("2Gi"))
+		workspace := newWorkspace(memoryLimited())
 		workspace.Spec.Volumes = []workspacev1alpha1.VolumeSpec{{
 			Name:      testUserShmVolume,
 			MountPath: SharedMemoryMountPath + "/",
@@ -205,7 +172,7 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 	})
 
 	It("drops its volume when an access strategy mounts /dev/shm into the primary container", func() {
-		workspace := newWorkspace(memoryLimited("2Gi"))
+		workspace := newWorkspace(memoryLimited())
 		accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 			ObjectMeta: metav1.ObjectMeta{Name: "shm-strategy", Namespace: testNamespace},
 			Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
@@ -240,7 +207,7 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 		// sidecar and the workspace container this way.
 		const integrationShm = "ray-dshm"
 		integrationSize := resource.MustParse("1Gi")
-		workspace := newWorkspace(memoryLimited("2Gi"))
+		workspace := newWorkspace(memoryLimited())
 		workspace.Spec.IntegrationTemplateRefs = []workspacev1alpha1.IntegrationTemplateRef{{Name: rayIntegrationName}}
 		workspace.Status.ResolvedIntegrations = []workspacev1alpha1.ResolvedIntegration{{
 			Name:                               rayIntegrationName,
@@ -291,7 +258,7 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 	})
 
 	It("skips a user volume that takes the reserved name", func() {
-		workspace := newWorkspace(memoryLimited("2Gi"))
+		workspace := newWorkspace(memoryLimited())
 		workspace.Spec.Volumes = []workspacev1alpha1.VolumeSpec{{
 			Name:                      volumeNameWorkspaceSharedMemory,
 			MountPath:                 "/scratch",
@@ -304,7 +271,7 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 	})
 
 	It("does not let a reserved-name user volume at /dev/shm suppress the operator's volume", func() {
-		workspace := newWorkspace(memoryLimited("2Gi"))
+		workspace := newWorkspace(memoryLimited())
 		workspace.Spec.Volumes = []workspacev1alpha1.VolumeSpec{{
 			Name:      volumeNameWorkspaceSharedMemory,
 			MountPath: SharedMemoryMountPath,
@@ -316,7 +283,7 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 	})
 
 	It("mounts alongside a user PVC volume", func() {
-		workspace := newWorkspace(memoryLimited("2Gi"))
+		workspace := newWorkspace(memoryLimited())
 		workspace.Spec.Volumes = []workspacev1alpha1.VolumeSpec{{
 			Name:                      volumeValidationNameData,
 			MountPath:                 volumeValidationMountData,
@@ -329,7 +296,7 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 	})
 
 	It("mounts the volume in the primary container only and sizes it to that container", func() {
-		workspace := newWorkspace(memoryLimited("2Gi"))
+		workspace := newWorkspace(memoryLimited())
 		accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 			ObjectMeta: metav1.ObjectMeta{Name: "sidecar-strategy", Namespace: testNamespace},
 			Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
@@ -354,7 +321,7 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 	})
 
 	It("reports an existing Deployment without the volume as needing an update", func() {
-		workspace := newWorkspace(memoryLimited("2Gi"))
+		workspace := newWorkspace(memoryLimited())
 		desired, err := builder.BuildWorkspaceDeployment(ctx, workspace, nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 

@@ -89,8 +89,8 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultSharedMemory *SharedMemorySpec `json:"defaultSharedMemory,omitempty"`
 
-	// SharedMemoryOverrides controls whether and how far a workspace may deviate from
-	// DefaultSharedMemory, including with a volume it mounts at /dev/shm itself.
+	// SharedMemoryOverrides controls whether a workspace may deviate from DefaultSharedMemory, including
+	// with a volume it mounts at /dev/shm itself.
 	// +optional
 	SharedMemoryOverrides *SharedMemoryOverridePolicy `json:"sharedMemoryOverrides,omitempty"`
 
@@ -289,21 +289,15 @@ type StorageConfig struct {
 	DefaultMountPath string `json:"defaultMountPath,omitempty"`
 }
 
-// SharedMemoryOverridePolicy bounds what a workspace may set for its /dev/shm volume.
-// NOTE: maxSizeLimit against defaultSharedMemory.sizeLimit cannot be checked in CEL (resource.Quantity);
-// the WorkspaceTemplate validating webhook enforces it.
+// SharedMemoryOverridePolicy controls whether a workspace may deviate from the template's
+// DefaultSharedMemory.
 type SharedMemoryOverridePolicy struct {
 	// Allow controls whether workspaces may set their own sharedMemory or mount their own volume at
-	// /dev/shm. When false, workspaces get DefaultSharedMemory and nothing else.
+	// /dev/shm. When false, workspaces get DefaultSharedMemory and nothing else, so a template that
+	// sets it needs a DefaultSharedMemory.
 	// +kubebuilder:default=true
 	// +optional
 	Allow *bool `json:"allow,omitempty"`
-
-	// MaxSizeLimit is the most a workspace may give its /dev/shm volume, through sharedMemory.sizeLimit
-	// or a volume of its own at /dev/shm. Requires a DefaultSharedMemory that is disabled or has a
-	// sizeLimit at or below it, since an unset sizeLimit means the container memory limit.
-	// +optional
-	MaxSizeLimit *resource.Quantity `json:"maxSizeLimit,omitempty"`
 }
 
 // IdleShutdownOverridePolicy defines idle shutdown override constraints

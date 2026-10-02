@@ -107,17 +107,15 @@ _Appears in:_
 
 
 
-SharedMemoryOverridePolicy bounds what a workspace may set for its /dev/shm volume.
-NOTE: maxSizeLimit against defaultSharedMemory.sizeLimit cannot be checked in CEL (resource.Quantity);
-the WorkspaceTemplate validating webhook enforces it.
+SharedMemoryOverridePolicy controls whether a workspace may deviate from the template's
+DefaultSharedMemory.
 
 _Appears in:_
 - [WorkspaceTemplateSpec](#workspacetemplatespec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `allow` _boolean_ | Allow controls whether workspaces may set their own sharedMemory or mount their own volume at<br />/dev/shm. When false, workspaces get DefaultSharedMemory and nothing else. | true | Optional: \{\} <br /> |
-| `maxSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#quantity-resource-api)_ | MaxSizeLimit is the most a workspace may give its /dev/shm volume, through sharedMemory.sizeLimit<br />or a volume of its own at /dev/shm. Requires a DefaultSharedMemory that is disabled or has a<br />sizeLimit at or below it, since an unset sizeLimit means the container memory limit. |  | Optional: \{\} <br /> |
+| `allow` _boolean_ | Allow controls whether workspaces may set their own sharedMemory or mount their own volume at<br />/dev/shm. When false, workspaces get DefaultSharedMemory and nothing else, so a template that<br />sets it needs a DefaultSharedMemory. | true | Optional: \{\} <br /> |
 
 
 
@@ -183,7 +181,7 @@ _Appears in:_
 | `allowSecondaryStorages` _boolean_ | AllowSecondaryStorages controls whether workspaces using this template<br />can mount additional storage volumes beyond the primary storage | true | Optional: \{\} <br /> |
 | `defaultVolumes` _[VolumeSpec](#volumespec) array_ | DefaultVolumes specifies default additional volumes for workspaces using this template<br />Volumes are applied during defaulting only if the workspace does not specify any volumes<br />Each volume references either a pre-existing PVC in the workspace namespace or an emptyDir source |  | MaxItems: 10 <br />Optional: \{\} <br /> |
 | `defaultSharedMemory` _[SharedMemorySpec](#sharedmemoryspec)_ | DefaultSharedMemory is the /dev/shm volume setting for workspaces using this template.<br />Copied in whole onto a workspace that sets no sharedMemory; applied only if the workspace does not<br />specify its own. |  | Optional: \{\} <br /> |
-| `sharedMemoryOverrides` _[SharedMemoryOverridePolicy](#sharedmemoryoverridepolicy)_ | SharedMemoryOverrides controls whether and how far a workspace may deviate from<br />DefaultSharedMemory, including with a volume it mounts at /dev/shm itself. |  | Optional: \{\} <br /> |
+| `sharedMemoryOverrides` _[SharedMemoryOverridePolicy](#sharedmemoryoverridepolicy)_ | SharedMemoryOverrides controls whether a workspace may deviate from DefaultSharedMemory, including<br />with a volume it mounts at /dev/shm itself. |  | Optional: \{\} <br /> |
 | `defaultNodeSelector` _object (keys:string, values:string)_ | DefaultNodeSelector specifies default node selection constraints |  | Optional: \{\} <br /> |
 | `defaultAffinity` _[Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#affinity-v1-core)_ | DefaultAffinity specifies default node affinity and anti-affinity rules |  | Optional: \{\} <br /> |
 | `defaultTolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#toleration-v1-core) array_ | DefaultTolerations specifies default tolerations for scheduling on nodes with taints |  | Optional: \{\} <br /> |

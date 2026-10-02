@@ -1,11 +1,11 @@
-# Template that gives workspaces a /dev/shm volume below the 512Mi memory limit and lets none of them raise it.
+# Template whose default turns the /dev/shm volume off while workspaces may still turn it on.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
-  name: shm-template-capped
+  name: shm-template-default-off
   namespace: jupyter-k8s-shared
 spec:
-  displayName: "Shared memory capped"
+  displayName: "Shared memory off by default"
   defaultImage: jk8s-application-jupyter-uv:latest
   defaultResources:
     requests:
@@ -24,6 +24,4 @@ spec:
         max: 4Gi
   appType: jupyter
   defaultSharedMemory:
-    sizeLimit: 128Mi
-  sharedMemoryOverrides:
-    maxSizeLimit: 128Mi
+    enabled: false

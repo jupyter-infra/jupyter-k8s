@@ -283,53 +283,23 @@ func validateTemplateConsistency(template *workspacev1alpha1.WorkspaceTemplate) 
 		return err
 	}
 
-	// defaultSharedMemory and sharedMemoryOverrides must agree, and a maximum needs a default under it.
+	// a locked shared memory policy needs a defaultSharedMemory to hold workspaces to.
 	return validateTemplateSharedMemoryConsistency(template)
 }
 
-// validateTemplateSharedMemoryConsistency rejects a shared memory policy the template's own default
-// cannot satisfy: a locked policy without a defaultSharedMemory for workspaces to match, a sizeLimit or
-// maxSizeLimit of zero or less, which the kubelet would ignore, or a maxSizeLimit without a
-// defaultSharedMemory that is disabled or sized at or below it, since an unset default size means the
-// container memory limit and would exceed the maximum on its own.
+// validateTemplateSharedMemoryConsistency rejects a template that locks shared memory overrides without
+// a defaultSharedMemory, since the lock holds workspaces to that default and there would be nothing to
+// hold them to.
 func validateTemplateSharedMemoryConsistency(template *workspacev1alpha1.WorkspaceTemplate) error {
-	def := template.Spec.DefaultSharedMemory
-	if def != nil && def.SizeLimit != nil && def.SizeLimit.Sign() <= 0 {
-		return fmt.Errorf("defaultSharedMemory.sizeLimit %s must be greater than zero (template %q)",
-			def.SizeLimit.String(), template.GetName())
-	}
 	policy := template.Spec.SharedMemoryOverrides
-	if policy == nil {
+	if policy == nil || policy.Allow == nil || *policy.Allow || template.Spec.DefaultSharedMemory != nil {
 		return nil
 	}
-	// A locked policy (allow=false) needs a default for workspaces to match against.
-	if policy.Allow != nil && !*policy.Allow && def == nil {
-		return fmt.Errorf(
-			"sharedMemoryOverrides.allow is false but defaultSharedMemory is not set: "+
-				"a locked shared memory policy requires a defaultSharedMemory for workspaces to match (template %q)",
-			template.GetName(),
-		)
-	}
-	if policy.MaxSizeLimit == nil {
-		return nil
-	}
-	if policy.MaxSizeLimit.Sign() <= 0 {
-		return fmt.Errorf("sharedMemoryOverrides.maxSizeLimit %s must be greater than zero (template %q)",
-			policy.MaxSizeLimit.String(), template.GetName())
-	}
-	if def != nil && def.Enabled != nil && !*def.Enabled {
-		return nil
-	}
-	if def == nil || def.SizeLimit == nil {
-		return fmt.Errorf("sharedMemoryOverrides.maxSizeLimit %s requires a defaultSharedMemory with a sizeLimit at or below it, "+
-			"since an unset sizeLimit means the container memory limit (template %q)",
-			policy.MaxSizeLimit.String(), template.GetName())
-	}
-	if def.SizeLimit.Cmp(*policy.MaxSizeLimit) > 0 {
-		return fmt.Errorf("defaultSharedMemory.sizeLimit %s exceeds sharedMemoryOverrides.maxSizeLimit %s (template %q)",
-			def.SizeLimit.String(), policy.MaxSizeLimit.String(), template.GetName())
-	}
-	return nil
+	return fmt.Errorf(
+		"sharedMemoryOverrides.allow is false but defaultSharedMemory is not set: "+
+			"a locked shared memory policy requires a defaultSharedMemory for workspaces to match (template %q)",
+		template.GetName(),
+	)
 }
 
 // validateIdleShutdownPolicyConsistency rejects a template whose idle shutdown policy is

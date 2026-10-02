@@ -21,22 +21,22 @@ import (
 )
 
 // Workspace shared memory (#484): the primary container of every workspace gets the operator's
-// memory-backed /dev/shm volume sized to its memory limit; templates set the default and bound what
-// workspaces may change, sidecars stay out of it unless an integration shares its own volume, and the
-// operator restores the volume when it is removed out of band.
+// memory-backed /dev/shm volume sized to its memory limit; templates set the default and may lock it,
+// sidecars stay out of it unless an integration shares its own volume, and the operator restores the
+// volume when it is removed out of band.
 var _ = Describe("Workspace shared memory", Ordered, func() {
 	const (
 		workspaceNamespace = "default"
 		groupDir           = "shared-memory"
 		defaultTemplate    = "shm-template"
 		disabledTemplate   = "shm-template-disabled"
-		cappedTemplate     = "shm-template-capped"
+		defaultOffTemplate = "shm-template-default-off"
 		noSecondaryTmpl    = "shm-template-no-secondary"
 		sidecarStrategy    = "access-strategy-with-exposed-ports"
 		sidecarWorkspace   = "workspace-with-exposed-ports-access-strategy"
 	)
 
-	templates := []string{defaultTemplate, disabledTemplate, cappedTemplate, noSecondaryTmpl}
+	templates := []string{defaultTemplate, disabledTemplate, defaultOffTemplate, noSecondaryTmpl}
 	var created []string
 
 	BeforeAll(func() {
@@ -163,22 +163,20 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			VerifyWorkspaceNoSharedMemory("shm-disabled-workspace", workspaceNamespace)
 		})
 
-		It("limits the volume to the template's sizeLimit", func() {
-			create("shm-capped-workspace")
-			VerifyWorkspaceSharedMemory("shm-capped-workspace", workspaceNamespace, "128Mi")
+		It("copies a default off switch and lets a workspace turn the volume on when overrides are allowed", func() {
+			create("shm-default-off-workspace")
+			VerifyWorkspaceNoSharedMemory("shm-default-off-workspace", workspaceNamespace)
+
+			create("shm-enabled-under-default-off-workspace")
+			VerifyWorkspaceSharedMemory("shm-enabled-under-default-off-workspace", workspaceNamespace, "512Mi")
 		})
 
-		It("lets a workspace lower the template's size limit and rejects raising it", func() {
-			create("shm-lowered-workspace")
-			VerifyWorkspaceSharedMemory("shm-lowered-workspace", workspaceNamespace, "96Mi")
-
-			VerifyCreateWorkspaceRejectedByWebhook("shm-over-cap-workspace", groupDir, "",
-				"shm-over-cap-workspace", workspaceNamespace)
+		It("rejects a workspace that deviates from a locked default", func() {
 			VerifyCreateWorkspaceRejectedByWebhook("shm-enable-under-disabled-workspace", groupDir, "",
 				"shm-enable-under-disabled-workspace", workspaceNamespace)
 		})
 
-		It("applies the template's setting to a workspace's own /dev/shm volume", func() {
+		It("mounts a workspace's own /dev/shm volume unless the template locks shared memory", func() {
 			create("shm-user-volume-workspace")
 			Eventually(func(g Gomega) {
 				pods, err := workspacePods("shm-user-volume-workspace", workspaceNamespace)
@@ -190,8 +188,6 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			}).WithTimeout(60 * time.Second).WithPolling(3 * time.Second).Should(Succeed())
 			VerifyShmSize("shm-user-volume-workspace", workspaceNamespace, "96Mi")
 
-			VerifyCreateWorkspaceRejectedByWebhook("shm-user-volume-over-limit-workspace", groupDir, "",
-				"shm-user-volume-over-limit-workspace", workspaceNamespace)
 			VerifyCreateWorkspaceRejectedByWebhook("shm-user-volume-under-disabled-workspace", groupDir, "",
 				"shm-user-volume-under-disabled-workspace", workspaceNamespace)
 		})
@@ -267,8 +263,7 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 		// Two specs below edit the shared templates; restore them before the Describe-level cleanup runs.
 		AfterEach(func() {
 			patchTemplate(defaultTemplate, `{"spec":{"defaultSharedMemory":null,"sharedMemoryOverrides":null}}`)
-			patchTemplate(cappedTemplate,
-				`{"spec":{"defaultSharedMemory":{"sizeLimit":"128Mi"},"sharedMemoryOverrides":{"maxSizeLimit":"128Mi"}}}`)
+			patchTemplate(disabledTemplate, `{"spec":{"defaultSharedMemory":{"enabled":false}}}`)
 		})
 
 		It("resizes the volume when the workspace memory limit changes", func() {
@@ -286,28 +281,22 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			create("shm-default-workspace")
 			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "512Mi")
 
-			_, err := patchWorkspace("shm-default-workspace", `{"spec":{"sharedMemory":{"sizeLimit":"256Mi"}}}`)
-			Expect(err).NotTo(HaveOccurred())
-			waitDeploymentSizeLimit("shm-default-workspace", "256Mi")
-			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "256Mi")
-
-			_, err = patchWorkspace("shm-default-workspace", `{"spec":{"sharedMemory":{"enabled":false}}}`)
+			_, err := patchWorkspace("shm-default-workspace", `{"spec":{"sharedMemory":{"enabled":false}}}`)
 			Expect(err).NotTo(HaveOccurred())
 			waitDeploymentSizeLimit("shm-default-workspace", "")
 			VerifyWorkspaceNoSharedMemory("shm-default-workspace", workspaceNamespace)
 
 			_, err = patchWorkspace("shm-default-workspace", `{"spec":{"sharedMemory":{"enabled":true}}}`)
 			Expect(err).NotTo(HaveOccurred())
-			waitDeploymentSizeLimit("shm-default-workspace", "256Mi")
-			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "256Mi")
+			waitDeploymentSizeLimit("shm-default-workspace", "512Mi")
+			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "512Mi")
 		})
 
-		It("applies a size limit added to the template to new workspaces, and to existing ones at their next change", func() {
+		It("applies a default added to the template to new workspaces, and to existing ones at their next change", func() {
 			create("shm-default-workspace")
 			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "512Mi")
 
-			patchTemplate(defaultTemplate,
-				`{"spec":{"defaultSharedMemory":{"sizeLimit":"128Mi"},"sharedMemoryOverrides":{"maxSizeLimit":"128Mi"}}}`)
+			patchTemplate(defaultTemplate, `{"spec":{"defaultSharedMemory":{"enabled":false}}}`)
 
 			By("verifying the running workspace keeps its volume")
 			Consistently(func(g Gomega) {
@@ -317,48 +306,40 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			}).WithTimeout(15 * time.Second).WithPolling(3 * time.Second).Should(Succeed())
 
 			create("shm-default-workspace-b")
-			VerifyWorkspaceSharedMemory("shm-default-workspace-b", workspaceNamespace, "128Mi")
+			VerifyWorkspaceNoSharedMemory("shm-default-workspace-b", workspaceNamespace)
 
-			By("changing the existing workspace so it adopts the template's size limit")
+			By("changing the existing workspace so it adopts the template's default")
 			_, err := patchWorkspace("shm-default-workspace",
 				`{"spec":{"resources":{"requests":{"memory":"512Mi"},"limits":{"memory":"1Gi"}}}}`)
 			Expect(err).NotTo(HaveOccurred())
-			waitDeploymentSizeLimit("shm-default-workspace", "128Mi")
-			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "128Mi")
+			waitDeploymentSizeLimit("shm-default-workspace", "")
+			VerifyWorkspaceNoSharedMemory("shm-default-workspace", workspaceNamespace)
 		})
 
-		It("rejects a workspace whose copied setting a lowered template maximum no longer allows", func() {
-			create("shm-capped-workspace")
-			VerifyWorkspaceSharedMemory("shm-capped-workspace", workspaceNamespace, "128Mi")
+		It("rejects a workspace whose copied setting no longer matches a changed locked default", func() {
+			create("shm-disabled-workspace")
+			VerifyWorkspaceNoSharedMemory("shm-disabled-workspace", workspaceNamespace)
 
-			patchTemplate(cappedTemplate,
-				`{"spec":{"defaultSharedMemory":{"sizeLimit":"32Mi"},"sharedMemoryOverrides":{"maxSizeLimit":"32Mi"}}}`)
+			patchTemplate(disabledTemplate, `{"spec":{"defaultSharedMemory":{"enabled":true}}}`)
 
-			By("verifying the running workspace keeps its volume")
-			Consistently(func(g Gomega) {
-				sizeLimit, err := deploymentSizeLimit("shm-capped-workspace")
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(sizeLimit).To(Equal("128Mi"))
-			}).WithTimeout(15 * time.Second).WithPolling(3 * time.Second).Should(Succeed())
-
-			By("verifying a change that keeps the old size limit is rejected")
-			output, err := patchWorkspace("shm-capped-workspace",
+			By("verifying a change that keeps the old setting is rejected")
+			output, err := patchWorkspace("shm-disabled-workspace",
 				`{"spec":{"resources":{"requests":{"memory":"512Mi"},"limits":{"memory":"1Gi"}}}}`)
 			Expect(err).To(HaveOccurred(), output)
-			Expect(output).To(ContainSubstring("exceeds"))
+			Expect(output).To(ContainSubstring("does not allow overriding shared memory"))
 
 			By("verifying a stop is still accepted")
-			UpdateWorkspaceDesiredState("shm-capped-workspace", workspaceNamespace, controller.DesiredStateStopped)
-			WaitForWorkspaceToReachCondition("shm-capped-workspace", workspaceNamespace,
+			UpdateWorkspaceDesiredState("shm-disabled-workspace", workspaceNamespace, controller.DesiredStateStopped)
+			WaitForWorkspaceToReachCondition("shm-disabled-workspace", workspaceNamespace,
 				controller.ConditionTypeStopped, ConditionTrue)
 
-			By("verifying the workspace is accepted once it fits the new size limit")
-			_, err = patchWorkspace("shm-capped-workspace",
-				fmt.Sprintf(`{"spec":{"desiredStatus":%q,"sharedMemory":{"sizeLimit":"32Mi"}}}`, controller.DesiredStateRunning))
+			By("verifying the workspace is accepted once it matches the new default")
+			_, err = patchWorkspace("shm-disabled-workspace",
+				fmt.Sprintf(`{"spec":{"desiredStatus":%q,"sharedMemory":{"enabled":true}}}`, controller.DesiredStateRunning))
 			Expect(err).NotTo(HaveOccurred())
-			WaitForWorkspaceToReachCondition("shm-capped-workspace", workspaceNamespace,
+			WaitForWorkspaceToReachCondition("shm-disabled-workspace", workspaceNamespace,
 				controller.ConditionTypeAvailable, ConditionTrue)
-			VerifyWorkspaceSharedMemory("shm-capped-workspace", workspaceNamespace, "32Mi")
+			VerifyWorkspaceSharedMemory("shm-disabled-workspace", workspaceNamespace, "512Mi")
 		})
 
 		It("restores the volume when it is removed from the Deployment out of band", func() {

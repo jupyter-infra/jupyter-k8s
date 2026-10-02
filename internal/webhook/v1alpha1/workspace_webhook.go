@@ -397,11 +397,6 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, workspace
 		return nil, err
 	}
 
-	// Validate the shared memory setting on its own (applies to all users)
-	if err := validateSharedMemorySpec(workspace); err != nil {
-		return nil, err
-	}
-
 	// Controller or admin users bypass validation
 	if isControllerOrAdminUser(ctx) {
 		return warnings, nil
@@ -428,11 +423,6 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldWorksp
 	// This allows finalizer removal even if template is already deleted
 	if !newWorkspace.DeletionTimestamp.IsZero() {
 		return nil, nil
-	}
-
-	// Validate the shared memory setting on its own (applies to all users)
-	if err := validateSharedMemorySpec(newWorkspace); err != nil {
-		return nil, err
 	}
 
 	// Controller or admin users bypass validation

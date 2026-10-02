@@ -1,4 +1,4 @@
-# The workspace's own /dev/shm volume replaces the operator's and stays within the template's 128Mi maximum.
+# The workspace's own /dev/shm volume is mounted as declared when the template does not lock shared memory.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
@@ -6,7 +6,7 @@ metadata:
 spec:
   displayName: "shm-user-volume-workspace"
   templateRef:
-    name: shm-template-capped
+    name: shm-template-default-off
     namespace: jupyter-k8s-shared
   ownershipType: Public
   volumes:

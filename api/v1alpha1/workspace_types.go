@@ -35,18 +35,13 @@ type VolumeSpec struct {
 
 // SharedMemorySpec configures the memory-backed /dev/shm volume the operator mounts into the
 // workspace's primary container. Containers otherwise get the 64Mi default, which is too small for
-// PyTorch DataLoader workers and NCCL.
+// PyTorch DataLoader workers and NCCL. The volume's size is the container's memory limit, or its
+// memory request when the container has no limit; a container with neither gets no volume and keeps
+// the container default. A workspace that needs another size declares its own volume at /dev/shm.
 type SharedMemorySpec struct {
 	// Enabled mounts the volume. Unset means true.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
-
-	// SizeLimit is the volume's maximum size. Defaults to the workspace container's memory limit, or to
-	// its memory request when the container has no limit; a container with neither gets no volume and
-	// keeps the container default. The memory limit is also the most it can be: a larger value is
-	// lowered to the limit, since the volume's contents count against that limit.
-	// +optional
-	SizeLimit *resource.Quantity `json:"sizeLimit,omitempty"`
 }
 
 // ContainerConfig defines container command and args configuration
@@ -195,8 +190,8 @@ type WorkspaceSpec struct {
 	Volumes []VolumeSpec `json:"volumes,omitempty"`
 
 	// SharedMemory configures the memory-backed /dev/shm volume mounted into the workspace's primary
-	// container. Defaulted from the template's defaultSharedMemory when unset and bounded by its
-	// sharedMemoryOverrides. A volume the workspace declares at /dev/shm takes precedence.
+	// container. Defaulted from the template's defaultSharedMemory when unset, and held to it when the
+	// template's sharedMemoryOverrides lock it. A volume the workspace declares at /dev/shm takes precedence.
 	// +optional
 	SharedMemory *SharedMemorySpec `json:"sharedMemory,omitempty"`
 

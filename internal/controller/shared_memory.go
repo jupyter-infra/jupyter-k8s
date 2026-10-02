@@ -45,21 +45,13 @@ func sharedMemoryEnabled(workspace *workspacev1alpha1.Workspace) bool {
 	return true
 }
 
-// sharedMemorySizeLimit returns the /dev/shm volume's sizeLimit. An explicit sharedMemory.sizeLimit is
-// used as given, lowered to the container's memory limit when it exceeds it, since the volume's contents
-// count against that limit. Without one, the size is the memory limit, or the memory request when the
-// container has no limit; with neither the result is nil and no volume is mounted, because a tmpfs
-// without a size would be bounded only by the node.
-func sharedMemorySizeLimit(workspace *workspacev1alpha1.Workspace, resources corev1.ResourceRequirements) *resource.Quantity {
-	limit, hasLimit := resources.Limits[corev1.ResourceMemory]
-
+// sharedMemorySizeLimit returns the /dev/shm volume's sizeLimit: the container's memory limit, since the
+// volume's contents count against it, or the memory request when the container has no limit. With
+// neither the result is nil and no volume is mounted, because a tmpfs without a size would be bounded
+// only by the node.
+func sharedMemorySizeLimit(resources corev1.ResourceRequirements) *resource.Quantity {
 	var size *resource.Quantity
-	if sm := workspace.Spec.SharedMemory; sm != nil && sm.SizeLimit != nil && sm.SizeLimit.Sign() > 0 {
-		size = sm.SizeLimit
-		if hasLimit && limit.Cmp(*size) < 0 {
-			size = &limit
-		}
-	} else if hasLimit {
+	if limit, hasLimit := resources.Limits[corev1.ResourceMemory]; hasLimit {
 		size = &limit
 	} else if request, hasRequest := resources.Requests[corev1.ResourceMemory]; hasRequest {
 		size = &request
@@ -75,17 +67,17 @@ func sharedMemorySizeLimit(workspace *workspacev1alpha1.Workspace, resources cor
 // sharedMemoryMounted reports whether the pod gets the operator's /dev/shm volume: enabled for the
 // workspace and with a size that can be derived from it.
 func sharedMemoryMounted(workspace *workspacev1alpha1.Workspace, resources corev1.ResourceRequirements) bool {
-	return sharedMemoryEnabled(workspace) && sharedMemorySizeLimit(workspace, resources) != nil
+	return sharedMemoryEnabled(workspace) && sharedMemorySizeLimit(resources) != nil
 }
 
 // sharedMemoryVolume builds the memory-backed emptyDir volume mounted at /dev/shm.
-func sharedMemoryVolume(workspace *workspacev1alpha1.Workspace, resources corev1.ResourceRequirements) corev1.Volume {
+func sharedMemoryVolume(resources corev1.ResourceRequirements) corev1.Volume {
 	return corev1.Volume{
 		Name: volumeNameWorkspaceSharedMemory,
 		VolumeSource: corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{
 				Medium:    corev1.StorageMediumMemory,
-				SizeLimit: sharedMemorySizeLimit(workspace, resources),
+				SizeLimit: sharedMemorySizeLimit(resources),
 			},
 		},
 	}

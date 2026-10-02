@@ -92,14 +92,14 @@ func TestConstraintsChanged(t *testing.T) {
 		},
 		{
 			name: "shared memory overrides unchanged",
-			old:  workspacev1alpha1.WorkspaceTemplateSpec{SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{MaxSizeLimit: qtyPtr("1Gi")}},
-			new:  workspacev1alpha1.WorkspaceTemplateSpec{SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{MaxSizeLimit: qtyPtr("1Gi")}},
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{Allow: boolPtr(false)}},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{Allow: boolPtr(false)}},
 			want: false,
 		},
 		{
 			name: "default shared memory changed",
 			old:  workspacev1alpha1.WorkspaceTemplateSpec{},
-			new:  workspacev1alpha1.WorkspaceTemplateSpec{DefaultSharedMemory: &workspacev1alpha1.SharedMemorySpec{SizeLimit: qtyPtr("1Gi")}},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{DefaultSharedMemory: &workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)}},
 			want: false,
 		},
 		{

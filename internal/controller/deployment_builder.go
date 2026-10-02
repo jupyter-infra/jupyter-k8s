@@ -211,7 +211,7 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 	}
 
 	if sharedMemoryMounted(workspace, resources) {
-		podSpec.Volumes = append(podSpec.Volumes, sharedMemoryVolume(workspace, resources))
+		podSpec.Volumes = append(podSpec.Volumes, sharedMemoryVolume(resources))
 	}
 
 	// Set scheduling fields from workspace spec

@@ -39,13 +39,8 @@ const (
 	ViolationTypeEnvRequired                    = "EnvRequired"
 	ViolationTypeEnvRegexMismatch               = "EnvRegexMismatch"
 	ViolationTypeInitContainersNotAllowed       = "InitContainersNotAllowed"
-	ViolationTypeSharedMemoryNotAllowed         = "SharedMemoryNotAllowed"
-	ViolationTypeSharedMemoryExceeded           = "SharedMemoryExceeded"
 	ViolationTypeSharedMemoryOverrideNotAllowed = "SharedMemoryOverrideNotAllowed"
 )
-
-// actualUnbounded is the Actual value of a violation for a volume with no size limit.
-const actualUnbounded = "unbounded"
 
 // labelValueTrue is the string value used for boolean-style Kubernetes labels.
 const labelValueTrue = "true"
