@@ -112,6 +112,18 @@ var _ = Describe("SharedMemoryValidator", func() {
 			Expect(err).To(MatchError(ContainSubstring("defaultSharedMemory is not set")))
 		})
 
+		It("rejects a locked policy whose default volumes mount /dev/shm", func() {
+			template := newTemplate(off(), locked())
+			template.Spec.DefaultVolumes = []workspacev1alpha1.VolumeSpec{{
+				Name: "shm", MountPath: "/dev/shm/", EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory},
+			}}
+			err := validateTemplateSharedMemoryConsistency(template)
+			Expect(err).To(MatchError(ContainSubstring("defaultVolumes[shm] mounts /dev/shm")))
+
+			template.Spec.DefaultVolumes[0].MountPath = "/data"
+			Expect(validateTemplateSharedMemoryConsistency(template)).To(Succeed())
+		})
+
 		It("accepts a locked policy with a default, an unlocked policy, and no policy", func() {
 			Expect(validateTemplateSharedMemoryConsistency(newTemplate(off(), locked()))).To(Succeed())
 			Expect(validateTemplateSharedMemoryConsistency(newTemplate(&workspacev1alpha1.SharedMemorySpec{}, locked()))).To(Succeed())

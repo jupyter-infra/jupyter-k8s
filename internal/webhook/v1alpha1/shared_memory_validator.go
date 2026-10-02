@@ -37,8 +37,8 @@ func validateSharedMemory(workspace *workspacev1alpha1.Workspace, template *work
 		Type:    ViolationTypeSharedMemoryOverrideNotAllowed,
 		Field:   "spec.sharedMemory",
 		Message: fmt.Sprintf("Template '%s' does not allow overriding shared memory, but the workspace sets its own", template.Name),
-		Allowed: "the template's defaultSharedMemory",
-		Actual:  "a different setting",
+		Allowed: fmt.Sprintf("enabled: %t, the template's defaultSharedMemory", sharedMemoryEnabledValue(template.Spec.DefaultSharedMemory)),
+		Actual:  fmt.Sprintf("enabled: %t", sharedMemoryEnabledValue(ws)),
 	}}
 }
 

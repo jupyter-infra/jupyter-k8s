@@ -18,7 +18,7 @@ On **create and update**, the webhook rejects a template whose own constraints a
 - `idleShutdownOverrides.minIdleTimeoutInMinutes` must not exceed `maxIdleTimeoutInMinutes`.
 - `idleShutdownOverrides.allow: false` requires a `defaultIdleShutdown` for workspaces to match against.
 - an enabled `defaultIdleShutdown.idleTimeoutInMinutes` must fall within the `idleShutdownOverrides` timeout bounds.
-- `sharedMemoryOverrides.allow: false` requires a `defaultSharedMemory` for workspaces to match against.
+- `sharedMemoryOverrides.allow: false` requires a `defaultSharedMemory` for workspaces to match against, and allows no `defaultVolumes` entry at `/dev/shm`, which the lock would reject on every workspace.
 
 ## Constraint fields
 
