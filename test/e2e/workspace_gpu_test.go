@@ -43,12 +43,12 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 	})
 
 	AfterAll(func() {
-		deleteGPUTemplate(gpuTemplateName)
+		deleteTemplateForTest(gpuTemplateName)
 		teardownFakeGPUNode(gpuNodeName)
 	})
 
 	AfterEach(func() {
-		deleteGPUWorkspace(workspaceName, workspaceNamespace)
+		deleteWorkspaceForTest(workspaceName, workspaceNamespace)
 		workspaceName = ""
 	})
 
@@ -105,6 +105,9 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 			By("verifying the pod scheduled onto the GPU-advertising node")
 			Expect(pod.Spec.NodeName).To(Equal(gpuNodeName))
 			Expect(pod.Status.Phase).To(Equal(corev1.PodRunning))
+
+			By("verifying the /dev/shm volume is sized to the template's 512Mi memory limit")
+			VerifyWorkspaceSharedMemory(workspaceName, workspaceNamespace, "512Mi")
 		})
 
 		It("should honor a workspace GPU request within template bounds", func() {

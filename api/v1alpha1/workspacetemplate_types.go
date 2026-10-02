@@ -83,6 +83,17 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultVolumes []VolumeSpec `json:"defaultVolumes,omitempty"`
 
+	// DefaultSharedMemory is the /dev/shm volume setting for workspaces using this template.
+	// Copied in whole onto a workspace that sets no sharedMemory; applied only if the workspace does not
+	// specify its own.
+	// +optional
+	DefaultSharedMemory *SharedMemorySpec `json:"defaultSharedMemory,omitempty"`
+
+	// SharedMemoryOverrides controls whether a workspace may deviate from DefaultSharedMemory, including
+	// with a volume it mounts at /dev/shm itself.
+	// +optional
+	SharedMemoryOverrides *SharedMemoryOverridePolicy `json:"sharedMemoryOverrides,omitempty"`
+
 	// DefaultNodeSelector specifies default node selection constraints
 	// +optional
 	DefaultNodeSelector map[string]string `json:"defaultNodeSelector,omitempty"`
@@ -276,6 +287,17 @@ type StorageConfig struct {
 	// +kubebuilder:default="/home/jovyan"
 	// +optional
 	DefaultMountPath string `json:"defaultMountPath,omitempty"`
+}
+
+// SharedMemoryOverridePolicy controls whether a workspace may deviate from the template's
+// DefaultSharedMemory.
+type SharedMemoryOverridePolicy struct {
+	// Allow controls whether workspaces may set their own sharedMemory or mount their own volume at
+	// /dev/shm. When false, workspaces get DefaultSharedMemory and nothing else, so a template that
+	// sets it needs a DefaultSharedMemory.
+	// +kubebuilder:default=true
+	// +optional
+	Allow *bool `json:"allow,omitempty"`
 }
 
 // IdleShutdownOverridePolicy defines idle shutdown override constraints

@@ -3731,6 +3731,16 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              defaultSharedMemory:
+                description: |-
+                  DefaultSharedMemory is the /dev/shm volume setting for workspaces using this template.
+                  Copied in whole onto a workspace that sets no sharedMemory; applied only if the workspace does not
+                  specify its own.
+                properties:
+                  enabled:
+                    description: Enabled mounts the volume. Unset means true.
+                    type: boolean
+                type: object
               defaultTolerations:
                 description: DefaultTolerations specifies default tolerations for
                   scheduling on nodes with taints
@@ -3988,6 +3998,19 @@ spec:
 
                       Custom accelerators follow the pattern: vendor.example/resource-name
                     type: object
+                type: object
+              sharedMemoryOverrides:
+                description: |-
+                  SharedMemoryOverrides controls whether a workspace may deviate from DefaultSharedMemory, including
+                  with a volume it mounts at /dev/shm itself.
+                properties:
+                  allow:
+                    default: true
+                    description: |-
+                      Allow controls whether workspaces may set their own sharedMemory or mount their own volume at
+                      /dev/shm. When false, workspaces get DefaultSharedMemory and nothing else, so a template that
+                      sets it needs a DefaultSharedMemory.
+                    type: boolean
                 type: object
             required:
             - defaultImage

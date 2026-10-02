@@ -166,6 +166,8 @@ func workspacePod(workspaceName, namespace string) *corev1.Pod {
 
 // workspacePods returns the workspace's pods, decoded. Errors are returned rather than asserted so
 // callers can poll: a pod listed while the workspace restarts may be gone by the time it is read.
+//
+//nolint:unparam // helper kept general; current callers happen to share the namespace
 func workspacePods(workspaceName, namespace string) ([]corev1.Pod, error) {
 	names, err := kubectlGetByLabels("pod",
 		fmt.Sprintf("%s=%s", controller.LabelWorkspaceName, workspaceName),
@@ -193,26 +195,4 @@ func patchWorkspaceGPU(workspaceName, namespace, gpus string) (string, error) {
 	cmd := exec.Command("kubectl", "patch", "workspace", workspaceName,
 		"-n", namespace, "--type=merge", "-p", patch)
 	return utils.Run(cmd)
-}
-
-// deleteGPUWorkspace removes the one workspace the current spec created, by name, so it can never
-// delete unrelated objects sharing the "default" namespace.
-func deleteGPUWorkspace(workspaceName, namespace string) {
-	ginkgo.GinkgoHelper()
-	if workspaceName == "" {
-		return
-	}
-	ginkgo.By(fmt.Sprintf("cleaning up workspace %s", workspaceName))
-	cmd := exec.Command("kubectl", "delete", "workspace", workspaceName,
-		"-n", namespace, "--ignore-not-found", "--wait=true", "--timeout=120s")
-	_, _ = utils.Run(cmd)
-}
-
-// deleteGPUTemplate removes the template the suite shares across its specs.
-func deleteGPUTemplate(templateName string) {
-	ginkgo.GinkgoHelper()
-	ginkgo.By("cleaning up the GPU template")
-	cmd := exec.Command("kubectl", "delete", "workspacetemplate", templateName,
-		"-n", SharedNamespace, "--ignore-not-found", "--wait=true", "--timeout=60s")
-	_, _ = utils.Run(cmd)
 }

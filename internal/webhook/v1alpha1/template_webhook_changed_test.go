@@ -85,6 +85,24 @@ func TestConstraintsChanged(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "shared memory overrides changed",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{Allow: boolPtr(false)}},
+			want: true,
+		},
+		{
+			name: "shared memory overrides unchanged",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{Allow: boolPtr(false)}},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{Allow: boolPtr(false)}},
+			want: false,
+		},
+		{
+			name: "default shared memory changed",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{DefaultSharedMemory: &workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)}},
+			want: false,
+		},
+		{
 			name: "env requirements changed",
 			old:  workspacev1alpha1.WorkspaceTemplateSpec{EnvRequirements: []workspacev1alpha1.EnvRequirement{{Name: "FOO"}}},
 			new:  workspacev1alpha1.WorkspaceTemplateSpec{EnvRequirements: []workspacev1alpha1.EnvRequirement{{Name: "BAR"}}},
