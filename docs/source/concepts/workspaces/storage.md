@@ -83,3 +83,5 @@ spec:
 ```
 
 With `allow: false` the webhook rejects a workspace `sharedMemory` that differs from the template default and any volume the workspace mounts at `/dev/shm` itself; a template that locks overrides must set a `defaultSharedMemory`. A workspace that needs a `/dev/shm` of another size declares its own volume there, which replaces the operator's.
+
+Files in `/dev/shm` outlive the process that created them. A worker that crashes can leave files behind that a kernel restart does not clear, and they keep counting against the container's memory. If a workspace runs out of memory after a failed run, check `df -h /dev/shm` and delete stale files with `rm /dev/shm/<file>`, or stop and start the workspace, which recreates the pod and with it the volume.
