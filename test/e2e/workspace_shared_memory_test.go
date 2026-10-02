@@ -101,6 +101,7 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 		It("gives a workspace the volume sized to its memory limit", func() {
 			create("shm-default-workspace")
 			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "512Mi")
+			VerifySharedMemoryRoundTrip("shm-default-workspace", workspaceNamespace)
 		})
 
 		It("sizes the volume to the memory request when the workspace has no limit", func() {

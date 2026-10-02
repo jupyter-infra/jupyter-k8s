@@ -295,6 +295,55 @@ func VerifyShmSize(workspaceName, namespace, size string) {
 	}, 60*time.Second, 2*time.Second).Should(gomega.Succeed())
 }
 
+// sharedMemoryRoundTrip moves 128MiB through /dev/shm between a child process and its parent with
+// Python's standard library, which fails on the 64MiB container default and passes with the volume.
+const sharedMemoryRoundTrip = `
+from multiprocessing import Process, shared_memory
+SIZE = 128 * 1024 * 1024
+CHUNK = 1024 * 1024
+def writer(name):
+    shm = shared_memory.SharedMemory(name=name)
+    for off in range(0, SIZE, CHUNK):
+        shm.buf[off:off + CHUNK] = b"\x5a" * CHUNK
+    shm.close()
+shm = shared_memory.SharedMemory(create=True, size=SIZE)
+try:
+    p = Process(target=writer, args=(shm.name,))
+    p.start()
+    p.join()
+    assert p.exitcode == 0, p.exitcode
+    assert bytes(shm.buf[:1]) == b"\x5a" and bytes(shm.buf[SIZE - 1:SIZE]) == b"\x5a"
+finally:
+    shm.close()
+    shm.unlink()
+print("round trip ok")
+`
+
+// VerifySharedMemoryRoundTrip runs sharedMemoryRoundTrip in the workspace's primary container. No-op when
+// using Finch, as VerifyShmSize.
+func VerifySharedMemoryRoundTrip(workspaceName, namespace string) {
+	ginkgo.GinkgoHelper()
+
+	if isUsingFinch() {
+		ginkgo.By("skipping exec-based /dev/shm round trip (Finch has known cgroup access issues)")
+		return
+	}
+
+	ginkgo.By(fmt.Sprintf("moving 128MiB through /dev/shm between processes in workspace %s", workspaceName))
+	podName, err := kubectlGetByLabels("pod", fmt.Sprintf("%s=%s", WorkspaceLabelName, workspaceName),
+		namespace, "{.items[0].metadata.name}")
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	gomega.Expect(podName).NotTo(gomega.BeEmpty())
+
+	gomega.Eventually(func(g gomega.Gomega) {
+		cmd := exec.Command("kubectl", "exec", podName, "-n", namespace,
+			"-c", controller.PrimaryContainerName, "--", "python3", "-c", sharedMemoryRoundTrip)
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(gomega.HaveOccurred(), output)
+		g.Expect(output).To(gomega.ContainSubstring("round trip ok"))
+	}, 60*time.Second, 2*time.Second).Should(gomega.Succeed())
+}
+
 // VerifyWorkspaceSharedMemory waits until the workspace has exactly one Running pod carrying the
 // operator's /dev/shm volume at size, mounted in the primary container, then checks df inside it.
 // Polling covers the Recreate roll after a spec change.
