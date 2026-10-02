@@ -169,10 +169,11 @@ func (sm *StatusManager) UpdateErrorStatus(
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
-// UpdatePermanentDegradedRunningStatus sets Degraded=True, Available=False, Progressing=False, Stopped=False.
-// Use when the controller has given up on a workspace whose desired state is Running
-// and will not retry without external intervention (e.g. access startup probe threshold exceeded).
-func (sm *StatusManager) UpdatePermanentDegradedRunningStatus(
+// UpdateDegradedRunningStatus sets Degraded=True, Available=False, Progressing=False, Stopped=False for
+// a workspace whose desired state is Running. The caller decides whether to keep reconciling: a stalled
+// rollout recovers through the ready path once its pod becomes ready, while an access startup probe
+// that exceeded its failure threshold is not retried until the workspace restarts.
+func (sm *StatusManager) UpdateDegradedRunningStatus(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
 	degradedReason string,
@@ -192,7 +193,7 @@ func (sm *StatusManager) UpdatePermanentDegradedRunningStatus(
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
-// If a Stopped-path equivalent is needed, add UpdatePermanentDegradedStoppedStatus
+// If a Stopped-path equivalent is needed, add UpdateDegradedStoppedStatus
 // mirroring this method: use ReasonDesiredStateStopped on Available, degradedReason
 // on Progressing, and stoppedReason on Stopped.
 

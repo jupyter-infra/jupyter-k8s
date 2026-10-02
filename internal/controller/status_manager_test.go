@@ -310,7 +310,7 @@ var _ = Describe("StatusManager", func() {
 			})
 		})
 
-		Describe("UpdatePermanentDegradedRunningStatus", func() {
+		Describe("UpdateDegradedRunningStatus", func() {
 			It("should set correct conditions with proper reasons", func() {
 				// First set workspace to Starting state so all 4 conditions exist
 				startingSnapshot := workspace.Status.DeepCopy()
@@ -329,7 +329,7 @@ var _ = Describe("StatusManager", func() {
 				Expect(progressingCond.Status).To(Equal(metav1.ConditionTrue))
 
 				snapshot := workspace.Status.DeepCopy()
-				err = statusManager.UpdatePermanentDegradedRunningStatus(ctx, workspace,
+				err = statusManager.UpdateDegradedRunningStatus(ctx, workspace,
 					ReasonAccessProbeThresholdExceeded, ReasonAccessNotReady,
 					"Access startup probe failed: threshold exceeded", snapshot)
 				Expect(err).NotTo(HaveOccurred())
@@ -506,9 +506,9 @@ var _ = Describe("StatusManager", func() {
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 				verifyConditionOrder(workspace.Status.Conditions, expectedOrder)
 
-				// Test UpdatePermanentDegradedRunningStatus
+				// Test UpdateDegradedRunningStatus
 				snapshot = workspace.Status.DeepCopy()
-				err = statusManager.UpdatePermanentDegradedRunningStatus(ctx, workspace,
+				err = statusManager.UpdateDegradedRunningStatus(ctx, workspace,
 					ReasonAccessProbeThresholdExceeded, ReasonAccessNotReady,
 					"threshold exceeded", snapshot)
 				Expect(err).NotTo(HaveOccurred())

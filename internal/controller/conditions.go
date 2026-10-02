@@ -58,6 +58,9 @@ const (
 	ReasonServiceError                 = "ServiceError"
 	ReasonAccessProbeThresholdExceeded = "AccessProbeThresholdExceeded"
 	ReasonNoError                      = "NoError"
+	// ReasonComputeStalled is set on Degraded, Available and Progressing while the workspace Deployment
+	// reports Progressing=False with reason ProgressDeadlineExceeded; it clears when the pod becomes ready.
+	ReasonComputeStalled = "ComputeStalled"
 
 	// ConditionTypeAvailable reasons (special cases)
 	ReasonPreempted = "Preempted"
@@ -83,6 +86,10 @@ const (
 	// (see getIntegrationStatusEvent), so a persistently-degraded integration does not spam the event stream.
 	IntegrationEventDegraded  = "IntegrationDegraded"
 	IntegrationEventRecovered = "IntegrationRecovered"
+
+	// EventWorkspaceComputeStalled is recorded (Warning) when the workspace Deployment first reports
+	// ProgressDeadlineExceeded. Edge-triggered, so a workspace that stays stalled does not repeat it.
+	EventWorkspaceComputeStalled = "WorkspaceComputeStalled"
 )
 
 // NewCondition creates a new condition with the specified status

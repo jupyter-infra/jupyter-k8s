@@ -832,7 +832,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(err.Error()).To(ContainSubstring("failed to parse URL template"))
 		})
 
-		It("should propagate UpdatePermanentDegradedRunningStatus failure on threshold exceeded", func() {
+		It("should propagate UpdateDegradedRunningStatus failure on threshold exceeded", func() {
 			mockProber.ready = false
 			workspace := newWorkspaceWithAccessStrategy()
 			dep := createReadyDeployment(workspace)
