@@ -33,11 +33,12 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 		disabledTemplate   = "shm-template-disabled"
 		defaultOffTemplate = "shm-template-default-off"
 		noSecondaryTmpl    = "shm-template-no-secondary"
+		plainTemplate      = "shm-template-plain"
 		sidecarStrategy    = "access-strategy-with-exposed-ports"
 		sidecarWorkspace   = "shm-sidecar-workspace"
 	)
 
-	templates := []string{defaultTemplate, disabledTemplate, defaultOffTemplate, noSecondaryTmpl}
+	templates := []string{defaultTemplate, disabledTemplate, defaultOffTemplate, noSecondaryTmpl, plainTemplate}
 	var created []string
 
 	BeforeAll(func() {
@@ -264,7 +265,7 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 	Context("Changes after creation", func() {
 		// Two specs below edit the shared templates; restore them before the Describe-level cleanup runs.
 		AfterEach(func() {
-			patchTemplate(defaultTemplate, `{"spec":{"defaultSharedMemory":{},"sharedMemoryOverrides":null}}`)
+			patchTemplate(plainTemplate, `{"spec":{"defaultSharedMemory":null,"sharedMemoryOverrides":null}}`)
 			patchTemplate(disabledTemplate, `{"spec":{"defaultSharedMemory":{"enabled":false}}}`)
 		})
 
@@ -294,28 +295,30 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "512Mi")
 		})
 
-		It("applies a changed template default to new workspaces at once, and to existing ones at their next change", func() {
-			create("shm-default-workspace")
-			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "512Mi")
+		It("adds a template default to new workspaces at once and to existing ones at their next change", func() {
+			// The webhook copies a template default only onto a workspace whose sharedMemory is unset, so a
+			// workspace created before the template had a default picks it up at its next change.
+			create("shm-plain-workspace")
+			VerifyWorkspaceNoSharedMemory("shm-plain-workspace", workspaceNamespace)
 
-			patchTemplate(defaultTemplate, `{"spec":{"defaultSharedMemory":{"enabled":false}}}`)
+			patchTemplate(plainTemplate, `{"spec":{"defaultSharedMemory":{}}}`)
 
-			By("verifying the running workspace keeps its volume")
+			By("verifying the running workspace is left alone")
 			Consistently(func(g Gomega) {
-				sizeLimit, err := deploymentSizeLimit("shm-default-workspace")
+				sizeLimit, err := deploymentSizeLimit("shm-plain-workspace")
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(sizeLimit).To(Equal("512Mi"))
+				g.Expect(sizeLimit).To(BeEmpty())
 			}).WithTimeout(15 * time.Second).WithPolling(3 * time.Second).Should(Succeed())
 
-			create("shm-default-workspace-b")
-			VerifyWorkspaceNoSharedMemory("shm-default-workspace-b", workspaceNamespace)
+			create("shm-plain-workspace-b")
+			VerifyWorkspaceSharedMemory("shm-plain-workspace-b", workspaceNamespace, "512Mi")
 
-			By("changing the existing workspace so it adopts the template's default")
-			_, err := patchWorkspace("shm-default-workspace",
+			By("changing the existing workspace so it picks up the template's default")
+			_, err := patchWorkspace("shm-plain-workspace",
 				`{"spec":{"resources":{"requests":{"memory":"512Mi"},"limits":{"memory":"1Gi"}}}}`)
 			Expect(err).NotTo(HaveOccurred())
-			waitDeploymentSizeLimit("shm-default-workspace", "")
-			VerifyWorkspaceNoSharedMemory("shm-default-workspace", workspaceNamespace)
+			waitDeploymentSizeLimit("shm-plain-workspace", "1Gi")
+			VerifyWorkspaceSharedMemory("shm-plain-workspace", workspaceNamespace, "1Gi")
 		})
 
 		It("rejects a workspace whose copied setting no longer matches a changed locked default", func() {
