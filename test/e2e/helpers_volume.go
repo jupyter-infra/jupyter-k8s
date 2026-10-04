@@ -9,6 +9,7 @@ Distributed under the terms of the MIT license
 package e2e
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -294,32 +295,8 @@ func VerifyShmSize(workspaceName, namespace, size string) {
 	}, 60*time.Second, 2*time.Second).Should(gomega.Succeed())
 }
 
-// sharedMemoryRoundTrip moves 128MiB through /dev/shm between a child process and its parent with
-// Python's standard library, which fails on the 64MiB container default and passes with the volume.
-const sharedMemoryRoundTrip = `
-from multiprocessing import Process, shared_memory
-SIZE = 128 * 1024 * 1024
-CHUNK = 1024 * 1024
-def writer(name):
-    shm = shared_memory.SharedMemory(name=name)
-    for off in range(0, SIZE, CHUNK):
-        shm.buf[off:off + CHUNK] = b"\x5a" * CHUNK
-    shm.close()
-shm = shared_memory.SharedMemory(create=True, size=SIZE)
-try:
-    p = Process(target=writer, args=(shm.name,))
-    p.start()
-    p.join()
-    assert p.exitcode == 0, p.exitcode
-    assert bytes(shm.buf[:1]) == b"\x5a" and bytes(shm.buf[SIZE - 1:SIZE]) == b"\x5a"
-finally:
-    shm.close()
-    shm.unlink()
-print("round trip ok")
-`
-
-// VerifySharedMemoryRoundTrip runs sharedMemoryRoundTrip in the workspace's primary container. No-op when
-// using Finch, as VerifyShmSize.
+// VerifySharedMemoryRoundTrip runs static/shared-memory/shm_round_trip.py in the workspace's primary
+// container, fed to python3 over stdin. No-op when using Finch, as VerifyShmSize.
 func VerifySharedMemoryRoundTrip(workspaceName, namespace string) {
 	ginkgo.GinkgoHelper()
 
@@ -328,6 +305,11 @@ func VerifySharedMemoryRoundTrip(workspaceName, namespace string) {
 		return
 	}
 
+	projectDir, err := utils.GetProjectDir()
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	script, err := os.ReadFile(fmt.Sprintf("%s/test/e2e/static/shared-memory/shm_round_trip.py", projectDir))
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
 	ginkgo.By(fmt.Sprintf("moving 128MiB through /dev/shm between processes in workspace %s", workspaceName))
 	podName, err := kubectlGetByLabels("pod", fmt.Sprintf("%s=%s", WorkspaceLabelName, workspaceName),
 		namespace, "{.items[0].metadata.name}")
@@ -335,8 +317,9 @@ func VerifySharedMemoryRoundTrip(workspaceName, namespace string) {
 	gomega.Expect(podName).NotTo(gomega.BeEmpty())
 
 	gomega.Eventually(func(g gomega.Gomega) {
-		cmd := exec.Command("kubectl", "exec", podName, "-n", namespace,
-			"-c", controller.PrimaryContainerName, "--", "python3", "-c", sharedMemoryRoundTrip)
+		cmd := exec.Command("kubectl", "exec", "-i", podName, "-n", namespace,
+			"-c", controller.PrimaryContainerName, "--", "python3", "-")
+		cmd.Stdin = bytes.NewReader(script)
 		output, err := utils.Run(cmd)
 		g.Expect(err).NotTo(gomega.HaveOccurred(), output)
 		g.Expect(output).To(gomega.ContainSubstring("round trip ok"))
