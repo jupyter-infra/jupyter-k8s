@@ -214,11 +214,12 @@ _Appears in:_
 
 
 
-SharedMemorySpec configures the memory-backed /dev/shm volume the operator mounts into the
-workspace's primary container. Containers otherwise get the 64Mi default, which is too small for
-PyTorch DataLoader workers and NCCL. The volume's size is the container's memory limit, or its
-memory request when the container has no limit; a container with neither gets no volume and keeps
-the container default. A workspace that needs another size declares its own volume at /dev/shm.
+SharedMemorySpec asks for the memory-backed /dev/shm volume the operator mounts into the
+workspace's primary container; setting it, even empty, is the request. A workspace without it
+keeps the 64Mi container default, which is too small for PyTorch DataLoader workers and NCCL.
+The volume's size is the container's memory limit, or its memory request when the container has
+no limit; a container with neither gets no volume and keeps the container default. A workspace
+that needs another size declares its own volume at /dev/shm.
 
 _Appears in:_
 - [WorkspaceSpec](#workspacespec)
@@ -226,7 +227,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled mounts the volume. Unset means true. |  | Optional: \{\} <br /> |
+| `enabled` _boolean_ | Enabled mounts the volume. Unset means true; false keeps the container default, which lets a<br />workspace turn off a template's default. |  | Optional: \{\} <br /> |
 
 
 
@@ -301,7 +302,7 @@ _Appears in:_
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#resourcerequirements-v1-core)_ | Resources specifies the resource requirements |  |  |
 | `storage` _[StorageSpec](#storagespec)_ | Storage specifies the storage configuration |  |  |
 | `volumes` _[VolumeSpec](#volumespec) array_ | Volumes specifies additional volumes to mount from existing PersistentVolumeClaims<br />or emptyDir sources. |  |  |
-| `sharedMemory` _[SharedMemorySpec](#sharedmemoryspec)_ | SharedMemory configures the memory-backed /dev/shm volume mounted into the workspace's primary<br />container. Defaulted from the template's defaultSharedMemory when unset, and held to it when the<br />template's sharedMemoryOverrides lock it. A volume the workspace declares at /dev/shm takes precedence. |  | Optional: \{\} <br /> |
+| `sharedMemory` _[SharedMemorySpec](#sharedmemoryspec)_ | SharedMemory asks for the memory-backed /dev/shm volume in the workspace's primary container.<br />Absent means the container default. Copied from the template's defaultSharedMemory when the<br />workspace sets none, and held to it when the template's sharedMemoryOverrides lock it. A volume<br />the workspace declares at /dev/shm takes precedence. |  | Optional: \{\} <br /> |
 | `containerConfig` _[ContainerConfig](#containerconfig)_ | ContainerConfig specifies container command and args configuration |  |  |
 | `env` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#envvar-v1-core) array_ | Env specifies environment variables for the workspace container<br />When a template is used, template's BaseEnv vars are merged (workspace vars take precedence by name) |  | Optional: \{\} <br /> |
 | `nodeSelector` _object (keys:string, values:string)_ | NodeSelector specifies node selection constraints for the workspace pod |  |  |

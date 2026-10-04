@@ -27,11 +27,13 @@ func MountsSharedMemoryPath(mountPath string) bool {
 	return path.Clean(mountPath) == SharedMemoryMountPath
 }
 
-// sharedMemoryEnabled reports whether the pod gets the operator's /dev/shm volume: on unless the
-// workspace disables it or one of its own volumes already mounts /dev/shm. A volume carrying a
-// reserved name does not count, since the builder drops it.
+// sharedMemoryEnabled reports whether the pod gets the operator's /dev/shm volume: only when the
+// workspace asks for it with sharedMemory set, by itself or copied from its template's
+// defaultSharedMemory, not disabled, and none of its own volumes already mounts /dev/shm. A volume
+// carrying a reserved name does not count, since the builder drops it.
 func sharedMemoryEnabled(workspace *workspacev1alpha1.Workspace) bool {
-	if sm := workspace.Spec.SharedMemory; sm != nil && sm.Enabled != nil && !*sm.Enabled {
+	sm := workspace.Spec.SharedMemory
+	if sm == nil || (sm.Enabled != nil && !*sm.Enabled) {
 		return false
 	}
 	for _, vol := range workspace.Spec.Volumes {

@@ -1,0 +1,20 @@
+# Workspace with an access strategy that adds a sidecar; the primary container asks for the volume.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-sidecar-workspace
+  namespace: default
+spec:
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  accessStrategy:
+    name: access-strategy-with-exposed-ports
+    namespace: jupyter-k8s-shared
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  sharedMemory: {}

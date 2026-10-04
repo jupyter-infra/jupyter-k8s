@@ -89,7 +89,7 @@ spec:
 
 ## Shared memory
 
-A template's `sharedMemoryOverrides` controls whether workspaces may change the `/dev/shm` volume setting that `defaultSharedMemory` gives them (`allow`). See [Storage](../workspaces/storage.md#shared-memory).
+A template's `sharedMemoryOverrides` controls whether workspaces may change the `/dev/shm` setting that `defaultSharedMemory` gives them (`allow`). See [Storage](../workspaces/storage.md#shared-memory).
 
 ## Enforcement model
 

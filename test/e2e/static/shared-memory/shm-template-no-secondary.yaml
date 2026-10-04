@@ -1,4 +1,4 @@
-# Template forbidding user volumes; the /dev/shm volume is not one, so workspaces are still admitted.
+# Template forbidding user volumes while asking for the /dev/shm volume, which is not one, so workspaces are still admitted.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
@@ -24,3 +24,4 @@ spec:
         max: 4Gi
   appType: jupyter
   allowSecondaryStorages: false
+  defaultSharedMemory: {}

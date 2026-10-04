@@ -20,10 +20,11 @@ import (
 	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 )
 
-// Workspace shared memory (#484): the primary container of every workspace gets the operator's
-// memory-backed /dev/shm volume sized to its memory limit; templates set the default and may lock it,
-// sidecars stay out of it unless an integration shares its own volume, and the operator restores the
-// volume when it is removed out of band.
+// Workspace shared memory (#484, #486): the primary container of a workspace that asks for it, with
+// sharedMemory set by itself or by its template's default, gets the operator's memory-backed /dev/shm
+// volume sized to its memory limit; a workspace that does not ask keeps the container default, templates
+// may lock their default, sidecars stay out of it unless an integration shares its own volume, and the
+// operator restores the volume when it is removed out of band.
 var _ = Describe("Workspace shared memory", Ordered, func() {
 	const (
 		workspaceNamespace = "default"
@@ -33,7 +34,7 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 		defaultOffTemplate = "shm-template-default-off"
 		noSecondaryTmpl    = "shm-template-no-secondary"
 		sidecarStrategy    = "access-strategy-with-exposed-ports"
-		sidecarWorkspace   = "workspace-with-exposed-ports-access-strategy"
+		sidecarWorkspace   = "shm-sidecar-workspace"
 	)
 
 	templates := []string{defaultTemplate, disabledTemplate, defaultOffTemplate, noSecondaryTmpl}
@@ -109,12 +110,12 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			VerifyWorkspaceSharedMemory("shm-request-only-workspace", workspaceNamespace, "384Mi")
 		})
 
-		It("applies the default without a template and honors the workspace's own off switch", func() {
+		It("mounts the volume for a workspace without a template only when it asks", func() {
 			create("shm-no-template-workspace")
 			VerifyWorkspaceSharedMemory("shm-no-template-workspace", workspaceNamespace, "512Mi")
 
-			create("shm-no-template-disabled-workspace")
-			VerifyWorkspaceNoSharedMemory("shm-no-template-disabled-workspace", workspaceNamespace)
+			create("shm-no-template-unset-workspace")
+			VerifyWorkspaceNoSharedMemory("shm-no-template-unset-workspace", workspaceNamespace)
 		})
 
 		It("keeps the volume across stop and start", func() {
@@ -139,7 +140,7 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 				_, _ = utils.Run(cmd)
 			})
 			created = append(created, sidecarWorkspace)
-			createWorkspaceForTest(sidecarWorkspace, "access-strategy", "")
+			createWorkspaceForTest(sidecarWorkspace, groupDir, "")
 			WaitForWorkspaceToReachCondition(sidecarWorkspace, workspaceNamespace,
 				controller.ConditionTypeAvailable, ConditionTrue)
 
@@ -263,7 +264,7 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 	Context("Changes after creation", func() {
 		// Two specs below edit the shared templates; restore them before the Describe-level cleanup runs.
 		AfterEach(func() {
-			patchTemplate(defaultTemplate, `{"spec":{"defaultSharedMemory":null,"sharedMemoryOverrides":null}}`)
+			patchTemplate(defaultTemplate, `{"spec":{"defaultSharedMemory":{},"sharedMemoryOverrides":null}}`)
 			patchTemplate(disabledTemplate, `{"spec":{"defaultSharedMemory":{"enabled":false}}}`)
 		})
 
@@ -293,7 +294,7 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "512Mi")
 		})
 
-		It("applies a default added to the template to new workspaces, and to existing ones at their next change", func() {
+		It("applies a changed template default to new workspaces at once, and to existing ones at their next change", func() {
 			create("shm-default-workspace")
 			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "512Mi")
 

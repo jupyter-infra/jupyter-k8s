@@ -22,9 +22,10 @@ import (
 // testUserShmVolume is the name a workspace gives its own /dev/shm volume in these tests.
 const testUserShmVolume = "shm"
 
-// The /dev/shm volume contract (#484): the primary container of every workspace gets a memory-backed
-// emptyDir named workspace-shm at /dev/shm sized to its memory limit, unless the workspace disables it
-// or something mounts another volume there.
+// The /dev/shm volume contract (#484, #486): the primary container of a workspace that asks for it,
+// with sharedMemory set by itself or by its template, gets a memory-backed emptyDir named workspace-shm
+// at /dev/shm sized to its memory limit, unless the workspace disables it or something mounts another
+// volume there. A workspace that does not ask keeps the container default.
 var _ = Describe("DeploymentBuilder shared memory", func() {
 	var (
 		ctx     context.Context
@@ -52,8 +53,9 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 		return &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{Name: "shm-workspace", Namespace: testNamespace},
 			Spec: workspacev1alpha1.WorkspaceSpec{
-				Storage:   &workspacev1alpha1.StorageSpec{Size: resource.MustParse("1Gi")},
-				Resources: resources,
+				Storage:      &workspacev1alpha1.StorageSpec{Size: resource.MustParse("1Gi")},
+				Resources:    resources,
+				SharedMemory: &workspacev1alpha1.SharedMemorySpec{},
 			},
 		}
 	}
@@ -132,13 +134,19 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 		expectShm(build(newWorkspace(nil)), DefaultMemoryRequest)
 	})
 
+	It("mounts no volume when the workspace does not ask for one", func() {
+		workspace := newWorkspace(memoryLimited())
+		workspace.Spec.SharedMemory = nil
+		expectNoShm(build(workspace))
+	})
+
 	It("omits the volume when the workspace disables it", func() {
 		workspace := newWorkspace(memoryLimited())
 		workspace.Spec.SharedMemory = &workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)}
 		expectNoShm(build(workspace))
 	})
 
-	It("treats an empty sharedMemory as the default", func() {
+	It("treats an empty sharedMemory as a request for the volume", func() {
 		workspace := newWorkspace(memoryLimited())
 		workspace.Spec.SharedMemory = &workspacev1alpha1.SharedMemorySpec{}
 		expectShm(build(workspace), "2Gi")

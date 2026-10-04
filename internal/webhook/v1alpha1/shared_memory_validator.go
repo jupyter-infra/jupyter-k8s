@@ -18,9 +18,10 @@ func sharedMemoryLocked(template *workspacev1alpha1.WorkspaceTemplate) bool {
 	return policy != nil && policy.Allow != nil && !*policy.Allow
 }
 
-// sharedMemoryEnabledValue reads a sharedMemory setting's effective switch, where an unset enabled means on.
+// sharedMemoryEnabledValue reads a sharedMemory setting's effective switch: an absent setting means
+// the container default, a present one with enabled unset means on.
 func sharedMemoryEnabledValue(spec *workspacev1alpha1.SharedMemorySpec) bool {
-	return spec == nil || spec.Enabled == nil || *spec.Enabled
+	return spec != nil && (spec.Enabled == nil || *spec.Enabled)
 }
 
 // validateSharedMemory holds a workspace's sharedMemory to the template's defaultSharedMemory when the

@@ -11,3 +11,4 @@ spec:
     requests:
       cpu: 200m
       memory: 384Mi
+  sharedMemory: {}

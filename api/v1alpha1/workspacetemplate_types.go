@@ -83,9 +83,9 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultVolumes []VolumeSpec `json:"defaultVolumes,omitempty"`
 
-	// DefaultSharedMemory is the /dev/shm volume setting for workspaces using this template.
-	// Copied in whole onto a workspace that sets no sharedMemory; applied only if the workspace does not
-	// specify its own.
+	// DefaultSharedMemory is the /dev/shm setting for workspaces using this template; set it, {} is
+	// enough, to give every workspace of the template the enlarged /dev/shm. Copied in whole onto a
+	// workspace that sets no sharedMemory.
 	// +optional
 	DefaultSharedMemory *SharedMemorySpec `json:"defaultSharedMemory,omitempty"`
 

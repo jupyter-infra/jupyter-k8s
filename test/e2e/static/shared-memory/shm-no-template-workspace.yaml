@@ -1,4 +1,4 @@
-# Without a template the operator default still applies, sized to the workspace's own 512Mi limit.
+# Without a template the workspace asks for the volume itself, sized to its own 512Mi limit.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
@@ -14,3 +14,4 @@ spec:
     limits:
       cpu: 500m
       memory: 512Mi
+  sharedMemory: {}

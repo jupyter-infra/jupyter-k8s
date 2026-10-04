@@ -39,3 +39,4 @@ spec:
   primaryStorage:
     defaultSize: 1Gi
   appType: jupyter
+  defaultSharedMemory: {}
