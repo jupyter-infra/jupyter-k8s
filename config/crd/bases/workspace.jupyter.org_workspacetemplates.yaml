@@ -3838,6 +3838,11 @@ spec:
                       || (!has(self.persistentVolumeClaimName) && has(self.emptyDir))
                 maxItems: 10
                 type: array
+                x-kubernetes-validations:
+                - message: volume name 'workspace-storage' is reserved
+                  rule: '!self.exists(v, v.name == ''workspace-storage'')'
+                - message: volume name 'workspace-shm' is reserved
+                  rule: '!self.exists(v, v.name == ''workspace-shm'')'
               description:
                 description: Description provides additional information about this
                   template

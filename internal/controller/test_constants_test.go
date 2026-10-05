@@ -80,4 +80,7 @@ const (
 	testReadyMessage        = "ready"
 	// testIntegrationTemplateVersion is the frozen integration template version test records carry.
 	testIntegrationTemplateVersion = "uid.1"
+	// testScratchMountPath and testScratchPVC describe a user volume that is not at /dev/shm.
+	testScratchMountPath = "/scratch"
+	testScratchPVC       = "scratch-pvc"
 )

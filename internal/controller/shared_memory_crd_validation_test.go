@@ -18,11 +18,31 @@ var _ = Describe("Shared memory CRD validation", func() {
 	It("should reject a volume named workspace-shm", func() {
 		workspace := workspaceWithVolume("reserved-shm-name", workspacev1alpha1.VolumeSpec{
 			Name:                      volumeNameWorkspaceSharedMemory,
-			MountPath:                 "/scratch",
-			PersistentVolumeClaimName: "scratch-pvc",
+			MountPath:                 testScratchMountPath,
+			PersistentVolumeClaimName: testScratchPVC,
 		})
 
 		err := k8sClient.Create(ctx, workspace)
+
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("volume name 'workspace-shm' is reserved"))
+	})
+
+	It("should reject a template default volume named workspace-shm", func() {
+		template := &workspacev1alpha1.WorkspaceTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "shm-crd-reserved-template", Namespace: testNamespace},
+			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
+				DisplayName:  "Reserved default volume",
+				DefaultImage: "jupyter:latest",
+				DefaultVolumes: []workspacev1alpha1.VolumeSpec{{
+					Name:                      volumeNameWorkspaceSharedMemory,
+					MountPath:                 testScratchMountPath,
+					PersistentVolumeClaimName: testScratchPVC,
+				}},
+			},
+		}
+
+		err := k8sClient.Create(ctx, template)
 
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("volume name 'workspace-shm' is reserved"))

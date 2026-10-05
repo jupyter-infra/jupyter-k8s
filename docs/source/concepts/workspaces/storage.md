@@ -62,7 +62,7 @@ Templates can disallow secondary volumes with `allowSecondaryStorages: false`, o
 
 `/dev/shm` is shared memory, the slice of RAM that processes on one machine use to hand large data to each other without copying it. PyTorch's DataLoader workers and NCCL depend on it, and a container gets only 64MiB unless something mounts a larger one.
 
-**Jupyter K8s** mounts a memory-backed `emptyDir` volume named `workspace-shm` at `/dev/shm` in the primary container of every workspace that asks for it. Its `sizeLimit` is the container's memory limit, or the memory request when the container sets no limit; a container that declares neither gets no volume and keeps the 64MiB default. The volume adds no memory to the workspace: whatever a process writes into it counts against the container's memory. A workspace that declares its own volume at `/dev/shm` keeps it, and the volume name `workspace-shm` is reserved.
+**Jupyter K8s** mounts a memory-backed `emptyDir` volume named `workspace-shm` at `/dev/shm` in the primary container of every workspace that asks for it. Its `sizeLimit` is the container's memory limit, or the memory request when the container sets no limit; a container that declares neither gets no volume and keeps the 64MiB default. The volume adds no memory to the workspace: whatever a process writes into it counts against the container's memory. A workspace that declares its own volume at `/dev/shm` keeps it, and the volume name `workspace-shm` is reserved, on workspaces and on template default volumes alike.
 
 A workspace asks for the volume by setting `sharedMemory`; an empty value is enough, and `enabled: false` turns off a template's default:
 

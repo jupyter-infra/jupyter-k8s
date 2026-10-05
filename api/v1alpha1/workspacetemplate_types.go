@@ -80,6 +80,8 @@ type WorkspaceTemplateSpec struct {
 	// Volumes are applied during defaulting only if the workspace does not specify any volumes
 	// Each volume references either a pre-existing PVC in the workspace namespace or an emptyDir source
 	// +kubebuilder:validation:MaxItems=10
+	// +kubebuilder:validation:XValidation:rule="!self.exists(v, v.name == 'workspace-storage')",message="volume name 'workspace-storage' is reserved"
+	// +kubebuilder:validation:XValidation:rule="!self.exists(v, v.name == 'workspace-shm')",message="volume name 'workspace-shm' is reserved"
 	// +optional
 	DefaultVolumes []VolumeSpec `json:"defaultVolumes,omitempty"`
 
