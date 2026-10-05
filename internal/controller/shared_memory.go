@@ -89,10 +89,10 @@ func sharedMemoryVolume(resources corev1.ResourceRequirements) corev1.Volume {
 // integration template has mounted another volume at /dev/shm in the primary container. Two mounts at
 // one path make the Deployment invalid, and the overlay's choice wins the way a workspace volume does.
 func dropShadowedSharedMemory(podSpec *corev1.PodSpec) {
-	if len(podSpec.Containers) == 0 {
+	primary := findPrimaryContainer(podSpec)
+	if primary == nil {
 		return
 	}
-	primary := &podSpec.Containers[0]
 	shadowed := false
 	for _, mount := range primary.VolumeMounts {
 		if mount.Name != volumeNameWorkspaceSharedMemory && MountsSharedMemoryPath(mount.MountPath) {

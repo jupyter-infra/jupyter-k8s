@@ -263,9 +263,7 @@ func mountByPath(container corev1.Container, mountPath string) *corev1.VolumeMou
 // VerifyShmSize runs `df -k /dev/shm` in the workspace's primary container and checks that the reported
 // size equals size, a Kubernetes quantity. The kubelet sizes the tmpfs to the smaller of the volume's
 // sizeLimit and the pod's memory limit, and tmpfs reports that size exactly; 64Mi is the container
-// default when no volume is mounted there. The pod is resolved once; only the exec is retried, for the
-// transient OCI errors described on VerifyPodCanAccessExternalVolumes. No-op when using Finch (known
-// cgroup exec issues in Kind).
+// default when no volume is mounted there. No-op when using Finch (known cgroup exec issues in Kind).
 func VerifyShmSize(workspaceName, namespace, size string) {
 	ginkgo.GinkgoHelper()
 

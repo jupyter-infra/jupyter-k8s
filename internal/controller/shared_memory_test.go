@@ -90,12 +90,8 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 		Expect(volume).NotTo(BeNil())
 		Expect(volume.EmptyDir).NotTo(BeNil())
 		Expect(volume.EmptyDir.Medium).To(Equal(corev1.StorageMediumMemory))
-		if size == "" {
-			Expect(volume.EmptyDir.SizeLimit).To(BeNil())
-		} else {
-			Expect(volume.EmptyDir.SizeLimit).NotTo(BeNil())
-			Expect(volume.EmptyDir.SizeLimit.Cmp(resource.MustParse(size))).To(BeZero())
-		}
+		Expect(volume.EmptyDir.SizeLimit).NotTo(BeNil())
+		Expect(volume.EmptyDir.SizeLimit.Cmp(resource.MustParse(size))).To(BeZero())
 		mount := findMount(deployment.Spec.Template.Spec.Containers[0], SharedMemoryMountPath)
 		Expect(mount).NotTo(BeNil())
 		Expect(mount.Name).To(Equal(volumeNameWorkspaceSharedMemory))

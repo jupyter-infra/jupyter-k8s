@@ -284,7 +284,7 @@ func validateTemplateConsistency(template *workspacev1alpha1.WorkspaceTemplate) 
 		return err
 	}
 
-	// a locked shared memory policy needs a defaultSharedMemory to hold workspaces to.
+	// A locked shared memory policy needs a defaultSharedMemory to hold workspaces to.
 	return validateTemplateSharedMemoryConsistency(template)
 }
 

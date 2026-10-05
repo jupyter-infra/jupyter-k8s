@@ -1,3 +1,4 @@
+# Workspace that asks for nothing itself; the integration's volume is its only /dev/shm.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
