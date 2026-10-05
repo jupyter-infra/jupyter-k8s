@@ -1,4 +1,4 @@
-# Workspace that asks for nothing itself; the integration's volume is its only /dev/shm.
+# Workspace that asks for the operator's volume; the integration's own /dev/shm must win over it.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:
@@ -17,3 +17,4 @@ spec:
     limits:
       cpu: 500m
       memory: 512Mi
+  sharedMemory: {}

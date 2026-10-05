@@ -7,7 +7,7 @@ spec:
   desiredStatus: Running
   image: jk8s-application-jupyter-uv:latest
   # A 2Gi limit keeps the kubelet from shrinking the 1Gi volume below its sizeLimit, so df shows
-  # the user's size and not the limit-sized volume the operator would have mounted.
+  # the user's size.
   resources:
     requests:
       cpu: 100m
@@ -17,6 +17,8 @@ spec:
       memory: 2Gi
   storage:
     size: 1Gi
+  # Asks for the operator's volume, which must yield to the user's volume at /dev/shm below.
+  sharedMemory: {}
   volumes:
     - name: shm
       mountPath: /dev/shm
