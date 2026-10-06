@@ -13,12 +13,6 @@ import (
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 )
 
-// sharedMemoryLocked reports whether the template forbids workspaces to deviate from its default.
-func sharedMemoryLocked(template *workspacev1alpha1.WorkspaceTemplate) bool {
-	policy := template.Spec.SharedMemoryOverrides
-	return policy != nil && policy.Allow != nil && !*policy.Allow
-}
-
 // normalizedSharedMemory returns a copy with enabled written out, so a lock comparison treats {} and
 // {enabled: true} as equal while every other field, present or added later, must match exactly.
 func normalizedSharedMemory(spec *workspacev1alpha1.SharedMemorySpec) *workspacev1alpha1.SharedMemorySpec {
@@ -36,7 +30,7 @@ func normalizedSharedMemory(spec *workspacev1alpha1.SharedMemorySpec) *workspace
 // gives it the default.
 func validateSharedMemory(workspace *workspacev1alpha1.Workspace, template *workspacev1alpha1.WorkspaceTemplate) []TemplateViolation {
 	ws := workspace.Spec.SharedMemory
-	if ws == nil || !sharedMemoryLocked(template) ||
+	if ws == nil || !template.Spec.SharedMemoryOverrides.Locked() ||
 		reflect.DeepEqual(normalizedSharedMemory(ws), normalizedSharedMemory(template.Spec.DefaultSharedMemory)) {
 		return nil
 	}
@@ -52,7 +46,7 @@ func validateSharedMemory(workspace *workspacev1alpha1.Workspace, template *work
 // validateSharedMemoryVolumes rejects a volume the workspace mounts at /dev/shm itself when the template
 // locks shared memory, since such a volume replaces the operator's and would bypass the lock.
 func validateSharedMemoryVolumes(workspace *workspacev1alpha1.Workspace, template *workspacev1alpha1.WorkspaceTemplate) []TemplateViolation {
-	if !sharedMemoryLocked(template) {
+	if !template.Spec.SharedMemoryOverrides.Locked() {
 		return nil
 	}
 	var violations []TemplateViolation

@@ -293,8 +293,7 @@ func validateTemplateConsistency(template *workspacev1alpha1.WorkspaceTemplate) 
 // hold workspaces to, or a lock with a defaultVolumes entry at /dev/shm, since that volume is copied onto
 // every workspace and the lock would then reject each of them.
 func validateTemplateSharedMemoryConsistency(template *workspacev1alpha1.WorkspaceTemplate) error {
-	policy := template.Spec.SharedMemoryOverrides
-	if policy == nil || policy.Allow == nil || *policy.Allow {
+	if !template.Spec.SharedMemoryOverrides.Locked() {
 		return nil
 	}
 	if template.Spec.DefaultSharedMemory == nil {

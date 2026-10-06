@@ -302,6 +302,12 @@ type SharedMemoryOverridePolicy struct {
 	Allow *bool `json:"allow,omitempty"`
 }
 
+// Locked reports whether the policy holds workspaces to the template's DefaultSharedMemory: only when
+// it is present and allow is false.
+func (p *SharedMemoryOverridePolicy) Locked() bool {
+	return p != nil && p.Allow != nil && !*p.Allow
+}
+
 // IdleShutdownOverridePolicy defines idle shutdown override constraints
 type IdleShutdownOverridePolicy struct {
 	// Allow controls whether workspaces can override idle shutdown
