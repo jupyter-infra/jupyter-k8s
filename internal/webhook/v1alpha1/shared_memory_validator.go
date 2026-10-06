@@ -7,6 +7,7 @@ package v1alpha1
 
 import (
 	"fmt"
+	"reflect"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
@@ -24,14 +25,27 @@ func sharedMemoryEnabledValue(spec *workspacev1alpha1.SharedMemorySpec) bool {
 	return spec != nil && (spec.Enabled == nil || *spec.Enabled)
 }
 
+// normalizedSharedMemory returns a copy with enabled written out, so a lock comparison treats {} and
+// {enabled: true} as equal while every other field, present or added later, must match exactly.
+func normalizedSharedMemory(spec *workspacev1alpha1.SharedMemorySpec) *workspacev1alpha1.SharedMemorySpec {
+	if spec == nil {
+		return nil
+	}
+	normalized := spec.DeepCopy()
+	if normalized.Enabled == nil {
+		enabled := true
+		normalized.Enabled = &enabled
+	}
+	return normalized
+}
+
 // validateSharedMemory holds a workspace's sharedMemory to the template's defaultSharedMemory when the
-// template's sharedMemoryOverrides lock it, comparing what each setting means rather than how it is
-// written, so {} and {enabled: true} match. A workspace that sets nothing passes, since the defaulter
+// template's sharedMemoryOverrides lock it. A workspace that sets nothing passes, since the defaulter
 // gives it the default.
 func validateSharedMemory(workspace *workspacev1alpha1.Workspace, template *workspacev1alpha1.WorkspaceTemplate) []TemplateViolation {
 	ws := workspace.Spec.SharedMemory
 	if ws == nil || !sharedMemoryLocked(template) ||
-		sharedMemoryEnabledValue(ws) == sharedMemoryEnabledValue(template.Spec.DefaultSharedMemory) {
+		reflect.DeepEqual(normalizedSharedMemory(ws), normalizedSharedMemory(template.Spec.DefaultSharedMemory)) {
 		return nil
 	}
 	return []TemplateViolation{{

@@ -85,20 +85,6 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 		}).WithTimeout(60 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
 	}
 
-	patchWorkspace := func(name, patch string) (string, error) {
-		cmd := exec.Command("kubectl", "patch", "workspace", name,
-			"-n", workspaceNamespace, "--type=merge", "-p", patch)
-		return utils.Run(cmd)
-	}
-
-	patchTemplate := func(name, patch string) {
-		GinkgoHelper()
-		cmd := exec.Command("kubectl", "patch", "workspacetemplate", name,
-			"-n", SharedNamespace, "--type=merge", "-p", patch)
-		_, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
-	}
-
 	Context("Defaults", func() {
 		It("gives a workspace the volume sized to its memory limit", func() {
 			create("shm-default-workspace")
@@ -265,15 +251,15 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 	Context("Changes after creation", func() {
 		// Two specs below edit the shared templates; restore them before the Describe-level cleanup runs.
 		AfterEach(func() {
-			patchTemplate(plainTemplate, `{"spec":{"defaultSharedMemory":null,"sharedMemoryOverrides":null}}`)
-			patchTemplate(disabledTemplate, `{"spec":{"defaultSharedMemory":{"enabled":false}}}`)
+			patchTemplateForTest(plainTemplate, `{"spec":{"defaultSharedMemory":null,"sharedMemoryOverrides":null}}`)
+			patchTemplateForTest(disabledTemplate, `{"spec":{"defaultSharedMemory":{"enabled":false}}}`)
 		})
 
 		It("resizes the volume when the workspace memory limit changes", func() {
 			create("shm-default-workspace")
 			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "512Mi")
 
-			_, err := patchWorkspace("shm-default-workspace",
+			_, err := patchWorkspaceForTest("shm-default-workspace", workspaceNamespace,
 				`{"spec":{"resources":{"requests":{"memory":"512Mi"},"limits":{"memory":"1Gi"}}}}`)
 			Expect(err).NotTo(HaveOccurred())
 			waitDeploymentSizeLimit("shm-default-workspace", "1Gi")
@@ -284,12 +270,14 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			create("shm-default-workspace")
 			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "512Mi")
 
-			_, err := patchWorkspace("shm-default-workspace", `{"spec":{"sharedMemory":{"enabled":false}}}`)
+			_, err := patchWorkspaceForTest("shm-default-workspace", workspaceNamespace,
+				`{"spec":{"sharedMemory":{"enabled":false}}}`)
 			Expect(err).NotTo(HaveOccurred())
 			waitDeploymentSizeLimit("shm-default-workspace", "")
 			VerifyWorkspaceNoSharedMemory("shm-default-workspace", workspaceNamespace)
 
-			_, err = patchWorkspace("shm-default-workspace", `{"spec":{"sharedMemory":{"enabled":true}}}`)
+			_, err = patchWorkspaceForTest("shm-default-workspace", workspaceNamespace,
+				`{"spec":{"sharedMemory":{"enabled":true}}}`)
 			Expect(err).NotTo(HaveOccurred())
 			waitDeploymentSizeLimit("shm-default-workspace", "512Mi")
 			VerifyWorkspaceSharedMemory("shm-default-workspace", workspaceNamespace, "512Mi")
@@ -301,7 +289,7 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			create("shm-plain-workspace")
 			VerifyWorkspaceNoSharedMemory("shm-plain-workspace", workspaceNamespace)
 
-			patchTemplate(plainTemplate, `{"spec":{"defaultSharedMemory":{}}}`)
+			patchTemplateForTest(plainTemplate, `{"spec":{"defaultSharedMemory":{}}}`)
 
 			By("verifying the running workspace is left alone")
 			Consistently(func(g Gomega) {
@@ -314,7 +302,7 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			VerifyWorkspaceSharedMemory("shm-plain-workspace-b", workspaceNamespace, "512Mi")
 
 			By("changing the existing workspace so it picks up the template's default")
-			_, err := patchWorkspace("shm-plain-workspace",
+			_, err := patchWorkspaceForTest("shm-plain-workspace", workspaceNamespace,
 				`{"spec":{"resources":{"requests":{"memory":"512Mi"},"limits":{"memory":"1Gi"}}}}`)
 			Expect(err).NotTo(HaveOccurred())
 			waitDeploymentSizeLimit("shm-plain-workspace", "1Gi")
@@ -325,10 +313,10 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 			create("shm-disabled-workspace")
 			VerifyWorkspaceNoSharedMemory("shm-disabled-workspace", workspaceNamespace)
 
-			patchTemplate(disabledTemplate, `{"spec":{"defaultSharedMemory":{"enabled":true}}}`)
+			patchTemplateForTest(disabledTemplate, `{"spec":{"defaultSharedMemory":{"enabled":true}}}`)
 
 			By("verifying a change that keeps the old setting is rejected")
-			output, err := patchWorkspace("shm-disabled-workspace",
+			output, err := patchWorkspaceForTest("shm-disabled-workspace", workspaceNamespace,
 				`{"spec":{"resources":{"requests":{"memory":"512Mi"},"limits":{"memory":"1Gi"}}}}`)
 			Expect(err).To(HaveOccurred(), output)
 			Expect(output).To(ContainSubstring("does not allow overriding shared memory"))
@@ -339,7 +327,7 @@ var _ = Describe("Workspace shared memory", Ordered, func() {
 				controller.ConditionTypeStopped, ConditionTrue)
 
 			By("verifying the workspace is accepted once it matches the new default")
-			_, err = patchWorkspace("shm-disabled-workspace",
+			_, err = patchWorkspaceForTest("shm-disabled-workspace", workspaceNamespace,
 				fmt.Sprintf(`{"spec":{"desiredStatus":%q,"sharedMemory":{"enabled":true}}}`, controller.DesiredStateRunning))
 			Expect(err).NotTo(HaveOccurred())
 			WaitForWorkspaceToReachCondition("shm-disabled-workspace", workspaceNamespace,

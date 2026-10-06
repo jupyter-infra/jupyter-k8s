@@ -277,6 +277,25 @@ func deleteWorkspaceForTest(workspaceName, namespace string) {
 	_, _ = utils.Run(cmd)
 }
 
+// patchWorkspaceForTest applies a JSON merge patch to a workspace and returns kubectl's output, so a
+// caller can assert on either an accepted or a rejected change.
+//
+//nolint:unparam // helper kept general; current callers happen to share the namespace
+func patchWorkspaceForTest(workspaceName, namespace, patch string) (string, error) {
+	cmd := exec.Command("kubectl", "patch", "workspace", workspaceName,
+		"-n", namespace, "--type=merge", "-p", patch)
+	return utils.Run(cmd)
+}
+
+// patchTemplateForTest applies a JSON merge patch to a template in the shared namespace.
+func patchTemplateForTest(templateName, patch string) {
+	ginkgo.GinkgoHelper()
+	cmd := exec.Command("kubectl", "patch", "workspacetemplate", templateName,
+		"-n", SharedNamespace, "--type=merge", "-p", patch)
+	_, err := utils.Run(cmd)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+}
+
 // deleteTemplateForTest removes one template from the shared namespace by name.
 func deleteTemplateForTest(templateName string) {
 	ginkgo.GinkgoHelper()
