@@ -227,6 +227,10 @@ lint-fix-e2e: golangci-lint ## Run golangci-lint linter on e2e tests and perform
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
 
+.PHONY: secret-scan
+secret-scan: ## Scan the full git history for committed secrets with gitleaks (same check as CI).
+	gitleaks git . --log-opts="--all" --redact --verbose
+
 ##@ Code Review
 
 .PHONY: review

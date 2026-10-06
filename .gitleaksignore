@@ -1,0 +1,13 @@
+# Reviewed gitleaks findings (fingerprints: commit:file:rule:line).
+
+# Placeholder JWT signing seed for local Kind clusters: base64 of "abcdefghijklmnopqrstuvwxyz...".
+# Not a credential (see the comments in the secret.yaml files).
+8c75acf4eb89419bf05783a53a494babe2e45474:config/jwt-rotator/secret.yaml:generic-api-key:21
+161bb97437b73cbd1c1b094d9538d07f09c1c1df:config-auth/authmiddleware/secret.yaml:generic-api-key:18
+e72cab581fff79e530a055254e9330e8715f8438:dist/install.yaml:generic-api-key:10250
+e72cab581fff79e530a055254e9330e8715f8438:dist/install.yaml:kubernetes-secret-yaml:10249
+
+# HISTORICAL REAL VALUE: oauth2-proxy <-> Dex client secret committed in #12 (76f2657) and removed in
+# #288 (9f34f60, "Remove hardcoded secret value"). guided-charts/ no longer exists on main, but the
+# value remains in public history: treat it as exposed. Any deployment that used that default must rotate it.
+76f26579a1edbd3fddc311a5992bedb8e77c44b9:guided-charts/aws-traefik-dex/values.yaml:generic-api-key:79
