@@ -29,9 +29,9 @@ func normalizedSharedMemory(spec *workspacev1alpha1.SharedMemorySpec) *workspace
 // template's sharedMemoryOverrides lock it. A workspace that sets nothing passes, since the defaulter
 // gives it the default.
 func validateSharedMemory(workspace *workspacev1alpha1.Workspace, template *workspacev1alpha1.WorkspaceTemplate) []TemplateViolation {
-	ws := workspace.Spec.SharedMemory
-	if ws == nil || !template.Spec.SharedMemoryOverrides.Locked() ||
-		reflect.DeepEqual(normalizedSharedMemory(ws), normalizedSharedMemory(template.Spec.DefaultSharedMemory)) {
+	workspaceSharedMemory := workspace.Spec.SharedMemory
+	if workspaceSharedMemory == nil || !template.Spec.SharedMemoryOverrides.Locked() ||
+		reflect.DeepEqual(normalizedSharedMemory(workspaceSharedMemory), normalizedSharedMemory(template.Spec.DefaultSharedMemory)) {
 		return nil
 	}
 	return []TemplateViolation{{
@@ -39,7 +39,7 @@ func validateSharedMemory(workspace *workspacev1alpha1.Workspace, template *work
 		Field:   "spec.sharedMemory",
 		Message: fmt.Sprintf("Template '%s' does not allow overriding shared memory, but the workspace sets its own", template.Name),
 		Allowed: fmt.Sprintf("enabled: %t, the template's defaultSharedMemory", template.Spec.DefaultSharedMemory.IsEnabled()),
-		Actual:  fmt.Sprintf("enabled: %t", ws.IsEnabled()),
+		Actual:  fmt.Sprintf("enabled: %t", workspaceSharedMemory.IsEnabled()),
 	}}
 }
 
