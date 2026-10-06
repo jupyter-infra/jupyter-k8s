@@ -46,6 +46,12 @@ type SharedMemorySpec struct {
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
+// IsEnabled reports whether the setting asks for the volume: a nil setting does not, a present one does
+// unless enabled is false.
+func (s *SharedMemorySpec) IsEnabled() bool {
+	return s != nil && (s.Enabled == nil || *s.Enabled)
+}
+
 // ContainerConfig defines container command and args configuration
 type ContainerConfig struct {
 	// Command specifies the container command

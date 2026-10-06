@@ -32,8 +32,7 @@ func MountsSharedMemoryPath(mountPath string) bool {
 // defaultSharedMemory, not disabled, and none of its own volumes already mounts /dev/shm. A volume
 // carrying a reserved name does not count, since the builder drops it.
 func sharedMemoryEnabled(workspace *workspacev1alpha1.Workspace) bool {
-	sm := workspace.Spec.SharedMemory
-	if sm == nil || (sm.Enabled != nil && !*sm.Enabled) {
+	if !workspace.Spec.SharedMemory.IsEnabled() {
 		return false
 	}
 	for _, vol := range workspace.Spec.Volumes {
