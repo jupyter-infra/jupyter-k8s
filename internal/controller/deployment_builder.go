@@ -38,7 +38,7 @@ func NewDeploymentBuilder(scheme *runtime.Scheme, options WorkspaceControllerOpt
 
 // BuildDeployment creates a Deployment resource for the given Workspace
 func (db *DeploymentBuilder) BuildDeployment(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*appsv1.Deployment, error) {
-	resources := db.parseResourceRequirements(workspace)
+	resources := parseResourceRequirements(workspace)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: db.buildObjectMeta(workspace),
@@ -311,7 +311,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 }
 
 // parseResourceRequirements extracts and validates resource requirements
-func (db *DeploymentBuilder) parseResourceRequirements(workspace *workspacev1alpha1.Workspace) corev1.ResourceRequirements {
+func parseResourceRequirements(workspace *workspacev1alpha1.Workspace) corev1.ResourceRequirements {
 	defaultCPU := resource.MustParse(DefaultCPURequest)
 	defaultMemory := resource.MustParse(DefaultMemoryRequest)
 

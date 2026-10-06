@@ -358,6 +358,24 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
+		It("warns on create and update when the workspace asks for shared memory without a memory limit or request", func() {
+			workspace.Spec.SharedMemory = &workspacev1alpha1.SharedMemorySpec{}
+			workspace.Spec.Resources = &corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m")},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(HaveLen(1))
+			Expect(warnings[0]).To(ContainSubstring("spec.sharedMemory"))
+			Expect(warnings[0]).To(ContainSubstring("64Mi"))
+
+			userCtx := createUserContext(ctx, "UPDATE", "test-user")
+			warnings, err = validator.ValidateUpdate(userCtx, workspace.DeepCopy(), workspace)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(HaveLen(1))
+		})
+
 		It("should reject OwnerOnly workspace update by non-owner", func() {
 			userCtx := createUserContext(ctx, "UPDATE", "different-user")
 

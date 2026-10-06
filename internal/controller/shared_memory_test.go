@@ -49,6 +49,12 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 		}
 	}
 
+	cpuOnlyRequests := func() *corev1.ResourceRequirements {
+		return &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m")},
+		}
+	}
+
 	newWorkspace := func(resources *corev1.ResourceRequirements) *workspacev1alpha1.Workspace {
 		return &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{Name: "shm-workspace", Namespace: testNamespace},
@@ -120,10 +126,30 @@ var _ = Describe("DeploymentBuilder shared memory", func() {
 	})
 
 	It("mounts no volume when the workspace declares no memory", func() {
-		workspace := newWorkspace(&corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m")},
+		expectNoShm(build(newWorkspace(cpuOnlyRequests())))
+	})
+
+	It("reports a workspace that asks for the volume with requests without memory and no memory limit", func() {
+		Expect(AsksForSharedMemoryWithoutSize(newWorkspace(cpuOnlyRequests()))).To(BeTrue())
+
+		Expect(AsksForSharedMemoryWithoutSize(newWorkspace(nil))).To(BeFalse())
+		Expect(AsksForSharedMemoryWithoutSize(newWorkspace(memoryLimited()))).To(BeFalse())
+		// Requests left out are filled in with the default memory request, so a CPU limit alone still sizes the volume.
+		cpuLimitOnly := newWorkspace(&corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
 		})
-		expectNoShm(build(workspace))
+		Expect(AsksForSharedMemoryWithoutSize(cpuLimitOnly)).To(BeFalse())
+		expectShm(build(cpuLimitOnly), DefaultMemoryRequest)
+		notAsking := newWorkspace(cpuOnlyRequests())
+		notAsking.Spec.SharedMemory = nil
+		Expect(AsksForSharedMemoryWithoutSize(notAsking)).To(BeFalse())
+		ownVolume := newWorkspace(cpuOnlyRequests())
+		ownVolume.Spec.Volumes = []workspacev1alpha1.VolumeSpec{{
+			Name:      testUserShmVolume,
+			MountPath: SharedMemoryMountPath,
+			EmptyDir:  &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory},
+		}}
+		Expect(AsksForSharedMemoryWithoutSize(ownVolume)).To(BeFalse())
 	})
 
 	It("sizes the volume to the default memory when the workspace sets no resources", func() {

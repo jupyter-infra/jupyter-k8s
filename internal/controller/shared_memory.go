@@ -71,6 +71,13 @@ func sharedMemoryMounted(workspace *workspacev1alpha1.Workspace, resources corev
 	return sharedMemoryEnabled(workspace) && sharedMemorySizeLimit(resources) != nil
 }
 
+// AsksForSharedMemoryWithoutSize reports whether a workspace asks for the /dev/shm volume but declares
+// requests without memory and no memory limit, the one shape the volume cannot be sized from, since a
+// workspace without any requests gets the default memory request. The admission webhook warns about it.
+func AsksForSharedMemoryWithoutSize(workspace *workspacev1alpha1.Workspace) bool {
+	return sharedMemoryEnabled(workspace) && sharedMemorySizeLimit(parseResourceRequirements(workspace)) == nil
+}
+
 // sharedMemoryVolume builds the memory-backed emptyDir volume mounted at /dev/shm.
 func sharedMemoryVolume(resources corev1.ResourceRequirements) corev1.Volume {
 	return corev1.Volume{

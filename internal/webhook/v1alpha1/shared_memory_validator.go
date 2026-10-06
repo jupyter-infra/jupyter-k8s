@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 )
@@ -63,4 +65,15 @@ func validateSharedMemoryVolumes(workspace *workspacev1alpha1.Workspace, templat
 		})
 	}
 	return violations
+}
+
+// sharedMemoryWarnings warns when a workspace asks for the /dev/shm volume but declares requests without
+// memory and no memory limit, so the volume has no size and the container keeps the 64Mi default.
+func sharedMemoryWarnings(workspace *workspacev1alpha1.Workspace) admission.Warnings {
+	if !controller.AsksForSharedMemoryWithoutSize(workspace) {
+		return nil
+	}
+	return admission.Warnings{"spec.sharedMemory: the /dev/shm volume takes its size from the memory limit or request, " +
+		"and the workspace declares requests without memory and no memory limit, so the container keeps the " +
+		"64Mi default; set spec.resources.limits.memory or spec.resources.requests.memory"}
 }
