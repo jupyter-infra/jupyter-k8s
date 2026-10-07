@@ -29,6 +29,7 @@ For example, if a `workspace.spec` specifies a `containerSecurityContext`, the t
 | `defaultReadinessProbe` | `spec.readinessProbe` |
 | `defaultPodSecurityContext` | `spec.podSecurityContext` |
 | `defaultContainerSecurityContext` | `spec.containerSecurityContext` |
+| `defaultSharedMemory` | `spec.sharedMemory` |
 
 ## Merge rules
 

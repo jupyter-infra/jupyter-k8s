@@ -1,0 +1,12 @@
+# Rejected by the template webhook: overrides are locked but there is no default for workspaces to match.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: shm-template-invalid-locked-no-default
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Shared memory locked without default"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  appType: jupyter
+  sharedMemoryOverrides:
+    allow: false

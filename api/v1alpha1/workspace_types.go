@@ -33,6 +33,25 @@ type VolumeSpec struct {
 	EmptyDir *corev1.EmptyDirVolumeSource `json:"emptyDir,omitempty"`
 }
 
+// SharedMemorySpec asks for the memory-backed /dev/shm volume the operator mounts into the
+// workspace's primary container; setting it, even empty, is the request. A workspace without it
+// keeps the 64Mi container default, which is too small for PyTorch DataLoader workers and NCCL.
+// The volume's size is the container's memory limit, or its memory request when the container has
+// no limit; a container with neither gets no volume and keeps the container default. A workspace
+// that needs another size declares its own volume at /dev/shm.
+type SharedMemorySpec struct {
+	// Enabled mounts the volume. Unset means true; false keeps the container default, which lets a
+	// workspace turn off a template's default.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// IsEnabled reports whether the setting asks for the volume: a nil setting does not, a present one does
+// unless enabled is false.
+func (s *SharedMemorySpec) IsEnabled() bool {
+	return s != nil && (s.Enabled == nil || *s.Enabled)
+}
+
 // ContainerConfig defines container command and args configuration
 type ContainerConfig struct {
 	// Command specifies the container command
@@ -175,7 +194,15 @@ type WorkspaceSpec struct {
 	// Volumes specifies additional volumes to mount from existing PersistentVolumeClaims
 	// or emptyDir sources.
 	// +kubebuilder:validation:XValidation:rule="!self.exists(v, v.name == 'workspace-storage')",message="volume name 'workspace-storage' is reserved"
+	// +kubebuilder:validation:XValidation:rule="!self.exists(v, v.name == 'workspace-shm')",message="volume name 'workspace-shm' is reserved"
 	Volumes []VolumeSpec `json:"volumes,omitempty"`
+
+	// SharedMemory asks for the memory-backed /dev/shm volume in the workspace's primary container.
+	// Absent means the container default. Copied from the template's defaultSharedMemory when the
+	// workspace sets none, and held to it when the template's sharedMemoryOverrides lock it. A volume
+	// the workspace declares at /dev/shm takes precedence.
+	// +optional
+	SharedMemory *SharedMemorySpec `json:"sharedMemory,omitempty"`
 
 	// ContainerConfig specifies container command and args configuration
 	ContainerConfig *ContainerConfig `json:"containerConfig,omitempty"`

@@ -1,0 +1,17 @@
+# Without a template the workspace asks for the volume itself, sized to its own 512Mi limit.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-no-template-workspace
+spec:
+  displayName: "shm-no-template-workspace"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  sharedMemory: {}

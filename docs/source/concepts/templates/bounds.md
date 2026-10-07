@@ -87,6 +87,10 @@ spec:
       required: true
 ```
 
+## Shared memory
+
+A template's `sharedMemoryOverrides` controls whether workspaces may change the `/dev/shm` setting that `defaultSharedMemory` gives them (`allow`). With `allow: false` a workspace must keep the template's setting. Volumes that an access strategy or integration template mounts at `/dev/shm` are not subject to template bounds and take precedence over the operator's volume. See [Storage](../workspaces/storage.md#shared-memory).
+
 ## Enforcement model
 
 The **[workspace validating webhook](../../dive-deeper/webhooks/workspace-validation.md)** enforces the bounds **lazily** — only during workspace CREATE and UPDATE operations.

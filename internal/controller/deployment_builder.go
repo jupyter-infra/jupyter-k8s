@@ -38,7 +38,7 @@ func NewDeploymentBuilder(scheme *runtime.Scheme, options WorkspaceControllerOpt
 
 // BuildDeployment creates a Deployment resource for the given Workspace
 func (db *DeploymentBuilder) BuildDeployment(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*appsv1.Deployment, error) {
-	resources := db.parseResourceRequirements(workspace)
+	resources := parseResourceRequirements(workspace)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: db.buildObjectMeta(workspace),
@@ -83,6 +83,8 @@ func (db *DeploymentBuilder) BuildWorkspaceDeployment(
 			return nil, fmt.Errorf("failed to apply access strategy to deployment: %w", err)
 		}
 	}
+
+	dropShadowedSharedMemory(&deployment.Spec.Template.Spec)
 
 	return deployment, nil
 }
@@ -191,8 +193,7 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 
 	// Add additional volumes from spec
 	for _, vol := range workspace.Spec.Volumes {
-		if vol.Name == volumeNameWorkspaceStorage {
-			// Skip if name conflicts with primary storage
+		if isReservedVolumeName(vol.Name) {
 			continue
 		}
 		volumeSource := corev1.VolumeSource{
@@ -207,6 +208,10 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 			Name:         vol.Name,
 			VolumeSource: volumeSource,
 		})
+	}
+
+	if sharedMemoryMounted(workspace, resources) {
+		podSpec.Volumes = append(podSpec.Volumes, sharedMemoryVolume(resources))
 	}
 
 	// Set scheduling fields from workspace spec
@@ -286,8 +291,7 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 
 	// Add additional volume mounts from spec
 	for _, vol := range workspace.Spec.Volumes {
-		if vol.Name == volumeNameWorkspaceStorage {
-			// Skip if name conflicts with primary storage
+		if isReservedVolumeName(vol.Name) {
 			continue
 		}
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
@@ -296,11 +300,18 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 		})
 	}
 
+	if sharedMemoryMounted(workspace, resources) {
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      volumeNameWorkspaceSharedMemory,
+			MountPath: SharedMemoryMountPath,
+		})
+	}
+
 	return container
 }
 
 // parseResourceRequirements extracts and validates resource requirements
-func (db *DeploymentBuilder) parseResourceRequirements(workspace *workspacev1alpha1.Workspace) corev1.ResourceRequirements {
+func parseResourceRequirements(workspace *workspacev1alpha1.Workspace) corev1.ResourceRequirements {
 	defaultCPU := resource.MustParse(DefaultCPURequest)
 	defaultMemory := resource.MustParse(DefaultMemoryRequest)
 

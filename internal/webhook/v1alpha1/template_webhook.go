@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
@@ -199,6 +200,11 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 		return true
 	}
 
+	// Check sharedMemoryOverrides changes
+	if !equality.Semantic.DeepEqual(oldSpec.SharedMemoryOverrides, newSpec.SharedMemoryOverrides) {
+		return true
+	}
+
 	return false
 }
 
@@ -274,7 +280,39 @@ func validateTemplateConsistency(template *workspacev1alpha1.WorkspaceTemplate) 
 	}
 
 	// idleShutdownOverrides bounds must be consistent, and a locked policy needs a default.
-	return validateIdleShutdownPolicyConsistency(template)
+	if err := validateIdleShutdownPolicyConsistency(template); err != nil {
+		return err
+	}
+
+	// A locked shared memory policy needs a defaultSharedMemory to hold workspaces to.
+	return validateTemplateSharedMemoryConsistency(template)
+}
+
+// validateTemplateSharedMemoryConsistency rejects a template whose shared memory lock cannot be
+// satisfied by its own defaults: a lock without a defaultSharedMemory, since there would be nothing to
+// hold workspaces to, or a lock with a defaultVolumes entry at /dev/shm, since that volume is copied onto
+// every workspace and the lock would then reject each of them.
+func validateTemplateSharedMemoryConsistency(template *workspacev1alpha1.WorkspaceTemplate) error {
+	if !template.Spec.SharedMemoryOverrides.Locked() {
+		return nil
+	}
+	if template.Spec.DefaultSharedMemory == nil {
+		return fmt.Errorf(
+			"sharedMemoryOverrides.allow is false but defaultSharedMemory is not set: "+
+				"a locked shared memory policy requires a defaultSharedMemory for workspaces to match (template %q)",
+			template.GetName(),
+		)
+	}
+	for _, vol := range template.Spec.DefaultVolumes {
+		if controller.MountsSharedMemoryPath(vol.MountPath) {
+			return fmt.Errorf(
+				"sharedMemoryOverrides.allow is false but defaultVolumes[%s] mounts /dev/shm: "+
+					"a locked shared memory policy rejects every workspace that inherits that volume (template %q)",
+				vol.Name, template.GetName(),
+			)
+		}
+	}
+	return nil
 }
 
 // validateIdleShutdownPolicyConsistency rejects a template whose idle shutdown policy is

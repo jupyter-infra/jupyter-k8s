@@ -80,8 +80,21 @@ type WorkspaceTemplateSpec struct {
 	// Volumes are applied during defaulting only if the workspace does not specify any volumes
 	// Each volume references either a pre-existing PVC in the workspace namespace or an emptyDir source
 	// +kubebuilder:validation:MaxItems=10
+	// +kubebuilder:validation:XValidation:rule="!self.exists(v, v.name == 'workspace-storage')",message="volume name 'workspace-storage' is reserved"
+	// +kubebuilder:validation:XValidation:rule="!self.exists(v, v.name == 'workspace-shm')",message="volume name 'workspace-shm' is reserved"
 	// +optional
 	DefaultVolumes []VolumeSpec `json:"defaultVolumes,omitempty"`
+
+	// DefaultSharedMemory is the /dev/shm setting for workspaces using this template; set it, {} is
+	// enough, to give every workspace of the template the enlarged /dev/shm. Copied in whole onto a
+	// workspace that sets no sharedMemory.
+	// +optional
+	DefaultSharedMemory *SharedMemorySpec `json:"defaultSharedMemory,omitempty"`
+
+	// SharedMemoryOverrides controls whether a workspace may deviate from DefaultSharedMemory, including
+	// with a volume it mounts at /dev/shm itself.
+	// +optional
+	SharedMemoryOverrides *SharedMemoryOverridePolicy `json:"sharedMemoryOverrides,omitempty"`
 
 	// DefaultNodeSelector specifies default node selection constraints
 	// +optional
@@ -276,6 +289,23 @@ type StorageConfig struct {
 	// +kubebuilder:default="/home/jovyan"
 	// +optional
 	DefaultMountPath string `json:"defaultMountPath,omitempty"`
+}
+
+// SharedMemoryOverridePolicy controls whether a workspace may deviate from the template's
+// DefaultSharedMemory.
+type SharedMemoryOverridePolicy struct {
+	// Allow controls whether workspaces may set their own sharedMemory or mount their own volume at
+	// /dev/shm. When false, workspaces get DefaultSharedMemory and nothing else, so a template that
+	// sets it needs a DefaultSharedMemory.
+	// +kubebuilder:default=true
+	// +optional
+	Allow *bool `json:"allow,omitempty"`
+}
+
+// Locked reports whether the policy holds workspaces to the template's DefaultSharedMemory: only when
+// it is present and allow is false.
+func (p *SharedMemoryOverridePolicy) Locked() bool {
+	return p != nil && p.Allow != nil && !*p.Allow
 }
 
 // IdleShutdownOverridePolicy defines idle shutdown override constraints

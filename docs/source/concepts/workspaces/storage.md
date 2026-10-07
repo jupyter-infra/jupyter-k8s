@@ -57,3 +57,29 @@ spec:
 The volume name `workspace-storage` is reserved for the primary volume.
 
 Templates can disallow secondary volumes with `allowSecondaryStorages: false`, or provide default volumes via `defaultVolumes`.
+
+## Shared memory
+
+`/dev/shm` is shared memory, the slice of RAM that processes on one machine use to hand large data to each other without copying it. PyTorch's DataLoader workers and NCCL depend on it, and a container gets only 64MiB unless something mounts a larger one.
+
+**Jupyter K8s** mounts a memory-backed `emptyDir` volume named `workspace-shm` at `/dev/shm` in the primary container of every workspace that asks for it. Its `sizeLimit` is the container's memory limit, or the memory request when the container sets no limit; a container that declares neither gets no volume and keeps the 64MiB default, and the admission webhook warns about it when the workspace is created or updated. The volume adds no memory to the workspace: whatever a process writes into it counts against the container's memory. A workspace that declares its own volume at `/dev/shm` keeps it, and the volume name `workspace-shm` is reserved, on workspaces and on template default volumes alike.
+
+A workspace asks for the volume by setting `sharedMemory`; an empty value is enough, and `enabled: false` turns off a template's default:
+
+```yaml
+spec:
+  sharedMemory: {}
+```
+
+A template gives the volume to all its workspaces with `defaultSharedMemory`, which the admission webhook copies onto a workspace that sets no `sharedMemory`, and locks it with `sharedMemoryOverrides`:
+
+```yaml
+spec:
+  defaultSharedMemory: {}
+  sharedMemoryOverrides:
+    allow: false
+```
+
+With `allow: false` a workspace must keep the template's setting: the webhook rejects a `sharedMemory` that differs from the template default and any volume the workspace mounts at `/dev/shm` itself, and a template that sets `allow: false` must also set a `defaultSharedMemory`. Volumes that an access strategy or integration template mounts at `/dev/shm` are not subject to this rule and take precedence over the operator's volume. A deployment that wants every workspace covered sets the default on the templates it deploys, or sets `sharedMemory` on every workspace with a mutating admission policy or webhook. A workspace that needs a `/dev/shm` of another size declares its own volume there, which replaces the operator's.
+
+Files in `/dev/shm` outlive the process that created them. A worker that crashes can leave files behind that a kernel restart does not clear, and they keep counting against the container's memory. If a workspace runs out of memory after a failed run, check `df -h /dev/shm` and delete stale files with `rm /dev/shm/<file>`, or stop and start the workspace, which recreates the pod and with it the volume.

@@ -126,6 +126,8 @@ func deleteResourcesForDriftTest(workspaceNamespace string) {
 
 // deploymentGeneration returns metadata.generation, which the API server increments on every
 // spec change.
+//
+//nolint:unparam // helper kept general; current callers happen to share the namespace
 func deploymentGeneration(name, namespace string) (int64, error) {
 	output, err := kubectlGet("deployment", name, namespace, "{.metadata.generation}")
 	if err != nil {
