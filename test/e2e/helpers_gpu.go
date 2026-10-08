@@ -179,6 +179,8 @@ func hasToleration(
 }
 
 // workspacePod returns the workspace's pod, decoded.
+//
+//nolint:unparam // helper kept general; current callers happen to share the namespace
 func workspacePod(workspaceName, namespace string) *corev1.Pod {
 	ginkgo.GinkgoHelper()
 	podName, err := kubectlGetByLabels("pod",
