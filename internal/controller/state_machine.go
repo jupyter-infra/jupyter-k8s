@@ -384,8 +384,8 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 }
 
 // reconcileStalledRollout reports a workspace whose Deployment exceeded its progress deadline as
-// Degraded with reason ComputeStalled, carrying what the pod reports (the scheduler's verdict or a
-// waiting container's reason) or, failing that, the Deployment's own message. One Warning event marks
+// Degraded with reason ComputeStalled, carrying what the pod reports (its start step's message) or,
+// failing that, the Deployment's own message. One Warning event marks
 // the transition. Recovery needs no action here: the Deployment watch reconciles the workspace when
 // the pod becomes ready and the ready path resets the conditions; the requeue only refreshes the message.
 func (sm *StateMachine) reconcileStalledRollout(
@@ -432,8 +432,7 @@ func (sm *StateMachine) reconcileFailedStart(
 	logger := logf.FromContext(ctx)
 	logger.Info("Workspace container cannot start", "reason", failure.Reason, "message", failure.Message)
 
-	degraded := FindCondition(&workspace.Status.Conditions, ConditionTypeDegraded)
-	if degraded == nil || degraded.Status != metav1.ConditionTrue || !IsDefinitiveStartFailureReason(degraded.Reason) {
+	if reportedStartFailure(workspace) == nil {
 		sm.recorder.Event(workspace, corev1.EventTypeWarning, EventWorkspaceStartFailed,
 			failure.Reason+": "+failure.Message)
 	}

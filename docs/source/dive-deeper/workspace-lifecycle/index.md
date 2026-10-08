@@ -43,7 +43,7 @@ conditions:
 
 ## Failed starts
 
-A container the kubelet reports as unable to start without a change to the workspace or its template, `ErrImagePull`, `ImagePullBackOff`, `ErrImageNeverPull`, `InvalidImageName`, `CreateContainerConfigError`, `CrashLoopBackOff`, or any other reason starting with `Err` or ending in `Error` or `BackOff` (the rule Argo CD's health check applies), turns the workspace `Degraded` at once, with the kubelet's reason and message on `Degraded`, `Available` and `Progressing`, instead of waiting for the progress deadline below. A Warning event with reason `WorkspaceStartFailed` is recorded on the workspace when the condition first appears; the kubelet alternating between related reasons (`ErrImagePull`, `ImagePullBackOff`) does not record another. The condition clears when the container runs. Fixing the cause, a wrong image name or a failing command, needs a stop and a start, as for stalled starts.
+A container the kubelet reports as unable to start without a change to the workspace or its template, `ErrImagePull`, `ImagePullBackOff`, `ErrImageNeverPull`, `InvalidImageName`, `CreateContainerConfigError`, `CrashLoopBackOff`, or any other reason starting with `Err` or ending in `Error` or `BackOff` (the rule Argo CD's health check applies), turns the workspace `Degraded` at once, with the kubelet's reason and message on `Degraded`, `Available` and `Progressing`, instead of waiting for the progress deadline below. A Warning event with reason `WorkspaceStartFailed` is recorded on the workspace when the condition first appears; the kubelet alternating between related reasons (`ErrImagePull`, `ImagePullBackOff`) does not record another. The condition clears once the workspace is `Available`; a crash-looping container that is between restarts, running or terminated rather than waiting, keeps it. Fixing the cause, a wrong image name or a failing command, needs a stop and a start, as for stalled starts.
 
 ## Stalled starts
 
@@ -63,7 +63,7 @@ conditions:
     reason: ComputeStalled
 ```
 
-The message is what the pod reports: the scheduler's verdict while the pod has no node, otherwise the reason and message of the first container that is waiting (for example `ImagePullBackOff: Back-off pulling image ...`), otherwise the Deployment's own message. A Warning event with reason `WorkspaceComputeStalled` is recorded on the workspace when the condition first appears, so `kubectl describe workspace` shows it too.
+The message is the start step's message above (the scheduler's or the autoscaler's verdict while the pod has no node, otherwise the kubelet's newest event, for example `Failed to create pod sandbox ...` or `Readiness probe failed: ...`), or the Deployment's own message when the workspace has no pod. A Warning event with reason `WorkspaceComputeStalled` is recorded on the workspace when the condition first appears, so `kubectl describe workspace` shows it too.
 
 The verdict is not final. The pod stays pending, and once it is scheduled and ready, for example after an autoscaler adds a node, the workspace returns to `Available=True` with `Degraded=False`. Stopping the workspace also clears the condition. A workspace that keeps stalling needs a change to its spec or template, applied with a stop and a start: the operator applies spec changes to the Deployment only while the workspace is `Available`.
 

@@ -12,8 +12,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // deploymentTimedOutReason is the reason the Deployment controller sets on Progressing=False once
@@ -70,44 +68,17 @@ func (rm *ResourceManager) IsDeploymentProgressDeadlineExceeded(deployment *apps
 	return false, ""
 }
 
-// WorkspacePodStallMessage returns what the workspace pod reports about why it is not running (see
-// podStallMessage), or "" when no pod reports anything. Pods being deleted are skipped: under the
-// Recreate strategy the previous pod can still be terminating while the next one is pending.
+// WorkspacePodStallMessage returns what the workspace's starting pod reports about why it is not
+// running, the message of its start step (see podStartStep), or "" when the workspace has no live pod.
 func (rm *ResourceManager) WorkspacePodStallMessage(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
 ) string {
-	podList := &corev1.PodList{}
-	if err := rm.client.List(ctx, podList,
-		client.InNamespace(workspace.Namespace),
-		client.MatchingLabels(GenerateLabels(workspace.Name)),
-	); err != nil {
-		logf.FromContext(ctx).Error(err, "Failed to list workspace pods for the stall message")
+	pod := rm.workspaceStartingPod(ctx, workspace)
+	if pod == nil {
 		return ""
 	}
-	for i := range podList.Items {
-		pod := &podList.Items[i]
-		if pod.DeletionTimestamp != nil {
-			continue
-		}
-		if message := podStallMessage(pod); message != "" {
-			return message
-		}
-	}
-	return ""
-}
-
-// podStallMessage returns the scheduler's verdict while the pod is unscheduled (the PodScheduled=False
-// message, e.g. "0/3 nodes are available: 3 Insufficient nvidia.com/gpu."), otherwise the reason and
-// message of the first waiting container, init containers first (e.g. "ImagePullBackOff: Back-off
-// pulling image ..."), otherwise "".
-func podStallMessage(pod *corev1.Pod) string {
-	for _, condition := range pod.Status.Conditions {
-		if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse && condition.Message != "" {
-			return condition.Message
-		}
-	}
-	return waitingContainerMessage(pod)
+	return podStartStep(pod, rm.startEvents(ctx, workspace, pod)).Message
 }
 
 // waitingContainerMessage returns the reason and message of the first waiting container, init

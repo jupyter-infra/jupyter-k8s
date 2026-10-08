@@ -8,6 +8,7 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,13 +77,8 @@ func TestResourceManager_IsDeploymentProgressDeadlineExceeded(t *testing.T) {
 	}
 }
 
-func TestPodStallMessage(t *testing.T) {
+func TestWaitingContainerMessage(t *testing.T) {
 	scheduled := corev1.PodCondition{Type: corev1.PodScheduled, Status: corev1.ConditionTrue}
-	unschedulable := func(message string) corev1.PodCondition {
-		return corev1.PodCondition{
-			Type: corev1.PodScheduled, Status: corev1.ConditionFalse, Reason: corev1.PodReasonUnschedulable, Message: message,
-		}
-	}
 	waiting := func(name, reason, message string) corev1.ContainerStatus {
 		return corev1.ContainerStatus{Name: name, State: corev1.ContainerState{
 			Waiting: &corev1.ContainerStateWaiting{Reason: reason, Message: message},
@@ -98,15 +94,6 @@ func TestPodStallMessage(t *testing.T) {
 		expected string
 	}{
 		{name: "no status", status: corev1.PodStatus{}},
-		{
-			name:     "unschedulable pod reports the scheduler's verdict",
-			status:   corev1.PodStatus{Conditions: []corev1.PodCondition{unschedulable(testSchedulingMessage)}},
-			expected: testSchedulingMessage,
-		},
-		{
-			name:   "unschedulable pod without a message reports nothing",
-			status: corev1.PodStatus{Conditions: []corev1.PodCondition{unschedulable("")}},
-		},
 		{
 			name: "scheduled pod reports the waiting container's reason and message",
 			status: corev1.PodStatus{
@@ -144,14 +131,6 @@ func TestPodStallMessage(t *testing.T) {
 			expected: `CreateContainerConfigError: secret "token" not found`,
 		},
 		{
-			name: "the scheduler's verdict wins over container states",
-			status: corev1.PodStatus{
-				Conditions:        []corev1.PodCondition{unschedulable(testSchedulingMessage)},
-				ContainerStatuses: []corev1.ContainerStatus{waiting("workspace", "ContainerCreating", "")},
-			},
-			expected: testSchedulingMessage,
-		},
-		{
 			name: "a waiting state without a reason is skipped",
 			status: corev1.PodStatus{
 				Conditions:        []corev1.PodCondition{scheduled},
@@ -169,7 +148,7 @@ func TestPodStallMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, podStallMessage(&corev1.Pod{Status: tt.status}))
+			assert.Equal(t, tt.expected, waitingContainerMessage(&corev1.Pod{Status: tt.status}))
 		})
 	}
 }
@@ -190,6 +169,12 @@ func TestResourceManager_WorkspacePodStallMessage(t *testing.T) {
 	terminatingPod := unschedulablePod("terminating", GenerateLabels(testWorkspaceName), "stale verdict")
 	terminatingPod.DeletionTimestamp = &now
 	terminatingPod.Finalizers = []string{"test.jupyter.org/keep"}
+	evictedPod := unschedulablePod("evicted", GenerateLabels(testWorkspaceName), "stale verdict")
+	evictedPod.Status = corev1.PodStatus{Phase: corev1.PodFailed, Reason: "Evicted"}
+	olderPod := unschedulablePod("older", GenerateLabels(testWorkspaceName), "stale verdict")
+	olderPod.CreationTimestamp = metav1.NewTime(now.Add(-time.Minute))
+	newerPod := unschedulablePod("newer", GenerateLabels(testWorkspaceName), testSchedulingMessage)
+	newerPod.CreationTimestamp = now
 
 	tests := []struct {
 		name     string
@@ -217,6 +202,15 @@ func TestResourceManager_WorkspacePodStallMessage(t *testing.T) {
 				terminatingPod,
 				unschedulablePod("pending", GenerateLabels(testWorkspaceName), testSchedulingMessage),
 			},
+			expected: testSchedulingMessage,
+		},
+		{
+			name:    "an evicted pod reports nothing",
+			objects: []client.Object{evictedPod},
+		},
+		{
+			name:     "the newest live pod decides",
+			objects:  []client.Object{olderPod, newerPod},
 			expected: testSchedulingMessage,
 		},
 		{

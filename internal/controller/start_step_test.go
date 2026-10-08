@@ -33,8 +33,22 @@ const (
 	stepTestLimits    = "Failed to schedule pod, all available instance types exceed limits for nodepool \"gpu\""
 	stepTestMount     = "MountVolume.SetUp failed for volume \"config\" : configmap \"settings\" not found"
 
-	eventReasonFailedScheduling = "FailedScheduling"
+	eventReasonFailedScheduling    = "FailedScheduling"
+	kubeletReasonContainerCreating = "ContainerCreating"
 )
+
+func runningStatus() corev1.ContainerStatus {
+	return corev1.ContainerStatus{Name: containerNameMain, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}
+}
+
+// restartedStatus is a container the kubelet restarted after a non-zero exit and that is not ready yet.
+func restartedStatus(ready bool) corev1.ContainerStatus {
+	return corev1.ContainerStatus{
+		Name: containerNameMain, Ready: ready, RestartCount: 2,
+		State:                corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+		LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 1}},
+	}
+}
 
 func waitingStatus(reason, message string) corev1.ContainerStatus {
 	return corev1.ContainerStatus{Name: containerNameMain, State: corev1.ContainerState{
@@ -82,8 +96,8 @@ func TestDefinitiveStartFailure(t *testing.T) {
 	}{
 		{name: "no container statuses", pod: scheduledPod()},
 		{name: "container creating is not a failure", pod: scheduledPod(waitingStatus(kubeletReasonContainerCreating, ""))},
-		{name: "running container", pod: scheduledPod(corev1.ContainerStatus{Name: containerNameMain,
-			State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}})},
+		{name: "running container", pod: scheduledPod(runningStatus())},
+		{name: "a restarted container is not a failure by itself", pod: scheduledPod(restartedStatus(false))},
 		{name: "image pull back-off", pod: scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, "Back-off pulling image \"x:1\"")),
 			expected: &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: "Back-off pulling image \"x:1\""}},
 		{name: "image pull error", pod: scheduledPod(waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")),
@@ -189,16 +203,24 @@ func TestPodStartStep(t *testing.T) {
 			expected: StartStep{Reason: ReasonStartingContainer, Message: "PodInitializing"},
 		},
 		{
-			name: "running but not ready container reports the kubelet's newest message",
-			pod: scheduledPod(corev1.ContainerStatus{Name: containerNameMain,
-				State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}),
+			name:     "running but not ready container reports the kubelet's newest message",
+			pod:      scheduledPod(runningStatus()),
 			events:   []corev1.Event{podEvent("unhealthy", kubeletComponent, "Unhealthy", "Readiness probe failed: connection refused", base)},
 			expected: StartStep{Reason: ReasonStartingContainer, Message: "Readiness probe failed: connection refused"},
 		},
 		{
 			name:     "running but not ready container without events",
-			pod:      scheduledPod(corev1.ContainerStatus{Name: containerNameMain, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}),
+			pod:      scheduledPod(runningStatus()),
 			expected: StartStep{Reason: ReasonStartingContainer, Message: startingContainerMessage},
+		},
+		{
+			name: "same-second kubelet events resolve to the later one in list order",
+			pod:  scheduledPod(runningStatus()),
+			events: []corev1.Event{
+				podEvent("pulling", kubeletComponent, kubeletEventPulling, stepTestPulling, base),
+				podEvent("started", kubeletComponent, "Started", "Started container main", base),
+			},
+			expected: StartStep{Reason: ReasonStartingContainer, Message: "Started container main"},
 		},
 	}
 	for _, tt := range tests {
@@ -252,6 +274,19 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 	deleting.DeletionTimestamp = &now
 	deleting.Finalizers = []string{stepTestFinalizer}
 	nominated := podEvent("nominated", "karpenter", "Nominated", stepTestNominated, time.Now())
+	evicted := labeled(scheduledPod(corev1.ContainerStatus{Name: containerNameMain, State: corev1.ContainerState{
+		Terminated: &corev1.ContainerStateTerminated{ExitCode: 137, Reason: "Evicted"},
+	}}))
+	evicted.Name = "evicted"
+	evicted.UID = "pod-uid-evicted"
+	evicted.Status.Phase = corev1.PodFailed
+	evicted.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Hour))
+	older := labeled(unscheduledPod("old verdict"))
+	older.Name = "older"
+	older.UID = "pod-uid-older"
+	older.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Minute))
+	newer := labeled(unscheduledPod(stepTestSchedMsg))
+	newer.CreationTimestamp = metav1.NewTime(time.Now())
 
 	tests := []struct {
 		name         string
@@ -261,6 +296,13 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 		expectFailed *StartFailure
 	}{
 		{name: "no pod yet", withReader: true},
+		{name: "an evicted pod is skipped for its replacement", withReader: true,
+			objects:    []client.Object{evicted, labeled(scheduledPod(waitingStatus(kubeletReasonContainerCreating, "")))},
+			expectStep: &StartStep{Reason: ReasonStartingContainer, Message: kubeletReasonContainerCreating}},
+		{name: "only an evicted pod is no starting pod", withReader: true, objects: []client.Object{evicted}},
+		{name: "the newest live pod decides", withReader: true,
+			objects:    []client.Object{older, newer},
+			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedMsg}},
 		{name: "a pod of another workspace is ignored", withReader: true, objects: []client.Object{unscheduledPod(stepTestSchedMsg)}},
 		{name: "failure is reported before any step", withReader: true,
 			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, "Back-off pulling image")))},
@@ -286,6 +328,51 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 			step, failure := rm.WorkspaceStartStep(context.Background(), workspace)
 			assert.Equal(t, tt.expectStep, step)
 			assert.Equal(t, tt.expectFailed, failure)
+		})
+	}
+}
+
+func TestResourceManager_WorkspaceStartStep_HoldsReportedFailure(t *testing.T) {
+	const crashMessage = "back-off 20s restarting failed container=main"
+	conditions := func(degradedReason, progressingReason string) []metav1.Condition {
+		return []metav1.Condition{
+			{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: degradedReason, Message: crashMessage},
+			{Type: ConditionTypeProgressing, Status: metav1.ConditionFalse, Reason: progressingReason, Message: crashMessage},
+		}
+	}
+	tests := []struct {
+		name       string
+		conditions []metav1.Condition
+		status     corev1.ContainerStatus
+		held       bool
+	}{
+		{name: "a reported crash loop holds while the container restarts",
+			conditions: conditions(kubeletReasonCrashLoopBackOff, kubeletReasonCrashLoopBackOff), status: restartedStatus(false), held: true},
+		{name: "an operator error on Degraded is not a reported start failure",
+			conditions: conditions(ReasonDeploymentError, ReasonStartingContainer), status: restartedStatus(false)},
+		{name: "a container on its first run is not held",
+			conditions: conditions(kubeletReasonCrashLoopBackOff, kubeletReasonCrashLoopBackOff), status: runningStatus()},
+		{name: "a ready container is not held",
+			conditions: conditions(kubeletReasonCrashLoopBackOff, kubeletReasonCrashLoopBackOff), status: restartedStatus(true)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
+			workspace.Status.Conditions = tt.conditions
+			pod := scheduledPod(tt.status)
+			pod.Labels = GenerateLabels(testWorkspaceName)
+			c := eventIndexedClient(t, pod)
+			rm := newResourceManagerForCRUD(c, crudScheme(t))
+			require.NotNil(t, rm)
+			rm.SetEventReader(c)
+			step, failure := rm.WorkspaceStartStep(context.Background(), workspace)
+			if tt.held {
+				assert.Nil(t, step)
+				assert.Equal(t, &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: crashMessage}, failure)
+			} else {
+				assert.Nil(t, failure)
+				assert.Equal(t, &StartStep{Reason: ReasonStartingContainer, Message: startingContainerMessage}, step)
+			}
 		})
 	}
 }
@@ -323,9 +410,13 @@ func TestResourceManager_StartEventsAreThrottled(t *testing.T) {
 	assert.Equal(t, stepTestLimits, step.Message)
 	assert.Equal(t, 2, reader.lists)
 
-	// A failed read keeps the previous events.
+	// A failed read keeps the previous events and holds the interval.
 	reader.failing = true
 	clock = clock.Add(startEventsInterval)
+	step, _ = rm.WorkspaceStartStep(ctx, workspace)
+	assert.Equal(t, stepTestLimits, step.Message)
+	assert.Equal(t, 3, reader.lists)
+	clock = clock.Add(startEventsInterval / 2)
 	step, _ = rm.WorkspaceStartStep(ctx, workspace)
 	assert.Equal(t, stepTestLimits, step.Message)
 	assert.Equal(t, 3, reader.lists)

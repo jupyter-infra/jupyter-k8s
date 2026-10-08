@@ -318,6 +318,20 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				}}},
 			}
 		}
+		createPodEvent := func(pod *corev1.Pod, name, component, reason, message string, at time.Time) *corev1.Event {
+			event := &corev1.Event{
+				ObjectMeta:     metav1.ObjectMeta{Name: pod.Name + "-" + name, Namespace: pod.Namespace},
+				InvolvedObject: corev1.ObjectReference{Kind: KindPod, Name: pod.Name, Namespace: pod.Namespace, UID: pod.UID},
+				Reason:         reason,
+				Message:        message,
+				Source:         corev1.EventSource{Component: component},
+				Type:           corev1.EventTypeNormal,
+				FirstTimestamp: metav1.NewTime(at),
+				LastTimestamp:  metav1.NewTime(at),
+			}
+			Expect(k8sClient.Create(ctx, event)).To(Succeed())
+			return event
+		}
 
 		expectStalled := func(ws *workspacev1alpha1.Workspace, message string) {
 			GinkgoHelper()
@@ -619,23 +633,30 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			Expect(err.Error()).To(ContainSubstring("failed to update Workspace.Status"))
 		})
 
+		It("should carry the kubelet's newest event in ComputeStalled for a pod with a node", func() {
+			workspace := newWorkspace()
+			dep := createNotReadyDeployment(workspace)
+			svc := createService(workspace)
+			pod := createPendingPod(workspace, waitingContainer(kubeletReasonContainerCreating, ""))
+			mount := createPodEvent(pod, "mount", kubeletComponent, "FailedMount", stepTestMount, time.Now())
+			defer func() { _ = k8sClient.Delete(ctx, mount) }()
+			defer func() { _ = k8sClient.Delete(ctx, pod) }()
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+			markDeploymentStalled(dep)
+
+			sm := buildStateMachine()
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			expectStalled(workspace, stepTestMount)
+			Expect(recorder.Events).To(Receive(stallEvent(stepTestMount)))
+		})
+
 		Context("start steps", func() {
 			const nominatedMessage = "Pod should schedule on: nodeclaim/workspace-gpu-abc12"
 
-			createPodEvent := func(pod *corev1.Pod, name, component, reason, message string, at time.Time) *corev1.Event {
-				event := &corev1.Event{
-					ObjectMeta:     metav1.ObjectMeta{Name: pod.Name + "-" + name, Namespace: pod.Namespace},
-					InvolvedObject: corev1.ObjectReference{Kind: KindPod, Name: pod.Name, Namespace: pod.Namespace, UID: pod.UID},
-					Reason:         reason,
-					Message:        message,
-					Source:         corev1.EventSource{Component: component},
-					Type:           corev1.EventTypeNormal,
-					FirstTimestamp: metav1.NewTime(at),
-					LastTimestamp:  metav1.NewTime(at),
-				}
-				Expect(k8sClient.Create(ctx, event)).To(Succeed())
-				return event
-			}
 			expectStartStep := func(ws *workspacev1alpha1.Workspace, reason, message string) {
 				GinkgoHelper()
 				progressing := getCondition(ws, ConditionTypeProgressing)
@@ -903,6 +924,62 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(err).NotTo(HaveOccurred())
 
 				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, "back-off 10s restarting failed container="+initContainerTestName)
+			})
+
+			It("should record the event when a start failure follows an operator error", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				Expect(sm.statusManager.UpdateErrorStatus(ctx, workspace, ReasonDeploymentError, "api error", nil)).To(Succeed())
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				expectStartFailed(workspace, kubeletReasonImagePullBackOff, backOffMessage)
+				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonImagePullBackOff, backOffMessage)))
+			})
+
+			It("should hold Degraded while a crash-looping container is between restarts", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				crashMessage := "back-off 20s restarting failed container=" + containerNameMain
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonCrashLoopBackOff, crashMessage))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, crashMessage)
+				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonCrashLoopBackOff, crashMessage)))
+
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), pod)).To(Succeed())
+				pod.Status = corev1.PodStatus{
+					Phase:      corev1.PodRunning,
+					Conditions: []corev1.PodCondition{{Type: corev1.PodScheduled, Status: corev1.ConditionTrue}},
+					ContainerStatuses: []corev1.ContainerStatus{{Name: containerNameMain, RestartCount: 1,
+						State:                corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+						LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 1}},
+					}},
+				}
+				Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+				result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(LongRequeueDelay))
+
+				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, crashMessage)
+				Expect(recorder.Events).To(BeEmpty())
 			})
 
 			It("should clear Degraded and report Available once the container runs", func() {

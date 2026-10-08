@@ -11,6 +11,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,7 +31,6 @@ const (
 	// Vocabulary of core Kubernetes components; k8s.io/kubernetes/pkg/kubelet is not importable.
 	kubeletComponent               = "kubelet"
 	kubeletEventPulling            = "Pulling"
-	kubeletReasonContainerCreating = "ContainerCreating"
 	kubeletReasonErrImagePull      = "ErrImagePull"
 	kubeletReasonImagePullBackOff  = "ImagePullBackOff"
 	kubeletReasonInvalidImageName  = "InvalidImageName"
@@ -80,6 +80,34 @@ type startEventsEntry struct {
 	podUID types.UID
 	readAt time.Time
 	events []corev1.Event
+}
+
+// reportedStartFailure returns the start failure the workspace's conditions already carry, written by
+// reconcileFailedStart as Degraded=True and Progressing with the same kubelet reason, or nil. UpdateErrorStatus
+// writes Degraded alone, so an operator error such as ComputeError does not count.
+func reportedStartFailure(workspace *workspacev1alpha1.Workspace) *StartFailure {
+	degraded := FindCondition(&workspace.Status.Conditions, ConditionTypeDegraded)
+	progressing := FindCondition(&workspace.Status.Conditions, ConditionTypeProgressing)
+	if degraded == nil || progressing == nil || degraded.Status != metav1.ConditionTrue ||
+		progressing.Reason != degraded.Reason || !IsDefinitiveStartFailureReason(degraded.Reason) {
+		return nil
+	}
+	return &StartFailure{Reason: degraded.Reason, Message: degraded.Message}
+}
+
+// containerRestartedAfterFailure reports whether a container of the pod is not ready and has been
+// restarted after exiting with an error. Between the exit and the kubelet's next CrashLoopBackOff report
+// the container shows as Running or Terminated rather than Waiting.
+func containerRestartedAfterFailure(pod *corev1.Pod) bool {
+	for _, statuses := range [][]corev1.ContainerStatus{pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses} {
+		for _, containerStatus := range statuses {
+			terminated := containerStatus.LastTerminationState.Terminated
+			if !containerStatus.Ready && containerStatus.RestartCount > 0 && terminated != nil && terminated.ExitCode != 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // definitiveStartFailure returns the first container, init containers first, that the kubelet reports
@@ -168,7 +196,9 @@ func isKubeletEvent(event *corev1.Event) bool {
 	return event.Source.Component == kubeletComponent || event.ReportingController == kubeletComponent
 }
 
-// newestEvent returns the most recently observed event accepted by keep, or nil.
+// newestEvent returns the most recently observed event accepted by keep, or nil. Equal timestamps go to
+// the later event in list order: the kubelet records timestamps at second resolution, and the API lists
+// events by name, which embeds their creation time.
 func newestEvent(events []corev1.Event, keep func(*corev1.Event) bool) *corev1.Event {
 	var newest *corev1.Event
 	for i := range events {
@@ -176,7 +206,7 @@ func newestEvent(events []corev1.Event, keep func(*corev1.Event) bool) *corev1.E
 		if !keep(event) {
 			continue
 		}
-		if newest == nil || eventTime(event).After(eventTime(newest)) {
+		if newest == nil || !eventTime(event).Before(eventTime(newest)) {
 			newest = event
 		}
 	}
@@ -192,7 +222,8 @@ func (rm *ResourceManager) SetEventReader(reader client.Reader) {
 
 // WorkspaceStartStep reports what the workspace's starting pod is doing: a failure the kubelet
 // recorded as definitive, if any, otherwise the step it is in with the newest relevant message. Both
-// are nil while no pod exists yet. Pods being deleted are skipped, as in WorkspacePodStallMessage.
+// are nil while no pod exists yet. A failure already on the conditions holds while its container is
+// between a crash and the kubelet's next report, so a crash loop does not flap the status.
 func (rm *ResourceManager) WorkspaceStartStep(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
@@ -203,6 +234,9 @@ func (rm *ResourceManager) WorkspaceStartStep(
 	}
 	if failure := definitiveStartFailure(pod); failure != nil {
 		return nil, failure
+	}
+	if reported := reportedStartFailure(workspace); reported != nil && containerRestartedAfterFailure(pod) {
+		return nil, reported
 	}
 	step := podStartStep(pod, rm.startEvents(ctx, workspace, pod))
 	return &step, nil
@@ -215,6 +249,10 @@ func (rm *ResourceManager) ForgetStartEvents(workspace *workspacev1alpha1.Worksp
 	delete(rm.cachedStartEvents, client.ObjectKeyFromObject(workspace))
 }
 
+// workspaceStartingPod returns the newest live pod of the workspace, or nil. Pods being deleted and pods
+// that have terminated are skipped: under the Recreate strategy the previous pod can still be
+// terminating while the next one is pending, and an evicted pod stays in phase Failed next to its
+// replacement. The cached list has no stable order, so the newest creation time decides.
 func (rm *ResourceManager) workspaceStartingPod(ctx context.Context, workspace *workspacev1alpha1.Workspace) *corev1.Pod {
 	podList := &corev1.PodList{}
 	if err := rm.client.List(ctx, podList,
@@ -224,16 +262,22 @@ func (rm *ResourceManager) workspaceStartingPod(ctx context.Context, workspace *
 		logf.FromContext(ctx).Error(err, "Failed to list workspace pods for the start step")
 		return nil
 	}
+	var newest *corev1.Pod
 	for i := range podList.Items {
-		if podList.Items[i].DeletionTimestamp == nil {
-			return &podList.Items[i]
+		pod := &podList.Items[i]
+		if pod.DeletionTimestamp != nil || pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+			continue
+		}
+		if newest == nil || pod.CreationTimestamp.After(newest.CreationTimestamp.Time) {
+			newest = pod
 		}
 	}
-	return nil
+	return newest
 }
 
 // startEvents returns the events recorded on the pod, read through the event reader at most once per
-// startEventsInterval per workspace and reused in between. A failed read keeps the previous events.
+// startEventsInterval per workspace and reused in between. A failed read keeps the previous events and
+// counts as a read, so the interval holds through an API outage.
 func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspacev1alpha1.Workspace, pod *corev1.Pod) []corev1.Event {
 	if rm.eventReader == nil {
 		return nil
@@ -258,16 +302,17 @@ func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspace
 		client.InNamespace(pod.Namespace),
 		client.MatchingFieldsSelector{Selector: fields.OneTermEqualSelector("involvedObject.uid", string(pod.UID))},
 	)
+	events := eventList.Items
 	if err != nil {
 		logf.FromContext(ctx).Error(err, "Failed to list the events of the starting pod", "pod", pod.Name)
+		events = nil
 		if found && cached.podUID == pod.UID {
-			return cached.events
+			events = cached.events
 		}
-		return nil
 	}
 
 	rm.startEventsMu.Lock()
-	rm.cachedStartEvents[key] = startEventsEntry{podUID: pod.UID, readAt: now, events: eventList.Items}
+	rm.cachedStartEvents[key] = startEventsEntry{podUID: pod.UID, readAt: now, events: events}
 	rm.startEventsMu.Unlock()
-	return eventList.Items
+	return events
 }
