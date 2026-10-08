@@ -27,9 +27,9 @@ While the workspace pod is not ready, `Progressing=True` names the step the star
 
 | Reason | When | Message |
 |--------|------|---------|
-| `WaitingForNode` | The pod has no node yet | The newest event an autoscaler recorded on the pod, for example Karpenter's `Pod should schedule on: nodeclaim/...` or `all available instance types exceed limits for nodepool`; the scheduler's `PodScheduled` message (`0/3 nodes are available: ...`) when there is none |
+| `WaitingForNode` | The pod has no node yet | The newest event a component other than the scheduler recorded on the pod, for example Karpenter's `Pod should schedule on: nodeclaim/...` or `Failed to schedule pod, all available instance types exceed limits for nodepool "gpu"`; the scheduler's `PodScheduled` message (`0/3 nodes are available: ...`) when there is none |
 | `PullingImage` | The kubelet is pulling the image | The kubelet's `Pulling image "..."` event |
-| `StartingContainer` | The pod has a node and its container is not ready | The waiting container's reason and message (`ContainerCreating`, `PodInitializing`, a failing readiness probe), or the kubelet's newest event |
+| `StartingContainer` | The pod has a node and its container is not ready | The kubelet's newest event for the pod (`Successfully pulled image ...`, `Started container ...`, `Readiness probe failed: ...`), or the waiting container's reason (`ContainerCreating`, `PodInitializing`) before any event is read |
 
 The operator does not interpret these messages; it copies them. The step appears on `Available=False` with the same reason. Events are read for the starting pod at most every few seconds, and the status is written only when the message changes.
 

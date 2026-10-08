@@ -677,7 +677,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				pod := createPendingPod(workspace, unschedulable(schedulingMessage))
 				now := time.Now()
 				nominated := createPodEvent(pod, "nominated", "karpenter", "Nominated", nominatedMessage, now.Add(-time.Minute))
-				scheduler := createPodEvent(pod, "sched", "default-scheduler", "FailedScheduling", schedulingMessage, now)
+				scheduler := createPodEvent(pod, "sched", "default-scheduler", eventReasonFailedScheduling, schedulingMessage, now)
 				defer func() { _ = k8sClient.Delete(ctx, nominated) }()
 				defer func() { _ = k8sClient.Delete(ctx, scheduler) }()
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
@@ -753,8 +753,8 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(err).NotTo(HaveOccurred())
 				expectStartStep(workspace, ReasonWaitingForNode, nominatedMessage)
 
-				limits := createPodEvent(pod, "limits", "karpenter", "Failed",
-					"all available instance types exceed limits for nodepool", now.Add(time.Second))
+				limits := createPodEvent(pod, "limits", "karpenter", eventReasonFailedScheduling, stepTestLimits,
+					now.Add(time.Second))
 				defer func() { _ = k8sClient.Delete(ctx, limits) }()
 				clock = now.Add(startEventsInterval / 2)
 				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
@@ -764,7 +764,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				clock = now.Add(2 * startEventsInterval)
 				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
 				Expect(err).NotTo(HaveOccurred())
-				expectStartStep(workspace, ReasonWaitingForNode, "all available instance types exceed limits for nodepool")
+				expectStartStep(workspace, ReasonWaitingForNode, stepTestLimits)
 			})
 
 			It("should keep the generic Starting reason while no pod exists", func() {

@@ -30,6 +30,10 @@ const (
 	stepTestSchedMsg  = "0/1 nodes are available: 1 Insufficient nvidia.com/gpu."
 	stepTestNominated = "Pod should schedule on: nodeclaim/workspace-gpu-abc12"
 	stepTestPulling   = "Pulling image \"jupyter/base-notebook:latest\""
+	stepTestLimits    = "Failed to schedule pod, all available instance types exceed limits for nodepool \"gpu\""
+	stepTestMount     = "MountVolume.SetUp failed for volume \"config\" : configmap \"settings\" not found"
+
+	eventReasonFailedScheduling = "FailedScheduling"
 )
 
 func waitingStatus(reason, message string) corev1.ContainerStatus {
@@ -135,26 +139,26 @@ func TestPodStartStep(t *testing.T) {
 			name: "the autoscaler's event wins over a newer FailedScheduling repeat",
 			pod:  unscheduledPod(stepTestSchedMsg),
 			events: []corev1.Event{
-				podEvent("sched", "default-scheduler", schedulerEventFailedScheduling, stepTestSchedMsg, base.Add(30*time.Second)),
+				podEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedMsg, base.Add(30*time.Second)),
 				podEvent("nominated", "karpenter", "Nominated", stepTestNominated, base),
 			},
 			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestNominated},
 		},
 		{
-			name: "the newest non-scheduler event wins among several",
+			name: "the autoscaler's FailedScheduling counts, the kube-scheduler's newer repeat does not",
 			pod:  unscheduledPod(stepTestSchedMsg),
 			events: []corev1.Event{
 				podEvent("nominated", "karpenter", "Nominated", stepTestNominated, base),
-				podEvent("failed", "karpenter", "FailedScheduling", "ignored: scheduler reason", base.Add(time.Minute)),
-				podEvent("limits", "karpenter", "Failed", "all available instance types exceed limits for nodepool", base.Add(2*time.Minute)),
+				podEvent("limits", "karpenter", eventReasonFailedScheduling, stepTestLimits, base.Add(2*time.Minute)),
+				podEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedMsg, base.Add(3*time.Minute)),
 			},
-			expected: StartStep{Reason: ReasonWaitingForNode, Message: "all available instance types exceed limits for nodepool"},
+			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestLimits},
 		},
 		{
 			name: "only scheduler events fall back to the verdict",
 			pod:  unscheduledPod(stepTestSchedMsg),
 			events: []corev1.Event{
-				podEvent("sched", "default-scheduler", schedulerEventFailedScheduling, stepTestSchedMsg, base),
+				podEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedMsg, base),
 			},
 			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedMsg},
 		},
@@ -171,7 +175,13 @@ func TestPodStartStep(t *testing.T) {
 				podEvent("pulling", kubeletComponent, kubeletEventPulling, stepTestPulling, base),
 				podEvent("pulled", kubeletComponent, "Pulled", "Successfully pulled image in 42s", base.Add(42*time.Second)),
 			},
-			expected: StartStep{Reason: ReasonStartingContainer, Message: kubeletReasonContainerCreating},
+			expected: StartStep{Reason: ReasonStartingContainer, Message: "Successfully pulled image in 42s"},
+		},
+		{
+			name:     "a kubelet warning while the container is creating is the message",
+			pod:      scheduledPod(waitingStatus(kubeletReasonContainerCreating, "")),
+			events:   []corev1.Event{podEvent("mount", kubeletComponent, "FailedMount", stepTestMount, base)},
+			expected: StartStep{Reason: ReasonStartingContainer, Message: stepTestMount},
 		},
 		{
 			name:     "scheduled pod with a waiting container and no events",
@@ -300,7 +310,7 @@ func TestResourceManager_StartEventsAreThrottled(t *testing.T) {
 	assert.Equal(t, 1, reader.lists)
 
 	// A new event within the interval is not seen: the cached events are reused.
-	limits := podEvent("limits", "karpenter", "Failed", "all available instance types exceed limits for nodepool", time.Now().Add(time.Minute))
+	limits := podEvent("limits", "karpenter", eventReasonFailedScheduling, stepTestLimits, time.Now().Add(time.Minute))
 	require.NoError(t, c.Create(ctx, &limits))
 	clock = clock.Add(startEventsInterval / 2)
 	step, _ = rm.WorkspaceStartStep(ctx, workspace)
@@ -310,14 +320,14 @@ func TestResourceManager_StartEventsAreThrottled(t *testing.T) {
 	// Past the interval the events are read again.
 	clock = clock.Add(startEventsInterval)
 	step, _ = rm.WorkspaceStartStep(ctx, workspace)
-	assert.Equal(t, "all available instance types exceed limits for nodepool", step.Message)
+	assert.Equal(t, stepTestLimits, step.Message)
 	assert.Equal(t, 2, reader.lists)
 
 	// A failed read keeps the previous events.
 	reader.failing = true
 	clock = clock.Add(startEventsInterval)
 	step, _ = rm.WorkspaceStartStep(ctx, workspace)
-	assert.Equal(t, "all available instance types exceed limits for nodepool", step.Message)
+	assert.Equal(t, stepTestLimits, step.Message)
 	assert.Equal(t, 3, reader.lists)
 	reader.failing = false
 

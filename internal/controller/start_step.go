@@ -30,7 +30,6 @@ const (
 	// Vocabulary of core Kubernetes components; k8s.io/kubernetes/pkg/kubelet is not importable.
 	kubeletComponent               = "kubelet"
 	kubeletEventPulling            = "Pulling"
-	schedulerEventFailedScheduling = "FailedScheduling"
 	kubeletReasonContainerCreating = "ContainerCreating"
 	kubeletReasonErrImagePull      = "ErrImagePull"
 	kubeletReasonImagePullBackOff  = "ImagePullBackOff"
@@ -115,11 +114,11 @@ func podScheduled(pod *corev1.Pod) bool {
 	return false
 }
 
-// podStartStep derives the step from the pod and the events recorded on it. While the pod has no node
-// the message is the newest event from a component other than the scheduler, since the scheduler's
-// FailedScheduling event repeats the same text every few seconds and that text is already the
-// PodScheduled message, which is the fallback. Once scheduled, the kubelet's waiting reason stays
-// ContainerCreating through an image pull, so the pull is visible only through its Pulling event.
+// podStartStep derives the step from the pod and the events recorded on it. Without a node, the message
+// is the newest event from a component other than the kube-scheduler, whose FailedScheduling text is
+// already the PodScheduled message (the fallback); autoscalers such as Karpenter record their verdicts
+// under their own component. With a node, the kubelet's waiting reason stays ContainerCreating through
+// a pull or a failed mount, so its newest event is the message and the waiting reason the fallback.
 func podStartStep(pod *corev1.Pod, events []corev1.Event) StartStep {
 	if !podScheduled(pod) {
 		if event := newestEvent(events, func(event *corev1.Event) bool { return !isSchedulerEvent(event) }); event != nil {
@@ -136,11 +135,11 @@ func podStartStep(pod *corev1.Pod, events []corev1.Event) StartStep {
 	if kubeletEvent != nil && kubeletEvent.Reason == kubeletEventPulling {
 		return StartStep{Reason: ReasonPullingImage, Message: kubeletEvent.Message}
 	}
-	if message := waitingContainerMessage(pod); message != "" {
-		return StartStep{Reason: ReasonStartingContainer, Message: message}
-	}
 	if kubeletEvent != nil && kubeletEvent.Message != "" {
 		return StartStep{Reason: ReasonStartingContainer, Message: kubeletEvent.Message}
+	}
+	if message := waitingContainerMessage(pod); message != "" {
+		return StartStep{Reason: ReasonStartingContainer, Message: message}
 	}
 	return StartStep{Reason: ReasonStartingContainer, Message: startingContainerMessage}
 }
@@ -161,8 +160,7 @@ func eventTime(event *corev1.Event) time.Time {
 }
 
 func isSchedulerEvent(event *corev1.Event) bool {
-	return event.Reason == schedulerEventFailedScheduling ||
-		strings.Contains(event.Source.Component, "scheduler") ||
+	return strings.Contains(event.Source.Component, "scheduler") ||
 		strings.Contains(event.ReportingController, "scheduler")
 }
 
