@@ -41,7 +41,7 @@ func (sm *StatusManager) updateStatus(
 		workspace.Status.Conditions = *conditionsToUpdate
 	}
 
-	if reflect.DeepEqual(workspace.Status, snapshotStatus) {
+	if reflect.DeepEqual(&workspace.Status, snapshotStatus) {
 		// no-op: status hasn't changed
 		return nil
 	}
