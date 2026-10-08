@@ -459,7 +459,7 @@ var _ = Describe("Workspace Status", Ordered, func() {
 			UpdateWorkspaceDesiredState(crashLoopWorkspace, statusTestNamespace, "Stopped")
 			WaitForWorkspaceToReachCondition(crashLoopWorkspace, statusTestNamespace, ConditionTypeStopped, ConditionTrue)
 			cmd := exec.Command("kubectl", "patch", "workspace", crashLoopWorkspace, "-n", statusTestNamespace,
-				"--type=merge", "-p", `{"spec":{"command":null,"desiredStatus":"Running"}}`)
+				"--type=merge", "-p", `{"spec":{"containerConfig":null,"desiredStatus":"Running"}}`)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			WaitForWorkspaceToReachCondition(crashLoopWorkspace, statusTestNamespace, ConditionTypeAvailable, ConditionTrue)
