@@ -107,6 +107,12 @@ func podStallMessage(pod *corev1.Pod) string {
 			return condition.Message
 		}
 	}
+	return waitingContainerMessage(pod)
+}
+
+// waitingContainerMessage returns the reason and message of the first waiting container, init
+// containers first (e.g. "ImagePullBackOff: Back-off pulling image ..."), or "".
+func waitingContainerMessage(pod *corev1.Pod) string {
 	for _, statuses := range [][]corev1.ContainerStatus{pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses} {
 		for _, containerStatus := range statuses {
 			waiting := containerStatus.State.Waiting

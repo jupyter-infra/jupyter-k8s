@@ -68,6 +68,8 @@ type WorkspaceRunningReadiness struct {
 	computeReady         bool
 	serviceReady         bool
 	accessResourcesReady bool
+	// computeStep is the step the workspace pod is in while computeReady is false, when known.
+	computeStep *StartStep
 }
 
 // UpdateStartingStatus sets Available to false and Progressing to true
@@ -89,7 +91,10 @@ func (sm *StatusManager) UpdateStartingStatus(
 	waitingForService := readiness.computeReady && !readiness.serviceReady && readiness.accessResourcesReady
 	waitingForAccess := readiness.computeReady && readiness.serviceReady && !readiness.accessResourcesReady
 
-	if waitingForCompute {
+	if !readiness.computeReady && readiness.computeStep != nil {
+		startingReason = readiness.computeStep.Reason
+		startingMessage = readiness.computeStep.Message
+	} else if waitingForCompute {
 		startingReason = ReasonComputeNotReady
 		startingMessage = "Compute is not ready"
 	} else if waitingForAccess {

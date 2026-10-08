@@ -327,6 +327,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		// BEFORE the status write, so they persist in the same Status().Update as the Running conditions.
 		// Non-gating: probe verdicts never change whether the workspace is Available.
 		integrationProbeInterval := sm.probeIntegrationStatus(ctx, workspace)
+		sm.resourceManager.ForgetStartEvents(workspace)
 
 		if err := sm.statusManager.UpdateRunningStatus(ctx, workspace, snapshotStatus); err != nil {
 			return ctrl.Result{}, err
@@ -340,6 +341,18 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		}
 		result.RequeueAfter = getShorterInterval(result.RequeueAfter, integrationProbeInterval)
 		return result, nil
+	}
+
+	// A container the kubelet reports as unable to start (ImagePullBackOff, CrashLoopBackOff, ...) will not
+	// recover without a change to the workspace or its template, so it is reported now rather than at the
+	// progress deadline. Otherwise the step the pod is in becomes the Starting reason and message.
+	var startStep *StartStep
+	if !deploymentReady {
+		var failure *StartFailure
+		startStep, failure = sm.resourceManager.WorkspaceStartStep(ctx, workspace)
+		if failure != nil {
+			return sm.reconcileFailedStart(ctx, workspace, deployment, service, failure, snapshotStatus)
+		}
 	}
 
 	// The Deployment controller declares a rollout stalled once progressDeadlineSeconds (600 by default,
@@ -359,6 +372,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		computeReady:         deploymentReady,
 		serviceReady:         serviceReady,
 		accessResourcesReady: accessResourcesReady,
+		computeStep:          startStep,
 	}
 	if err := sm.statusManager.UpdateStartingStatus(
 		ctx, workspace, readiness, snapshotStatus); err != nil {
@@ -398,6 +412,36 @@ func (sm *StateMachine) reconcileStalledRollout(
 	workspace.Status.ServiceName = service.GetName()
 	if err := sm.statusManager.UpdateDegradedRunningStatus(
 		ctx, workspace, ReasonComputeStalled, ReasonComputeStalled, message, snapshotStatus); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{RequeueAfter: LongRequeueDelay}, nil
+}
+
+// reconcileFailedStart reports a workspace whose container the kubelet says cannot start as Degraded with
+// the kubelet's reason and message, at once rather than at the progress deadline. One Warning event marks
+// the transition; the kubelet's alternation between related reasons (ErrImagePull, ImagePullBackOff) is
+// not a new failure. Recovery needs no action here: a fixed image or a container that eventually runs
+// makes the Deployment available and the ready path resets the conditions.
+func (sm *StateMachine) reconcileFailedStart(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	deployment *appsv1.Deployment,
+	service *corev1.Service,
+	failure *StartFailure,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (ctrl.Result, error) {
+	logger := logf.FromContext(ctx)
+	logger.Info("Workspace container cannot start", "reason", failure.Reason, "message", failure.Message)
+
+	degraded := FindCondition(&workspace.Status.Conditions, ConditionTypeDegraded)
+	if degraded == nil || degraded.Status != metav1.ConditionTrue || !IsDefinitiveStartFailureReason(degraded.Reason) {
+		sm.recorder.Event(workspace, corev1.EventTypeWarning, EventWorkspaceStartFailed,
+			failure.Reason+": "+failure.Message)
+	}
+
+	workspace.Status.DeploymentName = deployment.GetName()
+	workspace.Status.ServiceName = service.GetName()
+	if err := sm.statusManager.UpdateDegradedRunningStatus(
+		ctx, workspace, failure.Reason, failure.Reason, failure.Message, snapshotStatus); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{RequeueAfter: LongRequeueDelay}, nil

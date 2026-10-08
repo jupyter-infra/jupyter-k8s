@@ -9,6 +9,8 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"sync"
+	"time"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 
@@ -30,6 +32,12 @@ type ResourceManager struct {
 	pvcBuilder             *PVCBuilder
 	accessResourcesBuilder *AccessResourcesBuilder
 	statusManager          *StatusManager
+
+	// eventReader reads a starting pod's events; nil leaves the start step to what the pod reports.
+	eventReader       client.Reader
+	cachedStartEvents map[client.ObjectKey]startEventsEntry
+	startEventsMu     sync.Mutex
+	now               func() time.Time
 }
 
 // NewResourceManager creates a new ResourceManager
@@ -50,6 +58,8 @@ func NewResourceManager(
 		pvcBuilder:             pvcBuilder,
 		accessResourcesBuilder: accessResourcesBuilder,
 		statusManager:          statusManager,
+		cachedStartEvents:      map[client.ObjectKey]startEventsEntry{},
+		now:                    time.Now,
 	}
 }
 

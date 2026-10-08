@@ -62,6 +62,12 @@ const (
 	// reports Progressing=False with reason ProgressDeadlineExceeded; it clears when the pod becomes ready.
 	ReasonComputeStalled = "ComputeStalled"
 
+	// Start steps, set on Progressing=True and Available=False while the workspace pod is not ready, with
+	// the message the scheduler, the autoscaler or the kubelet recorded for that step copied unchanged.
+	ReasonWaitingForNode    = "WaitingForNode"
+	ReasonPullingImage      = "PullingImage"
+	ReasonStartingContainer = "StartingContainer"
+
 	// ConditionTypeAvailable reasons (special cases)
 	ReasonPreempted = "Preempted"
 
@@ -90,6 +96,11 @@ const (
 	// EventWorkspaceComputeStalled is recorded (Warning) when the workspace Deployment first reports
 	// ProgressDeadlineExceeded. Edge-triggered, so a workspace that stays stalled does not repeat it.
 	EventWorkspaceComputeStalled = "WorkspaceComputeStalled"
+
+	// EventWorkspaceStartFailed is recorded (Warning) when the kubelet first reports a container that will
+	// not start without a change (ImagePullBackOff, CrashLoopBackOff, ...). Edge-triggered: the kubelet
+	// alternates between related reasons (ErrImagePull, ImagePullBackOff) and that is not a new failure.
+	EventWorkspaceStartFailed = "WorkspaceStartFailed"
 )
 
 // NewCondition creates a new condition with the specified status
