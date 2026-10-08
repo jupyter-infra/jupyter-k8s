@@ -7,8 +7,8 @@ A workspace moves through a series of states from creation to availability (and 
 | Condition | Meaning |
 |-----------|---------|
 | `Available` | The workspace is fully functional — pod running, access probe passed, ready to accept connections |
-| `Progressing` | Resources are being created, updated, or stopped |
-| `Degraded` | The workspace failed to reach or maintain its desired state: the Deployment's progress deadline passed (`ComputeStalled`), the access probe exceeded its failure threshold, or a resource could not be created |
+| `Progressing` | Resources are being created, updated, or stopped. While the workspace pod starts, the reason is the step it is in (`WaitingForNode`, `PullingImage`, `StartingContainer`) and the message is what the scheduler, the autoscaler or the kubelet recorded for it |
+| `Degraded` | The workspace failed to reach or maintain its desired state: the kubelet reports a container that cannot start (`ImagePullBackOff`, `CrashLoopBackOff`, ...), the Deployment's progress deadline passed (`ComputeStalled`), the access probe exceeded its failure threshold, or a resource could not be created |
 | `Stopped` | The workspace has been stopped; the pod is removed but storage is preserved |
 
 Each condition's status is one of `True`, `False`, or `Unknown`.
@@ -16,10 +16,34 @@ Each condition's status is one of `True`, `False`, or `Unknown`.
 ## Typical progression
 
 1. User creates or starts a workspace (`desiredStatus: Running`).
-2. Controller sets `Progressing=True` while creating the deployment, service, and access resources.
+2. Controller sets `Progressing=True` while creating the deployment, service, and access resources; while the pod starts, the condition carries the step and the recorded message (see below).
 3. If the workspace references an access strategy with an [access startup probe](access-probes), the controller waits for it to pass.
 4. On probe success: `Available=True`, `Progressing=False`.
 5. On probe failure (threshold exceeded): `Degraded=True`, `Available=False`.
+
+## Start steps
+
+While the workspace pod is not ready, `Progressing=True` names the step the start is in and copies the message the cluster recorded for it, so a user can tell a start that is making progress from one that is waiting:
+
+| Reason | When | Message |
+|--------|------|---------|
+| `WaitingForNode` | The pod has no node yet | The newest event an autoscaler recorded on the pod, for example Karpenter's `Pod should schedule on: nodeclaim/...` or `all available instance types exceed limits for nodepool`; the scheduler's `PodScheduled` message (`0/3 nodes are available: ...`) when there is none |
+| `PullingImage` | The kubelet is pulling the image | The kubelet's `Pulling image "..."` event |
+| `StartingContainer` | The pod has a node and its container is not ready | The waiting container's reason and message (`ContainerCreating`, `PodInitializing`, a failing readiness probe), or the kubelet's newest event |
+
+The operator does not interpret these messages; it copies them. The step appears on `Available=False` with the same reason. Events are read for the starting pod at most every few seconds, and the status is written only when the message changes.
+
+```yaml
+conditions:
+  - type: Progressing
+    status: "True"
+    reason: WaitingForNode
+    message: "Pod should schedule on: nodeclaim/workspace-gpu-x7k2m"
+```
+
+## Failed starts
+
+A container the kubelet reports as unable to start without a change to the workspace or its template, with reason `ErrImagePull`, `ImagePullBackOff`, `InvalidImageName`, `CreateContainerConfigError` or `CrashLoopBackOff`, turns the workspace `Degraded` at once, with the kubelet's reason and message on `Degraded`, `Available` and `Progressing`, instead of waiting for the progress deadline below. A Warning event with reason `WorkspaceStartFailed` is recorded on the workspace when the condition first appears; the kubelet alternating between related reasons (`ErrImagePull`, `ImagePullBackOff`) does not record another. The condition clears when the container runs. Fixing the cause, a wrong image name or a failing command, needs a stop and a start, as for stalled starts.
 
 ## Stalled starts
 
