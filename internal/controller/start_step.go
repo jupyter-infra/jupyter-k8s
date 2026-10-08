@@ -34,13 +34,9 @@ const (
 	startEventsBurst     = 4
 
 	// Vocabulary of core Kubernetes components; k8s.io/kubernetes/pkg/kubelet is not importable.
-	kubeletComponent               = "kubelet"
-	kubeletEventPulling            = "Pulling"
-	kubeletReasonErrImagePull      = "ErrImagePull"
-	kubeletReasonImagePullBackOff  = "ImagePullBackOff"
-	kubeletReasonInvalidImageName  = "InvalidImageName"
-	kubeletReasonCreateConfigError = "CreateContainerConfigError"
-	kubeletReasonCrashLoopBackOff  = "CrashLoopBackOff"
+	kubeletComponent              = "kubelet"
+	kubeletEventPulling           = "Pulling"
+	kubeletReasonInvalidImageName = "InvalidImageName"
 
 	// Fallback messages when neither the pod nor its events carry one.
 	waitingForNodeMessage    = "Waiting for a node to run the pod"
@@ -51,19 +47,6 @@ const (
 	// created by hand has no length limit.
 	maxCopiedMessageBytes = 1024
 )
-
-// definitiveStartFailureReasons names kubelet waiting reasons for a container it cannot start as specified:
-// an image it cannot pull, an invalid image name, a missing Secret or ConfigMap, a command that keeps
-// failing. IsDefinitiveStartFailureReason extends the set with Argo CD's rule for the same verdict, any
-// reason starting with Err or ending with Error or BackOff, which also covers ErrImageNeverPull,
-// CreateContainerError and RunContainerError but not InvalidImageName.
-var definitiveStartFailureReasons = map[string]bool{
-	kubeletReasonErrImagePull:      true,
-	kubeletReasonImagePullBackOff:  true,
-	kubeletReasonInvalidImageName:  true,
-	kubeletReasonCreateConfigError: true,
-	kubeletReasonCrashLoopBackOff:  true,
-}
 
 // StartStep is the step a starting workspace pod is in: the Progressing reason and the message the
 // component responsible for that step recorded, copied unchanged.
@@ -79,10 +62,13 @@ type StartFailure struct {
 	Message string
 }
 
-// IsDefinitiveStartFailureReason reports whether reason is one the kubelet uses for a container it cannot
-// start as specified.
-func IsDefinitiveStartFailureReason(reason string) bool {
-	return definitiveStartFailureReasons[reason] || strings.HasPrefix(reason, "Err") ||
+// isDefinitiveStartFailureReason reports whether reason is one the kubelet uses for a container it cannot
+// start as specified: an image it cannot pull, a missing Secret or ConfigMap, a command that keeps failing.
+// Argo CD's health check applies the same rule, any reason starting with Err or ending with Error or
+// BackOff (ErrImagePull, ImagePullBackOff, ErrImageNeverPull, CreateContainerConfigError, RunContainerError,
+// CrashLoopBackOff); InvalidImageName matches neither and is named.
+func isDefinitiveStartFailureReason(reason string) bool {
+	return reason == kubeletReasonInvalidImageName || strings.HasPrefix(reason, "Err") ||
 		strings.HasSuffix(reason, "Error") || strings.HasSuffix(reason, "BackOff")
 }
 
@@ -100,20 +86,20 @@ func reportedStartFailure(workspace *workspacev1alpha1.Workspace) *StartFailure 
 	degraded := FindCondition(&workspace.Status.Conditions, ConditionTypeDegraded)
 	progressing := FindCondition(&workspace.Status.Conditions, ConditionTypeProgressing)
 	if degraded == nil || progressing == nil || degraded.Status != metav1.ConditionTrue ||
-		progressing.Reason != degraded.Reason || !IsDefinitiveStartFailureReason(degraded.Reason) {
+		progressing.Reason != degraded.Reason || !isDefinitiveStartFailureReason(degraded.Reason) {
 		return nil
 	}
 	return &StartFailure{Reason: degraded.Reason, Message: degraded.Message}
 }
 
-// containerRestartedAfterFailure reports whether a container of the pod is not ready and has been
-// restarted after exiting with an error. Between the exit and the kubelet's next CrashLoopBackOff report
-// the container shows as Running or Terminated rather than Waiting.
-func containerRestartedAfterFailure(pod *corev1.Pod) bool {
+// containerRestarted reports whether a container of the pod is not ready and has been restarted since
+// it last exited. Between the exit and the kubelet's next CrashLoopBackOff report the container shows as
+// Running or Terminated rather than Waiting; the kubelet backs off any exited container, exit code 0
+// included, so a command that completes at once loops as well.
+func containerRestarted(pod *corev1.Pod) bool {
 	for _, statuses := range [][]corev1.ContainerStatus{pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses} {
 		for _, containerStatus := range statuses {
-			terminated := containerStatus.LastTerminationState.Terminated
-			if !containerStatus.Ready && containerStatus.RestartCount > 0 && terminated != nil && terminated.ExitCode != 0 {
+			if !containerStatus.Ready && containerStatus.RestartCount > 0 && containerStatus.LastTerminationState.Terminated != nil {
 				return true
 			}
 		}
@@ -127,7 +113,7 @@ func definitiveStartFailure(pod *corev1.Pod) *StartFailure {
 	for _, statuses := range [][]corev1.ContainerStatus{pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses} {
 		for _, containerStatus := range statuses {
 			waiting := containerStatus.State.Waiting
-			if waiting == nil || !IsDefinitiveStartFailureReason(waiting.Reason) {
+			if waiting == nil || !isDefinitiveStartFailureReason(waiting.Reason) {
 				continue
 			}
 			message := waiting.Message
@@ -247,7 +233,7 @@ func (rm *ResourceManager) WorkspaceStartStep(
 		failure.Message = truncateMessage(failure.Message, maxCopiedMessageBytes)
 		return nil, failure
 	}
-	if reported := reportedStartFailure(workspace); reported != nil && containerRestartedAfterFailure(pod) {
+	if reported := reportedStartFailure(workspace); reported != nil && containerRestarted(pod) {
 		return nil, reported
 	}
 	step := podStartStep(pod, rm.startEvents(ctx, workspace, pod))

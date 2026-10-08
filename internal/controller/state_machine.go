@@ -180,6 +180,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 				sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceStopped", "Workspace has been stopped")
 			}
 
+			sm.resourceManager.ForgetStartEvents(workspace)
 			if err := sm.statusManager.UpdateStoppedStatus(ctx, workspace, snapshotStatus); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -637,6 +638,7 @@ func (sm *StateMachine) ReconcileDeletion(ctx context.Context, workspace *worksp
 
 	// Update status to Deleting
 	snapshotStatus := workspace.Status.DeepCopy()
+	sm.resourceManager.ForgetStartEvents(workspace)
 	if err := sm.statusManager.UpdateDeletingStatus(ctx, workspace, snapshotStatus); err != nil {
 		logger.Error(err, "Failed to update deleting status")
 		return ctrl.Result{}, err
