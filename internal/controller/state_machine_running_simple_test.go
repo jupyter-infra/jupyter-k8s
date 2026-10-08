@@ -23,6 +23,11 @@ import (
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
 
+const (
+	newReplicaSetAvailableReason = "NewReplicaSetAvailable"
+	initContainerTestName        = "init"
+)
+
 var _ = Describe("reconcileDesiredRunningStatus without access strategy", func() {
 	var (
 		ctx        context.Context
@@ -133,6 +138,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			NewAccessResourcesBuilder(),
 			statusManager,
 		)
+		rm.SetEventReader(k8sClient)
 		return &StateMachine{
 			resourceManager:     rm,
 			statusManager:       statusManager,
@@ -235,7 +241,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 		})
 	})
 
-	Context("stalled rollout", func() {
+	Context("stalled rollout, failed starts and start steps", func() {
 		const (
 			deploymentStalledMessage = "ReplicaSet \"sm-simple\" has timed out progressing."
 			schedulingMessage        = "0/1 nodes are available: 1 Insufficient nvidia.com/gpu."
@@ -361,12 +367,12 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			Expect(recorder.Events).To(Receive(stallEvent(schedulingMessage)))
 		})
 
-		It("should report the waiting container's reason when the pod is scheduled but cannot start", func() {
+		It("should keep the kubelet's reason rather than ComputeStalled when a pull failure outlasts the deadline", func() {
 			workspace := newWorkspace()
 			dep := createNotReadyDeployment(workspace)
 			svc := createService(workspace)
 			pod := createPendingPod(workspace,
-				waitingContainer("ImagePullBackOff", "Back-off pulling image \"example.com/missing:1\""))
+				waitingContainer(kubeletReasonImagePullBackOff, "Back-off pulling image \"example.com/missing:1\""))
 			defer func() { _ = k8sClient.Delete(ctx, pod) }()
 			defer func() { _ = k8sClient.Delete(ctx, dep) }()
 			defer func() { _ = k8sClient.Delete(ctx, svc) }()
@@ -374,11 +380,18 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			markDeploymentStalled(dep)
 
 			sm := buildStateMachine()
-			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(LongRequeueDelay))
 
-			expectStalled(workspace, imagePullMessage)
-			Expect(recorder.Events).To(Receive(stallEvent(imagePullMessage)))
+			for _, condType := range []string{ConditionTypeDegraded, ConditionTypeAvailable, ConditionTypeProgressing} {
+				Expect(getCondition(workspace, condType).Reason).To(Equal(kubeletReasonImagePullBackOff), condType)
+				Expect(getCondition(workspace, condType).Message).To(Equal("Back-off pulling image \"example.com/missing:1\""), condType)
+			}
+			Expect(getCondition(workspace, ConditionTypeDegraded).Status).To(Equal(metav1.ConditionTrue))
+			Expect(recorder.Events).To(HaveLen(1))
+			Expect(recorder.Events).To(Receive(Equal(fmt.Sprintf("%s %s %s", corev1.EventTypeWarning,
+				EventWorkspaceStartFailed, imagePullMessage))))
 		})
 
 		It("should fall back to the Deployment's message when no pod reports anything", func() {
@@ -468,7 +481,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			expectStalled(workspace, deploymentStalledMessage)
 
 			markDeploymentAvailable(dep, appsv1.DeploymentCondition{
-				Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: "NewReplicaSetAvailable",
+				Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: newReplicaSetAvailableReason,
 			})
 			_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
 			Expect(err).NotTo(HaveOccurred())
@@ -494,7 +507,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			expectStalled(workspace, deploymentStalledMessage)
 
 			markDeploymentAvailable(dep, appsv1.DeploymentCondition{
-				Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: "NewReplicaSetAvailable",
+				Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: newReplicaSetAvailableReason,
 			})
 			_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
 			Expect(err).NotTo(HaveOccurred())
@@ -604,6 +617,319 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to update Workspace.Status"))
+		})
+
+		Context("start steps", func() {
+			const nominatedMessage = "Pod should schedule on: nodeclaim/workspace-gpu-abc12"
+
+			createPodEvent := func(pod *corev1.Pod, name, component, reason, message string, at time.Time) *corev1.Event {
+				event := &corev1.Event{
+					ObjectMeta:     metav1.ObjectMeta{Name: pod.Name + "-" + name, Namespace: pod.Namespace},
+					InvolvedObject: corev1.ObjectReference{Kind: KindPod, Name: pod.Name, Namespace: pod.Namespace, UID: pod.UID},
+					Reason:         reason,
+					Message:        message,
+					Source:         corev1.EventSource{Component: component},
+					Type:           corev1.EventTypeNormal,
+					FirstTimestamp: metav1.NewTime(at),
+					LastTimestamp:  metav1.NewTime(at),
+				}
+				Expect(k8sClient.Create(ctx, event)).To(Succeed())
+				return event
+			}
+			expectStartStep := func(ws *workspacev1alpha1.Workspace, reason, message string) {
+				GinkgoHelper()
+				progressing := getCondition(ws, ConditionTypeProgressing)
+				Expect(progressing).NotTo(BeNil())
+				Expect(progressing.Status).To(Equal(metav1.ConditionTrue))
+				Expect(progressing.Reason).To(Equal(reason))
+				Expect(progressing.Message).To(Equal(message))
+				available := getCondition(ws, ConditionTypeAvailable)
+				Expect(available.Status).To(Equal(metav1.ConditionFalse))
+				Expect(available.Reason).To(Equal(reason))
+				Expect(available.Message).To(Equal(message))
+				expectNotDegraded(ws)
+			}
+
+			It("should report WaitingForNode with the scheduler's verdict while the pod has no node", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, unschedulable(schedulingMessage))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(PollRequeueDelay))
+
+				expectStartStep(workspace, ReasonWaitingForNode, schedulingMessage)
+				Expect(recorder.Events).To(BeEmpty())
+			})
+
+			It("should prefer the autoscaler's newest event over the scheduler's repeats", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, unschedulable(schedulingMessage))
+				now := time.Now()
+				nominated := createPodEvent(pod, "nominated", "karpenter", "Nominated", nominatedMessage, now.Add(-time.Minute))
+				scheduler := createPodEvent(pod, "sched", "default-scheduler", "FailedScheduling", schedulingMessage, now)
+				defer func() { _ = k8sClient.Delete(ctx, nominated) }()
+				defer func() { _ = k8sClient.Delete(ctx, scheduler) }()
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				expectStartStep(workspace, ReasonWaitingForNode, nominatedMessage)
+			})
+
+			It("should report PullingImage while the kubelet pulls the image", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonContainerCreating, ""))
+				pulling := createPodEvent(pod, "pulling", kubeletComponent, kubeletEventPulling,
+					"Pulling image \"jupyter/base-notebook:latest\"", time.Now())
+				defer func() { _ = k8sClient.Delete(ctx, pulling) }()
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				expectStartStep(workspace, ReasonPullingImage, "Pulling image \"jupyter/base-notebook:latest\"")
+			})
+
+			It("should report StartingContainer with the waiting container's reason", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonContainerCreating, ""))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				expectStartStep(workspace, ReasonStartingContainer, kubeletReasonContainerCreating)
+			})
+
+			It("should reuse the events read within the interval and refresh them after it", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, unschedulable(schedulingMessage))
+				now := time.Now()
+				nominated := createPodEvent(pod, "nominated", "karpenter", "Nominated", nominatedMessage, now)
+				defer func() { _ = k8sClient.Delete(ctx, nominated) }()
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				clock := now
+				sm.resourceManager.now = func() time.Time { return clock }
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				expectStartStep(workspace, ReasonWaitingForNode, nominatedMessage)
+
+				limits := createPodEvent(pod, "limits", "karpenter", "Failed",
+					"all available instance types exceed limits for nodepool", now.Add(time.Second))
+				defer func() { _ = k8sClient.Delete(ctx, limits) }()
+				clock = now.Add(startEventsInterval / 2)
+				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				expectStartStep(workspace, ReasonWaitingForNode, nominatedMessage)
+
+				clock = now.Add(2 * startEventsInterval)
+				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				expectStartStep(workspace, ReasonWaitingForNode, "all available instance types exceed limits for nodepool")
+			})
+
+			It("should keep the generic Starting reason while no pod exists", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				progressing := getCondition(workspace, ConditionTypeProgressing)
+				Expect(progressing.Status).To(Equal(metav1.ConditionTrue))
+				Expect(progressing.Reason).To(Equal(ReasonResourcesNotReady))
+			})
+
+			It("should drop the cached events once the workspace is Running", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, unschedulable(schedulingMessage))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(sm.resourceManager.cachedStartEvents).To(HaveKey(client.ObjectKeyFromObject(workspace)))
+
+				markDeploymentAvailable(dep, appsv1.DeploymentCondition{
+					Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: newReplicaSetAvailableReason,
+				})
+				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(getCondition(workspace, ConditionTypeAvailable).Status).To(Equal(metav1.ConditionTrue))
+				Expect(sm.resourceManager.cachedStartEvents).NotTo(HaveKey(client.ObjectKeyFromObject(workspace)))
+			})
+		})
+
+		Context("failed start", func() {
+			const (
+				backOffMessage = "Back-off pulling image \"example.com/missing:1\""
+				pullErrMessage = "rpc error: code = NotFound desc = failed to pull and unpack image"
+			)
+			failedEvent := func(reason, message string) OmegaMatcher {
+				return Equal(fmt.Sprintf("%s %s %s: %s", corev1.EventTypeWarning, EventWorkspaceStartFailed, reason, message))
+			}
+			expectStartFailed := func(ws *workspacev1alpha1.Workspace, reason, message string) {
+				GinkgoHelper()
+				for _, condType := range []string{ConditionTypeDegraded, ConditionTypeAvailable, ConditionTypeProgressing} {
+					cond := getCondition(ws, condType)
+					Expect(cond).NotTo(BeNil(), condType)
+					Expect(cond.Reason).To(Equal(reason), condType)
+					Expect(cond.Message).To(Equal(message), condType)
+				}
+				Expect(getCondition(ws, ConditionTypeDegraded).Status).To(Equal(metav1.ConditionTrue))
+				Expect(getCondition(ws, ConditionTypeAvailable).Status).To(Equal(metav1.ConditionFalse))
+				Expect(getCondition(ws, ConditionTypeProgressing).Status).To(Equal(metav1.ConditionFalse))
+			}
+
+			It("should report the kubelet's reason at once when the container cannot start", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(LongRequeueDelay))
+
+				expectStartFailed(workspace, kubeletReasonImagePullBackOff, backOffMessage)
+				Expect(workspace.Status.DeploymentName).To(Equal(dep.Name))
+				Expect(workspace.Status.ServiceName).To(Equal(svc.Name))
+				Expect(recorder.Events).To(HaveLen(1))
+				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonImagePullBackOff, backOffMessage)))
+			})
+
+			It("should not repeat the event when the kubelet alternates between pull reasons", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonErrImagePull, pullErrMessage))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				expectStartFailed(workspace, kubeletReasonErrImagePull, pullErrMessage)
+				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonErrImagePull, pullErrMessage)))
+
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), pod)).To(Succeed())
+				pod.Status = waitingContainer(kubeletReasonImagePullBackOff, backOffMessage)
+				pod.Status.Phase = corev1.PodPending
+				Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				expectStartFailed(workspace, kubeletReasonImagePullBackOff, backOffMessage)
+				Expect(recorder.Events).To(BeEmpty())
+			})
+
+			It("should report an init container that crash-loops", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				status := waitingContainer("PodInitializing", "")
+				status.InitContainerStatuses = []corev1.ContainerStatus{{Name: initContainerTestName, State: corev1.ContainerState{
+					Waiting: &corev1.ContainerStateWaiting{Reason: kubeletReasonCrashLoopBackOff, Message: "back-off 10s restarting failed container=" + initContainerTestName},
+				}}}
+				pod := createPendingPod(workspace, status)
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, "back-off 10s restarting failed container="+initContainerTestName)
+			})
+
+			It("should clear Degraded and report Available once the container runs", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				expectStartFailed(workspace, kubeletReasonImagePullBackOff, backOffMessage)
+
+				markDeploymentAvailable(dep, appsv1.DeploymentCondition{
+					Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: newReplicaSetAvailableReason,
+				})
+				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(getCondition(workspace, ConditionTypeAvailable).Status).To(Equal(metav1.ConditionTrue))
+				expectNotDegraded(workspace)
+			})
 		})
 	})
 
