@@ -8,6 +8,7 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
@@ -92,4 +93,33 @@ func TestMergeConditionsIfChanged(t *testing.T) {
 	}
 	result = MergeConditionsIfChanged(ctx, workspace, &unchangedConditions)
 	assert.Empty(t, result, "Should return empty slice when no changes")
+}
+
+func TestMergeConditionsIfChangedKeepsLastTransitionTimeWhileStatusHolds(t *testing.T) {
+	ctx := context.Background()
+	old := metav1.NewTime(time.Now().Add(-time.Hour).Truncate(time.Second))
+	workspace := &workspacev1alpha1.Workspace{}
+	workspace.Status.Conditions = []metav1.Condition{
+		{Type: conditionTypeExisting, Status: metav1.ConditionTrue, Reason: "A", Message: "a", LastTransitionTime: old},
+		{Type: conditionTypeToUpdate, Status: metav1.ConditionTrue, Reason: "B", Message: "b", LastTransitionTime: old},
+		{Type: "Third", Status: metav1.ConditionFalse, Reason: "C", Message: "c", LastTransitionTime: old},
+	}
+
+	result := MergeConditionsIfChanged(ctx, workspace, &[]metav1.Condition{
+		NewCondition(conditionTypeExisting, metav1.ConditionTrue, "A2", "a2"),
+		NewCondition(conditionTypeToUpdate, metav1.ConditionFalse, "B", "b"),
+		NewCondition("Third", metav1.ConditionFalse, "C", "c"),
+	})
+	assert.Len(t, result, 3)
+	for _, cond := range result {
+		switch cond.Type {
+		case conditionTypeExisting:
+			assert.Equal(t, "A2", cond.Reason)
+			assert.True(t, cond.LastTransitionTime.Equal(&old), "a new reason under the same status keeps lastTransitionTime")
+		case conditionTypeToUpdate:
+			assert.False(t, cond.LastTransitionTime.Equal(&old), "a status flip moves lastTransitionTime")
+		case "Third":
+			assert.True(t, cond.LastTransitionTime.Equal(&old), "an unchanged condition keeps lastTransitionTime")
+		}
+	}
 }

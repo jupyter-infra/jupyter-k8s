@@ -70,9 +70,14 @@ func MergeConditionsIfChanged(
 			existingCondition.Reason == condition.Reason &&
 			existingCondition.Message == condition.Message {
 			unchangedConditionNames = append(unchangedConditionNames, condition.Type)
+			condition.LastTransitionTime = existingCondition.LastTransitionTime
 			conditionsToUpdate = append(conditionsToUpdate, condition)
 		} else {
-			// Update the condition by removing old entry and appending new one
+			// lastTransitionTime marks the last status flip (API conventions); a new reason or message
+			// under the same status keeps it.
+			if existingCondition.Status == condition.Status {
+				condition.LastTransitionTime = existingCondition.LastTransitionTime
+			}
 			updated = true
 			updatedConditionNames = append(updatedConditionNames, condition.Type)
 			conditionsToUpdate = append(conditionsToUpdate, condition)
