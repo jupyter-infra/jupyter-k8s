@@ -43,7 +43,7 @@ conditions:
 
 ## Failed starts
 
-A container the kubelet reports as unable to start without a change to the workspace or its template, with reason `ErrImagePull`, `ImagePullBackOff`, `InvalidImageName`, `CreateContainerConfigError` or `CrashLoopBackOff`, turns the workspace `Degraded` at once, with the kubelet's reason and message on `Degraded`, `Available` and `Progressing`, instead of waiting for the progress deadline below. A Warning event with reason `WorkspaceStartFailed` is recorded on the workspace when the condition first appears; the kubelet alternating between related reasons (`ErrImagePull`, `ImagePullBackOff`) does not record another. The condition clears when the container runs. Fixing the cause, a wrong image name or a failing command, needs a stop and a start, as for stalled starts.
+A container the kubelet reports as unable to start without a change to the workspace or its template, `ErrImagePull`, `ImagePullBackOff`, `ErrImageNeverPull`, `InvalidImageName`, `CreateContainerConfigError`, `CrashLoopBackOff`, or any other reason starting with `Err` or ending in `Error` or `BackOff` (the rule Argo CD's health check applies), turns the workspace `Degraded` at once, with the kubelet's reason and message on `Degraded`, `Available` and `Progressing`, instead of waiting for the progress deadline below. A Warning event with reason `WorkspaceStartFailed` is recorded on the workspace when the condition first appears; the kubelet alternating between related reasons (`ErrImagePull`, `ImagePullBackOff`) does not record another. The condition clears when the container runs. Fixing the cause, a wrong image name or a failing command, needs a stop and a start, as for stalled starts.
 
 ## Stalled starts
 

@@ -400,7 +400,9 @@ var _ = Describe("Workspace Status", Ordered, func() {
 			unpullableImage     = "jk8s-e2e-missing-image"
 			crashLoopWorkspace  = "workspace-crash-loop"
 		)
-		imagePullReasons := []string{"ErrImagePull", "ImagePullBackOff"}
+		// The e2e operator runs application images with pull policy Never, so a missing image reads
+		// ErrImageNeverPull there and ErrImagePull or ImagePullBackOff on a cluster that pulls.
+		imagePullReasons := []string{"ErrImagePull", "ImagePullBackOff", "ErrImageNeverPull"}
 
 		It("should report Degraded as soon as the image cannot be pulled, clear it on stop, and start once fixed", func() {
 			By("creating a workspace whose image exists nowhere")

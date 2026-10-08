@@ -43,9 +43,10 @@ const (
 	startingContainerMessage = "Starting the container"
 )
 
-// definitiveStartFailureReasons are the kubelet waiting reasons under which a container will not start
-// without a change to the workspace or its template. Argo CD's health check degrades a pod on the same
-// set (any reason starting with Err or ending with Error or BackOff).
+// definitiveStartFailureReasons names the kubelet waiting reasons under which a container will not start
+// without a change to the workspace or its template; IsDefinitiveStartFailureReason extends the set with
+// Argo CD's rule for the same verdict, any reason starting with Err or ending with Error or BackOff, which
+// also covers ErrImageNeverPull, CreateContainerError and RunContainerError but not InvalidImageName.
 var definitiveStartFailureReasons = map[string]bool{
 	kubeletReasonErrImagePull:      true,
 	kubeletReasonImagePullBackOff:  true,
@@ -71,7 +72,8 @@ type StartFailure struct {
 // IsDefinitiveStartFailureReason reports whether reason is one the kubelet uses for a container that
 // will not start without a change to the workspace or its template.
 func IsDefinitiveStartFailureReason(reason string) bool {
-	return definitiveStartFailureReasons[reason]
+	return definitiveStartFailureReasons[reason] || strings.HasPrefix(reason, "Err") ||
+		strings.HasSuffix(reason, "Error") || strings.HasSuffix(reason, "BackOff")
 }
 
 // startEventsEntry is the last read of a starting pod's events for one workspace.
@@ -87,7 +89,7 @@ func definitiveStartFailure(pod *corev1.Pod) *StartFailure {
 	for _, statuses := range [][]corev1.ContainerStatus{pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses} {
 		for _, containerStatus := range statuses {
 			waiting := containerStatus.State.Waiting
-			if waiting == nil || !definitiveStartFailureReasons[waiting.Reason] {
+			if waiting == nil || !IsDefinitiveStartFailureReason(waiting.Reason) {
 				continue
 			}
 			message := waiting.Message
