@@ -279,10 +279,13 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 			By("creating a workspace that takes the template default of 1 GPU")
 			createWorkspaceForTest(workspaceName, groupDir, "")
 			deploymentName := GetWorkspaceDeploymentName(workspaceName, workspaceNamespace)
+
+			By("verifying the start reports WaitingForNode with the scheduler's verdict while the pod has no node")
+			verdict := ContainSubstring("Insufficient " + fakeGPUResourceName)
+			waitForWorkspaceStartStep(workspaceName, workspaceNamespace, controller.ReasonWaitingForNode, verdict)
 			setDeploymentProgressDeadline(deploymentName, workspaceNamespace, stallDeadlineSeconds)
 
 			By("waiting for Degraded=True with reason ComputeStalled carrying the scheduler's verdict")
-			verdict := ContainSubstring("Insufficient " + fakeGPUResourceName)
 			waitForWorkspaceStalled(workspaceName, workspaceNamespace, verdict)
 
 			By("verifying one Warning event carries the same verdict")

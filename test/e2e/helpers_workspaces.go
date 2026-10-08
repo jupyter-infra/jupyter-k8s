@@ -19,6 +19,7 @@ import (
 	"github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
@@ -287,13 +288,12 @@ func waitForWorkspaceStalled(workspaceName, namespace string, messageMatcher gom
 	}).WithTimeout(2 * time.Minute).WithPolling(3 * time.Second).Should(gomega.Succeed())
 }
 
-// workspaceStallEvents returns the WorkspaceComputeStalled events recorded on the workspace with the
-// given UID. Events outlive the object they were recorded on, so a selection by name would also return
-// the events of an earlier workspace of the same name, which specs reuse across runs.
-func workspaceStallEvents(workspaceUID, namespace string) ([]corev1.Event, error) {
+// workspaceEvents returns the events with the given reason recorded on the workspace with the given
+// UID. Events outlive the object they were recorded on, so a selection by name would also return the
+// events of an earlier workspace of the same name, which specs reuse across runs.
+func workspaceEvents(workspaceUID, namespace, reason string) ([]corev1.Event, error) {
 	cmd := exec.Command("kubectl", verbGet, "events", "-n", namespace,
-		"--field-selector", fmt.Sprintf("involvedObject.uid=%s,reason=%s",
-			workspaceUID, controller.EventWorkspaceComputeStalled),
+		"--field-selector", fmt.Sprintf("involvedObject.uid=%s,reason=%s", workspaceUID, reason),
 		"-o", "json")
 	output, err := utils.Run(cmd)
 	if err != nil {
@@ -310,19 +310,100 @@ func workspaceStallEvents(workspaceUID, namespace string) ([]corev1.Event, error
 // the workspace, once, with a message matching messageMatcher.
 func expectSingleStallEvent(workspaceName, namespace string, messageMatcher gomega.OmegaMatcher) {
 	ginkgo.GinkgoHelper()
+	expectSingleWarningEvent(workspaceName, namespace, controller.EventWorkspaceComputeStalled, messageMatcher)
+}
+
+// expectSingleStartFailedEvent asserts that exactly one Warning WorkspaceStartFailed event is recorded
+// on the workspace, once, with a message matching messageMatcher.
+func expectSingleStartFailedEvent(workspaceName, namespace string, messageMatcher gomega.OmegaMatcher) {
+	ginkgo.GinkgoHelper()
+	expectSingleWarningEvent(workspaceName, namespace, controller.EventWorkspaceStartFailed, messageMatcher)
+}
+
+func expectSingleWarningEvent(workspaceName, namespace, reason string, messageMatcher gomega.OmegaMatcher) {
+	ginkgo.GinkgoHelper()
 
 	workspaceUID, err := kubectlGet("workspace", workspaceName, namespace, "{.metadata.uid}")
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	gomega.Expect(workspaceUID).NotTo(gomega.BeEmpty())
 
 	gomega.Eventually(func(g gomega.Gomega) {
-		events, err := workspaceStallEvents(workspaceUID, namespace)
+		events, err := workspaceEvents(workspaceUID, namespace, reason)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		g.Expect(events).To(gomega.HaveLen(1))
 		g.Expect(events[0].Type).To(gomega.Equal(corev1.EventTypeWarning))
 		g.Expect(events[0].Count).To(gomega.BeNumerically("<=", 1))
 		g.Expect(events[0].Message).To(messageMatcher)
 	}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(gomega.Succeed())
+}
+
+// waitForWorkspaceStartStep polls until the workspace reports Progressing=True with the step as its
+// reason and a message matching messageMatcher, and Available=False under the same reason.
+func waitForWorkspaceStartStep(workspaceName, namespace, step string, messageMatcher gomega.OmegaMatcher) {
+	ginkgo.GinkgoHelper()
+
+	gomega.Eventually(func(g gomega.Gomega) {
+		var ws workspacev1alpha1.Workspace
+		g.Expect(kubectlGetInto("workspace", workspaceName, namespace, &ws)).To(gomega.Succeed())
+		progressing := meta.FindStatusCondition(ws.Status.Conditions, ConditionTypeProgressing)
+		g.Expect(progressing).NotTo(gomega.BeNil())
+		g.Expect(string(progressing.Status)).To(gomega.Equal(ConditionTrue))
+		g.Expect(progressing.Reason).To(gomega.Equal(step))
+		g.Expect(progressing.Message).To(messageMatcher)
+		available := meta.FindStatusCondition(ws.Status.Conditions, ConditionTypeAvailable)
+		g.Expect(available).NotTo(gomega.BeNil())
+		g.Expect(string(available.Status)).To(gomega.Equal(ConditionFalse))
+		g.Expect(available.Reason).To(gomega.Equal(step))
+	}).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(gomega.Succeed())
+}
+
+// waitForWorkspaceStartFailed polls until the workspace reports Degraded=True with one of the given
+// kubelet reasons and a message matching messageMatcher, and Available=False and Progressing=False
+// under the same reason and message.
+func waitForWorkspaceStartFailed(
+	workspaceName, namespace string, reasons []string, messageMatcher gomega.OmegaMatcher) {
+	ginkgo.GinkgoHelper()
+
+	gomega.Eventually(func(g gomega.Gomega) {
+		var ws workspacev1alpha1.Workspace
+		g.Expect(kubectlGetInto("workspace", workspaceName, namespace, &ws)).To(gomega.Succeed())
+		degraded := meta.FindStatusCondition(ws.Status.Conditions, ConditionTypeDegraded)
+		g.Expect(degraded).NotTo(gomega.BeNil())
+		g.Expect(string(degraded.Status)).To(gomega.Equal(ConditionTrue))
+		g.Expect(degraded.Reason).To(gomega.BeElementOf(reasons))
+		g.Expect(degraded.Message).To(messageMatcher)
+		for _, conditionType := range []string{ConditionTypeAvailable, ConditionTypeProgressing} {
+			condition := meta.FindStatusCondition(ws.Status.Conditions, conditionType)
+			g.Expect(condition).NotTo(gomega.BeNil(), conditionType)
+			g.Expect(string(condition.Status)).To(gomega.Equal(ConditionFalse), conditionType)
+			g.Expect(condition.Reason).To(gomega.Equal(degraded.Reason), conditionType)
+			g.Expect(condition.Message).To(gomega.Equal(degraded.Message), conditionType)
+		}
+	}).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(gomega.Succeed())
+}
+
+// progressingReasonsUntilAvailable polls the workspace until Available=True and returns every reason
+// its Progressing condition carried on the way, with the Degraded status values seen.
+func progressingReasonsUntilAvailable(
+	workspaceName, namespace string) (reasons map[string]bool, degradedSeen map[string]bool) {
+	ginkgo.GinkgoHelper()
+	reasons, degradedSeen = map[string]bool{}, map[string]bool{}
+
+	gomega.Eventually(func(g gomega.Gomega) {
+		var ws workspacev1alpha1.Workspace
+		g.Expect(kubectlGetInto("workspace", workspaceName, namespace, &ws)).To(gomega.Succeed())
+		if progressing := meta.FindStatusCondition(ws.Status.Conditions, ConditionTypeProgressing); progressing != nil &&
+			progressing.Status == metav1.ConditionTrue {
+			reasons[progressing.Reason] = true
+		}
+		if degraded := meta.FindStatusCondition(ws.Status.Conditions, ConditionTypeDegraded); degraded != nil {
+			degradedSeen[string(degraded.Status)] = true
+		}
+		available := meta.FindStatusCondition(ws.Status.Conditions, ConditionTypeAvailable)
+		g.Expect(available).NotTo(gomega.BeNil())
+		g.Expect(string(available.Status)).To(gomega.Equal(ConditionTrue))
+	}).WithTimeout(5 * time.Minute).WithPolling(500 * time.Millisecond).Should(gomega.Succeed())
+	return reasons, degradedSeen
 }
 
 // GetWorkspaceServiceName waits until the Workspace reports the Service it owns and returns its name.

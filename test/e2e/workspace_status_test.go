@@ -17,6 +17,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 )
 
@@ -376,21 +377,39 @@ var _ = Describe("Workspace Status", Ordered, func() {
 		})
 	})
 
+	Context("Start steps", func() {
+		It("should report only known steps on Progressing while a workspace starts", func() {
+			By("creating workspace with desiredStatus=Running")
+			createWorkspaceForTest(runningWorkspace, statusGroupDir, statusSubgroupDir)
+
+			By("recording every Progressing reason on the way to Available")
+			reasons, degradedSeen := progressingReasonsUntilAvailable(runningWorkspace, statusTestNamespace)
+			for reason := range reasons {
+				Expect(reason).To(BeElementOf(
+					controller.ReasonResourcesNotReady, controller.ReasonComputeNotReady, controller.ReasonServiceNotReady,
+					controller.ReasonAccessNotReady, controller.ReasonWaitingForNode, controller.ReasonPullingImage,
+					controller.ReasonStartingContainer), "unexpected Progressing reason during a start")
+			}
+			Expect(degradedSeen).NotTo(HaveKey(ConditionTrue), "a normal start must never read Degraded")
+		})
+	})
+
 	Context("Degraded State", func() {
 		const (
 			unpullableWorkspace = "workspace-unpullable-image"
 			unpullableImage     = "jk8s-e2e-missing-image"
+			crashLoopWorkspace  = "workspace-crash-loop"
 		)
+		imagePullReasons := []string{"ErrImagePull", "ImagePullBackOff"}
 
-		It("should report Degraded at the progress deadline, clear it on stop, and start once the image is fixed", func() {
+		It("should report Degraded as soon as the image cannot be pulled, clear it on stop, and start once fixed", func() {
 			By("creating a workspace whose image exists nowhere")
 			createWorkspaceForTest(unpullableWorkspace, statusGroupDir, statusSubgroupDir)
-			deploymentName := GetWorkspaceDeploymentName(unpullableWorkspace, statusTestNamespace)
-			setDeploymentProgressDeadline(deploymentName, statusTestNamespace, stallDeadlineSeconds)
 
-			By("waiting for Degraded=True with reason ComputeStalled naming the image")
-			waitForWorkspaceStalled(unpullableWorkspace, statusTestNamespace, ContainSubstring(unpullableImage))
-			expectSingleStallEvent(unpullableWorkspace, statusTestNamespace, ContainSubstring(unpullableImage))
+			By("waiting for Degraded=True with the kubelet's pull reason naming the image, before any deadline")
+			waitForWorkspaceStartFailed(unpullableWorkspace, statusTestNamespace, imagePullReasons,
+				ContainSubstring(unpullableImage))
+			expectSingleStartFailedEvent(unpullableWorkspace, statusTestNamespace, ContainSubstring(unpullableImage))
 			VerifyWorkspaceConditions(unpullableWorkspace, statusTestNamespace, map[string]string{
 				ConditionTypeProgressing: ConditionFalse,
 				ConditionTypeDegraded:    ConditionTrue,
@@ -417,6 +436,32 @@ var _ = Describe("Workspace Status", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			WaitForWorkspaceToReachCondition(unpullableWorkspace, statusTestNamespace, ConditionTypeAvailable, ConditionTrue)
 			VerifyWorkspaceConditions(unpullableWorkspace, statusTestNamespace, map[string]string{
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionFalse,
+				ConditionTypeAvailable:   ConditionTrue,
+				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionFalse,
+			})
+		})
+
+		It("should report Degraded as soon as the container crash-loops, and start once the command is removed", func() {
+			By("creating a workspace whose command exits at once")
+			createWorkspaceForTest(crashLoopWorkspace, statusGroupDir, statusSubgroupDir)
+
+			By("waiting for Degraded=True with reason CrashLoopBackOff and the kubelet's back-off message")
+			waitForWorkspaceStartFailed(crashLoopWorkspace, statusTestNamespace, []string{"CrashLoopBackOff"},
+				ContainSubstring("back-off"))
+			expectSingleStartFailedEvent(crashLoopWorkspace, statusTestNamespace, ContainSubstring("CrashLoopBackOff"))
+
+			By("stopping the workspace, removing the command and starting it again")
+			UpdateWorkspaceDesiredState(crashLoopWorkspace, statusTestNamespace, "Stopped")
+			WaitForWorkspaceToReachCondition(crashLoopWorkspace, statusTestNamespace, ConditionTypeStopped, ConditionTrue)
+			cmd := exec.Command("kubectl", "patch", "workspace", crashLoopWorkspace, "-n", statusTestNamespace,
+				"--type=merge", "-p", `{"spec":{"command":null,"desiredStatus":"Running"}}`)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			WaitForWorkspaceToReachCondition(crashLoopWorkspace, statusTestNamespace, ConditionTypeAvailable, ConditionTrue)
+			VerifyWorkspaceConditions(crashLoopWorkspace, statusTestNamespace, map[string]string{
 				ConditionTypeProgressing: ConditionFalse,
 				ConditionTypeDegraded:    ConditionFalse,
 				ConditionTypeAvailable:   ConditionTrue,
