@@ -6,8 +6,6 @@ Distributed under the terms of the MIT license
 package controller
 
 import (
-	"context"
-
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -66,19 +64,6 @@ func (rm *ResourceManager) IsDeploymentProgressDeadlineExceeded(deployment *apps
 		return false, ""
 	}
 	return false, ""
-}
-
-// WorkspacePodStallMessage returns what the workspace's starting pod reports about why it is not
-// running, the message of its start step (see podStartStep), or "" when the workspace has no live pod.
-func (rm *ResourceManager) WorkspacePodStallMessage(
-	ctx context.Context,
-	workspace *workspacev1alpha1.Workspace,
-) string {
-	pod := rm.workspaceStartingPod(ctx, workspace)
-	if pod == nil {
-		return ""
-	}
-	return podStartStep(pod, rm.startEvents(ctx, workspace, pod)).Message
 }
 
 // waitingContainerMessage returns the reason and message of the first waiting container, init

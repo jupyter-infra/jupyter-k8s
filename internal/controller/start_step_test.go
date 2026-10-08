@@ -7,11 +7,13 @@ package controller
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -288,14 +290,25 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 	newer := labeled(unscheduledPod(stepTestSchedMsg))
 	newer.CreationTimestamp = metav1.NewTime(time.Now())
 
+	oversized := podEvent("oversized", "karpenter", "Nominated", strings.Repeat("x", 40000), time.Now())
+
 	tests := []struct {
 		name         string
 		objects      []client.Object
 		withReader   bool
+		listErr      error
 		expectStep   *StartStep
 		expectFailed *StartFailure
 	}{
 		{name: "no pod yet", withReader: true},
+		{name: "a failed pod list reports nothing", withReader: true, listErr: errInjected,
+			objects: []client.Object{labeled(unscheduledPod(stepTestSchedMsg))}},
+		{name: "an oversized event message is cut", withReader: true,
+			objects:    []client.Object{labeled(unscheduledPod(stepTestSchedMsg)), &oversized},
+			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: truncateMessage(oversized.Message, maxCopiedMessageBytes)}},
+		{name: "an oversized waiting message is cut", withReader: true,
+			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonErrImagePull, strings.Repeat("x", 40000))))},
+			expectFailed: &StartFailure{Reason: kubeletReasonErrImagePull, Message: strings.Repeat("x", maxCopiedMessageBytes) + " ...(truncated)"}},
 		{name: "an evicted pod is skipped for its replacement", withReader: true,
 			objects:    []client.Object{evicted, labeled(scheduledPod(waitingStatus(kubeletReasonContainerCreating, "")))},
 			expectStep: &StartStep{Reason: ReasonStartingContainer, Message: kubeletReasonContainerCreating}},
@@ -320,6 +333,11 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := eventIndexedClient(t, tt.objects...)
+			if tt.listErr != nil {
+				c = &MockClient{Client: c, listFunc: func(context.Context, client.ObjectList, ...client.ListOption) error {
+					return tt.listErr
+				}}
+			}
 			rm := newResourceManagerForCRUD(c, crudScheme(t))
 			require.NotNil(t, rm)
 			if tt.withReader {
@@ -377,6 +395,37 @@ func TestResourceManager_WorkspaceStartStep_HoldsReportedFailure(t *testing.T) {
 	}
 }
 
+func TestResourceManager_StartEventsShareARateLimit(t *testing.T) {
+	workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
+	pod := unscheduledPod(stepTestSchedMsg)
+	pod.Labels = GenerateLabels(testWorkspaceName)
+	nominated := podEvent("nominated", "karpenter", "Nominated", stepTestNominated, time.Now())
+	c := eventIndexedClient(t, pod, &nominated)
+	reader := &countingReader{Reader: c}
+	rm := newResourceManagerForCRUD(c, crudScheme(t))
+	require.NotNil(t, rm)
+	rm.SetEventReader(reader)
+	// one read in the bucket and no refill
+	rm.eventReadLimiter = rate.NewLimiter(0, 1)
+	clock := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	rm.now = func() time.Time { return clock }
+	ctx := context.Background()
+
+	step, _ := rm.WorkspaceStartStep(ctx, workspace)
+	assert.Equal(t, stepTestNominated, step.Message)
+	assert.Equal(t, 1, reader.lists)
+
+	// Past the interval, a denied read reuses the cached events and leaves the interval open.
+	clock = clock.Add(2 * startEventsInterval)
+	step, _ = rm.WorkspaceStartStep(ctx, workspace)
+	assert.Equal(t, stepTestNominated, step.Message)
+	assert.Equal(t, 1, reader.lists)
+
+	rm.eventReadLimiter = rate.NewLimiter(rate.Inf, 0)
+	_, _ = rm.WorkspaceStartStep(ctx, workspace)
+	assert.Equal(t, 2, reader.lists)
+}
+
 func TestResourceManager_StartEventsAreThrottled(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
 	pod := unscheduledPod(stepTestSchedMsg)
@@ -387,6 +436,7 @@ func TestResourceManager_StartEventsAreThrottled(t *testing.T) {
 	rm := newResourceManagerForCRUD(c, crudScheme(t))
 	require.NotNil(t, rm)
 	rm.SetEventReader(reader)
+	rm.eventReadLimiter = rate.NewLimiter(rate.Inf, 0)
 	clock := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	rm.now = func() time.Time { return clock }
 	ctx := context.Background()

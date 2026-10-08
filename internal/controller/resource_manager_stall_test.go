@@ -6,19 +6,11 @@ Distributed under the terms of the MIT license
 package controller
 
 import (
-	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
 
 const (
@@ -149,89 +141,6 @@ func TestWaitingContainerMessage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.expected, waitingContainerMessage(&corev1.Pod{Status: tt.status}))
-		})
-	}
-}
-
-func TestResourceManager_WorkspacePodStallMessage(t *testing.T) {
-	workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{
-		Name: testWorkspaceName, Namespace: testNamespaceName,
-	}}
-	unschedulablePod := func(name string, labels map[string]string, message string) *corev1.Pod {
-		return &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespaceName, Labels: labels},
-			Status: corev1.PodStatus{Phase: corev1.PodPending, Conditions: []corev1.PodCondition{{
-				Type: corev1.PodScheduled, Status: corev1.ConditionFalse, Reason: corev1.PodReasonUnschedulable, Message: message,
-			}}},
-		}
-	}
-	now := metav1.Now()
-	terminatingPod := unschedulablePod("terminating", GenerateLabels(testWorkspaceName), "stale verdict")
-	terminatingPod.DeletionTimestamp = &now
-	terminatingPod.Finalizers = []string{"test.jupyter.org/keep"}
-	evictedPod := unschedulablePod("evicted", GenerateLabels(testWorkspaceName), "stale verdict")
-	evictedPod.Status = corev1.PodStatus{Phase: corev1.PodFailed, Reason: "Evicted"}
-	olderPod := unschedulablePod("older", GenerateLabels(testWorkspaceName), "stale verdict")
-	olderPod.CreationTimestamp = metav1.NewTime(now.Add(-time.Minute))
-	newerPod := unschedulablePod("newer", GenerateLabels(testWorkspaceName), testSchedulingMessage)
-	newerPod.CreationTimestamp = now
-
-	tests := []struct {
-		name     string
-		objects  []client.Object
-		listErr  error
-		expected string
-	}{
-		{name: "no pods"},
-		{
-			name:     "the workspace pod's verdict",
-			objects:  []client.Object{unschedulablePod("pending", GenerateLabels(testWorkspaceName), testSchedulingMessage)},
-			expected: testSchedulingMessage,
-		},
-		{
-			name:    "another workspace's pod is not consulted",
-			objects: []client.Object{unschedulablePod("other", GenerateLabels("other-workspace"), testSchedulingMessage)},
-		},
-		{
-			name:    "a terminating pod is skipped",
-			objects: []client.Object{terminatingPod},
-		},
-		{
-			name: "the pending pod is preferred over the terminating one",
-			objects: []client.Object{
-				terminatingPod,
-				unschedulablePod("pending", GenerateLabels(testWorkspaceName), testSchedulingMessage),
-			},
-			expected: testSchedulingMessage,
-		},
-		{
-			name:    "an evicted pod reports nothing",
-			objects: []client.Object{evictedPod},
-		},
-		{
-			name:     "the newest live pod decides",
-			objects:  []client.Object{olderPod, newerPod},
-			expected: testSchedulingMessage,
-		},
-		{
-			name:    "a list failure reports nothing",
-			objects: []client.Object{unschedulablePod("pending", GenerateLabels(testWorkspaceName), testSchedulingMessage)},
-			listErr: errInjected,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			scheme := crudScheme(t)
-			var c client.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
-			if tt.listErr != nil {
-				c = &MockClient{Client: c, listFunc: func(context.Context, client.ObjectList, ...client.ListOption) error {
-					return tt.listErr
-				}}
-			}
-			rm := newResourceManagerForCRUD(c, scheme)
-			require.NotNil(t, rm)
-			assert.Equal(t, tt.expected, rm.WorkspacePodStallMessage(context.Background(), workspace))
 		})
 	}
 }

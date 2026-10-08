@@ -7,6 +7,7 @@ package controller
 
 import (
 	"context"
+	"unicode/utf8"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -96,4 +97,17 @@ func MergeConditionsIfChanged(
 		)
 		return conditionsToUpdate
 	}
+}
+
+// truncateMessage bounds a condition message to maxBytes on a rune boundary and appends a marker when it
+// clips, so a message copied from outside can never exceed the CRD's conditions[].message ceiling.
+func truncateMessage(msg string, maxBytes int) string {
+	if len(msg) <= maxBytes {
+		return msg
+	}
+	clipped := msg[:maxBytes]
+	for len(clipped) > 0 && !utf8.ValidString(clipped) {
+		clipped = clipped[:len(clipped)-1]
+	}
+	return clipped + " ...(truncated)"
 }

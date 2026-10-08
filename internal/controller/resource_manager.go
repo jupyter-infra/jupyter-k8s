@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -35,6 +37,7 @@ type ResourceManager struct {
 
 	// eventReader reads a starting pod's events; nil leaves the start step to what the pod reports.
 	eventReader       client.Reader
+	eventReadLimiter  *rate.Limiter
 	cachedStartEvents map[client.ObjectKey]startEventsEntry
 	startEventsMu     sync.Mutex
 	now               func() time.Time
@@ -58,6 +61,7 @@ func NewResourceManager(
 		pvcBuilder:             pvcBuilder,
 		accessResourcesBuilder: accessResourcesBuilder,
 		statusManager:          statusManager,
+		eventReadLimiter:       rate.NewLimiter(startEventsPerSecond, startEventsBurst),
 		cachedStartEvents:      map[client.ObjectKey]startEventsEntry{},
 		now:                    time.Now,
 	}

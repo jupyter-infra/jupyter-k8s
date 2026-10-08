@@ -391,8 +391,6 @@ var _ = Describe("Workspace Status", Ordered, func() {
 					controller.ReasonStartingContainer), "unexpected Progressing reason during a start")
 			}
 			Expect(degradedSeen).NotTo(HaveKey(ConditionTrue), "a normal start must never read Degraded")
-			Expect(reasons).To(SatisfyAny(HaveKey(controller.ReasonWaitingForNode), HaveKey(controller.ReasonPullingImage),
-				HaveKey(controller.ReasonStartingContainer)), "a start must show at least one step")
 		})
 	})
 

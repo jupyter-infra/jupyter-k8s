@@ -343,9 +343,9 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		return result, nil
 	}
 
-	// A container the kubelet reports as unable to start (ImagePullBackOff, CrashLoopBackOff, ...) will not
-	// recover without a change to the workspace or its template, so it is reported now rather than at the
-	// progress deadline. Otherwise the step the pod is in becomes the Starting reason and message.
+	// A container the kubelet cannot start as specified (ImagePullBackOff, CrashLoopBackOff, ...) is
+	// reported now rather than at the progress deadline. Otherwise the step the pod is in becomes the
+	// Starting reason and message, and the stall message should the deadline pass.
 	var startStep *StartStep
 	if !deploymentReady {
 		var failure *StartFailure
@@ -358,7 +358,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	// The Deployment controller declares a rollout stalled once progressDeadlineSeconds (600 by default,
 	// unset by the operator) passes without a replica becoming ready, e.g. a pod that no node can take.
 	if stalled, deploymentMessage := sm.resourceManager.IsDeploymentProgressDeadlineExceeded(deployment); stalled {
-		return sm.reconcileStalledRollout(ctx, workspace, deployment, service, deploymentMessage, snapshotStatus)
+		return sm.reconcileStalledRollout(ctx, workspace, deployment, service, startStep, deploymentMessage, snapshotStatus)
 	}
 
 	// Resources are being created/started but not fully ready yet
@@ -384,8 +384,8 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 }
 
 // reconcileStalledRollout reports a workspace whose Deployment exceeded its progress deadline as
-// Degraded with reason ComputeStalled, carrying what the pod reports (its start step's message) or,
-// failing that, the Deployment's own message. One Warning event marks
+// Degraded with reason ComputeStalled, carrying the pod's start step message or, when the workspace has
+// no live pod, the Deployment's own message. One Warning event marks
 // the transition. Recovery needs no action here: the Deployment watch reconciles the workspace when
 // the pod becomes ready and the ready path resets the conditions; the requeue only refreshes the message.
 func (sm *StateMachine) reconcileStalledRollout(
@@ -393,13 +393,14 @@ func (sm *StateMachine) reconcileStalledRollout(
 	workspace *workspacev1alpha1.Workspace,
 	deployment *appsv1.Deployment,
 	service *corev1.Service,
+	startStep *StartStep,
 	deploymentMessage string,
 	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
-	message := sm.resourceManager.WorkspacePodStallMessage(ctx, workspace)
-	if message == "" {
-		message = deploymentMessage
+	message := deploymentMessage
+	if startStep != nil {
+		message = startStep.Message
 	}
 	logger.Info("Deployment rollout stalled", "deployment", deployment.GetName(), "message", message)
 

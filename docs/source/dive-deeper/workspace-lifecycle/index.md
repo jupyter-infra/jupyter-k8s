@@ -31,7 +31,7 @@ While the workspace pod is not ready, `Progressing=True` names the step the star
 | `PullingImage` | The kubelet is pulling the image | The kubelet's `Pulling image "..."` event |
 | `StartingContainer` | The pod has a node and its container is not ready | The kubelet's newest event for the pod (`Successfully pulled image ...`, `Started container ...`, `Readiness probe failed: ...`), or the waiting container's reason (`ContainerCreating`, `PodInitializing`) before any event is read |
 
-The operator does not interpret these messages; it copies them. The step appears on `Available=False` with the same reason. Events are read for the starting pod at most every few seconds, and the status is written only when the message changes.
+The operator does not interpret these messages; it copies them, cut at 1024 bytes. The step appears on `Available=False` with the same reason. Events are read for a starting pod at most every 5 seconds, and a few times per second across all workspaces, so many workspaces starting at once do not crowd out the operator's other API calls; the status is written only when the message changes.
 
 ```yaml
 conditions:
@@ -43,7 +43,7 @@ conditions:
 
 ## Failed starts
 
-A container the kubelet reports as unable to start without a change to the workspace or its template, `ErrImagePull`, `ImagePullBackOff`, `ErrImageNeverPull`, `InvalidImageName`, `CreateContainerConfigError`, `CrashLoopBackOff`, or any other reason starting with `Err` or ending in `Error` or `BackOff` (the rule Argo CD's health check applies), turns the workspace `Degraded` at once, with the kubelet's reason and message on `Degraded`, `Available` and `Progressing`, instead of waiting for the progress deadline below. A Warning event with reason `WorkspaceStartFailed` is recorded on the workspace when the condition first appears; the kubelet alternating between related reasons (`ErrImagePull`, `ImagePullBackOff`) does not record another. The condition clears once the workspace is `Available`; a crash-looping container that is between restarts, running or terminated rather than waiting, keeps it. Fixing the cause, a wrong image name or a failing command, needs a stop and a start, as for stalled starts.
+A container the kubelet cannot start as specified, because of an image it cannot pull, an invalid image name, a missing Secret or ConfigMap or a command that keeps failing, with waiting reason `ErrImagePull`, `ImagePullBackOff`, `ErrImageNeverPull`, `InvalidImageName`, `CreateContainerConfigError`, `CrashLoopBackOff`, or any other reason starting with `Err` or ending in `Error` or `BackOff` (the rule Argo CD's health check applies), turns the workspace `Degraded` at once, with the kubelet's reason and message on `Degraded`, `Available` and `Progressing`, instead of waiting for the progress deadline below. A Warning event with reason `WorkspaceStartFailed` is recorded on the workspace when the condition first appears; the kubelet alternating between related reasons (`ErrImagePull`, `ImagePullBackOff`) does not record another. The condition clears once the workspace is `Available`; a crash-looping container that is between restarts, running or terminated rather than waiting, keeps it. A missing Secret that appears later resolves on its own, since the kubelet retries. Fixing a wrong image name or a failing command needs a stop and a start, as for stalled starts.
 
 ## Stalled starts
 

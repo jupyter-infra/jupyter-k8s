@@ -27,6 +27,11 @@ const (
 	// startEventsRetention bounds how long a workspace's cached events outlive their last read, so a
 	// workspace that stopped mid-start does not keep an entry forever.
 	startEventsRetention = 10 * time.Minute
+	// startEventsPerSecond and startEventsBurst bound event reads across all workspaces, so a hundred
+	// workspaces starting at once do not spend the manager's API client budget (20 requests per second by
+	// default) on events; each workspace then refreshes its events less often than startEventsInterval.
+	startEventsPerSecond = 4
+	startEventsBurst     = 4
 
 	// Vocabulary of core Kubernetes components; k8s.io/kubernetes/pkg/kubelet is not importable.
 	kubeletComponent               = "kubelet"
@@ -40,12 +45,18 @@ const (
 	// Fallback messages when neither the pod nor its events carry one.
 	waitingForNodeMessage    = "Waiting for a node to run the pod"
 	startingContainerMessage = "Starting the container"
+
+	// maxCopiedMessageBytes bounds a message copied from an event or a container state onto a condition,
+	// which holds at most 32768 bytes. The kubelet and the scheduler stay far below it; a core/v1 event
+	// created by hand has no length limit.
+	maxCopiedMessageBytes = 1024
 )
 
-// definitiveStartFailureReasons names the kubelet waiting reasons under which a container will not start
-// without a change to the workspace or its template; IsDefinitiveStartFailureReason extends the set with
-// Argo CD's rule for the same verdict, any reason starting with Err or ending with Error or BackOff, which
-// also covers ErrImageNeverPull, CreateContainerError and RunContainerError but not InvalidImageName.
+// definitiveStartFailureReasons names kubelet waiting reasons for a container it cannot start as specified:
+// an image it cannot pull, an invalid image name, a missing Secret or ConfigMap, a command that keeps
+// failing. IsDefinitiveStartFailureReason extends the set with Argo CD's rule for the same verdict, any
+// reason starting with Err or ending with Error or BackOff, which also covers ErrImageNeverPull,
+// CreateContainerError and RunContainerError but not InvalidImageName.
 var definitiveStartFailureReasons = map[string]bool{
 	kubeletReasonErrImagePull:      true,
 	kubeletReasonImagePullBackOff:  true,
@@ -61,15 +72,15 @@ type StartStep struct {
 	Message string
 }
 
-// StartFailure is a kubelet waiting reason under which the pod's container will not start, with the
+// StartFailure is a kubelet waiting reason for a container it cannot start as specified, with the
 // kubelet's message.
 type StartFailure struct {
 	Reason  string
 	Message string
 }
 
-// IsDefinitiveStartFailureReason reports whether reason is one the kubelet uses for a container that
-// will not start without a change to the workspace or its template.
+// IsDefinitiveStartFailureReason reports whether reason is one the kubelet uses for a container it cannot
+// start as specified.
 func IsDefinitiveStartFailureReason(reason string) bool {
 	return definitiveStartFailureReasons[reason] || strings.HasPrefix(reason, "Err") ||
 		strings.HasSuffix(reason, "Error") || strings.HasSuffix(reason, "BackOff")
@@ -233,12 +244,14 @@ func (rm *ResourceManager) WorkspaceStartStep(
 		return nil, nil
 	}
 	if failure := definitiveStartFailure(pod); failure != nil {
+		failure.Message = truncateMessage(failure.Message, maxCopiedMessageBytes)
 		return nil, failure
 	}
 	if reported := reportedStartFailure(workspace); reported != nil && containerRestartedAfterFailure(pod) {
 		return nil, reported
 	}
 	step := podStartStep(pod, rm.startEvents(ctx, workspace, pod))
+	step.Message = truncateMessage(step.Message, maxCopiedMessageBytes)
 	return &step, nil
 }
 
@@ -276,8 +289,9 @@ func (rm *ResourceManager) workspaceStartingPod(ctx context.Context, workspace *
 }
 
 // startEvents returns the events recorded on the pod, read through the event reader at most once per
-// startEventsInterval per workspace and reused in between. A failed read keeps the previous events and
-// counts as a read, so the interval holds through an API outage.
+// startEventsInterval per workspace and at most startEventsPerSecond across workspaces, and reused in
+// between. A failed read keeps the previous events and counts as a read, so the interval holds through an
+// API outage; a read the shared limiter denies does not, so the next reconcile tries again.
 func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspacev1alpha1.Workspace, pod *corev1.Pod) []corev1.Event {
 	if rm.eventReader == nil {
 		return nil
@@ -295,6 +309,12 @@ func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspace
 	rm.startEventsMu.Unlock()
 	if found && cached.podUID == pod.UID && now.Sub(cached.readAt) < startEventsInterval {
 		return cached.events
+	}
+	if !rm.eventReadLimiter.Allow() {
+		if found && cached.podUID == pod.UID {
+			return cached.events
+		}
+		return nil
 	}
 
 	eventList := &corev1.EventList{}
