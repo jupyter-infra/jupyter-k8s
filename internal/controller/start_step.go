@@ -44,6 +44,14 @@ const (
 	waitingForNodeMessage    = "Waiting for a node to run the pod"
 	startingContainerMessage = "Starting the container"
 
+	// crashLoopResetAfter is how long a container has to run before the kubelet resets its restart back-off
+	// (https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy); an exit older than
+	// that no longer marks a crash loop.
+	crashLoopResetAfter = 10 * time.Minute
+
+	// recordedExitMarker is in every message crashLoopFailure writes, and in none the kubelet writes.
+	recordedExitMarker = " exited with code "
+
 	// maxCopiedMessageBytes bounds a message copied from an event or a container state onto a condition,
 	// which holds at most 32768 bytes. The kubelet and the scheduler stay far below it; a core/v1 event
 	// created by hand has no length limit.
@@ -98,16 +106,24 @@ func reportedStartFailure(workspace *workspacev1alpha1.Workspace) *StartFailure 
 	return &StartFailure{Reason: degraded.Reason, Message: degraded.Message}
 }
 
-// restartedContainer returns the first container of the pod, init containers first, that is not ready
-// and has been restarted since it last exited, or nil. The kubelet backs off any exited container, exit
-// code 0 included, so such a container is in a crash loop; between the exit and the next CrashLoopBackOff
-// report it shows as Running or Terminated rather than Waiting, and on Kubernetes 1.37 the Waiting report
-// lasts about a second per restart where 1.33 held it for the whole back-off.
-func restartedContainer(pod *corev1.Pod) *corev1.ContainerStatus {
+// crashLoopingContainer returns the first container of the pod, init containers first, that is in a crash
+// loop, or nil: a restarted container that is not ready and has exited again, or ran for less than
+// crashLoopResetAfter since its last exit. The kubelet backs off any exited container, exit code 0
+// included; between the exit and the next CrashLoopBackOff report the container shows as Running or
+// Terminated rather than Waiting, and on Kubernetes 1.37 the Waiting report lasts about a second per
+// restart where 1.33 held it for the whole back-off.
+func crashLoopingContainer(pod *corev1.Pod, now time.Time) *corev1.ContainerStatus {
 	for _, statuses := range [][]corev1.ContainerStatus{pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses} {
 		for i := range statuses {
 			containerStatus := &statuses[i]
-			if !containerStatus.Ready && containerStatus.RestartCount > 0 && containerStatus.LastTerminationState.Terminated != nil {
+			if containerStatus.Ready || containerStatus.RestartCount == 0 {
+				continue
+			}
+			if containerStatus.State.Terminated != nil {
+				return containerStatus
+			}
+			last := containerStatus.LastTerminationState.Terminated
+			if last != nil && now.Sub(last.FinishedAt.Time) < crashLoopResetAfter {
 				return containerStatus
 			}
 		}
@@ -115,15 +131,18 @@ func restartedContainer(pod *corev1.Pod) *corev1.ContainerStatus {
 	return nil
 }
 
-// crashLoopFailure describes a restarted container as the CrashLoopBackOff failure the kubelet reports
-// between its own back-off messages, from the exit the pod status records.
+// crashLoopFailure describes a crash-looping container as the CrashLoopBackOff failure the kubelet reports
+// between its own back-off messages, from the latest exit the pod status records.
 func crashLoopFailure(containerStatus *corev1.ContainerStatus) *StartFailure {
-	terminated := containerStatus.LastTerminationState.Terminated
-	message := fmt.Sprintf("container %s exited with code %d", containerStatus.Name, terminated.ExitCode)
+	terminated := containerStatus.State.Terminated
+	if terminated == nil {
+		terminated = containerStatus.LastTerminationState.Terminated
+	}
+	message := fmt.Sprintf("container %s%s%d", containerStatus.Name, recordedExitMarker, terminated.ExitCode)
 	if terminated.Reason != "" {
 		message += " (" + terminated.Reason + ")"
 	}
-	message += fmt.Sprintf(" and has restarted %d times", containerStatus.RestartCount)
+	message += fmt.Sprintf(", restart count %d", containerStatus.RestartCount)
 	return &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: message}
 }
 
@@ -230,18 +249,19 @@ func newestEvent(events []corev1.Event, keep func(*corev1.Event) bool) *corev1.E
 	return newest
 }
 
-// SetEventReader sets the reader used for a starting pod's events. The manager's API reader is used
-// so that events are fetched for one pod at a time instead of cached cluster-wide; without a reader
-// the step falls back to what the pod itself reports.
+// SetEventReader sets the reader used for a starting pod's events. The manager's API reader is used so
+// that events are fetched for one pod at a time; the manager caches events cluster-wide only when
+// workspace pod watching is enabled, which is off by default. Without a reader the step falls back to
+// what the pod itself reports.
 func (rm *ResourceManager) SetEventReader(reader client.Reader) {
 	rm.eventReader = reader
 }
 
 // WorkspaceStartStep reports what the workspace's starting pod is doing: a failure the kubelet
 // recorded as definitive, if any, otherwise the step it is in with the newest relevant message. Both
-// are nil while no pod exists yet. A restarted container is a crash loop: a failure already on the
-// conditions holds through the restarts, so the status does not flap, and otherwise the exit the pod
-// status records is reported until the kubelet's own back-off message is seen.
+// are nil while no pod exists yet. For a crash-looping container the kubelet's back-off message, once
+// seen, holds through the restarts so the status does not flap; until then the exit the pod status
+// records is reported, with the current restart count.
 func (rm *ResourceManager) WorkspaceStartStep(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
@@ -254,11 +274,12 @@ func (rm *ResourceManager) WorkspaceStartStep(
 		failure.Message = truncateMessage(failure.Message, maxCopiedMessageBytes)
 		return nil, failure
 	}
-	if restarted := restartedContainer(pod); restarted != nil {
-		if reported := reportedStartFailure(workspace); reported != nil {
+	if crashLooping := crashLoopingContainer(pod, rm.now()); crashLooping != nil {
+		// the kubelet's own back-off message holds; a recorded exit is refreshed with the current restart count
+		if reported := reportedStartFailure(workspace); reported != nil && !strings.Contains(reported.Message, recordedExitMarker) {
 			return nil, reported
 		}
-		return nil, crashLoopFailure(restarted)
+		return nil, crashLoopFailure(crashLooping)
 	}
 	step := podStartStep(pod, rm.startEvents(ctx, workspace, pod))
 	step.Message = truncateMessage(step.Message, maxCopiedMessageBytes)
@@ -310,11 +331,6 @@ func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspace
 	now := rm.now()
 
 	rm.startEventsMu.Lock()
-	for cachedKey, cached := range rm.cachedStartEvents {
-		if now.Sub(cached.readAt) > startEventsRetention {
-			delete(rm.cachedStartEvents, cachedKey)
-		}
-	}
 	cached, found := rm.cachedStartEvents[key]
 	rm.startEventsMu.Unlock()
 	if found && cached.podUID == pod.UID && now.Sub(cached.readAt) < startEventsInterval {
@@ -327,10 +343,13 @@ func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspace
 		return nil
 	}
 
+	// resourceVersion 0 lets the API server answer from its watch cache instead of reading every event in
+	// the namespace from etcd; a few hundred milliseconds of staleness do not matter at this interval.
 	eventList := &corev1.EventList{}
 	err := rm.eventReader.List(ctx, eventList,
 		client.InNamespace(pod.Namespace),
 		client.MatchingFieldsSelector{Selector: fields.OneTermEqualSelector("involvedObject.uid", string(pod.UID))},
+		&client.ListOptions{Raw: &metav1.ListOptions{ResourceVersion: "0"}},
 	)
 	events := eventList.Items
 	if err != nil {
@@ -342,6 +361,11 @@ func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspace
 	}
 
 	rm.startEventsMu.Lock()
+	for cachedKey, cached := range rm.cachedStartEvents {
+		if now.Sub(cached.readAt) > startEventsRetention {
+			delete(rm.cachedStartEvents, cachedKey)
+		}
+	}
 	rm.cachedStartEvents[key] = startEventsEntry{podUID: pod.UID, readAt: now, events: events}
 	rm.startEventsMu.Unlock()
 	return events
