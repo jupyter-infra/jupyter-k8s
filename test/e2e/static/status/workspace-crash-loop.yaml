@@ -1,0 +1,23 @@
+# A workspace whose container exits at once: the kubelet restarts it with back-off and reports
+# CrashLoopBackOff. The Degraded State specs in workspace_status_test.go assert the workspace reports
+# that reason as soon as the kubelet does, clears it when stopped, and starts once the command is removed.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-crash-loop
+  namespace: default
+spec:
+  displayName: "Status Test - Crash Loop"
+  image: jk8s-application-jupyter-uv:latest
+  containerConfig:
+    command: ["sh", "-c", "exit 1"]
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  storage:
+    size: 1Gi

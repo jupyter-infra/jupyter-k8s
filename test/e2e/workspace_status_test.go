@@ -17,6 +17,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 )
 
@@ -373,6 +374,139 @@ var _ = Describe("Workspace Status", Ordered, func() {
 				"{.spec.desiredStatus}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(desiredStatus).To(Equal("Running"), "desiredStatus should be defaulted to Running by the mutating webhook")
+		})
+	})
+
+	Context("Start steps", func() {
+		It("should report only known steps on Progressing while a workspace starts", func() {
+			By("creating workspace with desiredStatus=Running")
+			createWorkspaceForTest(runningWorkspace, statusGroupDir, statusSubgroupDir)
+
+			By("recording every Progressing reason on the way to Available")
+			reasons, degradedSeen := progressingReasonsUntilAvailable(runningWorkspace, statusTestNamespace)
+			for reason := range reasons {
+				Expect(reason).To(BeElementOf(
+					controller.ReasonResourcesNotReady, controller.ReasonComputeNotReady, controller.ReasonServiceNotReady,
+					controller.ReasonAccessNotReady, controller.ReasonWaitingForNode, controller.ReasonPullingImage,
+					controller.ReasonStartingContainer), "unexpected Progressing reason during a start")
+			}
+			Expect(degradedSeen).NotTo(HaveKey(ConditionTrue), "a normal start must never read Degraded")
+			Expect(reasons).To(SatisfyAny(HaveKey(controller.ReasonWaitingForNode), HaveKey(controller.ReasonPullingImage),
+				HaveKey(controller.ReasonStartingContainer)), "a start must show at least one step")
+		})
+	})
+
+	Context("Degraded State", func() {
+		const (
+			unpullableWorkspace = "workspace-unpullable-image"
+			unpullableImage     = "jk8s-e2e-missing-image"
+			crashLoopWorkspace  = "workspace-crash-loop"
+		)
+		// The e2e operator runs application images with pull policy Never, so a missing image reads
+		// ErrImageNeverPull there and ErrImagePull or ImagePullBackOff on a cluster that pulls.
+		imagePullReasons := []string{"ErrImagePull", "ImagePullBackOff", "ErrImageNeverPull"}
+
+		It("should report Degraded as soon as the image cannot be pulled, clear it on stop, and start once fixed", func() {
+			By("creating a workspace whose image exists nowhere")
+			createWorkspaceForTest(unpullableWorkspace, statusGroupDir, statusSubgroupDir)
+
+			By("waiting for Degraded=True with the kubelet's pull reason naming the image, before any deadline")
+			waitForWorkspaceStartFailed(unpullableWorkspace, statusTestNamespace, imagePullReasons,
+				ContainSubstring(unpullableImage))
+			expectSingleStartFailedEvent(unpullableWorkspace, statusTestNamespace, ContainSubstring(unpullableImage))
+			VerifyWorkspaceConditions(unpullableWorkspace, statusTestNamespace, map[string]string{
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionTrue,
+				ConditionTypeAvailable:   ConditionFalse,
+				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionFalse,
+			})
+
+			By("stopping the workspace")
+			UpdateWorkspaceDesiredState(unpullableWorkspace, statusTestNamespace, "Stopped")
+			WaitForWorkspaceToReachCondition(unpullableWorkspace, statusTestNamespace, ConditionTypeStopped, ConditionTrue)
+			VerifyWorkspaceConditions(unpullableWorkspace, statusTestNamespace, map[string]string{
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionFalse,
+				ConditionTypeAvailable:   ConditionFalse,
+				ConditionTypeStopped:     ConditionTrue,
+				ConditionTypeDeleting:    ConditionFalse,
+			})
+
+			By("fixing the image and starting the workspace again")
+			cmd := exec.Command("kubectl", "patch", "workspace", unpullableWorkspace, "-n", statusTestNamespace,
+				"--type=merge", "-p", `{"spec":{"image":"jk8s-application-jupyter-uv:latest","desiredStatus":"Running"}}`)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			WaitForWorkspaceToReachCondition(unpullableWorkspace, statusTestNamespace, ConditionTypeAvailable, ConditionTrue)
+			VerifyWorkspaceConditions(unpullableWorkspace, statusTestNamespace, map[string]string{
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionFalse,
+				ConditionTypeAvailable:   ConditionTrue,
+				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionFalse,
+			})
+		})
+
+		It("should report Degraded as soon as the container crash-loops, and start once the command is removed", func() {
+			By("creating a workspace whose command exits at once")
+			createWorkspaceForTest(crashLoopWorkspace, statusGroupDir, statusSubgroupDir)
+
+			By("waiting for Degraded=True with reason CrashLoopBackOff and the back-off or the recorded exit as the message")
+			waitForWorkspaceStartFailed(crashLoopWorkspace, statusTestNamespace, []string{"CrashLoopBackOff"},
+				MatchRegexp(`back-off|exited with code 1`))
+			expectSingleStartFailedEvent(crashLoopWorkspace, statusTestNamespace, ContainSubstring("CrashLoopBackOff"))
+
+			By("stopping the workspace, removing the command and starting it again")
+			UpdateWorkspaceDesiredState(crashLoopWorkspace, statusTestNamespace, "Stopped")
+			WaitForWorkspaceToReachCondition(crashLoopWorkspace, statusTestNamespace, ConditionTypeStopped, ConditionTrue)
+			cmd := exec.Command("kubectl", "patch", "workspace", crashLoopWorkspace, "-n", statusTestNamespace,
+				"--type=merge", "-p", `{"spec":{"containerConfig":null,"desiredStatus":"Running"}}`)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			WaitForWorkspaceToReachCondition(crashLoopWorkspace, statusTestNamespace, ConditionTypeAvailable, ConditionTrue)
+			VerifyWorkspaceConditions(crashLoopWorkspace, statusTestNamespace, map[string]string{
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionFalse,
+				ConditionTypeAvailable:   ConditionTrue,
+				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionFalse,
+			})
+		})
+	})
+
+	Context("Degraded State, missing Secret", func() {
+		const (
+			missingSecretWorkspace = "workspace-missing-secret"
+			missingSecretName      = "status-test-missing-secret"
+		)
+
+		It("should report Degraded while a referenced Secret is missing, and start once it exists", func() {
+			By("creating a workspace whose env references a Secret that does not exist")
+			createWorkspaceForTest(missingSecretWorkspace, statusGroupDir, statusSubgroupDir)
+
+			By("waiting for Degraded=True with reason CreateContainerConfigError naming the Secret")
+			waitForWorkspaceStartFailed(missingSecretWorkspace, statusTestNamespace, []string{"CreateContainerConfigError"},
+				ContainSubstring(missingSecretName))
+			expectSingleStartFailedEvent(missingSecretWorkspace, statusTestNamespace, ContainSubstring(missingSecretName))
+
+			By("creating the Secret and waiting for the workspace to become Available without a restart")
+			cmd := exec.Command("kubectl", "create", "secret", "generic", missingSecretName, "-n", statusTestNamespace,
+				"--from-literal=token=status-test")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() {
+				_, _ = utils.Run(exec.Command("kubectl", "delete", "secret", missingSecretName, "-n", statusTestNamespace,
+					"--ignore-not-found"))
+			}()
+			WaitForWorkspaceToReachCondition(missingSecretWorkspace, statusTestNamespace, ConditionTypeAvailable, ConditionTrue)
+			VerifyWorkspaceConditions(missingSecretWorkspace, statusTestNamespace, map[string]string{
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionFalse,
+				ConditionTypeAvailable:   ConditionTrue,
+				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionFalse,
+			})
 		})
 	})
 

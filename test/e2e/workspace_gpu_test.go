@@ -24,12 +24,15 @@ import (
 
 // Workspace GPU: the operator's GPU contract on a node advertising fake nvidia.com/gpu capacity
 // (helpers_gpu.go): template GPU defaults and placement reach the pod, requests are bounded at
-// create and on update, and workspaces without GPU settings get none.
+// create and on update, workspaces without GPU settings get none, and a GPU pod no node can take
+// is reported as Degraded at the Deployment's progress deadline and recovers when capacity appears.
 var _ = Describe("Workspace GPU", Ordered, func() {
 	const (
 		workspaceNamespace = "default"
 		groupDir           = "gpu"
 		gpuTemplateName    = "gpu-template"
+		// gpuDefaultWorkspace takes the template defaults; several specs start from it.
+		gpuDefaultWorkspace = "gpu-default-workspace"
 	)
 
 	var (
@@ -54,7 +57,7 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 
 	Context("Template propagation", func() {
 		It("should propagate template GPU defaults and placement to the pod and schedule it", func() {
-			workspaceName = "gpu-default-workspace"
+			workspaceName = gpuDefaultWorkspace
 
 			By("creating a workspace with no resources or scheduling fields")
 			createWorkspaceForTest(workspaceName, groupDir, "")
@@ -138,7 +141,7 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 
 	Context("Updates", func() {
 		It("should restart with the new GPU count on an in-bounds change and reject an out-of-bounds one", func() {
-			workspaceName = "gpu-default-workspace"
+			workspaceName = gpuDefaultWorkspace
 
 			By("creating a workspace that takes the template default of 1 GPU")
 			createWorkspaceForTest(workspaceName, groupDir, "")
@@ -261,6 +264,65 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 			Expect(ok).To(BeFalse())
 			_, ok = gpuQuantity(primary.Resources.Limits)
 			Expect(ok).To(BeFalse())
+		})
+	})
+
+	// Declared last: the spec withdraws the fake GPU capacity the earlier specs rely on, and the
+	// AfterAll teardown leaves the node clean whether or not the spec reaches the re-advertise step.
+	Context("Unschedulable compute", func() {
+		It("should report Degraded at the progress deadline and recover when GPU capacity appears", func() {
+			workspaceName = gpuDefaultWorkspace
+
+			By("withdrawing the fake GPU capacity so no node can take a GPU pod")
+			removeFakeGPUAdvertisement(gpuNodeName)
+
+			By("creating a workspace that takes the template default of 1 GPU")
+			createWorkspaceForTest(workspaceName, groupDir, "")
+			deploymentName := GetWorkspaceDeploymentName(workspaceName, workspaceNamespace)
+
+			By("verifying the start reports WaitingForNode with the scheduler's verdict while the pod has no node")
+			verdict := ContainSubstring("Insufficient " + fakeGPUResourceName)
+			waitForWorkspaceStartStep(workspaceName, workspaceNamespace, controller.ReasonWaitingForNode, verdict)
+			setDeploymentProgressDeadline(deploymentName, workspaceNamespace, stallDeadlineSeconds)
+
+			By("waiting for Degraded=True with reason ComputeStalled carrying the scheduler's verdict")
+			waitForWorkspaceStalled(workspaceName, workspaceNamespace, verdict)
+
+			By("verifying one Warning event carries the same verdict")
+			expectSingleStallEvent(workspaceName, workspaceNamespace, verdict)
+
+			By("verifying the verdict holds while the pod stays pending")
+			VerifyConsistentWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
+				controller.ConditionTypeDegraded:    ConditionTrue,
+				controller.ConditionTypeAvailable:   ConditionFalse,
+				controller.ConditionTypeProgressing: ConditionFalse,
+			}, "10s", "2s")
+
+			By("advertising GPU capacity again so the pending pod can schedule")
+			advertiseFakeGPU(gpuNodeName)
+
+			By("waiting for the workspace to recover to Available with Degraded cleared")
+			WaitForWorkspaceToReachCondition(
+				workspaceName, workspaceNamespace, controller.ConditionTypeAvailable, ConditionTrue)
+			VerifyWorkspaceConditions(workspaceName, workspaceNamespace, map[string]string{
+				controller.ConditionTypeProgressing: ConditionFalse,
+				controller.ConditionTypeDegraded:    ConditionFalse,
+				controller.ConditionTypeAvailable:   ConditionTrue,
+				controller.ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:               ConditionFalse,
+			})
+			degradedReason, err := kubectlGet("workspace", workspaceName, workspaceNamespace,
+				`{.status.conditions[?(@.type=="Degraded")].reason}`)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(degradedReason).To(Equal(controller.ReasonNoError))
+
+			By("verifying the pod runs on the GPU-advertising node")
+			pod := workspacePod(workspaceName, workspaceNamespace)
+			Expect(pod.Spec.NodeName).To(Equal(gpuNodeName))
+			Expect(pod.Status.Phase).To(Equal(corev1.PodRunning))
+
+			By("verifying the recovery recorded no second stall event")
+			expectSingleStallEvent(workspaceName, workspaceNamespace, verdict)
 		})
 	})
 })

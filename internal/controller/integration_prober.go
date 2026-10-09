@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"net"
 	"time"
-	"unicode/utf8"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -159,15 +158,7 @@ type exitStatusError interface {
 // can never blow past the CRD conditions[].message ceiling (32768) and fail the status write. A "(truncated)"
 // marker is appended when the message is clipped so a reader knows the tail was dropped.
 func truncateProbeMessage(msg string) string {
-	if len(msg) <= maxProbeMessageBytes {
-		return msg
-	}
-	clipped := msg[:maxProbeMessageBytes]
-	// Back off to the last valid UTF-8 boundary so we never split a multi-byte rune.
-	for len(clipped) > 0 && !utf8.ValidString(clipped) {
-		clipped = clipped[:len(clipped)-1]
-	}
-	return clipped + " ...(truncated)"
+	return truncateMessage(msg, maxProbeMessageBytes)
 }
 
 // buildIntegrationStatus builds a KRO-style IntegrationStatus: a coarse State plus a single "Ready"

@@ -345,6 +345,7 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 		NewAccessResourcesBuilder(),
 		statusManager,
 	)
+	resourceManager.SetEventReader(mgr.GetAPIReader())
 
 	// Create state machine
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")

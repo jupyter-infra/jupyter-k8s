@@ -12,6 +12,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// deploymentTimedOutReason is the reason the Deployment controller sets on Progressing=False once
+// progressDeadlineSeconds passes without progress; k8s.io/api does not export the constant.
+const deploymentTimedOutReason = "ProgressDeadlineExceeded"
+
 // IsWorkspaceAvailable checks if the workspace is in Available=True state
 func (rm *ResourceManager) IsWorkspaceAvailable(workspace *workspacev1alpha1.Workspace) bool {
 	for _, condition := range workspace.Status.Conditions {
@@ -41,6 +45,25 @@ func (rm *ResourceManager) IsDeploymentAvailable(deployment *appsv1.Deployment) 
 	// This is useful if the conditions aren't updated yet but replicas are running
 	return deployment.Status.AvailableReplicas > 0 &&
 		deployment.Status.ReadyReplicas >= *deployment.Spec.Replicas
+}
+
+// IsDeploymentProgressDeadlineExceeded reports whether the Deployment controller has declared the
+// rollout stalled (Progressing=False with reason ProgressDeadlineExceeded) and returns that
+// condition's message.
+func (rm *ResourceManager) IsDeploymentProgressDeadlineExceeded(deployment *appsv1.Deployment) (bool, string) {
+	if deployment == nil {
+		return false, ""
+	}
+	for _, condition := range deployment.Status.Conditions {
+		if condition.Type != appsv1.DeploymentProgressing {
+			continue
+		}
+		if condition.Status == corev1.ConditionFalse && condition.Reason == deploymentTimedOutReason {
+			return true, condition.Message
+		}
+		return false, ""
+	}
+	return false, ""
 }
 
 // IsDeploymentMissingOrDeleting checks if the Deployment is either missing (nil)
