@@ -383,11 +383,40 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	return ctrl.Result{RequeueAfter: requeueDelay}, nil
 }
 
+// degradedStart is a start that cannot complete: the reason and message for the Degraded, Available and
+// Progressing conditions, the Warning event that marks the transition, and whether the conditions already
+// report this failure so that a workspace that stays degraded does not repeat the event.
+type degradedStart struct {
+	reason, message           string
+	eventReason, eventMessage string
+	alreadyReported           bool
+}
+
+// reconcileDegradedStart writes a degradedStart and requeues at LongRequeueDelay. Recovery needs no action
+// here: the Deployment watch reconciles the workspace when its pod becomes ready and the ready path resets
+// the conditions; the requeue only refreshes the message.
+func (sm *StateMachine) reconcileDegradedStart(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	deployment *appsv1.Deployment,
+	service *corev1.Service,
+	start degradedStart,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (ctrl.Result, error) {
+	if !start.alreadyReported {
+		sm.recorder.Event(workspace, corev1.EventTypeWarning, start.eventReason, start.eventMessage)
+	}
+	workspace.Status.DeploymentName = deployment.GetName()
+	workspace.Status.ServiceName = service.GetName()
+	if err := sm.statusManager.UpdateDegradedRunningStatus(
+		ctx, workspace, start.reason, start.reason, start.message, snapshotStatus); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{RequeueAfter: LongRequeueDelay}, nil
+}
+
 // reconcileStalledRollout reports a workspace whose Deployment exceeded its progress deadline as
 // Degraded with reason ComputeStalled, carrying the pod's start step message or, when the workspace has
-// no live pod, the Deployment's own message. One Warning event marks
-// the transition. Recovery needs no action here: the Deployment watch reconciles the workspace when
-// the pod becomes ready and the ready path resets the conditions; the requeue only refreshes the message.
+// no live pod, the Deployment's own message.
 func (sm *StateMachine) reconcileStalledRollout(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
@@ -396,33 +425,23 @@ func (sm *StateMachine) reconcileStalledRollout(
 	startStep *StartStep,
 	deploymentMessage string,
 	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (ctrl.Result, error) {
-	logger := logf.FromContext(ctx)
-
 	message := deploymentMessage
 	if startStep != nil {
 		message = startStep.Message
 	}
-	logger.Info("Deployment rollout stalled", "deployment", deployment.GetName(), "message", message)
+	logf.FromContext(ctx).Info("Deployment rollout stalled", "deployment", deployment.GetName(), "message", message)
 
 	degraded := FindCondition(&workspace.Status.Conditions, ConditionTypeDegraded)
-	if degraded == nil || degraded.Status != metav1.ConditionTrue || degraded.Reason != ReasonComputeStalled {
-		sm.recorder.Event(workspace, corev1.EventTypeWarning, EventWorkspaceComputeStalled, message)
-	}
-
-	workspace.Status.DeploymentName = deployment.GetName()
-	workspace.Status.ServiceName = service.GetName()
-	if err := sm.statusManager.UpdateDegradedRunningStatus(
-		ctx, workspace, ReasonComputeStalled, ReasonComputeStalled, message, snapshotStatus); err != nil {
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{RequeueAfter: LongRequeueDelay}, nil
+	return sm.reconcileDegradedStart(ctx, workspace, deployment, service, degradedStart{
+		reason: ReasonComputeStalled, message: message,
+		eventReason: EventWorkspaceComputeStalled, eventMessage: message,
+		alreadyReported: degraded != nil && degraded.Status == metav1.ConditionTrue && degraded.Reason == ReasonComputeStalled,
+	}, snapshotStatus)
 }
 
 // reconcileFailedStart reports a workspace whose container the kubelet says cannot start as Degraded with
-// the kubelet's reason and message, at once rather than at the progress deadline. One Warning event marks
-// the transition; the kubelet's alternation between related reasons (ErrImagePull, ImagePullBackOff) is
-// not a new failure. Recovery needs no action here: a fixed image or a container that eventually runs
-// makes the Deployment available and the ready path resets the conditions.
+// the kubelet's reason and message, at once rather than at the progress deadline. The kubelet's alternation
+// between related reasons (ErrImagePull, ImagePullBackOff) and a crash loop's restarts are one failure.
 func (sm *StateMachine) reconcileFailedStart(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
@@ -430,21 +449,13 @@ func (sm *StateMachine) reconcileFailedStart(
 	service *corev1.Service,
 	failure *StartFailure,
 	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (ctrl.Result, error) {
-	logger := logf.FromContext(ctx)
-	logger.Info("Workspace container cannot start", "reason", failure.Reason, "message", failure.Message)
+	logf.FromContext(ctx).Info("Workspace container cannot start", "reason", failure.Reason, "message", failure.Message)
 
-	if reportedStartFailure(workspace) == nil {
-		sm.recorder.Event(workspace, corev1.EventTypeWarning, EventWorkspaceStartFailed,
-			failure.Reason+": "+failure.Message)
-	}
-
-	workspace.Status.DeploymentName = deployment.GetName()
-	workspace.Status.ServiceName = service.GetName()
-	if err := sm.statusManager.UpdateDegradedRunningStatus(
-		ctx, workspace, failure.Reason, failure.Reason, failure.Message, snapshotStatus); err != nil {
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{RequeueAfter: LongRequeueDelay}, nil
+	return sm.reconcileDegradedStart(ctx, workspace, deployment, service, degradedStart{
+		reason: failure.Reason, message: failure.Message,
+		eventReason: EventWorkspaceStartFailed, eventMessage: failure.Reason + ": " + failure.Message,
+		alreadyReported: reportedStartFailure(workspace) != nil,
+	}, snapshotStatus)
 }
 
 // probeIntegrationStatus runs each attached integration's report-only statusProbe and writes one

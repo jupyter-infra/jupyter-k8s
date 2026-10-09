@@ -66,24 +66,6 @@ func (rm *ResourceManager) IsDeploymentProgressDeadlineExceeded(deployment *apps
 	return false, ""
 }
 
-// waitingContainerMessage returns the reason and message of the first waiting container, init
-// containers first (e.g. "ImagePullBackOff: Back-off pulling image ..."), or "".
-func waitingContainerMessage(pod *corev1.Pod) string {
-	for _, statuses := range [][]corev1.ContainerStatus{pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses} {
-		for _, containerStatus := range statuses {
-			waiting := containerStatus.State.Waiting
-			if waiting == nil || waiting.Reason == "" {
-				continue
-			}
-			if waiting.Message == "" {
-				return waiting.Reason
-			}
-			return waiting.Reason + ": " + waiting.Message
-		}
-	}
-	return ""
-}
-
 // IsDeploymentMissingOrDeleting checks if the Deployment is either missing (nil)
 // or in the process of being deleted
 func (rm *ResourceManager) IsDeploymentMissingOrDeleting(deployment *appsv1.Deployment) bool {

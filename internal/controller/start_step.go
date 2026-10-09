@@ -113,19 +113,18 @@ func reportedStartFailure(workspace *workspacev1alpha1.Workspace) *StartFailure 
 // Terminated rather than Waiting, and on Kubernetes 1.37 the Waiting report lasts about a second per
 // restart where 1.33 held it for the whole back-off.
 func crashLoopingContainer(pod *corev1.Pod, now time.Time) *corev1.ContainerStatus {
-	for _, statuses := range [][]corev1.ContainerStatus{pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses} {
-		for i := range statuses {
-			containerStatus := &statuses[i]
-			if containerStatus.Ready || containerStatus.RestartCount == 0 {
-				continue
-			}
-			if containerStatus.State.Terminated != nil {
-				return containerStatus
-			}
-			last := containerStatus.LastTerminationState.Terminated
-			if last != nil && now.Sub(last.FinishedAt.Time) < crashLoopResetAfter {
-				return containerStatus
-			}
+	statuses := containerStatuses(pod)
+	for i := range statuses {
+		containerStatus := &statuses[i]
+		if containerStatus.Ready || containerStatus.RestartCount == 0 {
+			continue
+		}
+		if containerStatus.State.Terminated != nil {
+			return containerStatus
+		}
+		last := containerStatus.LastTerminationState.Terminated
+		if last != nil && now.Sub(last.FinishedAt.Time) < crashLoopResetAfter {
+			return containerStatus
 		}
 	}
 	return nil
@@ -146,21 +145,42 @@ func crashLoopFailure(containerStatus *corev1.ContainerStatus) *StartFailure {
 	return &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: message}
 }
 
+// containerStatuses returns the pod's container statuses, init containers first.
+func containerStatuses(pod *corev1.Pod) []corev1.ContainerStatus {
+	statuses := make([]corev1.ContainerStatus, 0, len(pod.Status.InitContainerStatuses)+len(pod.Status.ContainerStatuses))
+	statuses = append(statuses, pod.Status.InitContainerStatuses...)
+	return append(statuses, pod.Status.ContainerStatuses...)
+}
+
+// waitingContainerMessage returns the reason and message of the first waiting container, init
+// containers first (e.g. "ImagePullBackOff: Back-off pulling image ..."), or "".
+func waitingContainerMessage(pod *corev1.Pod) string {
+	for _, containerStatus := range containerStatuses(pod) {
+		waiting := containerStatus.State.Waiting
+		if waiting == nil || waiting.Reason == "" {
+			continue
+		}
+		if waiting.Message == "" {
+			return waiting.Reason
+		}
+		return waiting.Reason + ": " + waiting.Message
+	}
+	return ""
+}
+
 // definitiveStartFailure returns the first container, init containers first, that the kubelet reports
 // as unable to start, or nil.
 func definitiveStartFailure(pod *corev1.Pod) *StartFailure {
-	for _, statuses := range [][]corev1.ContainerStatus{pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses} {
-		for _, containerStatus := range statuses {
-			waiting := containerStatus.State.Waiting
-			if waiting == nil || !isDefinitiveStartFailureReason(waiting.Reason) {
-				continue
-			}
-			message := waiting.Message
-			if message == "" {
-				message = waiting.Reason
-			}
-			return &StartFailure{Reason: waiting.Reason, Message: message}
+	for _, containerStatus := range containerStatuses(pod) {
+		waiting := containerStatus.State.Waiting
+		if waiting == nil || !isDefinitiveStartFailureReason(waiting.Reason) {
+			continue
 		}
+		message := waiting.Message
+		if message == "" {
+			message = waiting.Reason
+		}
+		return &StartFailure{Reason: waiting.Reason, Message: message}
 	}
 	return nil
 }
