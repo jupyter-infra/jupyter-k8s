@@ -40,15 +40,20 @@ const (
 	kubeletReasonErrImagePull      = "ErrImagePull"
 	kubeletReasonImagePullBackOff  = "ImagePullBackOff"
 	kubeletReasonCreateConfigError = "CreateContainerConfigError"
+	terminatedReasonError          = "Error"
 )
 
 func runningStatus() corev1.ContainerStatus {
 	return corev1.ContainerStatus{Name: containerNameMain, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}
 }
 
-// restartedStatus is a container the kubelet restarted twice after it exited with exitCode.
+// stepTestClock is the fixed time the start-step tests run at.
+var stepTestClock = time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+
+// restartedStatus is a container the kubelet restarted twice, the last time 30 seconds ago, after it
+// exited with exitCode.
 func restartedStatus(ready bool, exitCode int32) corev1.ContainerStatus {
-	reason := "Error"
+	reason := terminatedReasonError
 	if exitCode == 0 {
 		reason = "Completed"
 	}
@@ -56,7 +61,7 @@ func restartedStatus(ready bool, exitCode int32) corev1.ContainerStatus {
 		Name: containerNameMain, Ready: ready, RestartCount: 2,
 		State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
 		LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
-			ExitCode: exitCode, Reason: reason,
+			ExitCode: exitCode, Reason: reason, FinishedAt: metav1.NewTime(stepTestClock.Add(-30 * time.Second)),
 		}},
 	}
 }
@@ -371,7 +376,7 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 	}
 }
 
-func TestResourceManager_WorkspaceStartStep_RestartedContainer(t *testing.T) {
+func TestResourceManager_WorkspaceStartStep_CrashLoop(t *testing.T) {
 	const crashMessage = "back-off 20s restarting failed container=main"
 	conditions := func(degradedReason, progressingReason string) []metav1.Condition {
 		return []metav1.Condition{
@@ -379,28 +384,49 @@ func TestResourceManager_WorkspaceStartStep_RestartedContainer(t *testing.T) {
 			{Type: ConditionTypeProgressing, Status: metav1.ConditionFalse, Reason: progressingReason, Message: crashMessage},
 		}
 	}
+	const recordedExit = "container main exited with code 1 (Error), restart count 2"
+	longAgo := restartedStatus(false, 137)
+	longAgo.LastTerminationState.Terminated.Reason = "OOMKilled"
+	longAgo.LastTerminationState.Terminated.FinishedAt = metav1.NewTime(stepTestClock.Add(-time.Hour))
+	terminatedAgain := restartedStatus(false, 1)
+	terminatedAgain.State = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+		ExitCode: 1, Reason: terminatedReasonError, FinishedAt: metav1.NewTime(stepTestClock.Add(-time.Hour)),
+	}}
+	terminatedAgain.LastTerminationState.Terminated.FinishedAt = metav1.NewTime(stepTestClock.Add(-2 * time.Hour))
 	tests := []struct {
 		name         string
 		conditions   []metav1.Condition
 		status       corev1.ContainerStatus
 		expectFailed *StartFailure
 	}{
-		{name: "a reported crash loop holds its message while the container restarts",
+		{name: "the kubelet's back-off message holds while the container restarts",
 			conditions:   conditions(kubeletReasonCrashLoopBackOff, kubeletReasonCrashLoopBackOff),
 			status:       restartedStatus(false, 1),
 			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: crashMessage}},
 		{name: "a restarted container with nothing reported is a crash loop with the recorded exit",
 			conditions: nil, status: restartedStatus(false, 1),
-			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff,
-				Message: "container main exited with code 1 (Error) and has restarted 2 times"}},
+			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: recordedExit}},
+		{name: "a recorded exit is refreshed with the current restart count",
+			conditions: []metav1.Condition{
+				{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: kubeletReasonCrashLoopBackOff,
+					Message: "container main exited with code 1 (Error), restart count 1"},
+				{Type: ConditionTypeProgressing, Status: metav1.ConditionFalse, Reason: kubeletReasonCrashLoopBackOff,
+					Message: "container main exited with code 1 (Error), restart count 1"},
+			},
+			status:       restartedStatus(false, 1),
+			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: recordedExit}},
 		{name: "an operator error on Degraded is not a reported start failure",
 			conditions: conditions(ReasonDeploymentError, ReasonStartingContainer), status: restartedStatus(false, 1),
-			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff,
-				Message: "container main exited with code 1 (Error) and has restarted 2 times"}},
+			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: recordedExit}},
 		{name: "a container that completes at once and loops is a crash loop too",
 			conditions: nil, status: restartedStatus(false, 0),
 			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff,
-				Message: "container main exited with code 0 (Completed) and has restarted 2 times"}},
+				Message: "container main exited with code 0 (Completed), restart count 2"}},
+		{name: "a container terminated again after a restart is a crash loop whatever the age of its exits",
+			conditions: nil, status: terminatedAgain,
+			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: recordedExit}},
+		{name: "a container that restarted an hour ago and is not ready is a step, not a failure",
+			conditions: nil, status: longAgo},
 		{name: "a container on its first run is a step, not a failure",
 			conditions: conditions(kubeletReasonCrashLoopBackOff, kubeletReasonCrashLoopBackOff), status: runningStatus()},
 		{name: "a ready container is a step, not a failure",
@@ -416,6 +442,7 @@ func TestResourceManager_WorkspaceStartStep_RestartedContainer(t *testing.T) {
 			rm := newResourceManagerForCRUD(c, crudScheme(t))
 			require.NotNil(t, rm)
 			rm.SetEventReader(c)
+			rm.now = func() time.Time { return stepTestClock }
 			step, failure := rm.WorkspaceStartStep(context.Background(), workspace)
 			if tt.expectFailed != nil {
 				assert.Nil(t, step)
