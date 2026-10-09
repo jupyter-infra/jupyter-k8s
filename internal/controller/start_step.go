@@ -7,6 +7,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -37,6 +38,7 @@ const (
 	kubeletComponent              = "kubelet"
 	kubeletEventPulling           = "Pulling"
 	kubeletReasonInvalidImageName = "InvalidImageName"
+	kubeletReasonCrashLoopBackOff = "CrashLoopBackOff"
 
 	// Fallback messages when neither the pod nor its events carry one.
 	waitingForNodeMessage    = "Waiting for a node to run the pod"
@@ -92,19 +94,33 @@ func reportedStartFailure(workspace *workspacev1alpha1.Workspace) *StartFailure 
 	return &StartFailure{Reason: degraded.Reason, Message: degraded.Message}
 }
 
-// containerRestarted reports whether a container of the pod is not ready and has been restarted since
-// it last exited. Between the exit and the kubelet's next CrashLoopBackOff report the container shows as
-// Running or Terminated rather than Waiting; the kubelet backs off any exited container, exit code 0
-// included, so a command that completes at once loops as well.
-func containerRestarted(pod *corev1.Pod) bool {
+// restartedContainer returns the first container of the pod, init containers first, that is not ready
+// and has been restarted since it last exited, or nil. The kubelet backs off any exited container, exit
+// code 0 included, so such a container is in a crash loop; between the exit and the next CrashLoopBackOff
+// report it shows as Running or Terminated rather than Waiting, and on Kubernetes 1.37 the Waiting report
+// lasts about a second per restart where 1.33 held it for the whole back-off.
+func restartedContainer(pod *corev1.Pod) *corev1.ContainerStatus {
 	for _, statuses := range [][]corev1.ContainerStatus{pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses} {
-		for _, containerStatus := range statuses {
+		for i := range statuses {
+			containerStatus := &statuses[i]
 			if !containerStatus.Ready && containerStatus.RestartCount > 0 && containerStatus.LastTerminationState.Terminated != nil {
-				return true
+				return containerStatus
 			}
 		}
 	}
-	return false
+	return nil
+}
+
+// crashLoopFailure describes a restarted container as the CrashLoopBackOff failure the kubelet reports
+// between its own back-off messages, from the exit the pod status records.
+func crashLoopFailure(containerStatus *corev1.ContainerStatus) *StartFailure {
+	terminated := containerStatus.LastTerminationState.Terminated
+	message := fmt.Sprintf("container %s exited with code %d", containerStatus.Name, terminated.ExitCode)
+	if terminated.Reason != "" {
+		message += " (" + terminated.Reason + ")"
+	}
+	message += fmt.Sprintf(" and has restarted %d times", containerStatus.RestartCount)
+	return &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: message}
 }
 
 // definitiveStartFailure returns the first container, init containers first, that the kubelet reports
@@ -219,8 +235,9 @@ func (rm *ResourceManager) SetEventReader(reader client.Reader) {
 
 // WorkspaceStartStep reports what the workspace's starting pod is doing: a failure the kubelet
 // recorded as definitive, if any, otherwise the step it is in with the newest relevant message. Both
-// are nil while no pod exists yet. A failure already on the conditions holds while its container is
-// between a crash and the kubelet's next report, so a crash loop does not flap the status.
+// are nil while no pod exists yet. A restarted container is a crash loop: a failure already on the
+// conditions holds through the restarts, so the status does not flap, and otherwise the exit the pod
+// status records is reported until the kubelet's own back-off message is seen.
 func (rm *ResourceManager) WorkspaceStartStep(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
@@ -233,8 +250,11 @@ func (rm *ResourceManager) WorkspaceStartStep(
 		failure.Message = truncateMessage(failure.Message, maxCopiedMessageBytes)
 		return nil, failure
 	}
-	if reported := reportedStartFailure(workspace); reported != nil && containerRestarted(pod) {
-		return nil, reported
+	if restarted := restartedContainer(pod); restarted != nil {
+		if reported := reportedStartFailure(workspace); reported != nil {
+			return nil, reported
+		}
+		return nil, crashLoopFailure(restarted)
 	}
 	step := podStartStep(pod, rm.startEvents(ctx, workspace, pod))
 	step.Message = truncateMessage(step.Message, maxCopiedMessageBytes)

@@ -982,6 +982,43 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(recorder.Events).To(BeEmpty())
 			})
 
+			It("should report CrashLoopBackOff from a restarted container when the kubelet's back-off state is not seen", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, corev1.PodStatus{
+					Conditions: []corev1.PodCondition{{Type: corev1.PodScheduled, Status: corev1.ConditionTrue}},
+					ContainerStatuses: []corev1.ContainerStatus{{Name: containerNameMain, RestartCount: 1,
+						State:                corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+						LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 1, Reason: "Error"}},
+					}},
+				})
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				recorded := "container " + containerNameMain + " exited with code 1 (Error) and has restarted 1 times"
+				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, recorded)
+				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonCrashLoopBackOff, recorded)))
+
+				// the kubelet's own back-off report replaces the recorded exit once seen, and no second event follows
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), pod)).To(Succeed())
+				crashMessage := "back-off 10s restarting failed container=" + containerNameMain
+				pod.Status = waitingContainer(kubeletReasonCrashLoopBackOff, crashMessage)
+				pod.Status.Phase = corev1.PodPending
+				Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, crashMessage)
+				Expect(recorder.Events).To(BeEmpty())
+			})
+
 			It("should clear Degraded and report Available once the container runs", func() {
 				workspace := newWorkspace()
 				dep := createNotReadyDeployment(workspace)

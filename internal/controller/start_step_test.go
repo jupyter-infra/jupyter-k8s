@@ -40,19 +40,24 @@ const (
 	kubeletReasonErrImagePull      = "ErrImagePull"
 	kubeletReasonImagePullBackOff  = "ImagePullBackOff"
 	kubeletReasonCreateConfigError = "CreateContainerConfigError"
-	kubeletReasonCrashLoopBackOff  = "CrashLoopBackOff"
 )
 
 func runningStatus() corev1.ContainerStatus {
 	return corev1.ContainerStatus{Name: containerNameMain, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}
 }
 
-// restartedStatus is a container the kubelet restarted after it exited with exitCode.
+// restartedStatus is a container the kubelet restarted twice after it exited with exitCode.
 func restartedStatus(ready bool, exitCode int32) corev1.ContainerStatus {
+	reason := "Error"
+	if exitCode == 0 {
+		reason = "Completed"
+	}
 	return corev1.ContainerStatus{
 		Name: containerNameMain, Ready: ready, RestartCount: 2,
-		State:                corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
-		LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: exitCode}},
+		State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+		LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+			ExitCode: exitCode, Reason: reason,
+		}},
 	}
 }
 
@@ -103,7 +108,7 @@ func TestDefinitiveStartFailure(t *testing.T) {
 		{name: "no container statuses", pod: scheduledPod()},
 		{name: "container creating is not a failure", pod: scheduledPod(waitingStatus(kubeletReasonContainerCreating, ""))},
 		{name: "running container", pod: scheduledPod(runningStatus())},
-		{name: "a restarted container is not a failure by itself", pod: scheduledPod(restartedStatus(false, 1))},
+		{name: "a restarted container is not a waiting failure", pod: scheduledPod(restartedStatus(false, 1))},
 		{name: "image pull back-off", pod: scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, "Back-off pulling image \"x:1\"")),
 			expected: &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: "Back-off pulling image \"x:1\""}},
 		{name: "image pull error", pod: scheduledPod(waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")),
@@ -354,7 +359,7 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 	}
 }
 
-func TestResourceManager_WorkspaceStartStep_HoldsReportedFailure(t *testing.T) {
+func TestResourceManager_WorkspaceStartStep_RestartedContainer(t *testing.T) {
 	const crashMessage = "back-off 20s restarting failed container=main"
 	conditions := func(degradedReason, progressingReason string) []metav1.Condition {
 		return []metav1.Condition{
@@ -363,21 +368,31 @@ func TestResourceManager_WorkspaceStartStep_HoldsReportedFailure(t *testing.T) {
 		}
 	}
 	tests := []struct {
-		name       string
-		conditions []metav1.Condition
-		status     corev1.ContainerStatus
-		held       bool
+		name         string
+		conditions   []metav1.Condition
+		status       corev1.ContainerStatus
+		expectFailed *StartFailure
 	}{
-		{name: "a reported crash loop holds while the container restarts",
-			conditions: conditions(kubeletReasonCrashLoopBackOff, kubeletReasonCrashLoopBackOff), status: restartedStatus(false, 1), held: true},
+		{name: "a reported crash loop holds its message while the container restarts",
+			conditions:   conditions(kubeletReasonCrashLoopBackOff, kubeletReasonCrashLoopBackOff),
+			status:       restartedStatus(false, 1),
+			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: crashMessage}},
+		{name: "a restarted container with nothing reported is a crash loop with the recorded exit",
+			conditions: nil, status: restartedStatus(false, 1),
+			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff,
+				Message: "container main exited with code 1 (Error) and has restarted 2 times"}},
 		{name: "an operator error on Degraded is not a reported start failure",
-			conditions: conditions(ReasonDeploymentError, ReasonStartingContainer), status: restartedStatus(false, 1)},
-		{name: "a container on its first run is not held",
+			conditions: conditions(ReasonDeploymentError, ReasonStartingContainer), status: restartedStatus(false, 1),
+			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff,
+				Message: "container main exited with code 1 (Error) and has restarted 2 times"}},
+		{name: "a container that completes at once and loops is a crash loop too",
+			conditions: nil, status: restartedStatus(false, 0),
+			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff,
+				Message: "container main exited with code 0 (Completed) and has restarted 2 times"}},
+		{name: "a container on its first run is a step, not a failure",
 			conditions: conditions(kubeletReasonCrashLoopBackOff, kubeletReasonCrashLoopBackOff), status: runningStatus()},
-		{name: "a ready container is not held",
+		{name: "a ready container is a step, not a failure",
 			conditions: conditions(kubeletReasonCrashLoopBackOff, kubeletReasonCrashLoopBackOff), status: restartedStatus(true, 1)},
-		{name: "a container that completes at once and loops is held",
-			conditions: conditions(kubeletReasonCrashLoopBackOff, kubeletReasonCrashLoopBackOff), status: restartedStatus(false, 0), held: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -390,9 +405,9 @@ func TestResourceManager_WorkspaceStartStep_HoldsReportedFailure(t *testing.T) {
 			require.NotNil(t, rm)
 			rm.SetEventReader(c)
 			step, failure := rm.WorkspaceStartStep(context.Background(), workspace)
-			if tt.held {
+			if tt.expectFailed != nil {
 				assert.Nil(t, step)
-				assert.Equal(t, &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: crashMessage}, failure)
+				assert.Equal(t, tt.expectFailed, failure)
 			} else {
 				assert.Nil(t, failure)
 				assert.Equal(t, &StartStep{Reason: ReasonStartingContainer, Message: startingContainerMessage}, step)
