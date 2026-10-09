@@ -830,6 +830,65 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(getCondition(workspace, ConditionTypeAvailable).Status).To(Equal(metav1.ConditionTrue))
 				Expect(sm.resourceManager.cachedStartEvents).NotTo(HaveKey(client.ObjectKeyFromObject(workspace)))
 			})
+
+			It("should drop the cached events once the workspace is Stopped", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, unschedulable(schedulingMessage))
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(sm.resourceManager.cachedStartEvents).To(HaveKey(client.ObjectKeyFromObject(workspace)))
+
+				// the stop path has already removed the compute; the workspace spec now asks for Stopped
+				Expect(k8sClient.Delete(ctx, pod)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, dep)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, svc)).To(Succeed())
+				workspace.Spec.DesiredStatus = DesiredStateStopped
+				Expect(k8sClient.Update(ctx, workspace)).To(Succeed())
+				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(getCondition(workspace, ConditionTypeStopped).Status).To(Equal(metav1.ConditionTrue))
+				Expect(sm.resourceManager.cachedStartEvents).NotTo(HaveKey(client.ObjectKeyFromObject(workspace)))
+			})
+
+			It("should drop the cached events once the workspace is Deleting", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, unschedulable(schedulingMessage))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() {
+					// let the object go once the spec is done
+					if k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace) == nil {
+						workspace.Finalizers = nil
+						_ = k8sClient.Update(ctx, workspace)
+					}
+				}()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(sm.resourceManager.cachedStartEvents).To(HaveKey(client.ObjectKeyFromObject(workspace)))
+
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+				workspace.Finalizers = []string{WorkspaceFinalizerName}
+				Expect(k8sClient.Update(ctx, workspace)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, workspace)).To(Succeed())
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+				_, err = sm.ReconcileDeletion(ctx, workspace)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(sm.resourceManager.cachedStartEvents).NotTo(HaveKey(client.ObjectKeyFromObject(workspace)))
+			})
 		})
 
 		Context("failed start", func() {
@@ -1017,6 +1076,40 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(err).NotTo(HaveOccurred())
 				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, crashMessage)
 				Expect(recorder.Events).To(BeEmpty())
+			})
+
+			It("should record a new event when a recovered workspace fails to start again", func() {
+				workspace := newWorkspace()
+				dep := createBuiltDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonImagePullBackOff, backOffMessage)))
+
+				markDeploymentAvailable(dep, appsv1.DeploymentCondition{
+					Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: newReplicaSetAvailableReason,
+				})
+				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(getCondition(workspace, ConditionTypeAvailable).Status).To(Equal(metav1.ConditionTrue))
+				expectNotDegraded(workspace)
+				Expect(recorder.Events).To(Receive(ContainSubstring("WorkspaceRunning")))
+
+				// a new rollout whose pod fails the same way
+				markDeploymentProgressing(dep)
+				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				expectStartFailed(workspace, kubeletReasonImagePullBackOff, backOffMessage)
+				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonImagePullBackOff, backOffMessage)))
 			})
 
 			It("should clear Degraded and report Available once the container runs", func() {

@@ -473,6 +473,41 @@ var _ = Describe("Workspace Status", Ordered, func() {
 		})
 	})
 
+	Context("Degraded State, missing Secret", func() {
+		const (
+			missingSecretWorkspace = "workspace-missing-secret"
+			missingSecretName      = "status-test-missing-secret"
+		)
+
+		It("should report Degraded while a referenced Secret is missing, and start once it exists", func() {
+			By("creating a workspace whose env references a Secret that does not exist")
+			createWorkspaceForTest(missingSecretWorkspace, statusGroupDir, statusSubgroupDir)
+
+			By("waiting for Degraded=True with reason CreateContainerConfigError naming the Secret")
+			waitForWorkspaceStartFailed(missingSecretWorkspace, statusTestNamespace, []string{"CreateContainerConfigError"},
+				ContainSubstring(missingSecretName))
+			expectSingleStartFailedEvent(missingSecretWorkspace, statusTestNamespace, ContainSubstring(missingSecretName))
+
+			By("creating the Secret and waiting for the workspace to become Available without a restart")
+			cmd := exec.Command("kubectl", "create", "secret", "generic", missingSecretName, "-n", statusTestNamespace,
+				"--from-literal=token=status-test")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() {
+				_, _ = utils.Run(exec.Command("kubectl", "delete", "secret", missingSecretName, "-n", statusTestNamespace,
+					"--ignore-not-found"))
+			}()
+			WaitForWorkspaceToReachCondition(missingSecretWorkspace, statusTestNamespace, ConditionTypeAvailable, ConditionTrue)
+			VerifyWorkspaceConditions(missingSecretWorkspace, statusTestNamespace, map[string]string{
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionFalse,
+				ConditionTypeAvailable:   ConditionTrue,
+				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionFalse,
+			})
+		})
+	})
+
 	Context("Deleting State", func() {
 		const deletionWorkspace = "workspace-deletion-test"
 
