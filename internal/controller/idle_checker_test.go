@@ -283,6 +283,42 @@ func TestWorkspaceIdleChecker_CheckWorkspaceIdle_NoPodFound(t *testing.T) {
 	assert.True(t, result.ShouldRetry) // Should retry on pod not found (temporary failure)
 }
 
+func TestWorkspaceIdleChecker_CheckWorkspaceIdle_TerminatingPodSkipped(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = workspacev1alpha1.AddToScheme(scheme)
+
+	workspace := createTestWorkspace()
+
+	// a Running pod being torn down; a finalizer keeps the fake client from dropping the deletion timestamp
+	now := metav1.Now()
+	terminatingPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              testCheckerPodName,
+			Namespace:         workspace.Namespace,
+			Labels:            GenerateLabels(workspace.Name),
+			DeletionTimestamp: &now,
+			Finalizers:        []string{"test.jupyter.org/keep"},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(terminatingPod).
+		Build()
+
+	checker := NewWorkspaceIdleChecker(fakeClient, 0)
+	idleConfig := createTestIdleConfigCheckerPodExec(testTimeoutMinutes)
+
+	result, err := checker.CheckWorkspaceIdle(context.Background(), workspace, nil, idleConfig)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no running pod found for workspace")
+	assert.NotNil(t, result)
+	assert.True(t, result.ShouldRetry)
+}
+
 func TestWorkspaceIdleChecker_CheckWorkspaceIdle_PodNotRunning(t *testing.T) {
 	// Setup scheme
 	scheme := runtime.NewScheme()

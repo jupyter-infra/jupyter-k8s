@@ -404,17 +404,14 @@ func (rm *ResourceManager) ForgetStartEvents(workspace *workspacev1alpha1.Worksp
 // terminating while the next one is pending, and an evicted pod stays in phase Failed next to its
 // replacement. The cached list has no stable order, so the newest creation time decides.
 func (rm *ResourceManager) workspaceStartingPod(ctx context.Context, workspace *workspacev1alpha1.Workspace) *corev1.Pod {
-	podList := &corev1.PodList{}
-	if err := rm.client.List(ctx, podList,
-		client.InNamespace(workspace.Namespace),
-		client.MatchingLabels(GenerateLabels(workspace.Name)),
-	); err != nil {
+	pods, err := workspacePods(ctx, rm.client, workspace)
+	if err != nil {
 		logf.FromContext(ctx).Error(err, "Failed to list workspace pods for the start step")
 		return nil
 	}
 	var newest *corev1.Pod
-	for i := range podList.Items {
-		pod := &podList.Items[i]
+	for i := range pods {
+		pod := &pods[i]
 		if pod.DeletionTimestamp != nil || pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
 			continue
 		}

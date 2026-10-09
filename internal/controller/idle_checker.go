@@ -131,23 +131,12 @@ func (w *WorkspaceIdleChecker) checkViaPodExec(ctx context.Context, workspace *w
 	return detector.CheckIdle(ctx, workspace, "localhost", idleConfig)
 }
 
-// findWorkspacePod finds the pod for a workspace
+// findWorkspacePod finds the running pod of a workspace, the lookup the integration prober shares.
 func (w *WorkspaceIdleChecker) findWorkspacePod(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.Pod, error) {
-	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name)
-
-	podList := &corev1.PodList{}
-	labels := GenerateLabels(workspace.Name)
-
-	if err := w.client.List(ctx, podList, client.InNamespace(workspace.Namespace), client.MatchingLabels(labels)); err != nil {
-		return nil, fmt.Errorf("failed to list pods: %w", err)
+	pod, err := runningWorkspacePod(ctx, w.client, workspace)
+	if err != nil {
+		return nil, err
 	}
-
-	for _, pod := range podList.Items {
-		if pod.Status.Phase == corev1.PodRunning {
-			logger.V(1).Info("Found running workspace pod", "pod", pod.Name)
-			return &pod, nil
-		}
-	}
-
-	return nil, fmt.Errorf("no running pod found for workspace")
+	logf.FromContext(ctx).WithValues("workspace", workspace.Name).V(1).Info("Found running workspace pod", "pod", pod.Name)
+	return pod, nil
 }

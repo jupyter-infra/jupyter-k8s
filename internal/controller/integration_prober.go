@@ -265,23 +265,9 @@ func getIntegrationStatusEvent(name string, prior, next *workspacev1alpha1.Integ
 	}
 }
 
-// FindRunningPod locates a running pod for the workspace by its labels (mirrors the idle checker).
+// FindRunningPod locates the workspace's running pod, the lookup the idle checker shares.
 func (p *IntegrationProber) FindRunningPod(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.Pod, error) {
-	podList := &corev1.PodList{}
-	if err := p.client.List(ctx, podList,
-		client.InNamespace(workspace.Namespace),
-		client.MatchingLabels(GenerateLabels(workspace.Name)),
-	); err != nil {
-		return nil, fmt.Errorf("failed to list pods: %w", err)
-	}
-	for i := range podList.Items {
-		// Skip a terminating pod: during a Recreate rollout the old pod can still report Running while it
-		// is being torn down, and probing it would yield a stale verdict for the incoming pod.
-		if podList.Items[i].Status.Phase == corev1.PodRunning && podList.Items[i].DeletionTimestamp == nil {
-			return &podList.Items[i], nil
-		}
-	}
-	return nil, fmt.Errorf("no running pod found for workspace")
+	return runningWorkspacePod(ctx, p.client, workspace)
 }
 
 func resolveIntegrationProbeTimeout(probe *workspacev1alpha1.IntegrationStatusProbe) int32 {
