@@ -7,8 +7,8 @@ A workspace moves through a series of states from creation to availability (and 
 | Condition | Meaning |
 |-----------|---------|
 | `Available` | The workspace is fully functional — pod running, access probe passed, ready to accept connections |
-| `Progressing` | Resources are being created, updated, or stopped. While the workspace pod starts, the reason is the step it is in (`WaitingForNode`, `PullingImage`, `StartingContainer`) and the message is what the scheduler, the autoscaler or the kubelet recorded for it |
-| `Degraded` | The workspace failed to reach or maintain its desired state: the kubelet reports a container that cannot start (`ImagePullBackOff`, `CrashLoopBackOff`, ...), the Deployment's progress deadline passed (`ComputeStalled`), the access probe exceeded its failure threshold, or a resource could not be created |
+| `Progressing` | Resources are being created, updated, or stopped; while the pod starts, the reason names the step (`WaitingForNode`, `PullingImage`, `StartingContainer`, see [Start steps](#start-steps)) |
+| `Degraded` | The workspace failed to reach or maintain its desired state: a container the kubelet cannot start, a start past the progress deadline (`ComputeStalled`), an access probe past its failure threshold, or a resource that could not be created |
 | `Stopped` | The workspace has been stopped; the pod is removed but storage is preserved |
 
 Each condition's status is one of `True`, `False`, or `Unknown`.
@@ -43,7 +43,27 @@ conditions:
 
 ## Failed starts
 
-A container the kubelet cannot start as specified, because of an image it cannot pull, an invalid image name, a missing Secret or ConfigMap or a command that keeps failing, with waiting reason `ErrImagePull`, `ImagePullBackOff`, `ErrImageNeverPull`, `InvalidImageName`, `CreateContainerConfigError`, `CrashLoopBackOff`, or any other reason starting with `Err` or ending in `Error` or `BackOff` (the rule Argo CD's health check applies), turns the workspace `Degraded` at once, with the kubelet's reason and message on `Degraded`, `Available` and `Progressing`, instead of waiting for the progress deadline below. The operator's own reasons `ComputeError` and `ServiceError`, set when a Deployment or Service write fails, are not kubelet reasons and are not part of this rule. A Warning event with reason `WorkspaceStartFailed` is recorded on the workspace when the condition first appears; the kubelet alternating between related reasons (`ErrImagePull`, `ImagePullBackOff`) does not record another. A container that has restarted after exiting is reported as `CrashLoopBackOff` from the pod's container status, with the exit code and the restart count as the message until the kubelet's back-off message is seen, since recent kubelets show that message only briefly between restarts. The condition clears once the workspace is `Available`; a crash-looping container that is between restarts, running or terminated rather than waiting, keeps it. A missing Secret that appears later resolves on its own, since the kubelet retries. Fixing a wrong image name or a failing command needs a stop and a start, as for stalled starts.
+A container the kubelet cannot start as specified turns the workspace `Degraded` at once, instead of after the progress deadline below. The kubelet's waiting reason and message are copied onto `Degraded`, `Available` and `Progressing`:
+
+```yaml
+conditions:
+  - type: Degraded
+    status: "True"
+    reason: ImagePullBackOff
+    message: 'Back-off pulling image "jupyter/notebook:typo"'
+  - type: Available
+    status: "False"
+    reason: ImagePullBackOff
+  - type: Progressing
+    status: "False"
+    reason: ImagePullBackOff
+```
+
+The reasons that count are those of an image that cannot be pulled, an invalid image name, a missing Secret or ConfigMap and a command that keeps failing: `ErrImagePull`, `ImagePullBackOff`, `ErrImageNeverPull`, `InvalidImageName`, `CreateContainerConfigError`, `CrashLoopBackOff`, and any other reason starting with `Err` or ending in `Error` or `BackOff`, the rule Argo CD's health check applies. The operator's own reasons `ComputeError` and `ServiceError`, set when a Deployment or Service write fails, are not kubelet reasons and are not part of it.
+
+A container that keeps exiting is a crash loop even while the kubelet shows it as running or terminated between restarts, which on Kubernetes 1.37 is most of the time. Such a container is reported as `CrashLoopBackOff` with the exit code and the restart count as the message, until the kubelet's own back-off message is seen.
+
+A Warning event with reason `WorkspaceStartFailed` is recorded on the workspace when the condition first appears; the kubelet alternating between related reasons (`ErrImagePull`, `ImagePullBackOff`) or a container restarting does not record another. The condition clears once the workspace is `Available`. A missing Secret that appears later resolves on its own, since the kubelet retries; a wrong image name or a failing command is fixed with a stop and a start, as for stalled starts.
 
 ## Stalled starts
 
