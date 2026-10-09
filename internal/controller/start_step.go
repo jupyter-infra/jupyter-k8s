@@ -70,6 +70,10 @@ type StartFailure struct {
 // BackOff (ErrImagePull, ImagePullBackOff, ErrImageNeverPull, CreateContainerConfigError, RunContainerError,
 // CrashLoopBackOff); InvalidImageName matches neither and is named.
 func isDefinitiveStartFailureReason(reason string) bool {
+	// the operator's own Degraded reasons end in Error as well
+	if reason == ReasonDeploymentError || reason == ReasonServiceError {
+		return false
+	}
 	return reason == kubeletReasonInvalidImageName || strings.HasPrefix(reason, "Err") ||
 		strings.HasSuffix(reason, "Error") || strings.HasSuffix(reason, "BackOff")
 }

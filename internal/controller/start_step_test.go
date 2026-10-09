@@ -142,6 +142,18 @@ func TestDefinitiveStartFailure(t *testing.T) {
 	}
 }
 
+func TestIsDefinitiveStartFailureReason(t *testing.T) {
+	for reason, expected := range map[string]bool{
+		kubeletReasonInvalidImageName: true, kubeletReasonErrImagePull: true, "ErrImageNeverPull": true,
+		kubeletReasonImagePullBackOff: true, kubeletReasonCrashLoopBackOff: true, "RunContainerError": true,
+		kubeletReasonCreateConfigError: true,
+		kubeletReasonContainerCreating: false, "PodInitializing": false,
+		ReasonDeploymentError: false, ReasonServiceError: false, ReasonComputeStalled: false,
+	} {
+		assert.Equal(t, expected, isDefinitiveStartFailureReason(reason), reason)
+	}
+}
+
 func TestPodStartStep(t *testing.T) {
 	base := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	tests := []struct {

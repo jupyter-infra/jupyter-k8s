@@ -354,12 +354,11 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		if failure != nil {
 			return sm.reconcileFailedStart(ctx, workspace, deployment, service, failure, snapshotStatus)
 		}
-	}
-
-	// The Deployment controller declares a rollout stalled once progressDeadlineSeconds (600 by default,
-	// unset by the operator) passes without a replica becoming ready, e.g. a pod that no node can take.
-	if stalled, deploymentMessage := sm.resourceManager.IsDeploymentProgressDeadlineExceeded(deployment); stalled {
-		return sm.reconcileStalledRollout(ctx, workspace, deployment, service, startStep, deploymentMessage, snapshotStatus)
+		// The Deployment controller declares a rollout stalled once progressDeadlineSeconds (600 by default,
+		// unset by the operator) passes without a replica becoming ready, e.g. a pod that no node can take.
+		if stalled, deploymentMessage := sm.resourceManager.IsDeploymentProgressDeadlineExceeded(deployment); stalled {
+			return sm.reconcileStalledRollout(ctx, workspace, deployment, service, startStep, deploymentMessage, snapshotStatus)
+		}
 	}
 
 	// Resources are being created/started but not fully ready yet
