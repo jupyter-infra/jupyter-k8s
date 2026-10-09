@@ -275,8 +275,10 @@ func (rm *ResourceManager) WorkspaceStartStep(
 		return nil, failure
 	}
 	if crashLooping := crashLoopingContainer(pod, rm.now()); crashLooping != nil {
-		// the kubelet's own back-off message holds; a recorded exit is refreshed with the current restart count
-		if reported := reportedStartFailure(workspace); reported != nil && !strings.Contains(reported.Message, recordedExitMarker) {
+		// the kubelet's own back-off message holds; a recorded exit is refreshed with the current restart count,
+		// and an earlier failure of another kind (a pull error before the image was fixed) is replaced
+		if reported := reportedStartFailure(workspace); reported != nil &&
+			reported.Reason == kubeletReasonCrashLoopBackOff && !strings.Contains(reported.Message, recordedExitMarker) {
 			return nil, reported
 		}
 		return nil, crashLoopFailure(crashLooping)
@@ -343,13 +345,10 @@ func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspace
 		return nil
 	}
 
-	// resourceVersion 0 lets the API server answer from its watch cache instead of reading every event in
-	// the namespace from etcd; a few hundred milliseconds of staleness do not matter at this interval.
 	eventList := &corev1.EventList{}
 	err := rm.eventReader.List(ctx, eventList,
 		client.InNamespace(pod.Namespace),
 		client.MatchingFieldsSelector{Selector: fields.OneTermEqualSelector("involvedObject.uid", string(pod.UID))},
-		&client.ListOptions{Raw: &metav1.ListOptions{ResourceVersion: "0"}},
 	)
 	events := eventList.Items
 	if err != nil {
