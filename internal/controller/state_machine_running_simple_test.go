@@ -1150,6 +1150,37 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				}
 			})
 
+			It("should report a crash loop of an Available workspace once its container exits again", func() {
+				workspace := newWorkspace()
+				dep := createBuiltDeployment(workspace)
+				svc := createService(workspace)
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				progressed := appsv1.DeploymentCondition{
+					Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: newReplicaSetAvailableReason,
+				}
+				markDeploymentAvailable(dep, progressed)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(getCondition(workspace, ConditionTypeAvailable).Status).To(Equal(metav1.ConditionTrue))
+				for len(recorder.Events) > 0 {
+					<-recorder.Events
+				}
+
+				pod := createPendingPod(workspace, restartedRunning(2, time.Now()))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				markDeploymentProgressing(dep)
+				result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(FailedStartRequeueDelay))
+				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, recordedExit(2))
+				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonCrashLoopBackOff, recordedExit(2))))
+				Expect(recorder.Events).To(BeEmpty())
+			})
+
 			It("should report Deleting and clear Degraded when a failed workspace is deleted", func() {
 				workspace := newWorkspace()
 				dep := createNotReadyDeployment(workspace)
