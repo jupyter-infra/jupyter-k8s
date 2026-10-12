@@ -70,7 +70,7 @@ conditions:
   - type: Degraded
     status: "True"
     reason: CrashLoopBackOff
-    message: "container main exited with code 1 (Error), restart count 4"
+    message: "container workspace exited with code 1 (Error), restart count 4"
 ```
 
 A container that has run for ten minutes since its last exit is out of the loop, the point at which the kubelet resets its restart back-off, and is reported by its start step again.
