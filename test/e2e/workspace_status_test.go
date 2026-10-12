@@ -452,9 +452,9 @@ var _ = Describe("Workspace Status", Ordered, func() {
 			By("creating a workspace whose command exits at once")
 			createWorkspaceForTest(crashLoopWorkspace, statusGroupDir, statusSubgroupDir)
 
-			By("waiting for Degraded=True with reason CrashLoopBackOff and the back-off or the recorded exit as the message")
+			By("waiting for Degraded=True with reason CrashLoopBackOff and the recorded exit as the message")
 			waitForWorkspaceStartFailed(crashLoopWorkspace, statusTestNamespace, []string{"CrashLoopBackOff"},
-				MatchRegexp(`back-off|exited with code 1`))
+				ContainSubstring("exited with code 1"))
 			expectSingleStartFailedEvent(crashLoopWorkspace, statusTestNamespace, ContainSubstring("CrashLoopBackOff"))
 
 			By("stopping the workspace, removing the command and starting it again")

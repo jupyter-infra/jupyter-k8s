@@ -50,9 +50,6 @@ const (
 	// that no longer marks a crash loop.
 	crashLoopResetAfter = 10 * time.Minute
 
-	// recordedExitMarker is in every message crashLoopFailure writes, and in none the kubelet writes.
-	recordedExitMarker = " exited with code "
-
 	// maxCopiedMessageBytes bounds a message copied from an event or a container state onto a condition,
 	// which holds at most 32768 bytes. The kubelet and the scheduler stay far below it; a core/v1 event
 	// created by hand has no length limit.
@@ -140,11 +137,12 @@ func lastExit(containerStatus *corev1.ContainerStatus) *corev1.ContainerStateTer
 	return containerStatus.LastTerminationState.Terminated
 }
 
-// crashLoopFailure describes a crash-looping container as the CrashLoopBackOff failure the kubelet reports
-// between its own back-off messages, from the latest exit the pod status records.
+// crashLoopFailure describes a crash-looping container as a CrashLoopBackOff failure whose message is the
+// latest exit the pod status records, whether the kubelet is reporting its back-off or restarting the
+// container, so the message changes only with the exit code or the restart count.
 func crashLoopFailure(containerStatus *corev1.ContainerStatus) *StartFailure {
 	terminated := lastExit(containerStatus)
-	message := fmt.Sprintf("container %s%s%d", containerStatus.Name, recordedExitMarker, terminated.ExitCode)
+	message := fmt.Sprintf("container %s exited with code %d", containerStatus.Name, terminated.ExitCode)
 	if terminated.Reason != "" {
 		message += " (" + terminated.Reason + ")"
 	}
@@ -178,10 +176,15 @@ func waitingContainerMessage(pod *corev1.Pod) string {
 // definitiveStartFailure returns the first container, init containers first, that the kubelet reports
 // as unable to start, or nil.
 func definitiveStartFailure(pod *corev1.Pod) *StartFailure {
-	for _, containerStatus := range containerStatuses(pod) {
+	statuses := containerStatuses(pod)
+	for i := range statuses {
+		containerStatus := &statuses[i]
 		waiting := containerStatus.State.Waiting
 		if waiting == nil || !isDefinitiveStartFailureReason(waiting.Reason) {
 			continue
+		}
+		if waiting.Reason == kubeletReasonCrashLoopBackOff && lastExit(containerStatus) != nil {
+			return crashLoopFailure(containerStatus)
 		}
 		message := waiting.Message
 		if message == "" {
@@ -285,10 +288,8 @@ func (rm *ResourceManager) SetEventReader(reader client.Reader) {
 }
 
 // WorkspaceStartStep reports what the workspace's starting pod is doing: a failure the kubelet
-// recorded as definitive, if any, otherwise the step it is in with the newest relevant message. Both
-// are nil while no pod exists yet. For a crash-looping container the kubelet's back-off message, once
-// seen, holds through the restarts so the status does not flap; until then the exit the pod status
-// records is reported, with the current restart count.
+// recorded as definitive or a crash loop read from a restarted container, if any, otherwise the step
+// it is in with the newest relevant message. Both are nil while no pod exists yet.
 func (rm *ResourceManager) WorkspaceStartStep(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
@@ -302,12 +303,6 @@ func (rm *ResourceManager) WorkspaceStartStep(
 		return nil, failure
 	}
 	if crashLooping := crashLoopingContainer(pod, rm.now()); crashLooping != nil {
-		// the kubelet's own back-off message holds; a recorded exit is refreshed with the current restart count,
-		// and an earlier failure of another kind (a pull error before the image was fixed) is replaced
-		if reported := reportedStartFailure(workspace); reported != nil &&
-			reported.Reason == kubeletReasonCrashLoopBackOff && !strings.Contains(reported.Message, recordedExitMarker) {
-			return nil, reported
-		}
 		return nil, crashLoopFailure(crashLooping)
 	}
 	step := podStartStep(pod, rm.startEvents(ctx, workspace, pod))

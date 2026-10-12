@@ -867,9 +867,14 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
 				status := waitingContainer("PodInitializing", "")
-				status.InitContainerStatuses = []corev1.ContainerStatus{{Name: initContainerTestName, State: corev1.ContainerState{
-					Waiting: &corev1.ContainerStateWaiting{Reason: kubeletReasonCrashLoopBackOff, Message: "back-off 10s restarting failed container=" + initContainerTestName},
-				}}}
+				status.InitContainerStatuses = []corev1.ContainerStatus{{Name: initContainerTestName, RestartCount: 4,
+					State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{
+						Reason: kubeletReasonCrashLoopBackOff, Message: "back-off 10s restarting failed container=" + initContainerTestName,
+					}},
+					LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+						ExitCode: 2, Reason: terminatedReasonError, FinishedAt: metav1.Now(),
+					}},
+				}}
 				pod := createPendingPod(workspace, status)
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
 				defer func() { _ = k8sClient.Delete(ctx, dep) }()
@@ -881,7 +886,8 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, "back-off 10s restarting failed container="+initContainerTestName)
+				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff,
+					"container "+initContainerTestName+" exited with code 2 (Error), restart count 4")
 			})
 
 			It("should record the event when a start failure follows an operator error", func() {
@@ -904,44 +910,6 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonImagePullBackOff, backOffMessage)))
 			})
 
-			It("should hold Degraded while a crash-looping container is between restarts", func() {
-				workspace := newWorkspace()
-				dep := createNotReadyDeployment(workspace)
-				svc := createService(workspace)
-				crashMessage := "back-off 20s restarting failed container=" + containerNameMain
-				pod := createPendingPod(workspace, waitingContainer(kubeletReasonCrashLoopBackOff, crashMessage))
-				defer func() { _ = k8sClient.Delete(ctx, pod) }()
-				defer func() { _ = k8sClient.Delete(ctx, dep) }()
-				defer func() { _ = k8sClient.Delete(ctx, svc) }()
-				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
-				markDeploymentProgressing(dep)
-
-				sm := buildStateMachine()
-				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
-				Expect(err).NotTo(HaveOccurred())
-				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, crashMessage)
-				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonCrashLoopBackOff, crashMessage)))
-
-				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), pod)).To(Succeed())
-				pod.Status = corev1.PodStatus{
-					Phase:      corev1.PodRunning,
-					Conditions: []corev1.PodCondition{{Type: corev1.PodScheduled, Status: corev1.ConditionTrue}},
-					ContainerStatuses: []corev1.ContainerStatus{{Name: containerNameMain, RestartCount: 2,
-						State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
-						LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
-							ExitCode: 1, FinishedAt: metav1.Now(),
-						}},
-					}},
-				}
-				Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
-				result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.RequeueAfter).To(Equal(LongRequeueDelay))
-
-				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, crashMessage)
-				Expect(recorder.Events).To(BeEmpty())
-			})
-
 			restartedRunning := func(restartCount int32, finishedAt time.Time) corev1.PodStatus {
 				return corev1.PodStatus{
 					Conditions: []corev1.PodCondition{{Type: corev1.PodScheduled, Status: corev1.ConditionTrue}},
@@ -957,7 +925,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				return fmt.Sprintf("container %s exited with code 1 (Error), restart count %d", containerNameMain, restartCount)
 			}
 
-			It("should report CrashLoopBackOff from a restarted container when the kubelet's back-off state is not seen", func() {
+			It("should carry the exit code and restart count of a crash loop and refresh the count without a second event", func() {
 				workspace := newWorkspace()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
@@ -974,7 +942,18 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, recordedExit(2))
 				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonCrashLoopBackOff, recordedExit(2))))
 
-				// further restarts refresh the count without a second event
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), pod)).To(Succeed())
+				pod.Status = restartedRunning(2, time.Now())
+				pod.Status.ContainerStatuses[0].State = corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{
+					Reason: kubeletReasonCrashLoopBackOff, Message: "back-off 10s restarting failed container=" + containerNameMain,
+				}}
+				pod.Status.Phase = corev1.PodRunning
+				Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, recordedExit(2))
+				Expect(recorder.Events).To(BeEmpty())
+
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), pod)).To(Succeed())
 				pod.Status = restartedRunning(3, time.Now())
 				pod.Status.Phase = corev1.PodRunning
@@ -982,17 +961,6 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
 				Expect(err).NotTo(HaveOccurred())
 				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, recordedExit(3))
-				Expect(recorder.Events).To(BeEmpty())
-
-				// the kubelet's own back-off report replaces the recorded exit once seen, and no second event follows
-				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), pod)).To(Succeed())
-				crashMessage := "back-off 10s restarting failed container=" + containerNameMain
-				pod.Status = waitingContainer(kubeletReasonCrashLoopBackOff, crashMessage)
-				pod.Status.Phase = corev1.PodPending
-				Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
-				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
-				Expect(err).NotTo(HaveOccurred())
-				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, crashMessage)
 				Expect(recorder.Events).To(BeEmpty())
 			})
 
