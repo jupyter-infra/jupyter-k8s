@@ -38,6 +38,8 @@ const (
 	eventReasonFailedScheduling    = "FailedScheduling"
 	kubeletReasonContainerCreating = "ContainerCreating"
 	kubeletReasonImagePullBackOff  = "ImagePullBackOff"
+	kubeletReasonErrImageNeverPull = "ErrImageNeverPull"
+	kubeletReasonRunContainerError = "RunContainerError"
 	kubeletReasonCreateConfigError = "CreateContainerConfigError"
 	terminatedReasonError          = "Error"
 )
@@ -120,10 +122,12 @@ func TestDefinitiveStartFailure(t *testing.T) {
 			expected: &StartFailure{Reason: kubeletReasonInvalidImageName, Message: "couldn't parse image name"}},
 		{name: "config error", pod: scheduledPod(waitingStatus(kubeletReasonCreateConfigError, "secret \"s\" not found")),
 			expected: &StartFailure{Reason: kubeletReasonCreateConfigError, Message: "secret \"s\" not found"}},
-		{name: "image absent under pull policy Never", pod: scheduledPod(waitingStatus("ErrImageNeverPull", "Container image \"x:1\" is not present with pull policy of Never")),
-			expected: &StartFailure{Reason: "ErrImageNeverPull", Message: "Container image \"x:1\" is not present with pull policy of Never"}},
-		{name: "any kubelet error reason counts", pod: scheduledPod(waitingStatus("RunContainerError", "failed to start container")),
-			expected: &StartFailure{Reason: "RunContainerError", Message: "failed to start container"}},
+		{name: "image absent under pull policy Never", pod: scheduledPod(waitingStatus(kubeletReasonErrImageNeverPull, "Container image \"x:1\" is not present with pull policy of Never")),
+			expected: &StartFailure{Reason: kubeletReasonErrImageNeverPull, Message: "Container image \"x:1\" is not present with pull policy of Never"}},
+		{name: "any kubelet error reason counts", pod: scheduledPod(waitingStatus(kubeletReasonRunContainerError, "failed to start container")),
+			expected: &StartFailure{Reason: kubeletReasonRunContainerError, Message: "failed to start container"}},
+		{name: "a reason the CRD would reject is guarded", pod: scheduledPod(waitingStatus("Err/ImagePull", "not found")),
+			expected: &StartFailure{Reason: ReasonContainerStartFailed, Message: "Err/ImagePull: not found"}},
 		{name: "pod initializing is not a failure", pod: scheduledPod(waitingStatus("PodInitializing", ""))},
 		{name: "crash loop with an empty message and no recorded exit falls back to the reason",
 			pod:      scheduledPod(waitingStatus(kubeletReasonCrashLoopBackOff, "")),
@@ -159,12 +163,68 @@ func TestDefinitiveStartFailure(t *testing.T) {
 	}
 }
 
+func TestStartFailureReasonGuard(t *testing.T) {
+	tests := []struct {
+		name            string
+		reason, message string
+		expected        *StartFailure
+	}{
+		{name: "a conforming reason is kept", reason: kubeletReasonRunContainerError, message: "no such file",
+			expected: &StartFailure{Reason: kubeletReasonRunContainerError, Message: "no such file"}},
+		{name: "a conforming reason without a message is its own message", reason: kubeletReasonErrImageNeverPull,
+			expected: &StartFailure{Reason: kubeletReasonErrImageNeverPull, Message: kubeletReasonErrImageNeverPull}},
+		{name: "a reason outside the CRD pattern becomes ContainerStartFailed", reason: "Err/ImagePull", message: "not found",
+			expected: &StartFailure{Reason: ReasonContainerStartFailed, Message: "Err/ImagePull: not found"}},
+		{name: "a reason outside the CRD pattern without a message", reason: "Err pull",
+			expected: &StartFailure{Reason: ReasonContainerStartFailed, Message: "Err pull"}},
+		{name: "a reason over the CRD length becomes ContainerStartFailed",
+			reason: "Err" + strings.Repeat("x", maxConditionReasonBytes), message: "boom",
+			expected: &StartFailure{Reason: ReasonContainerStartFailed, Message: "Err" + strings.Repeat("x", maxConditionReasonBytes) + ": boom"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, startFailure(tt.reason, tt.message))
+		})
+	}
+}
+
+func TestReportedStartFailure(t *testing.T) {
+	conditions := func(degradedReason, progressingReason string) []metav1.Condition {
+		return []metav1.Condition{
+			{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: degradedReason, Message: "m"},
+			{Type: ConditionTypeProgressing, Status: metav1.ConditionFalse, Reason: progressingReason, Message: "m"},
+		}
+	}
+	tests := []struct {
+		name       string
+		conditions []metav1.Condition
+		expected   *StartFailure
+	}{
+		{name: "no conditions"},
+		{name: "a kubelet reason on Degraded and Progressing",
+			conditions: conditions(kubeletReasonImagePullBackOff, kubeletReasonImagePullBackOff),
+			expected:   &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: "m"}},
+		{name: "a guarded reason on Degraded and Progressing",
+			conditions: conditions(ReasonContainerStartFailed, ReasonContainerStartFailed),
+			expected:   &StartFailure{Reason: ReasonContainerStartFailed, Message: "m"}},
+		{name: "an operator error on Degraded alone", conditions: conditions(ReasonDeploymentError, ReasonStartingContainer)},
+		{name: "a stall", conditions: conditions(ReasonComputeStalled, ReasonComputeStalled)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workspace := &workspacev1alpha1.Workspace{}
+			workspace.Status.Conditions = tt.conditions
+			assert.Equal(t, tt.expected, reportedStartFailure(workspace))
+		})
+	}
+}
+
 func TestIsDefinitiveStartFailureReason(t *testing.T) {
 	for reason, expected := range map[string]bool{
-		kubeletReasonInvalidImageName: true, "ErrImageNeverPull": true,
-		kubeletReasonImagePullBackOff: true, kubeletReasonCrashLoopBackOff: true, "RunContainerError": true,
+		kubeletReasonInvalidImageName: true, kubeletReasonErrImageNeverPull: true,
+		kubeletReasonImagePullBackOff: true, kubeletReasonCrashLoopBackOff: true, kubeletReasonRunContainerError: true,
 		kubeletReasonCreateConfigError: true,
-		kubeletReasonErrImagePull: false, kubeletReasonContainerCreating: false, "PodInitializing": false,
+		kubeletReasonErrImagePull:      false, kubeletReasonContainerCreating: false, "PodInitializing": false,
 		ReasonDeploymentError: false, ReasonServiceError: false, ReasonComputeStalled: false,
 	} {
 		assert.Equal(t, expected, isDefinitiveStartFailureReason(reason), reason)

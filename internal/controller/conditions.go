@@ -61,6 +61,9 @@ const (
 	// ReasonComputeStalled is set on Degraded, Available and Progressing while the workspace Deployment
 	// reports Progressing=False with reason ProgressDeadlineExceeded; it clears when the pod becomes ready.
 	ReasonComputeStalled = "ComputeStalled"
+	// ReasonContainerStartFailed replaces a kubelet waiting reason that the CRD would reject as a condition
+	// reason; the raw reason then opens the message.
+	ReasonContainerStartFailed = "ContainerStartFailed"
 
 	// Start steps, set on Progressing=True and Available=False while the workspace pod is not ready, with
 	// the message the scheduler, the autoscaler or the kubelet recorded for that step copied unchanged.

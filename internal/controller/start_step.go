@@ -8,6 +8,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -54,7 +55,13 @@ const (
 	// which holds at most 32768 bytes, and the Warning event composed from it. The kubelet and the scheduler
 	// stay far below it; a core/v1 event created by hand has no length limit.
 	maxCopiedMessageBytes = 1024
+
+	// maxConditionReasonBytes is the CRD's ceiling for a condition reason, from metav1.Condition.
+	maxConditionReasonBytes = 1024
 )
+
+// conditionReasonPattern is the CRD's validation of a condition reason, from metav1.Condition.
+var conditionReasonPattern = regexp.MustCompile(`^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$`)
 
 // StartStep is the step a starting workspace pod is in: the Progressing reason and the message the
 // component responsible for that step recorded, copied unchanged.
@@ -68,6 +75,24 @@ type StartStep struct {
 type StartFailure struct {
 	Reason  string
 	Message string
+}
+
+// startFailure builds a StartFailure from a kubelet reason and message, the reason itself when the message
+// is empty. A reason the CRD would reject as a condition reason becomes ContainerStartFailed, with the raw
+// reason prefixed to the message.
+func startFailure(reason, message string) *StartFailure {
+	if len(reason) > maxConditionReasonBytes || !conditionReasonPattern.MatchString(reason) {
+		if message != "" {
+			message = reason + ": " + message
+		} else {
+			message = reason
+		}
+		return &StartFailure{Reason: ReasonContainerStartFailed, Message: message}
+	}
+	if message == "" {
+		message = reason
+	}
+	return &StartFailure{Reason: reason, Message: message}
 }
 
 // isDefinitiveStartFailureReason reports whether reason is one the kubelet uses for a container it cannot
@@ -93,13 +118,17 @@ type startEventsEntry struct {
 }
 
 // reportedStartFailure returns the start failure the workspace's conditions already carry, written by
-// reconcileFailedStart as Degraded=True and Progressing with the same kubelet reason, or nil. UpdateErrorStatus
-// writes Degraded alone, so an operator error such as ComputeError does not count.
+// reconcileFailedStart as Degraded=True and Progressing with the same kubelet reason or with
+// ContainerStartFailed, or nil. UpdateErrorStatus writes Degraded alone, so an operator error such as
+// ComputeError does not count.
 func reportedStartFailure(workspace *workspacev1alpha1.Workspace) *StartFailure {
 	degraded := FindCondition(&workspace.Status.Conditions, ConditionTypeDegraded)
 	progressing := FindCondition(&workspace.Status.Conditions, ConditionTypeProgressing)
 	if degraded == nil || progressing == nil || degraded.Status != metav1.ConditionTrue ||
-		progressing.Reason != degraded.Reason || !isDefinitiveStartFailureReason(degraded.Reason) {
+		progressing.Reason != degraded.Reason {
+		return nil
+	}
+	if degraded.Reason != ReasonContainerStartFailed && !isDefinitiveStartFailureReason(degraded.Reason) {
 		return nil
 	}
 	return &StartFailure{Reason: degraded.Reason, Message: degraded.Message}
@@ -147,7 +176,7 @@ func crashLoopFailure(containerStatus *corev1.ContainerStatus) *StartFailure {
 		message += " (" + terminated.Reason + ")"
 	}
 	message += fmt.Sprintf(", restart count %d", containerStatus.RestartCount)
-	return &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: message}
+	return startFailure(kubeletReasonCrashLoopBackOff, message)
 }
 
 // containerStatuses returns the pod's container statuses, init containers first.
@@ -186,11 +215,7 @@ func definitiveStartFailure(pod *corev1.Pod) *StartFailure {
 		if waiting.Reason == kubeletReasonCrashLoopBackOff && lastExit(containerStatus) != nil {
 			return crashLoopFailure(containerStatus)
 		}
-		message := waiting.Message
-		if message == "" {
-			message = waiting.Reason
-		}
-		return &StartFailure{Reason: waiting.Reason, Message: message}
+		return startFailure(waiting.Reason, waiting.Message)
 	}
 	return nil
 }
