@@ -110,6 +110,9 @@ const (
 	PollRequeueDelay = 200 * time.Millisecond
 	// LongRequeueDelay is the delay for long reconciliation cycles
 	LongRequeueDelay = 60 * time.Second
+	// FailedStartRequeueDelay is the delay between reads of a pod whose container the kubelet cannot start. A
+	// change of waiting reason does not reach the Deployment watch, so only the requeue sees the kubelet recover.
+	FailedStartRequeueDelay = 15 * time.Second
 
 	// DefaultIdleCheckInterval is the default interval for checking workspace idle status
 	DefaultIdleCheckInterval = 5 * time.Minute

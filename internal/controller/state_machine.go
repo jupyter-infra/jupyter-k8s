@@ -384,17 +384,20 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 }
 
 // degradedStart is a start that cannot complete: the reason and message for the Degraded, Available and
-// Progressing conditions, the Warning event that marks the transition, and whether the conditions already
-// report this failure so that a workspace that stays degraded does not repeat the event.
+// Progressing conditions, the Warning event that marks the transition, whether the conditions already
+// report this failure so that a workspace that stays degraded does not repeat the event, and the delay
+// until the pod is read again.
 type degradedStart struct {
 	reason, message           string
 	eventReason, eventMessage string
 	alreadyReported           bool
+	requeueAfter              time.Duration
 }
 
-// reconcileDegradedStart writes a degradedStart and requeues at LongRequeueDelay. Recovery needs no action
-// here: the Deployment watch reconciles the workspace when its pod becomes ready and the ready path resets
-// the conditions; the requeue only refreshes the message.
+// reconcileDegradedStart writes a degradedStart and requeues at its delay. The event follows the status
+// write, so a write conflict, which reconciles again, does not repeat it. Recovery needs no action here: the
+// Deployment watch reconciles the workspace when its pod becomes ready and the ready path resets the
+// conditions; the requeue refreshes the message and sees the kubelet stop reporting the failure.
 func (sm *StateMachine) reconcileDegradedStart(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
@@ -402,16 +405,17 @@ func (sm *StateMachine) reconcileDegradedStart(
 	service *corev1.Service,
 	start degradedStart,
 	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (ctrl.Result, error) {
-	if !start.alreadyReported {
-		sm.recorder.Event(workspace, corev1.EventTypeWarning, start.eventReason, start.eventMessage)
-	}
 	workspace.Status.DeploymentName = deployment.GetName()
 	workspace.Status.ServiceName = service.GetName()
 	if err := sm.statusManager.UpdateDegradedRunningStatus(
 		ctx, workspace, start.reason, start.reason, start.message, snapshotStatus); err != nil {
 		return ctrl.Result{}, err
 	}
-	return ctrl.Result{RequeueAfter: LongRequeueDelay}, nil
+	if !start.alreadyReported {
+		sm.recorder.Event(workspace, corev1.EventTypeWarning, start.eventReason,
+			truncateMessage(start.eventMessage, maxCopiedMessageBytes))
+	}
+	return ctrl.Result{RequeueAfter: start.requeueAfter}, nil
 }
 
 // reconcileStalledRollout reports a workspace whose Deployment exceeded its progress deadline as
@@ -436,6 +440,7 @@ func (sm *StateMachine) reconcileStalledRollout(
 		reason: ReasonComputeStalled, message: message,
 		eventReason: EventWorkspaceComputeStalled, eventMessage: message,
 		alreadyReported: degraded != nil && degraded.Status == metav1.ConditionTrue && degraded.Reason == ReasonComputeStalled,
+		requeueAfter:    LongRequeueDelay,
 	}, snapshotStatus)
 }
 
@@ -455,6 +460,7 @@ func (sm *StateMachine) reconcileFailedStart(
 		reason: failure.Reason, message: failure.Message,
 		eventReason: EventWorkspaceStartFailed, eventMessage: failure.Reason + ": " + failure.Message,
 		alreadyReported: reportedStartFailure(workspace) != nil,
+		requeueAfter:    FailedStartRequeueDelay,
 	}, snapshotStatus)
 }
 

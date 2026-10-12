@@ -8,6 +8,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -409,7 +410,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			sm := buildStateMachine()
 			result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(LongRequeueDelay))
+			Expect(result.RequeueAfter).To(Equal(FailedStartRequeueDelay))
 
 			for _, condType := range []string{ConditionTypeDegraded, ConditionTypeAvailable, ConditionTypeProgressing} {
 				Expect(getCondition(workspace, condType).Reason).To(Equal(kubeletReasonImagePullBackOff), condType)
@@ -824,13 +825,60 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				sm := buildStateMachine()
 				result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.RequeueAfter).To(Equal(LongRequeueDelay))
+				Expect(result.RequeueAfter).To(Equal(FailedStartRequeueDelay))
 
 				expectStartFailed(workspace, kubeletReasonImagePullBackOff, backOffMessage)
 				Expect(workspace.Status.DeploymentName).To(Equal(dep.Name))
 				Expect(workspace.Status.ServiceName).To(Equal(svc.Name))
 				Expect(recorder.Events).To(HaveLen(1))
 				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonImagePullBackOff, backOffMessage)))
+			})
+
+			It("should record the event only once the status write has succeeded", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+				makeWorkspaceStale(workspace)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).To(MatchError(ContainSubstring("failed to update Workspace.Status")))
+				Expect(recorder.Events).To(BeEmpty())
+
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				expectStartFailed(workspace, kubeletReasonImagePullBackOff, backOffMessage)
+				Expect(recorder.Events).To(HaveLen(1))
+				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonImagePullBackOff, backOffMessage)))
+			})
+
+			It("should bound the event message like the condition message", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				longMessage := strings.Repeat("x", 4*maxCopiedMessageBytes)
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, longMessage))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				conditionMessage := truncateMessage(longMessage, maxCopiedMessageBytes)
+				expectStartFailed(workspace, kubeletReasonImagePullBackOff, conditionMessage)
+				Expect(recorder.Events).To(Receive(Equal(fmt.Sprintf("%s %s %s", corev1.EventTypeWarning, EventWorkspaceStartFailed,
+					truncateMessage(kubeletReasonImagePullBackOff+": "+conditionMessage, maxCopiedMessageBytes)))))
 			})
 
 			It("should report a failed pull attempt as a step and turn Degraded once the kubelet backs off", func() {

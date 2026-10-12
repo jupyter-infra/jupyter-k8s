@@ -51,8 +51,8 @@ const (
 	crashLoopResetAfter = 10 * time.Minute
 
 	// maxCopiedMessageBytes bounds a message copied from an event or a container state onto a condition,
-	// which holds at most 32768 bytes. The kubelet and the scheduler stay far below it; a core/v1 event
-	// created by hand has no length limit.
+	// which holds at most 32768 bytes, and the Warning event composed from it. The kubelet and the scheduler
+	// stay far below it; a core/v1 event created by hand has no length limit.
 	maxCopiedMessageBytes = 1024
 )
 
