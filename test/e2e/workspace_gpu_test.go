@@ -286,7 +286,7 @@ var _ = Describe("Workspace GPU", Ordered, func() {
 			setDeploymentProgressDeadline(deploymentName, workspaceNamespace, stallDeadlineSeconds)
 
 			By("waiting for Degraded=True with reason ComputeStalled carrying the scheduler's verdict")
-			waitForWorkspaceStalled(workspaceName, workspaceNamespace, verdict)
+			waitForWorkspaceDegradedStart(workspaceName, workspaceNamespace, []string{controller.ReasonComputeStalled}, verdict)
 
 			By("verifying one Warning event carries the same verdict")
 			expectSingleStallEvent(workspaceName, workspaceNamespace, verdict)

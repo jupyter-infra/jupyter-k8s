@@ -264,30 +264,6 @@ func setDeploymentProgressDeadline(deploymentName, namespace string, seconds int
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 }
 
-// waitForWorkspaceStalled polls until the workspace reports Degraded=True with reason ComputeStalled and
-// a message matching messageMatcher, and Available=False and Progressing=False under the same reason
-// and message.
-func waitForWorkspaceStalled(workspaceName, namespace string, messageMatcher gomega.OmegaMatcher) {
-	ginkgo.GinkgoHelper()
-
-	gomega.Eventually(func(g gomega.Gomega) {
-		var ws workspacev1alpha1.Workspace
-		g.Expect(kubectlGetInto("workspace", workspaceName, namespace, &ws)).To(gomega.Succeed())
-		degraded := meta.FindStatusCondition(ws.Status.Conditions, ConditionTypeDegraded)
-		g.Expect(degraded).NotTo(gomega.BeNil())
-		g.Expect(string(degraded.Status)).To(gomega.Equal(ConditionTrue))
-		g.Expect(degraded.Reason).To(gomega.Equal(controller.ReasonComputeStalled))
-		g.Expect(degraded.Message).To(messageMatcher)
-		for _, conditionType := range []string{ConditionTypeAvailable, ConditionTypeProgressing} {
-			condition := meta.FindStatusCondition(ws.Status.Conditions, conditionType)
-			g.Expect(condition).NotTo(gomega.BeNil(), conditionType)
-			g.Expect(string(condition.Status)).To(gomega.Equal(ConditionFalse), conditionType)
-			g.Expect(condition.Reason).To(gomega.Equal(controller.ReasonComputeStalled), conditionType)
-			g.Expect(condition.Message).To(gomega.Equal(degraded.Message), conditionType)
-		}
-	}).WithTimeout(2 * time.Minute).WithPolling(3 * time.Second).Should(gomega.Succeed())
-}
-
 // workspaceEvents returns the events with the given reason recorded on the workspace with the given
 // UID. Events outlive the object they were recorded on, so a selection by name would also return the
 // events of an earlier workspace of the same name, which specs reuse across runs.
@@ -357,10 +333,12 @@ func waitForWorkspaceStartStep(workspaceName, namespace, step string, messageMat
 	}).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(gomega.Succeed())
 }
 
-// waitForWorkspaceStartFailed polls until the workspace reports Degraded=True with one of the given
-// kubelet reasons and a message matching messageMatcher, and Available=False and Progressing=False
-// under the same reason and message.
-func waitForWorkspaceStartFailed(
+// waitForWorkspaceDegradedStart waits until the workspace reports a failed or stalled start: Degraded=True
+// with a reason among reasons and a message matching messageMatcher, and Available=False and
+// Progressing=False under the same reason and message.
+//
+//nolint:unparam // helper kept general; current callers happen to share the namespace
+func waitForWorkspaceDegradedStart(
 	workspaceName, namespace string, reasons []string, messageMatcher gomega.OmegaMatcher) {
 	ginkgo.GinkgoHelper()
 

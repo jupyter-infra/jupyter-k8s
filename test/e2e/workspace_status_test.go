@@ -411,7 +411,7 @@ var _ = Describe("Workspace Status", Ordered, func() {
 			createWorkspaceForTest(unpullableWorkspace, statusGroupDir, statusSubgroupDir)
 
 			By("waiting for Degraded=True with the kubelet's pull reason naming the image, before any deadline")
-			waitForWorkspaceStartFailed(unpullableWorkspace, statusTestNamespace, imagePullReasons,
+			waitForWorkspaceDegradedStart(unpullableWorkspace, statusTestNamespace, imagePullReasons,
 				ContainSubstring(unpullableImage))
 			expectSingleStartFailedEvent(unpullableWorkspace, statusTestNamespace, ContainSubstring(unpullableImage))
 			VerifyWorkspaceConditions(unpullableWorkspace, statusTestNamespace, map[string]string{
@@ -453,7 +453,7 @@ var _ = Describe("Workspace Status", Ordered, func() {
 			createWorkspaceForTest(crashLoopWorkspace, statusGroupDir, statusSubgroupDir)
 
 			By("waiting for Degraded=True with reason CrashLoopBackOff and the recorded exit as the message")
-			waitForWorkspaceStartFailed(crashLoopWorkspace, statusTestNamespace, []string{"CrashLoopBackOff"},
+			waitForWorkspaceDegradedStart(crashLoopWorkspace, statusTestNamespace, []string{"CrashLoopBackOff"},
 				ContainSubstring("exited with code 1"))
 			expectSingleStartFailedEvent(crashLoopWorkspace, statusTestNamespace, ContainSubstring("CrashLoopBackOff"))
 
@@ -486,7 +486,7 @@ var _ = Describe("Workspace Status", Ordered, func() {
 			createWorkspaceForTest(missingSecretWorkspace, statusGroupDir, statusSubgroupDir)
 
 			By("waiting for Degraded=True with reason CreateContainerConfigError naming the Secret")
-			waitForWorkspaceStartFailed(missingSecretWorkspace, statusTestNamespace, []string{"CreateContainerConfigError"},
+			waitForWorkspaceDegradedStart(missingSecretWorkspace, statusTestNamespace, []string{"CreateContainerConfigError"},
 				ContainSubstring(missingSecretName))
 			expectSingleStartFailedEvent(missingSecretWorkspace, statusTestNamespace, ContainSubstring(missingSecretName))
 
