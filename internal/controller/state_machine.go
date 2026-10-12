@@ -458,7 +458,7 @@ func (sm *StateMachine) reconcileFailedStart(
 
 	return sm.reconcileDegradedStart(ctx, workspace, deployment, service, degradedStart{
 		reason: failure.Reason, message: failure.Message,
-		eventReason: EventWorkspaceStartFailed, eventMessage: failure.Reason + ": " + failure.Message,
+		eventReason: EventWorkspaceStartFailed, eventMessage: prefixReason(failure.Reason, failure.Message),
 		alreadyReported: reportedStartFailure(workspace) != nil,
 		requeueAfter:    FailedStartRequeueDelay,
 	}, snapshotStatus)

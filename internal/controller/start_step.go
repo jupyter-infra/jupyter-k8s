@@ -83,17 +83,21 @@ type StartFailure struct {
 // reason prefixed to the message.
 func startFailure(reason, message string) *StartFailure {
 	if len(reason) > maxConditionReasonBytes || !conditionReasonPattern.MatchString(reason) {
-		if message != "" {
-			message = reason + ": " + message
-		} else {
-			message = reason
-		}
-		return &StartFailure{Reason: ReasonContainerStartFailed, Message: message}
+		return &StartFailure{Reason: ReasonContainerStartFailed, Message: prefixReason(reason, message)}
 	}
 	if message == "" {
 		message = reason
 	}
 	return &StartFailure{Reason: reason, Message: message}
+}
+
+// prefixReason joins a reason and its message the way kubectl prints them, the reason alone when the
+// message is empty.
+func prefixReason(reason, message string) string {
+	if message == "" {
+		return reason
+	}
+	return reason + ": " + message
 }
 
 // isDefinitiveStartFailureReason reports whether reason is one the kubelet uses for a container it cannot
@@ -206,10 +210,7 @@ func waitingContainerMessage(pod *corev1.Pod) string {
 		if waiting == nil || waiting.Reason == "" {
 			continue
 		}
-		if waiting.Message == "" {
-			return waiting.Reason
-		}
-		return waiting.Reason + ": " + waiting.Message
+		return prefixReason(waiting.Reason, waiting.Message)
 	}
 	return ""
 }
