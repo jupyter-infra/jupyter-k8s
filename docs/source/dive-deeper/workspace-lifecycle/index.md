@@ -29,7 +29,7 @@ While the workspace pod is not ready, `Progressing=True` names the step the star
 |--------|------|---------|
 | `WaitingForNode` | The pod has no node yet | The newest event a component other than the scheduler recorded on the pod, for example Karpenter's `Pod should schedule on: nodeclaim/...` or `Failed to schedule pod, all available instance types exceed limits for nodepool "gpu"`; the scheduler's `PodScheduled` message (`0/3 nodes are available: ...`) when there is none |
 | `PullingImage` | The kubelet is pulling the image | The kubelet's `Pulling image "..."` event |
-| `StartingContainer` | The pod has a node and its container is not ready | The kubelet's newest event for the pod (`Successfully pulled image ...`, `Started container ...`, `Readiness probe failed: ...`), or the waiting container's reason and message (`ContainerCreating`, `PodInitializing`) while the kubelet has recorded no event |
+| `StartingContainer` | The pod has a node and its container is not ready | The kubelet's newest event for the pod (`Successfully pulled image ...`, `Started container ...`, `Readiness probe failed: ...`), or the waiting container's reason and message (`ContainerCreating`, `PodInitializing`, `ErrImagePull: ...`) while the kubelet has recorded no event |
 
 The operator does not interpret these messages; it copies them, cut at 1024 bytes. The step appears on `Available=False` with the same reason. Events are read for a starting pod at most every 5 seconds, and a few times per second across all workspaces, so many workspaces starting at once do not crowd out the operator's other API calls; the status is written only when the message changes.
 
@@ -43,7 +43,7 @@ conditions:
 
 ## Failed starts
 
-A container the kubelet cannot start as specified turns the workspace `Degraded` at once, instead of after the progress deadline below. The kubelet's waiting reason and message are copied onto `Degraded`, `Available` and `Progressing`:
+A container the kubelet cannot start as specified turns the workspace `Degraded` at once, instead of after the progress deadline below. The kubelet's waiting reason becomes the reason of `Degraded`, `Available` and `Progressing`, and `Progressing` is `False` while the failure lasts, even though the kubelet keeps retrying:
 
 ```yaml
 conditions:
@@ -59,11 +59,23 @@ conditions:
     reason: ImagePullBackOff
 ```
 
-The reasons that count are those of an image that cannot be pulled, an invalid image name, a missing Secret or ConfigMap and a command that keeps failing: `ErrImagePull`, `ImagePullBackOff`, `ErrImageNeverPull`, `InvalidImageName`, `CreateContainerConfigError`, `CrashLoopBackOff`, and any other reason starting with `Err` or ending in `Error` or `BackOff`, the rule Argo CD's health check applies. The operator's own reasons `ComputeError` and `ServiceError`, set when a Deployment or Service write fails, are not kubelet reasons and are not part of it.
+The reasons that count are those of a kubelet that is backing off, `ImagePullBackOff` and `CrashLoopBackOff`, and those of an image or a configuration that cannot work as written, `InvalidImageName`, `ErrImageNeverPull`, `CreateContainerConfigError` and the like: any reason starting with `Err` or ending in `Error` or `BackOff`, the rule Argo CD's health check applies, with one exception. `ErrImagePull` is one failed pull attempt, which the kubelet reports for a few seconds before it backs off, and stays a `StartingContainer` step with the kubelet's message. The operator's own reasons `ComputeError` and `ServiceError`, set when a Deployment or Service write fails, are not kubelet reasons and are not part of the rule. The kubelet's reasons are an open set that grows with Kubernetes releases; a consumer reads them as text and must not enumerate them. A reason the CRD would reject as a condition reason is written as `ContainerStartFailed`, with the raw reason opening the message.
 
-A container that keeps exiting is a crash loop even while the kubelet shows it as running or terminated between restarts, which on Kubernetes 1.37 is most of the time. Such a container is reported as `CrashLoopBackOff` with the exit code and the restart count as the message, until the kubelet's own back-off message is seen. A container that has run for ten minutes since its last exit is out of the loop, the point at which the kubelet resets its restart back-off, and is reported by its start step again.
+A missing Secret or ConfigMap turns the workspace `Degraded` when a container references it from `env`, which the kubelet reports as `CreateContainerConfigError`. A missing Secret or ConfigMap mounted as a volume keeps the pod in `ContainerCreating`, so the workspace stays a `StartingContainer` step with the kubelet's `FailedMount` message until the progress deadline below.
 
-A Warning event with reason `WorkspaceStartFailed` is recorded on the workspace when the condition first appears, one per failed start whatever reasons it passes through. The condition clears as soon as the kubelet stops reporting the failure, which returns the workspace to its start step, and when the workspace is stopped. A missing Secret that appears later resolves on its own, since the kubelet retries; a wrong image name or a failing command is fixed with a stop and a start, as for stalled starts.
+A crash loop is a restarted container that exits again. The kubelet restarts a container's first exit without back-off, so a container that exits once and comes back ready never reads `Degraded`; from the second exit on, the workspace reports `CrashLoopBackOff`, whether the kubelet shows the container as waiting, running or terminated between restarts. The message is composed from the pod status, the exit code, the exit reason and the restart count, so it changes only when one of them does; every other failure message is the kubelet's own text, copied:
+
+```yaml
+conditions:
+  - type: Degraded
+    status: "True"
+    reason: CrashLoopBackOff
+    message: "container main exited with code 1 (Error), restart count 4"
+```
+
+A container that has run for ten minutes since its last exit is out of the loop, the point at which the kubelet resets its restart back-off, and is reported by its start step again.
+
+A Warning event with reason `WorkspaceStartFailed` is recorded on the workspace when the condition first appears, one per failed start whatever reasons it passes through. The operator reads the pod again every fifteen seconds while the failure lasts, so the condition clears within fifteen seconds of the kubelet dropping the failure, which returns the workspace to its start step, and at once when the pod becomes ready or the workspace is stopped. A missing Secret that appears later resolves on its own, since the kubelet retries; a wrong image name or a failing command is fixed with a stop and a start, as for stalled starts.
 
 ## Stalled starts
 
