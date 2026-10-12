@@ -833,7 +833,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonImagePullBackOff, backOffMessage)))
 			})
 
-			It("should not repeat the event when the kubelet alternates between pull reasons", func() {
+			It("should report a failed pull attempt as a step and turn Degraded once the kubelet backs off", func() {
 				workspace := newWorkspace()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
@@ -847,8 +847,8 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				sm := buildStateMachine()
 				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 				Expect(err).NotTo(HaveOccurred())
-				expectStartFailed(workspace, kubeletReasonErrImagePull, pullErrMessage)
-				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonErrImagePull, pullErrMessage)))
+				expectStartStep(workspace, ReasonStartingContainer, kubeletReasonErrImagePull+": "+pullErrMessage)
+				Expect(recorder.Events).To(BeEmpty())
 
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), pod)).To(Succeed())
 				pod.Status = waitingContainer(kubeletReasonImagePullBackOff, backOffMessage)
@@ -858,7 +858,8 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(err).NotTo(HaveOccurred())
 
 				expectStartFailed(workspace, kubeletReasonImagePullBackOff, backOffMessage)
-				Expect(recorder.Events).To(BeEmpty())
+				Expect(recorder.Events).To(HaveLen(1))
+				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonImagePullBackOff, backOffMessage)))
 			})
 
 			It("should report an init container that crash-loops", func() {

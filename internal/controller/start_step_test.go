@@ -37,7 +37,6 @@ const (
 
 	eventReasonFailedScheduling    = "FailedScheduling"
 	kubeletReasonContainerCreating = "ContainerCreating"
-	kubeletReasonErrImagePull      = "ErrImagePull"
 	kubeletReasonImagePullBackOff  = "ImagePullBackOff"
 	kubeletReasonCreateConfigError = "CreateContainerConfigError"
 	terminatedReasonError          = "Error"
@@ -116,8 +115,7 @@ func TestDefinitiveStartFailure(t *testing.T) {
 		{name: "a restarted container is not a waiting failure", pod: scheduledPod(restartedStatus(false, 1))},
 		{name: "image pull back-off", pod: scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, "Back-off pulling image \"x:1\"")),
 			expected: &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: "Back-off pulling image \"x:1\""}},
-		{name: "image pull error", pod: scheduledPod(waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")),
-			expected: &StartFailure{Reason: kubeletReasonErrImagePull, Message: "rpc error: not found"}},
+		{name: "one failed pull attempt is not a failure", pod: scheduledPod(waitingStatus(kubeletReasonErrImagePull, "rpc error: not found"))},
 		{name: "invalid image name", pod: scheduledPod(waitingStatus(kubeletReasonInvalidImageName, "couldn't parse image name")),
 			expected: &StartFailure{Reason: kubeletReasonInvalidImageName, Message: "couldn't parse image name"}},
 		{name: "config error", pod: scheduledPod(waitingStatus(kubeletReasonCreateConfigError, "secret \"s\" not found")),
@@ -149,10 +147,10 @@ func TestDefinitiveStartFailure(t *testing.T) {
 
 func TestIsDefinitiveStartFailureReason(t *testing.T) {
 	for reason, expected := range map[string]bool{
-		kubeletReasonInvalidImageName: true, kubeletReasonErrImagePull: true, "ErrImageNeverPull": true,
+		kubeletReasonInvalidImageName: true, "ErrImageNeverPull": true,
 		kubeletReasonImagePullBackOff: true, kubeletReasonCrashLoopBackOff: true, "RunContainerError": true,
 		kubeletReasonCreateConfigError: true,
-		kubeletReasonContainerCreating: false, "PodInitializing": false,
+		kubeletReasonErrImagePull: false, kubeletReasonContainerCreating: false, "PodInitializing": false,
 		ReasonDeploymentError: false, ReasonServiceError: false, ReasonComputeStalled: false,
 	} {
 		assert.Equal(t, expected, isDefinitiveStartFailureReason(reason), reason)
@@ -229,6 +227,11 @@ func TestPodStartStep(t *testing.T) {
 			name:     "scheduled pod with a waiting container and no events",
 			pod:      scheduledPod(waitingStatus("PodInitializing", "")),
 			expected: StartStep{Reason: ReasonStartingContainer, Message: "PodInitializing"},
+		},
+		{
+			name:     "a failed pull attempt is a step with the kubelet's reason and message",
+			pod:      scheduledPod(waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")),
+			expected: StartStep{Reason: ReasonStartingContainer, Message: "ErrImagePull: rpc error: not found"},
 		},
 		{
 			name:     "running but not ready container reports the kubelet's newest message",
@@ -333,8 +336,8 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 			objects:    []client.Object{labeled(unscheduledPod(stepTestSchedMsg)), &oversized},
 			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: truncateMessage(oversized.Message, maxCopiedMessageBytes)}},
 		{name: "an oversized waiting message is cut", withReader: true,
-			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonErrImagePull, strings.Repeat("x", 40000))))},
-			expectFailed: &StartFailure{Reason: kubeletReasonErrImagePull, Message: strings.Repeat("x", maxCopiedMessageBytes) + " ...(truncated)"}},
+			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, strings.Repeat("x", 40000))))},
+			expectFailed: &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: strings.Repeat("x", maxCopiedMessageBytes) + " ...(truncated)"}},
 		{name: "an evicted pod is skipped for its replacement", withReader: true,
 			objects:    []client.Object{evicted, labeled(scheduledPod(waitingStatus(kubeletReasonContainerCreating, "")))},
 			expectStep: &StartStep{Reason: ReasonStartingContainer, Message: kubeletReasonContainerCreating}},

@@ -37,6 +37,7 @@ const (
 	// Vocabulary of core Kubernetes components; k8s.io/kubernetes/pkg/kubelet is not importable.
 	kubeletComponent              = "kubelet"
 	kubeletEventPulling           = "Pulling"
+	kubeletReasonErrImagePull     = "ErrImagePull"
 	kubeletReasonInvalidImageName = "InvalidImageName"
 	kubeletReasonCrashLoopBackOff = "CrashLoopBackOff"
 
@@ -73,13 +74,14 @@ type StartFailure struct {
 }
 
 // isDefinitiveStartFailureReason reports whether reason is one the kubelet uses for a container it cannot
-// start as specified: an image it cannot pull, a missing Secret or ConfigMap, a command that keeps failing.
-// Argo CD's health check applies the same rule, any reason starting with Err or ending with Error or
-// BackOff (ErrImagePull, ImagePullBackOff, ErrImageNeverPull, CreateContainerConfigError, RunContainerError,
-// CrashLoopBackOff); InvalidImageName matches neither and is named.
+// start as specified: an image it is backing off from pulling, a missing Secret or ConfigMap, a command
+// that keeps failing. Argo CD's health check applies the same rule, any reason starting with Err or ending
+// with Error or BackOff (ImagePullBackOff, ErrImageNeverPull, CreateContainerConfigError, RunContainerError,
+// CrashLoopBackOff); InvalidImageName matches neither and is named. ErrImagePull is one failed pull
+// attempt, which the kubelet reports for a few seconds before ImagePullBackOff, and stays a step.
 func isDefinitiveStartFailureReason(reason string) bool {
 	// the operator's own Degraded reasons end in Error as well
-	if reason == ReasonDeploymentError || reason == ReasonServiceError {
+	if reason == ReasonDeploymentError || reason == ReasonServiceError || reason == kubeletReasonErrImagePull {
 		return false
 	}
 	return reason == kubeletReasonInvalidImageName || strings.HasPrefix(reason, "Err") ||

@@ -98,8 +98,8 @@ const (
 	EventWorkspaceComputeStalled = "WorkspaceComputeStalled"
 
 	// EventWorkspaceStartFailed is recorded (Warning) when the kubelet first reports a container that will
-	// not start without a change (ImagePullBackOff, CrashLoopBackOff, ...). Edge-triggered: the kubelet
-	// alternates between related reasons (ErrImagePull, ImagePullBackOff) and that is not a new failure.
+	// not start without a change (ImagePullBackOff, CrashLoopBackOff, ...). Edge-triggered: a workspace
+	// that stays failed, through a crash loop's restarts or a change of kubelet reason, does not repeat it.
 	EventWorkspaceStartFailed = "WorkspaceStartFailed"
 )
 

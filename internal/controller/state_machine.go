@@ -440,8 +440,8 @@ func (sm *StateMachine) reconcileStalledRollout(
 }
 
 // reconcileFailedStart reports a workspace whose container the kubelet says cannot start as Degraded with
-// the kubelet's reason and message, at once rather than at the progress deadline. The kubelet's alternation
-// between related reasons (ErrImagePull, ImagePullBackOff) and a crash loop's restarts are one failure.
+// the kubelet's reason and message, at once rather than at the progress deadline. A change of kubelet reason
+// and a crash loop's restarts are one failure.
 func (sm *StateMachine) reconcileFailedStart(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
