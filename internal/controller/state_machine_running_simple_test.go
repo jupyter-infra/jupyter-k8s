@@ -926,7 +926,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				pod.Status = corev1.PodStatus{
 					Phase:      corev1.PodRunning,
 					Conditions: []corev1.PodCondition{{Type: corev1.PodScheduled, Status: corev1.ConditionTrue}},
-					ContainerStatuses: []corev1.ContainerStatus{{Name: containerNameMain, RestartCount: 1,
+					ContainerStatuses: []corev1.ContainerStatus{{Name: containerNameMain, RestartCount: 2,
 						State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
 						LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 1, FinishedAt: metav1.Now(),
@@ -961,7 +961,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				workspace := newWorkspace()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
-				pod := createPendingPod(workspace, restartedRunning(1, time.Now()))
+				pod := createPendingPod(workspace, restartedRunning(2, time.Now()))
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
 				defer func() { _ = k8sClient.Delete(ctx, dep) }()
 				defer func() { _ = k8sClient.Delete(ctx, svc) }()
@@ -971,8 +971,8 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				sm := buildStateMachine()
 				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 				Expect(err).NotTo(HaveOccurred())
-				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, recordedExit(1))
-				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonCrashLoopBackOff, recordedExit(1))))
+				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff, recordedExit(2))
+				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonCrashLoopBackOff, recordedExit(2))))
 
 				// further restarts refresh the count without a second event
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), pod)).To(Succeed())
@@ -1060,11 +1060,11 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(recorder.Events).To(BeEmpty())
 			})
 
-			It("should not take an old restart for a crash loop when the container turns unready later", func() {
+			It("should not take old restarts for a crash loop when the container turns unready later", func() {
 				workspace := newWorkspace()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
-				pod := createPendingPod(workspace, restartedRunning(1, time.Now().Add(-time.Hour)))
+				pod := createPendingPod(workspace, restartedRunning(2, time.Now().Add(-time.Hour)))
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
 				defer func() { _ = k8sClient.Delete(ctx, dep) }()
 				defer func() { _ = k8sClient.Delete(ctx, svc) }()
@@ -1077,6 +1077,42 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 
 				expectStartStep(workspace, ReasonStartingContainer, startingContainerMessage)
 				Expect(recorder.Events).To(BeEmpty())
+			})
+
+			It("should stay out of Degraded when the container of an Available workspace exits once and comes back", func() {
+				workspace := newWorkspace()
+				dep := createBuiltDeployment(workspace)
+				svc := createService(workspace)
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				progressed := appsv1.DeploymentCondition{
+					Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: newReplicaSetAvailableReason,
+				}
+				markDeploymentAvailable(dep, progressed)
+
+				sm := buildStateMachine()
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(getCondition(workspace, ConditionTypeAvailable).Status).To(Equal(metav1.ConditionTrue))
+
+				pod := createPendingPod(workspace, restartedRunning(1, time.Now()))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				markDeploymentProgressing(dep)
+				result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(PollRequeueDelay))
+				expectStartStep(workspace, ReasonStartingContainer, startingContainerMessage)
+
+				markDeploymentAvailable(dep, progressed)
+				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(getCondition(workspace, ConditionTypeAvailable).Status).To(Equal(metav1.ConditionTrue))
+				expectNotDegraded(workspace)
+				Expect(recorder.Events).To(HaveLen(2))
+				for len(recorder.Events) > 0 {
+					Expect(<-recorder.Events).NotTo(ContainSubstring(EventWorkspaceStartFailed))
+				}
 			})
 
 			It("should report Deleting and clear Degraded when a failed workspace is deleted", func() {

@@ -379,6 +379,44 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 	}
 }
 
+func TestCrashLoopingContainer(t *testing.T) {
+	running := corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}
+	exit := func(at time.Time) corev1.ContainerState {
+		return corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+			ExitCode: 1, Reason: terminatedReasonError, FinishedAt: metav1.NewTime(at),
+		}}
+	}
+	recent := stepTestClock.Add(-30 * time.Second)
+	old := stepTestClock.Add(-time.Hour)
+	tests := []struct {
+		name      string
+		status    corev1.ContainerStatus
+		crashLoop bool
+	}{
+		{name: "first run", status: corev1.ContainerStatus{Name: containerNameMain, State: running}},
+		{name: "one exit and running again",
+			status: corev1.ContainerStatus{Name: containerNameMain, RestartCount: 1, State: running, LastTerminationState: exit(recent)}},
+		{name: "one exit and terminated again", crashLoop: true,
+			status: corev1.ContainerStatus{Name: containerNameMain, RestartCount: 1, State: exit(recent), LastTerminationState: exit(old)}},
+		{name: "two restarts and running", crashLoop: true,
+			status: corev1.ContainerStatus{Name: containerNameMain, RestartCount: 2, State: running, LastTerminationState: exit(recent)}},
+		{name: "two restarts and an old exit",
+			status: corev1.ContainerStatus{Name: containerNameMain, RestartCount: 2, State: running, LastTerminationState: exit(old)}},
+		{name: "ready after two restarts",
+			status: corev1.ContainerStatus{Name: containerNameMain, Ready: true, RestartCount: 2, State: running, LastTerminationState: exit(recent)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			crashLooping := crashLoopingContainer(scheduledPod(tt.status), stepTestClock)
+			if tt.crashLoop {
+				assert.Equal(t, &tt.status, crashLooping)
+			} else {
+				assert.Nil(t, crashLooping)
+			}
+		})
+	}
+}
+
 func TestResourceManager_WorkspaceStartStep_CrashLoop(t *testing.T) {
 	const crashMessage = "back-off 20s restarting failed container=main"
 	conditions := func(degradedReason, progressingReason string) []metav1.Condition {
@@ -392,10 +430,12 @@ func TestResourceManager_WorkspaceStartStep_CrashLoop(t *testing.T) {
 	longAgo.LastTerminationState.Terminated.Reason = "OOMKilled"
 	longAgo.LastTerminationState.Terminated.FinishedAt = metav1.NewTime(stepTestClock.Add(-time.Hour))
 	terminatedAgain := restartedStatus(false, 1)
+	terminatedAgain.RestartCount = 1
 	terminatedAgain.State = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
-		ExitCode: 1, Reason: terminatedReasonError, FinishedAt: metav1.NewTime(stepTestClock.Add(-time.Hour)),
+		ExitCode: 1, Reason: terminatedReasonError, FinishedAt: metav1.NewTime(stepTestClock.Add(-10 * time.Second)),
 	}}
-	terminatedAgain.LastTerminationState.Terminated.FinishedAt = metav1.NewTime(stepTestClock.Add(-2 * time.Hour))
+	onceRunning := restartedStatus(false, 1)
+	onceRunning.RestartCount = 1
 	tests := []struct {
 		name         string
 		conditions   []metav1.Condition
@@ -428,9 +468,12 @@ func TestResourceManager_WorkspaceStartStep_CrashLoop(t *testing.T) {
 			conditions: nil, status: restartedStatus(false, 0),
 			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff,
 				Message: "container main exited with code 0 (Completed), restart count 2"}},
-		{name: "a container terminated again after a restart is a crash loop whatever the age of its exits",
+		{name: "a container terminated again after one restart is a crash loop",
 			conditions: nil, status: terminatedAgain,
-			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: recordedExit}},
+			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff,
+				Message: "container main exited with code 1 (Error), restart count 1"}},
+		{name: "a container running again after one exit is a step, not a failure",
+			conditions: nil, status: onceRunning},
 		{name: "a container that restarted an hour ago and is not ready is a step, not a failure",
 			conditions: nil, status: longAgo},
 		{name: "a container on its first run is a step, not a failure",

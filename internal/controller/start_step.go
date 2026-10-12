@@ -109,11 +109,11 @@ func reportedStartFailure(workspace *workspacev1alpha1.Workspace) *StartFailure 
 }
 
 // crashLoopingContainer returns the first container of the pod, init containers first, that is in a crash
-// loop, or nil: a restarted container that is not ready and has exited again, or ran for less than
-// crashLoopResetAfter since its last exit. The kubelet backs off any exited container, exit code 0
-// included; between the exit and the next CrashLoopBackOff report the container shows as Running or
-// Terminated rather than Waiting, and on Kubernetes 1.37 the Waiting report lasts about a second per
-// restart where 1.33 held it for the whole back-off.
+// loop, or nil: a restarted container that is not ready, has exited again or restarted at least twice, and
+// whose last exit is younger than crashLoopResetAfter. The kubelet restarts a first exit without back-off,
+// exit code 0 included, and backs off from the second; between an exit and the next CrashLoopBackOff
+// report the container shows as Running or Terminated rather than Waiting, and on Kubernetes 1.37 the
+// Waiting report lasts about a second per restart where 1.33 held it for the whole back-off.
 func crashLoopingContainer(pod *corev1.Pod, now time.Time) *corev1.ContainerStatus {
 	statuses := containerStatuses(pod)
 	for i := range statuses {
@@ -121,24 +121,29 @@ func crashLoopingContainer(pod *corev1.Pod, now time.Time) *corev1.ContainerStat
 		if containerStatus.Ready || containerStatus.RestartCount == 0 {
 			continue
 		}
-		if containerStatus.State.Terminated != nil {
-			return containerStatus
+		if containerStatus.State.Terminated == nil && containerStatus.RestartCount < 2 {
+			continue
 		}
-		last := containerStatus.LastTerminationState.Terminated
-		if last != nil && now.Sub(last.FinishedAt.Time) < crashLoopResetAfter {
+		if last := lastExit(containerStatus); last != nil && now.Sub(last.FinishedAt.Time) < crashLoopResetAfter {
 			return containerStatus
 		}
 	}
 	return nil
 }
 
+// lastExit returns the exit the pod status records for the container: the current one while it is
+// terminated, otherwise the one before its last restart, or nil.
+func lastExit(containerStatus *corev1.ContainerStatus) *corev1.ContainerStateTerminated {
+	if containerStatus.State.Terminated != nil {
+		return containerStatus.State.Terminated
+	}
+	return containerStatus.LastTerminationState.Terminated
+}
+
 // crashLoopFailure describes a crash-looping container as the CrashLoopBackOff failure the kubelet reports
 // between its own back-off messages, from the latest exit the pod status records.
 func crashLoopFailure(containerStatus *corev1.ContainerStatus) *StartFailure {
-	terminated := containerStatus.State.Terminated
-	if terminated == nil {
-		terminated = containerStatus.LastTerminationState.Terminated
-	}
+	terminated := lastExit(containerStatus)
 	message := fmt.Sprintf("container %s%s%d", containerStatus.Name, recordedExitMarker, terminated.ExitCode)
 	if terminated.Reason != "" {
 		message += " (" + terminated.Reason + ")"
