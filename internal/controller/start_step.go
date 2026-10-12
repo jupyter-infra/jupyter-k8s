@@ -424,8 +424,8 @@ func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspace
 	}
 
 	rm.startEventsMu.Lock()
-	for cachedKey, cached := range rm.cachedStartEvents {
-		if now.Sub(cached.readAt) > startEventsRetention {
+	for cachedKey, entry := range rm.cachedStartEvents {
+		if now.Sub(entry.readAt) > startEventsRetention {
 			delete(rm.cachedStartEvents, cachedKey)
 		}
 	}

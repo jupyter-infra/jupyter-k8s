@@ -104,6 +104,14 @@ func podEvent(name, component, reason, message string, at time.Time) corev1.Even
 	}
 }
 
+// reportedEvent is an event written through events/v1: the component sits in reportingComponent and source is empty.
+func reportedEvent(name, component, reason, message string, at time.Time) corev1.Event {
+	event := podEvent(name, component, reason, message, at)
+	event.Source = corev1.EventSource{}
+	event.ReportingController = component
+	return event
+}
+
 func TestDefinitiveStartFailure(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -247,6 +255,15 @@ func TestPodStartStep(t *testing.T) {
 			name:     "unscheduled pod without verdict or events",
 			pod:      unscheduledPod(""),
 			expected: StartStep{Reason: ReasonWaitingForNode, Message: waitingForNodeMessage},
+		},
+		{
+			name: "a scheduler repeat reported through reportingComponent, with no source, still loses to the autoscaler",
+			pod:  unscheduledPod(stepTestSchedMsg),
+			events: []corev1.Event{
+				reportedEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedMsg, base.Add(30*time.Second)),
+				podEvent("nominated", "karpenter", "Nominated", stepTestNominated, base),
+			},
+			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestNominated},
 		},
 		{
 			name: "the autoscaler's event wins over a newer FailedScheduling repeat",
