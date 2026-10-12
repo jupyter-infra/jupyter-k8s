@@ -37,7 +37,6 @@ const (
 
 	eventReasonFailedScheduling    = "FailedScheduling"
 	kubeletReasonContainerCreating = "ContainerCreating"
-	kubeletReasonImagePullBackOff  = "ImagePullBackOff"
 	kubeletReasonErrImageNeverPull = "ErrImageNeverPull"
 	kubeletReasonRunContainerError = "RunContainerError"
 	kubeletReasonCreateConfigError = "CreateContainerConfigError"
@@ -551,6 +550,25 @@ func TestResourceManager_WorkspaceStartStep_CrashLoop(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResourceManager_WorkspaceStartStep_HoldsReportedBackOffWhileRetrying(t *testing.T) {
+	const backOff = "Back-off pulling image \"example.com/missing:1\""
+	workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
+	workspace.Status.Conditions = []metav1.Condition{
+		{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: kubeletReasonImagePullBackOff, Message: backOff},
+		{Type: ConditionTypeProgressing, Status: metav1.ConditionFalse, Reason: kubeletReasonImagePullBackOff, Message: backOff},
+	}
+	pod := scheduledPod(waitingStatus(kubeletReasonErrImagePull, "rpc error: not found"))
+	pod.Labels = GenerateLabels(testWorkspaceName)
+	c := eventIndexedClient(t, pod)
+	rm := newResourceManagerForCRUD(c, crudScheme(t))
+	require.NotNil(t, rm)
+	rm.SetEventReader(c)
+
+	step, failure := rm.WorkspaceStartStep(context.Background(), workspace)
+	assert.Nil(t, step)
+	assert.Equal(t, &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: backOff}, failure)
 }
 
 func TestResourceManager_StartEventsShareARateLimit(t *testing.T) {

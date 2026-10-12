@@ -39,6 +39,7 @@ const (
 	kubeletComponent              = "kubelet"
 	kubeletEventPulling           = "Pulling"
 	kubeletReasonErrImagePull     = "ErrImagePull"
+	kubeletReasonImagePullBackOff = "ImagePullBackOff"
 	kubeletReasonInvalidImageName = "InvalidImageName"
 	kubeletReasonCrashLoopBackOff = "CrashLoopBackOff"
 
@@ -177,6 +178,17 @@ func crashLoopFailure(containerStatus *corev1.ContainerStatus) *StartFailure {
 	}
 	message += fmt.Sprintf(", restart count %d", containerStatus.RestartCount)
 	return startFailure(kubeletReasonCrashLoopBackOff, message)
+}
+
+// pullRetrying reports whether a container of the pod is in a pull attempt, which the kubelet reports as
+// ErrImagePull for a few seconds each time its back-off expires.
+func pullRetrying(pod *corev1.Pod) bool {
+	for _, containerStatus := range containerStatuses(pod) {
+		if waiting := containerStatus.State.Waiting; waiting != nil && waiting.Reason == kubeletReasonErrImagePull {
+			return true
+		}
+	}
+	return false
 }
 
 // containerStatuses returns the pod's container statuses, init containers first.
@@ -329,6 +341,11 @@ func (rm *ResourceManager) WorkspaceStartStep(
 	}
 	if crashLooping := crashLoopingContainer(pod, rm.now()); crashLooping != nil {
 		return nil, crashLoopFailure(crashLooping)
+	}
+	// a retry after a back-off does not clear the reported back-off; only a pull that succeeds does
+	if reported := reportedStartFailure(workspace); reported != nil &&
+		reported.Reason == kubeletReasonImagePullBackOff && pullRetrying(pod) {
+		return nil, reported
 	}
 	step := podStartStep(pod, rm.startEvents(ctx, workspace, pod))
 	step.Message = truncateMessage(step.Message, maxCopiedMessageBytes)

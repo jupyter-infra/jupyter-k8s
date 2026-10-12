@@ -75,7 +75,7 @@ conditions:
 
 A container that has run for ten minutes since its last exit is out of the loop, the point at which the kubelet resets its restart back-off, and is reported by its start step again.
 
-A Warning event with reason `WorkspaceStartFailed` is recorded on the workspace when the condition first appears, one per failed start whatever reasons it passes through. The operator reads the pod again every fifteen seconds while the failure lasts, so the condition clears within fifteen seconds of the kubelet dropping the failure, which returns the workspace to its start step, and at once when the pod becomes ready or the workspace is stopped. A missing Secret that appears later resolves on its own, since the kubelet retries; a wrong image name or a failing command is fixed with a stop and a start, as for stalled starts.
+A Warning event with reason `WorkspaceStartFailed` is recorded on the workspace when the condition first appears, one per failed start whatever reasons it passes through. The operator reads the pod again every fifteen seconds while the failure lasts, so the condition clears within fifteen seconds of the kubelet dropping the failure, which returns the workspace to its start step, and at once when the pod becomes ready or the workspace is stopped. A pull the kubelet retries after a back-off does not clear it; a retry that succeeds does. A missing Secret that appears later resolves on its own, since the kubelet retries; a wrong image name or a failing command is fixed with a stop and a start, as for stalled starts.
 
 ## Stalled starts
 
