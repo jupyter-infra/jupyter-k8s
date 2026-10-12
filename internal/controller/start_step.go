@@ -92,9 +92,10 @@ func startFailure(reason, message string) *StartFailure {
 }
 
 // prefixReason joins a reason and its message the way kubectl prints them, the reason alone when the
-// message is empty.
+// message is empty or is the reason itself (a StartFailure without a kubelet message carries the reason
+// as its message).
 func prefixReason(reason, message string) string {
-	if message == "" {
+	if message == "" || message == reason {
 		return reason
 	}
 	return reason + ": " + message

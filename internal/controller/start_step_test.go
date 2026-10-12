@@ -690,6 +690,23 @@ func TestResourceManager_StartEventsAreThrottled(t *testing.T) {
 	assert.False(t, kept)
 }
 
+func TestPrefixReason(t *testing.T) {
+	tests := []struct {
+		name, reason, message, expected string
+	}{
+		{name: "reason and message", reason: kubeletReasonImagePullBackOff, message: "Back-off pulling image",
+			expected: kubeletReasonImagePullBackOff + ": Back-off pulling image"},
+		{name: "no message", reason: kubeletReasonContainerCreating, message: "", expected: kubeletReasonContainerCreating},
+		{name: "message that repeats the reason", reason: kubeletReasonCrashLoopBackOff,
+			message: kubeletReasonCrashLoopBackOff, expected: kubeletReasonCrashLoopBackOff},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, prefixReason(tt.reason, tt.message))
+		})
+	}
+}
+
 func TestWaitingContainerMessage(t *testing.T) {
 	scheduled := corev1.PodCondition{Type: corev1.PodScheduled, Status: corev1.ConditionTrue}
 	waiting := func(name, reason, message string) corev1.ContainerStatus {
