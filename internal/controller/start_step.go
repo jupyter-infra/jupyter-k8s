@@ -264,7 +264,8 @@ func podScheduled(pod *corev1.Pod) bool {
 // is the newest event from a component other than the kube-scheduler, whose FailedScheduling text is
 // already the PodScheduled message (the fallback); autoscalers such as Karpenter record their verdicts
 // under their own component. With a node, the kubelet's waiting reason stays ContainerCreating through
-// a pull or a failed mount, so its newest event is the message and the waiting reason the fallback.
+// a pull or a failed mount, so its newest event about the pod or a container not yet started is the
+// message and the waiting reason the fallback.
 func podStartStep(pod *corev1.Pod, events []corev1.Event) StartStep {
 	if !podScheduled(pod) {
 		if event := newestEvent(events, func(event *corev1.Event) bool { return !isSchedulerEvent(event) }); event != nil {
@@ -277,7 +278,7 @@ func podStartStep(pod *corev1.Pod, events []corev1.Event) StartStep {
 		}
 		return StartStep{Reason: ReasonWaitingForNode, Message: waitingForNodeMessage}
 	}
-	kubeletEvent := newestEvent(events, isKubeletEvent)
+	kubeletEvent := newestEvent(events, kubeletStartEvent(pod))
 	if kubeletEvent != nil && kubeletEvent.Reason == kubeletEventPulling {
 		return StartStep{Reason: ReasonPullingImage, Message: kubeletEvent.Message}
 	}
@@ -314,14 +315,34 @@ func isKubeletEvent(event *corev1.Event) bool {
 	return event.Source.Component == kubeletComponent || event.ReportingController == kubeletComponent
 }
 
-// newestEvent returns the most recently observed event accepted by keep, or nil. Equal timestamps go to
-// the later event in list order: the kubelet records timestamps at second resolution, and the API lists
-// events by name, which embeds their creation time.
+// containerFieldPath is the involvedObject.fieldPath the kubelet gives a container's events.
+var containerFieldPath = regexp.MustCompile(`^spec\.(?:containers|initContainers|ephemeralContainers)\{(.+)\}$`)
+
+// kubeletStartEvent keeps the kubelet's events about the pod itself and about containers that have not
+// started. An event about a started container, Started, Killing or Unhealthy, is not about the start, and
+// a sidecar's would otherwise outrank the main container's pull.
+func kubeletStartEvent(pod *corev1.Pod) func(*corev1.Event) bool {
+	started := map[string]bool{}
+	for _, status := range containerStatuses(pod) {
+		started[status.Name] = status.State.Waiting == nil
+	}
+	return func(event *corev1.Event) bool {
+		if !isKubeletEvent(event) {
+			return false
+		}
+		match := containerFieldPath.FindStringSubmatch(event.InvolvedObject.FieldPath)
+		return match == nil || !started[match[1]]
+	}
+}
+
+// newestEvent returns the most recently observed event accepted by keep that carries a message, or nil.
+// Equal timestamps go to the later event in list order: the kubelet records timestamps at second
+// resolution, and the API lists events by name, which embeds their creation time.
 func newestEvent(events []corev1.Event, keep func(*corev1.Event) bool) *corev1.Event {
 	var newest *corev1.Event
 	for i := range events {
 		event := &events[i]
-		if !keep(event) {
+		if event.Message == "" || !keep(event) {
 			continue
 		}
 		if newest == nil || !eventTime(event).Before(eventTime(newest)) {

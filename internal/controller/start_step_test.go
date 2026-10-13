@@ -47,6 +47,12 @@ func runningStatus() corev1.ContainerStatus {
 	return corev1.ContainerStatus{Name: containerNameMain, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}
 }
 
+func startedSidecar() corev1.ContainerStatus {
+	sidecar := runningStatus()
+	sidecar.Name = stepTestOtherName
+	return sidecar
+}
+
 // stepTestClock is the fixed time the start-step tests run at.
 var stepTestClock = time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 
@@ -102,6 +108,13 @@ func podEvent(name, component, reason, message string, at time.Time) corev1.Even
 		Source:         corev1.EventSource{Component: component},
 		LastTimestamp:  metav1.NewTime(at),
 	}
+}
+
+// containerEvent is a kubelet event about one container, which names it in involvedObject.fieldPath.
+func containerEvent(name, container, reason, message string, at time.Time) corev1.Event {
+	event := podEvent(name, kubeletComponent, reason, message, at)
+	event.InvolvedObject.FieldPath = "spec.containers{" + container + "}"
+	return event
 }
 
 // reportedEvent is an event written through events/v1: the component sits in reportingComponent and source is empty.
@@ -297,6 +310,27 @@ func TestPodStartStep(t *testing.T) {
 			pod:      scheduledPod(waitingStatus(kubeletReasonContainerCreating, "")),
 			events:   []corev1.Event{podEvent("pulling", kubeletComponent, kubeletEventPulling, stepTestPulling, base)},
 			expected: StartStep{Reason: ReasonPullingImage, Message: stepTestPulling},
+		},
+		{
+			name: "a sidecar's newer Started event does not hide the main container's pull",
+			pod:  scheduledPod(waitingStatus(kubeletReasonContainerCreating, ""), startedSidecar()),
+			events: []corev1.Event{
+				containerEvent("pulling", containerNameMain, kubeletEventPulling, stepTestPulling, base),
+				containerEvent("started", stepTestOtherName, "Started", "Started container "+stepTestOtherName, base.Add(10*time.Second)),
+			},
+			expected: StartStep{Reason: ReasonPullingImage, Message: stepTestPulling},
+		},
+		{
+			name:     "a kubelet event about a started container is not a start step",
+			pod:      scheduledPod(runningStatus()),
+			events:   []corev1.Event{containerEvent("killing", containerNameMain, "Killing", "Stopping container "+containerNameMain, base)},
+			expected: StartStep{Reason: ReasonStartingContainer, Message: startingContainerMessage},
+		},
+		{
+			name:     "an event without a message does not count",
+			pod:      unscheduledPod(stepTestSchedulingMessage),
+			events:   []corev1.Event{podEvent("nominated", "karpenter", "Nominated", "", base.Add(time.Minute))},
+			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedulingMessage},
 		},
 		{
 			name: "a later kubelet event ends the pull step",
