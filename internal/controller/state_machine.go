@@ -447,19 +447,31 @@ func (sm *StateMachine) reconcileStalledRollout(
 	startStep *StartStep,
 	deploymentMessage string,
 	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (ctrl.Result, error) {
-	message := deploymentMessage
-	if startStep != nil {
-		message = startStep.Message
-	}
+	degraded := FindCondition(&workspace.Status.Conditions, ConditionTypeDegraded)
+	alreadyReported := degraded != nil && degraded.Status == metav1.ConditionTrue && degraded.Reason == ReasonComputeStalled
+	message := stalledMessage(startStep, deploymentMessage, alreadyReported, degraded)
 	logf.FromContext(ctx).Info("Deployment rollout stalled", "deployment", deployment.GetName(), "message", message)
 
-	degraded := FindCondition(&workspace.Status.Conditions, ConditionTypeDegraded)
 	return sm.reconcileDegradedStart(ctx, workspace, deployment, service, degradedStart{
 		reason: ReasonComputeStalled, message: message,
 		eventReason: EventWorkspaceComputeStalled, eventMessage: message,
-		alreadyReported: degraded != nil && degraded.Status == metav1.ConditionTrue && degraded.Reason == ReasonComputeStalled,
+		alreadyReported: alreadyReported,
 		requeueAfter:    LongRequeueDelay,
 	}, snapshotStatus)
+}
+
+// stalledMessage is the message of a stalled start: the pod's step message, else the verdict a stall already
+// reported, since a step that is missing while the stall is on record means the pod list failed or the pod
+// is gone and the Deployment's own text would say less, else the Deployment's message.
+func stalledMessage(startStep *StartStep, deploymentMessage string, alreadyReported bool, degraded *metav1.Condition) string {
+	switch {
+	case startStep != nil:
+		return startStep.Message
+	case alreadyReported && degraded.Message != "":
+		return degraded.Message
+	default:
+		return deploymentMessage
+	}
 }
 
 // reconcileFailedStart reports a workspace whose container the kubelet says cannot start as Degraded with
