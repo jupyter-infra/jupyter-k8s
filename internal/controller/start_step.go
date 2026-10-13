@@ -35,6 +35,9 @@ const (
 	// default) on events; each workspace then refreshes its events less often than startEventsInterval.
 	startEventsPerSecond = 4
 	startEventsBurst     = 4
+	// startEventsReadTimeout bounds one event read: one reconcile worker serves every workspace, so a slow
+	// API server must not hold it. KubeSpawner bounds its API calls the same way.
+	startEventsReadTimeout = 3 * time.Second
 
 	// eventInvolvedObjectUIDField selects the events recorded about one object, as a field selector on the
 	// API server and as an index on the manager cache.
@@ -520,8 +523,9 @@ func (rm *ResourceManager) workspaceStartingPod(ctx context.Context, workspace *
 
 // startEvents returns the events recorded on the pod, read through the event reader at most once per
 // startEventsInterval per workspace and at most startEventsPerSecond across workspaces, and reused in
-// between. A failed read keeps the previous events and counts as a read, so the interval holds through an
-// API outage; a read the shared limiter denies does not, so the next reconcile tries again.
+// between. A failed read, a timeout included, keeps the previous events and counts as a read, so the
+// interval holds through an API outage; a read the shared limiter denies does not, so the next reconcile
+// tries again.
 func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspacev1alpha1.Workspace, pod *corev1.Pod) []corev1.Event {
 	if rm.eventReader == nil {
 		return nil
@@ -545,7 +549,9 @@ func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspace
 	eventList := &corev1.EventList{}
 	// ResourceVersion 0 lets the API server answer from its watch cache instead of a quorum read from etcd;
 	// events a moment stale are fine for a status message.
-	err := rm.eventReader.List(ctx, eventList,
+	readCtx, cancel := context.WithTimeout(ctx, rm.eventReadTimeout)
+	defer cancel()
+	err := rm.eventReader.List(readCtx, eventList,
 		client.InNamespace(pod.Namespace),
 		client.MatchingFieldsSelector{Selector: fields.OneTermEqualSelector(eventInvolvedObjectUIDField, string(pod.UID))},
 		&client.ListOptions{Raw: &metav1.ListOptions{ResourceVersion: "0"}},

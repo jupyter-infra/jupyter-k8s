@@ -37,6 +37,7 @@ type ResourceManager struct {
 
 	// eventReader reads a starting pod's events; nil leaves the start step to what the pod reports.
 	eventReader       client.Reader
+	eventReadTimeout  time.Duration
 	eventReadLimiter  *rate.Limiter
 	cachedStartEvents map[client.ObjectKey]startEventsEntry
 	startEventsMu     sync.Mutex
@@ -61,6 +62,7 @@ func NewResourceManager(
 		pvcBuilder:             pvcBuilder,
 		accessResourcesBuilder: accessResourcesBuilder,
 		statusManager:          statusManager,
+		eventReadTimeout:       startEventsReadTimeout,
 		eventReadLimiter:       rate.NewLimiter(startEventsPerSecond, startEventsBurst),
 		cachedStartEvents:      map[client.ObjectKey]startEventsEntry{},
 		now:                    time.Now,

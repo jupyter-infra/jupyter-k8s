@@ -762,6 +762,43 @@ func TestResourceManager_WorkspaceStartStep_HoldsReportedBackOffWhileRetrying(t 
 	}
 }
 
+// blockingReader is an event reader whose List returns only when the context ends, like a stalled API server.
+type blockingReader struct{ client.Reader }
+
+func (r *blockingReader) List(ctx context.Context, _ client.ObjectList, _ ...client.ListOption) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestResourceManager_StartEventsReadIsBounded(t *testing.T) {
+	workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
+	pod := unscheduledPod(stepTestSchedulingMessage)
+	pod.Labels = GenerateLabels(testWorkspaceName)
+	nominated := podEvent("nominated", "karpenter", "Nominated", stepTestNominated, time.Now())
+	c := eventIndexedClient(t, pod, &nominated)
+	rm := newResourceManagerForCRUD(c, crudScheme(t))
+	require.NotNil(t, rm)
+	rm.SetEventReader(c)
+	rm.eventReadLimiter = rate.NewLimiter(rate.Inf, 0)
+	rm.eventReadTimeout = 50 * time.Millisecond
+	clock := stepTestClock
+	rm.now = func() time.Time { return clock }
+	ctx := context.Background()
+
+	step, _ := rm.WorkspaceStartStep(ctx, workspace)
+	require.NotNil(t, step)
+	assert.Equal(t, stepTestNominated, step.Message)
+
+	// The API server stalls: the read ends at the timeout and the cached events stand.
+	rm.SetEventReader(&blockingReader{Reader: c})
+	clock = clock.Add(2 * startEventsInterval)
+	started := time.Now()
+	step, _ = rm.WorkspaceStartStep(ctx, workspace)
+	assert.Less(t, time.Since(started), time.Second)
+	require.NotNil(t, step)
+	assert.Equal(t, stepTestNominated, step.Message)
+}
+
 func TestResourceManager_StartEventsShareARateLimit(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
 	pod := unscheduledPod(stepTestSchedulingMessage)
