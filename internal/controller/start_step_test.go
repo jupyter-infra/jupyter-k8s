@@ -838,6 +838,13 @@ func TestResourceManager_StartEventsShareARateLimit(t *testing.T) {
 	rm.eventReadLimiter = rate.NewLimiter(rate.Inf, 0)
 	_, _ = rm.WorkspaceStartStep(ctx, workspace)
 	assert.Equal(t, 2, reader.lists)
+
+	// Reads from the manager cache cost no API request, so the limiter does not apply to them.
+	rm.SetEventCacheReader(reader)
+	rm.eventReadLimiter = rate.NewLimiter(0, 0)
+	clock = clock.Add(2 * startEventsInterval)
+	_, _ = rm.WorkspaceStartStep(ctx, workspace)
+	assert.Equal(t, 3, reader.lists)
 }
 
 func TestResourceManager_StartEventsAreThrottled(t *testing.T) {

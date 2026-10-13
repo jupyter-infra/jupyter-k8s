@@ -441,11 +441,18 @@ func newestEvent(events []corev1.Event, keep func(*corev1.Event) bool) *corev1.E
 	return newest
 }
 
-// SetEventReader sets the reader used for a starting pod's events: the manager's API reader, or its cached
-// client once EventInvolvedObjectUID is registered as the eventInvolvedObjectUIDField index. Without a
-// reader the step falls back to what the pod itself reports.
+// SetEventReader sets the reader used for a starting pod's events, the manager's API reader; its reads are
+// limited across workspaces. Without a reader the step falls back to what the pod itself reports.
 func (rm *ResourceManager) SetEventReader(reader client.Reader) {
 	rm.eventReader = reader
+	rm.eventReaderCached = false
+}
+
+// SetEventCacheReader sets the manager's cached client as the event reader, once EventInvolvedObjectUID is
+// registered as the eventInvolvedObjectUIDField index; its reads cost no API request and are not limited.
+func (rm *ResourceManager) SetEventCacheReader(reader client.Reader) {
+	rm.eventReader = reader
+	rm.eventReaderCached = true
 }
 
 // EventInvolvedObjectUID indexes events by the UID of the object they are about, so the manager cache can
@@ -540,7 +547,7 @@ func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspace
 	if found && cached.podUID == pod.UID && now.Sub(cached.readAt) < startEventsInterval {
 		return cached.events
 	}
-	if !rm.eventReadLimiter.Allow() {
+	if !rm.eventReaderCached && !rm.eventReadLimiter.Allow() {
 		if found && cached.podUID == pod.UID {
 			return cached.events
 		}

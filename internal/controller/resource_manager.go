@@ -37,6 +37,7 @@ type ResourceManager struct {
 
 	// eventReader reads a starting pod's events; nil leaves the start step to what the pod reports.
 	eventReader       client.Reader
+	eventReaderCached bool
 	eventReadTimeout  time.Duration
 	eventReadLimiter  *rate.Limiter
 	cachedStartEvents map[client.ObjectKey]startEventsEntry

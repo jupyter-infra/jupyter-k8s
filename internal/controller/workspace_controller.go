@@ -359,7 +359,7 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 			context.Background(), &corev1.Event{}, eventInvolvedObjectUIDField, EventInvolvedObjectUID); err != nil {
 			return fmt.Errorf("failed to index events by involved object: %w", err)
 		}
-		resourceManager.SetEventReader(k8sClient)
+		resourceManager.SetEventCacheReader(k8sClient)
 	} else {
 		resourceManager.SetEventReader(mgr.GetAPIReader())
 	}
