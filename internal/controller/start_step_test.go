@@ -162,9 +162,9 @@ func TestDefinitiveStartFailure(t *testing.T) {
 		{name: "a reason the CRD would reject is guarded", pod: scheduledPod(waitingStatus("Err/ImagePull", "not found")),
 			expected: &StartFailure{Reason: ReasonContainerStartFailed, Message: "Err/ImagePull: not found"}},
 		{name: "pod initializing is not a failure", pod: scheduledPod(waitingStatus("PodInitializing", ""))},
-		{name: "crash loop with an empty message and no recorded exit falls back to the reason",
-			pod:      scheduledPod(waitingStatus(kubeletReasonCrashLoopBackOff, "")),
-			expected: &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: kubeletReasonCrashLoopBackOff}},
+		{name: "crash loop without a recorded exit gets a message that does not carry the back-off delay",
+			pod:      scheduledPod(waitingStatus(kubeletReasonCrashLoopBackOff, "back-off 20s restarting failed container=main")),
+			expected: &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: "container main is restarting with back-off"}},
 		{name: "a crash loop report carries the recorded exit, not the kubelet's back-off text",
 			pod: func() *corev1.Pod {
 				status := restartedStatus(false, 1)

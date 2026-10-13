@@ -262,8 +262,12 @@ func definitiveStartFailure(pod *corev1.Pod) *StartFailure {
 		if waiting == nil || !isDefinitiveStartFailureReason(waiting.Reason) {
 			continue
 		}
-		if waiting.Reason == kubeletReasonCrashLoopBackOff && lastExit(containerStatus) != nil {
-			return crashLoopFailure(containerStatus)
+		if waiting.Reason == kubeletReasonCrashLoopBackOff {
+			if lastExit(containerStatus) != nil {
+				return crashLoopFailure(containerStatus)
+			}
+			// the kubelet's own text carries the growing back-off delay, which would rewrite the status every cycle
+			return startFailure(waiting.Reason, "container "+containerStatus.Name+" is restarting with back-off")
 		}
 		return startFailure(waiting.Reason, waiting.Message)
 	}
