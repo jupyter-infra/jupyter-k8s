@@ -571,21 +571,45 @@ func TestResourceManager_WorkspaceStartStep_CrashLoop(t *testing.T) {
 
 func TestResourceManager_WorkspaceStartStep_HoldsReportedBackOffWhileRetrying(t *testing.T) {
 	const backOff = "Back-off pulling image \"example.com/missing:1\""
-	workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
-	workspace.Status.Conditions = []metav1.Condition{
-		{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: kubeletReasonImagePullBackOff, Message: backOff},
-		{Type: ConditionTypeProgressing, Status: metav1.ConditionFalse, Reason: kubeletReasonImagePullBackOff, Message: backOff},
+	sidecarRetrying := waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")
+	sidecarRetrying.Name = stepTestOtherName
+	tests := []struct {
+		name     string
+		statuses []corev1.ContainerStatus
+		held     bool
+	}{
+		{name: "the reported container retrying its pull holds the back-off",
+			statuses: []corev1.ContainerStatus{waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")}, held: true},
+		{name: "a sidecar retrying its own image does not hold another container's resolved back-off",
+			statuses: []corev1.ContainerStatus{runningStatus(), sidecarRetrying}, held: false},
 	}
-	pod := scheduledPod(waitingStatus(kubeletReasonErrImagePull, "rpc error: not found"))
-	pod.Labels = GenerateLabels(testWorkspaceName)
-	c := eventIndexedClient(t, pod)
-	rm := newResourceManagerForCRUD(c, crudScheme(t))
-	require.NotNil(t, rm)
-	rm.SetEventReader(c)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
+			workspace.Status.Conditions = []metav1.Condition{
+				{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: kubeletReasonImagePullBackOff, Message: backOff},
+				{Type: ConditionTypeProgressing, Status: metav1.ConditionFalse, Reason: kubeletReasonImagePullBackOff, Message: backOff},
+			}
+			pod := scheduledPod(tt.statuses...)
+			pod.Spec.Containers = []corev1.Container{
+				{Name: containerNameMain, Image: "example.com/missing:1"}, {Name: stepTestOtherName, Image: "example.com/sidecar:1"},
+			}
+			pod.Labels = GenerateLabels(testWorkspaceName)
+			c := eventIndexedClient(t, pod)
+			rm := newResourceManagerForCRUD(c, crudScheme(t))
+			require.NotNil(t, rm)
+			rm.SetEventReader(c)
 
-	step, failure := rm.WorkspaceStartStep(context.Background(), workspace)
-	assert.Nil(t, step)
-	assert.Equal(t, &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: backOff}, failure)
+			step, failure := rm.WorkspaceStartStep(context.Background(), workspace)
+			if tt.held {
+				assert.Nil(t, step)
+				assert.Equal(t, &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: backOff}, failure)
+				return
+			}
+			assert.Nil(t, failure)
+			assert.Equal(t, ReasonStartingContainer, step.Reason)
+		})
+	}
 }
 
 func TestResourceManager_StartEventsShareARateLimit(t *testing.T) {

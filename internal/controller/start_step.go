@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -179,15 +180,33 @@ func crashLoopFailure(containerStatus *corev1.ContainerStatus) *StartFailure {
 	return startFailure(kubeletReasonCrashLoopBackOff, message)
 }
 
-// pullRetrying reports whether a container of the pod is in a pull attempt, which the kubelet reports as
-// ErrImagePull for a few seconds each time its back-off expires.
-func pullRetrying(pod *corev1.Pod) bool {
+// pullRetrying reports whether the container whose back-off the workspace reports is in a pull attempt,
+// which the kubelet reports as ErrImagePull for a few seconds each time its back-off expires. The back-off
+// message quotes the container's image, which tells that container from a sidecar retrying its own pull.
+func pullRetrying(pod *corev1.Pod, reported *StartFailure) bool {
 	for _, containerStatus := range containerStatuses(pod) {
-		if waiting := containerStatus.State.Waiting; waiting != nil && waiting.Reason == kubeletReasonErrImagePull {
+		waiting := containerStatus.State.Waiting
+		if waiting == nil || waiting.Reason != kubeletReasonErrImagePull {
+			continue
+		}
+		if image, found := containerImage(pod, containerStatus.Name); found &&
+			strings.Contains(reported.Message, strconv.Quote(image)) {
 			return true
 		}
 	}
 	return false
+}
+
+// containerImage returns the image the pod spec gives the named container, init containers included.
+func containerImage(pod *corev1.Pod, name string) (string, bool) {
+	for _, containers := range [][]corev1.Container{pod.Spec.InitContainers, pod.Spec.Containers} {
+		for _, container := range containers {
+			if container.Name == name {
+				return container.Image, true
+			}
+		}
+	}
+	return "", false
 }
 
 // containerStatuses returns the pod's container statuses, init containers first.
@@ -339,7 +358,7 @@ func (rm *ResourceManager) WorkspaceStartStep(
 	}
 	// a retry after a back-off does not clear the reported back-off; only a pull that succeeds does
 	if reported := reportedStartFailure(workspace); reported != nil &&
-		reported.Reason == kubeletReasonImagePullBackOff && pullRetrying(pod) {
+		reported.Reason == kubeletReasonImagePullBackOff && pullRetrying(pod, reported) {
 		return nil, reported
 	}
 	step := podStartStep(pod, rm.startEvents(ctx, workspace, pod))

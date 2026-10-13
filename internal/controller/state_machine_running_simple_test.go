@@ -242,7 +242,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 	Context("stalled rollout, failed starts and start steps", func() {
 		const (
 			deploymentStalledMessage = "ReplicaSet \"sm-simple\" has timed out progressing."
-			backOffMessage           = "Back-off pulling image \"example.com/missing:1\""
+			backOffMessage           = "Back-off pulling image \"" + imageBaseNotebook + "\""
 			imagePullMessage         = kubeletReasonImagePullBackOff + ": " + backOffMessage
 		)
 
