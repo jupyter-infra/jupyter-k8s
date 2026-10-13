@@ -123,3 +123,22 @@ func TestMergeConditionsIfChangedKeepsLastTransitionTimeWhileStatusHolds(t *test
 		}
 	}
 }
+
+func TestTruncateMessage(t *testing.T) {
+	tests := []struct {
+		name     string
+		msg      string
+		expected string
+	}{
+		{name: "a message within the bound is untouched", msg: "short", expected: "short"},
+		{name: "a message at the bound is untouched", msg: "12345678", expected: "12345678"},
+		{name: "a longer message is cut at the bound", msg: "123456789", expected: "12345678" + TruncatedMessageSuffix},
+		{name: "a rune the cut splits is dropped whole", msg: "1234567\u00e9x", expected: "1234567" + TruncatedMessageSuffix},
+		{name: "an invalid byte before the cut stays and the cut holds", msg: "1\xff3456789", expected: "1\xff345678" + TruncatedMessageSuffix},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, truncateMessage(tt.msg, 8))
+		})
+	}
+}

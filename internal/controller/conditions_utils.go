@@ -99,15 +99,21 @@ func MergeConditionsIfChanged(
 	}
 }
 
-// truncateMessage bounds a condition message to maxBytes on a rune boundary and appends a marker when it
-// clips, so a message copied from outside can never exceed the CRD's conditions[].message ceiling.
+// truncateMessage bounds a condition message to maxBytes and appends a marker when it clips, so a message
+// copied from outside can never exceed the CRD's conditions[].message ceiling. Only a rune the cut splits is
+// dropped; an invalid byte elsewhere in the text is copied as it is.
 func truncateMessage(msg string, maxBytes int) string {
 	if len(msg) <= maxBytes {
 		return msg
 	}
 	clipped := msg[:maxBytes]
-	for len(clipped) > 0 && !utf8.ValidString(clipped) {
-		clipped = clipped[:len(clipped)-1]
+	for i := len(clipped) - 1; i >= 0 && i >= len(clipped)-utf8.UTFMax; i-- {
+		if utf8.RuneStart(clipped[i]) {
+			if !utf8.FullRuneInString(clipped[i:]) {
+				clipped = clipped[:i]
+			}
+			break
+		}
 	}
 	return clipped + TruncatedMessageSuffix
 }
