@@ -31,6 +31,7 @@ const (
 	stepTestPodUID            = types.UID("pod-uid-1")
 	stepTestSchedulingMessage = "0/1 nodes are available: 1 Insufficient nvidia.com/gpu."
 	stepTestNominated         = "Pod should schedule on: nodeclaim/workspace-gpu-abc12"
+	stepTestNotReadyTaint     = "0/2 nodes are available: 1 node(s) had untolerated taint {node.kubernetes.io/not-ready: }."
 	stepTestPulling           = "Pulling image \"jupyter/base-notebook:latest\""
 	stepTestLimits            = "Failed to schedule pod, all available instance types exceed limits for nodepool \"gpu\""
 	stepTestMount             = "MountVolume.SetUp failed for volume \"config\" : configmap \"settings\" not found"
@@ -109,6 +110,14 @@ func podEvent(name, component, reason, message string, at time.Time) corev1.Even
 		Source:         corev1.EventSource{Component: component},
 		LastTimestamp:  metav1.NewTime(at),
 	}
+}
+
+// repeatedEvent is an event the recorder aggregated: its text first appeared at first and was last repeated at last.
+func repeatedEvent(name, component, reason, message string, first, last time.Time) corev1.Event {
+	event := podEvent(name, component, reason, message, last)
+	event.FirstTimestamp = metav1.NewTime(first)
+	event.Count = 9
+	return event
 }
 
 // containerEvent is a kubelet event about one container, which names it in involvedObject.fieldPath.
@@ -271,35 +280,47 @@ func TestPodStartStep(t *testing.T) {
 			expected: StartStep{Reason: ReasonWaitingForNode, Message: waitingForNodeMessage},
 		},
 		{
-			name: "a scheduler repeat reported through reportingComponent, with no source, still loses to the autoscaler",
+			name: "a verdict the scheduler keeps repeating counts from its first appearance, so the later nomination wins",
 			pod:  unscheduledPod(stepTestSchedulingMessage),
 			events: []corev1.Event{
-				reportedEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedulingMessage, base.Add(30*time.Second)),
+				repeatedEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedulingMessage,
+					base.Add(-10*time.Second), base.Add(30*time.Second)),
 				podEvent("nominated", "karpenter", "Nominated", stepTestNominated, base),
 			},
 			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestNominated},
 		},
 		{
-			name: "the autoscaler's event wins over a newer FailedScheduling repeat",
+			name: "a repeat reported through reportingComponent with no source is a repeat too",
 			pod:  unscheduledPod(stepTestSchedulingMessage),
 			events: []corev1.Event{
-				podEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedulingMessage, base.Add(30*time.Second)),
-				podEvent("nominated", "karpenter", "Nominated", stepTestNominated, base),
+				repeatedEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedulingMessage,
+					base.Add(-10*time.Second), base.Add(30*time.Second)),
+				reportedEvent("nominated", "karpenter", "Nominated", stepTestNominated, base),
 			},
 			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestNominated},
 		},
 		{
-			name: "the autoscaler's FailedScheduling counts, the kube-scheduler's newer repeat does not",
+			name: "the autoscaler's later FailedScheduling outranks the nomination and the scheduler's repeats",
 			pod:  unscheduledPod(stepTestSchedulingMessage),
 			events: []corev1.Event{
 				podEvent("nominated", "karpenter", "Nominated", stepTestNominated, base),
 				podEvent("limits", "karpenter", eventReasonFailedScheduling, stepTestLimits, base.Add(2*time.Minute)),
-				podEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedulingMessage, base.Add(3*time.Minute)),
+				repeatedEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedulingMessage,
+					base.Add(-10*time.Second), base.Add(3*time.Minute)),
 			},
 			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestLimits},
 		},
 		{
-			name: "only scheduler events fall back to the verdict",
+			name: "a scheduler verdict that changed after the nomination wins",
+			pod:  unscheduledPod(stepTestSchedulingMessage),
+			events: []corev1.Event{
+				podEvent("nominated", "karpenter", "Nominated", stepTestNominated, base),
+				podEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestNotReadyTaint, base.Add(45*time.Second)),
+			},
+			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestNotReadyTaint},
+		},
+		{
+			name: "the scheduler's event alone is the message",
 			pod:  unscheduledPod(stepTestSchedulingMessage),
 			events: []corev1.Event{
 				podEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedulingMessage, base),
@@ -388,13 +409,15 @@ func TestPodStartStep(t *testing.T) {
 	}
 }
 
-func TestEventTime(t *testing.T) {
+func TestEventFirstSeen(t *testing.T) {
 	base := stepTestClock
-	event := corev1.Event{FirstTimestamp: metav1.NewTime(base), LastTimestamp: metav1.NewTime(base.Add(time.Minute))}
-	assert.Equal(t, base.Add(time.Minute), eventTime(&event))
-	// events.k8s.io style: eventTime and series, no last timestamp
+	repeated := corev1.Event{Count: 9, FirstTimestamp: metav1.NewTime(base), LastTimestamp: metav1.NewTime(base.Add(time.Minute))}
+	assert.Equal(t, base, eventFirstSeen(&repeated))
+	// events.k8s.io style: eventTime and series, no first or last timestamp
 	series := corev1.Event{EventTime: metav1.NewMicroTime(base), Series: &corev1.EventSeries{LastObservedTime: metav1.NewMicroTime(base.Add(2 * time.Minute))}}
-	assert.Equal(t, base.Add(2*time.Minute), eventTime(&series))
+	assert.Equal(t, base, eventFirstSeen(&series))
+	single := corev1.Event{LastTimestamp: metav1.NewTime(base.Add(time.Minute))}
+	assert.Equal(t, base.Add(time.Minute), eventFirstSeen(&single))
 }
 
 // countingReader counts List calls and can be made to fail.

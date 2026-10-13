@@ -27,7 +27,7 @@ While the workspace pod is not ready, `Progressing=True` names the step the star
 
 | Reason | When | Message |
 |--------|------|---------|
-| `WaitingForNode` | The pod has no node yet | The newest event a component other than the scheduler recorded on the pod, for example Karpenter's `Pod should schedule on: nodeclaim/...` or `Failed to schedule pod, all available instance types exceed limits for nodepool "gpu"`; the scheduler's `PodScheduled` message (`0/3 nodes are available: ...`) when there is none |
+| `WaitingForNode` | The pod has no node yet | The message recorded on the pod whose text appeared last, the scheduler's `FailedScheduling` verdict or an autoscaler's, for example Karpenter's `Pod should schedule on: nodeclaim/...` or `Failed to schedule pod, all available instance types exceed limits for nodepool "gpu"`; a verdict the scheduler keeps repeating counts from its first appearance, so a later nomination shows until the scheduler's verdict changes. The `PodScheduled` condition's message when no event is recorded
 | `PullingImage` | The kubelet is pulling the image | The kubelet's `Pulling image "..."` event |
 | `StartingContainer` | The pod has a node and its container is not ready | The kubelet's newest event about the pod or about a container that is not ready yet (`Successfully pulled image ...`, `Started container ...`, `Readiness probe failed: ...`), or the waiting container's reason and message (`ContainerCreating`, `PodInitializing`, `ErrImagePull: ...`) while the kubelet has recorded no event |
 

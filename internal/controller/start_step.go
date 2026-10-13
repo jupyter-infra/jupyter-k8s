@@ -261,14 +261,13 @@ func podScheduled(pod *corev1.Pod) bool {
 }
 
 // podStartStep derives the step from the pod and the events recorded on it. Without a node, the message
-// is the newest event from a component other than the kube-scheduler, whose FailedScheduling text is
-// already the PodScheduled message (the fallback); autoscalers such as Karpenter record their verdicts
-// under their own component. With a node, the kubelet's waiting reason stays ContainerCreating through
-// a pull or a failed mount, so its newest event about the pod or a container not yet ready is the
-// message and the waiting reason the fallback.
+// is the event whose text appeared last, the scheduler's verdict or an autoscaler's such as Karpenter's
+// nomination, and the PodScheduled message the fallback. With a node, the kubelet's waiting reason stays
+// ContainerCreating through a pull or a failed mount, so its newest event about the pod or a container
+// not yet ready is the message and the waiting reason the fallback.
 func podStartStep(pod *corev1.Pod, events []corev1.Event) StartStep {
 	if !podScheduled(pod) {
-		if event := newestEvent(events, func(event *corev1.Event) bool { return !isSchedulerEvent(event) }); event != nil {
+		if event := newestEvent(events, nil); event != nil {
 			return StartStep{Reason: ReasonWaitingForNode, Message: event.Message}
 		}
 		for _, condition := range pod.Status.Conditions {
@@ -291,24 +290,17 @@ func podStartStep(pod *corev1.Pod, events []corev1.Event) StartStep {
 	return StartStep{Reason: ReasonStartingContainer, Message: startingContainerMessage}
 }
 
-// eventTime returns the time an event was last observed, whichever of its timestamp fields is set.
-func eventTime(event *corev1.Event) time.Time {
-	observed := event.EventTime.Time
-	if event.LastTimestamp.After(observed) {
-		observed = event.LastTimestamp.Time
+// eventFirstSeen returns when an event's text first appeared: FirstTimestamp for a core/v1 event, EventTime
+// for an events/v1 one. A repeat of the same text only raises the count and the last timestamp, so a
+// verdict the scheduler keeps repeating counts from its first appearance and does not outrank a later one.
+func eventFirstSeen(event *corev1.Event) time.Time {
+	if !event.FirstTimestamp.IsZero() {
+		return event.FirstTimestamp.Time
 	}
-	if event.FirstTimestamp.After(observed) {
-		observed = event.FirstTimestamp.Time
+	if !event.EventTime.IsZero() {
+		return event.EventTime.Time
 	}
-	if event.Series != nil && event.Series.LastObservedTime.After(observed) {
-		observed = event.Series.LastObservedTime.Time
-	}
-	return observed
-}
-
-func isSchedulerEvent(event *corev1.Event) bool {
-	return strings.Contains(event.Source.Component, "scheduler") ||
-		strings.Contains(event.ReportingController, "scheduler")
+	return event.LastTimestamp.Time
 }
 
 func isKubeletEvent(event *corev1.Event) bool {
@@ -334,17 +326,18 @@ func kubeletStartEvent(pod *corev1.Pod) func(*corev1.Event) bool {
 	}
 }
 
-// newestEvent returns the most recently observed event accepted by keep that carries a message, or nil.
-// Equal timestamps go to the later event in list order: the kubelet records timestamps at second
-// resolution, and the API lists events by name, which embeds their creation time.
+// newestEvent returns the event with a message whose text appeared last among those keep accepts, every
+// event when keep is nil, or nil. Equal timestamps go to the later event in list order: the kubelet
+// records timestamps at second resolution, and the API lists events by name, which embeds their creation
+// time.
 func newestEvent(events []corev1.Event, keep func(*corev1.Event) bool) *corev1.Event {
 	var newest *corev1.Event
 	for i := range events {
 		event := &events[i]
-		if event.Message == "" || !keep(event) {
+		if event.Message == "" || (keep != nil && !keep(event)) {
 			continue
 		}
-		if newest == nil || !eventTime(event).Before(eventTime(newest)) {
+		if newest == nil || !eventFirstSeen(event).Before(eventFirstSeen(newest)) {
 			newest = event
 		}
 	}

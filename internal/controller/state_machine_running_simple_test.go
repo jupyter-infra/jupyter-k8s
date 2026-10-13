@@ -708,14 +708,18 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(recorder.Events).To(BeEmpty())
 			})
 
-			It("should prefer the autoscaler's newest event over the scheduler's repeats", func() {
+			It("should keep the autoscaler's nomination while the scheduler repeats an older verdict", func() {
 				workspace := newWorkspace()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
 				pod := createPendingPod(workspace, unschedulable(stepTestSchedulingMessage))
 				now := time.Now()
 				nominated := createPodEvent(pod, "nominated", "karpenter", "Nominated", stepTestNominated, now.Add(-time.Minute))
-				scheduler := createPodEvent(pod, "sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedulingMessage, now)
+				scheduler := createPodEvent(pod, "sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedulingMessage,
+					now.Add(-2*time.Minute))
+				scheduler.Count = 9
+				scheduler.LastTimestamp = metav1.NewTime(now)
+				Expect(k8sClient.Update(ctx, scheduler)).To(Succeed())
 				defer func() { _ = k8sClient.Delete(ctx, nominated) }()
 				defer func() { _ = k8sClient.Delete(ctx, scheduler) }()
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
