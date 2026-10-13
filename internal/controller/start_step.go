@@ -57,8 +57,9 @@ const (
 	kubeletReasonCreateContainerError      = "CreateContainerError"
 	kubeletReasonRunContainerError         = "RunContainerError"
 	// kubeletEventFailed is the reason of the kubelet's Warning event for a pull, create or start attempt
-	// that did not succeed.
-	kubeletEventFailed = "Failed"
+	// that did not succeed; kubeletErrorEventPrefix opens its message, followed by the error's text.
+	kubeletEventFailed      = "Failed"
+	kubeletErrorEventPrefix = "Error: "
 
 	// Fallback messages when neither the pod nor its events carry one.
 	waitingForNodeMessage    = "Waiting for a node to run the pod"
@@ -291,7 +292,7 @@ var retriedStartReasons = map[string]bool{kubeletReasonCreateContainerError: tru
 
 // pullFailureMessages open the kubelet's Failed events about a pull attempt, which are not create or start
 // attempts: the pull's own report and the start attempt it fails.
-var pullFailureMessages = []string{"Failed to pull image", "Error: " + kubeletReasonErrImagePull, "Error: " + kubeletReasonImagePullBackOff}
+var pullFailureMessages = []string{"Failed to pull image", kubeletErrorEventPrefix + kubeletReasonErrImagePull, kubeletErrorEventPrefix + kubeletReasonImagePullBackOff}
 
 func isPullFailureMessage(message string) bool {
 	for _, prefix := range pullFailureMessages {
@@ -302,13 +303,19 @@ func isPullFailureMessage(message string) bool {
 	return false
 }
 
-// failedAttempts counts the kubelet's Failed events about create or start attempts of the named container,
-// each repeated event standing for its count.
-func failedAttempts(events []corev1.Event, container string) int {
+// failedAttempts counts the kubelet's Failed events about create or start attempts of the named container
+// that report the error the container is waiting on, each repeated event standing for its count. The
+// kubelet writes the same text to the waiting state and to the event, behind "Error: ", so events of an
+// earlier error, such as a Secret that was missing, do not count towards this one. Without a waiting message
+// every create or start attempt counts.
+func failedAttempts(events []corev1.Event, container, waitingMessage string) int {
 	attempts := 0
 	for i := range events {
 		event := &events[i]
 		if event.Reason != kubeletEventFailed || !isKubeletEvent(event) || isPullFailureMessage(event.Message) {
+			continue
+		}
+		if waitingMessage != "" && event.Message != kubeletErrorEventPrefix+waitingMessage {
 			continue
 		}
 		if match := containerFieldPathPattern.FindStringSubmatch(event.InvolvedObject.FieldPath); match != nil && match[1] == container {
@@ -341,7 +348,7 @@ func definitiveStartFailure(pod *corev1.Pod, events []corev1.Event) *StartFailur
 		if waiting == nil || !isDefinitiveStartFailureReason(waiting.Reason) {
 			continue
 		}
-		if retriedStartReasons[waiting.Reason] && failedAttempts(events, containerStatus.Name) < 2 {
+		if retriedStartReasons[waiting.Reason] && failedAttempts(events, containerStatus.Name, waiting.Message) < 2 {
 			continue
 		}
 		if waiting.Reason == kubeletReasonCrashLoopBackOff {

@@ -201,10 +201,20 @@ func TestDefinitiveStartFailure(t *testing.T) {
 				return []corev1.Event{event}
 			}()},
 		{name: "a run error follows the same rule", pod: scheduledPod(waitingStatus(kubeletReasonRunContainerError, "failed to start container")),
-			events: []corev1.Event{failedAttempt("f1", 1)}},
+			events: []corev1.Event{containerEvent("f1", containerNameMain, kubeletEventFailed, "Error: failed to start container", now)}},
 		{name: "a run error the kubelet failed twice is a failure", pod: scheduledPod(waitingStatus(kubeletReasonRunContainerError, "failed to start container")),
-			events:   []corev1.Event{failedAttempt("f1", 2)},
+			events: func() []corev1.Event {
+				event := containerEvent("f1", containerNameMain, kubeletEventFailed, "Error: failed to start container", now)
+				event.Count = 2
+				return []corev1.Event{event}
+			}(),
 			expected: &StartFailure{Reason: kubeletReasonRunContainerError, Message: "failed to start container"}},
+		{name: "the attempts of an earlier error do not count towards this one", pod: createError,
+			events: func() []corev1.Event {
+				configError := containerEvent("config", containerNameMain, kubeletEventFailed, "Error: secret \"s\" not found", now.Add(-time.Hour))
+				configError.Count = 50
+				return []corev1.Event{configError, failedAttempt("f1", 1)}
+			}()},
 		{name: "a reason the CRD would reject is guarded", pod: scheduledPod(waitingStatus("Err/ImagePull", "not found")),
 			expected: &StartFailure{Reason: ReasonContainerStartFailed, Message: "Err/ImagePull: not found"}},
 		{name: "pod initializing is not a failure", pod: scheduledPod(waitingStatus("PodInitializing", ""))},
