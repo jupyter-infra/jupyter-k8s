@@ -36,6 +36,10 @@ const (
 	startEventsPerSecond = 4
 	startEventsBurst     = 4
 
+	// eventInvolvedObjectUIDField selects the events recorded about one object, as a field selector on the
+	// API server and as an index on the manager cache.
+	eventInvolvedObjectUIDField = "involvedObject.uid"
+
 	// Vocabulary of core Kubernetes components; k8s.io/kubernetes/pkg/kubelet is not importable.
 	kubeletComponent          = "kubelet"
 	kubeletEventPulling       = "Pulling"
@@ -371,11 +375,21 @@ func newestEvent(events []corev1.Event, keep func(*corev1.Event) bool) *corev1.E
 	return newest
 }
 
-// SetEventReader sets the reader used for a starting pod's events. The manager's API reader fetches one
-// pod's events at a time, where its cached client would hold every event in the cluster. Without a reader
-// the step falls back to what the pod itself reports.
+// SetEventReader sets the reader used for a starting pod's events: the manager's API reader, or its cached
+// client once EventInvolvedObjectUID is registered as the eventInvolvedObjectUIDField index. Without a
+// reader the step falls back to what the pod itself reports.
 func (rm *ResourceManager) SetEventReader(reader client.Reader) {
 	rm.eventReader = reader
+}
+
+// EventInvolvedObjectUID indexes events by the UID of the object they are about, so the manager cache can
+// serve the reads startEvents makes with eventInvolvedObjectUIDField.
+func EventInvolvedObjectUID(obj client.Object) []string {
+	event, ok := obj.(*corev1.Event)
+	if !ok {
+		return nil
+	}
+	return []string{string(event.InvolvedObject.UID)}
 }
 
 // WorkspaceStartStep reports what the workspace's starting pod is doing: a failure the kubelet
@@ -465,9 +479,12 @@ func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspace
 	}
 
 	eventList := &corev1.EventList{}
+	// ResourceVersion 0 lets the API server answer from its watch cache instead of a quorum read from etcd;
+	// events a moment stale are fine for a status message.
 	err := rm.eventReader.List(ctx, eventList,
 		client.InNamespace(pod.Namespace),
-		client.MatchingFieldsSelector{Selector: fields.OneTermEqualSelector("involvedObject.uid", string(pod.UID))},
+		client.MatchingFieldsSelector{Selector: fields.OneTermEqualSelector(eventInvolvedObjectUIDField, string(pod.UID))},
+		&client.ListOptions{Raw: &metav1.ListOptions{ResourceVersion: "0"}},
 	)
 	events := eventList.Items
 	if err != nil {

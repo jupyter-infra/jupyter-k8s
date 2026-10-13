@@ -7,6 +7,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -345,7 +346,23 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 		NewAccessResourcesBuilder(),
 		statusManager,
 	)
-	resourceManager.SetEventReader(mgr.GetAPIReader())
+	// The start step copies the message the scheduler, the autoscaler or the kubelet recorded about a
+	// starting pod, which the pod status does not carry. It reads the pod's core/v1 Events, selected by
+	// involvedObject.uid in the pod's namespace, and keeps the last read per workspace for 5 seconds with
+	// at most 4 reads per second across workspaces; entries are dropped when the workspace is Running,
+	// Stopped or Deleting and after 10 minutes. It then keeps the kubelet's events about containers that
+	// are not ready yet (start_step.go). With pod watching on, the Event watch below already caches every
+	// event in the cluster, so the reads come from that cache through a field index; otherwise they go to
+	// the API server, since an index on the cached client would start that cluster-wide informer.
+	if options.EnableWorkspacePodWatching {
+		if err := mgr.GetFieldIndexer().IndexField(
+			context.Background(), &corev1.Event{}, eventInvolvedObjectUIDField, EventInvolvedObjectUID); err != nil {
+			return fmt.Errorf("failed to index events by involved object: %w", err)
+		}
+		resourceManager.SetEventReader(k8sClient)
+	} else {
+		resourceManager.SetEventReader(mgr.GetAPIReader())
+	}
 
 	// Create state machine
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")

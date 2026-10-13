@@ -440,9 +440,7 @@ func (r *countingReader) List(ctx context.Context, list client.ObjectList, opts 
 
 func eventIndexedClient(t *testing.T, objects ...client.Object) client.Client {
 	return fake.NewClientBuilder().WithScheme(crudScheme(t)).WithObjects(objects...).
-		WithIndex(&corev1.Event{}, "involvedObject.uid", func(o client.Object) []string {
-			return []string{string(o.(*corev1.Event).InvolvedObject.UID)}
-		}).Build()
+		WithIndex(&corev1.Event{}, eventInvolvedObjectUIDField, EventInvolvedObjectUID).Build()
 }
 
 func TestResourceManager_WorkspaceStartStep(t *testing.T) {
