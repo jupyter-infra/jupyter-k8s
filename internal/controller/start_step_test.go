@@ -547,6 +547,7 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 		withReader   bool
 		listErr      error
 		reported     *StartFailure
+		reportedStep *StartStep
 		expectStep   *StartStep
 		expectFailed *StartFailure
 	}{
@@ -555,6 +556,10 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 			objects: []client.Object{labeled(unscheduledPod(stepTestSchedulingMessage))}},
 		{name: "a failed pod list keeps the reported failure", withReader: true, listErr: errInjected,
 			objects: []client.Object{labeled(unscheduledPod(stepTestSchedulingMessage))}, reported: reportedBackOff, expectFailed: reportedBackOff},
+		{name: "a failed pod list keeps the reported step", withReader: true, listErr: errInjected,
+			objects:      []client.Object{labeled(unscheduledPod(stepTestSchedulingMessage))},
+			reportedStep: &StartStep{Reason: ReasonPullingImage, Message: stepTestPulling},
+			expectStep:   &StartStep{Reason: ReasonPullingImage, Message: stepTestPulling}},
 		{name: "pods created in the same second resolve by name", withReader: true,
 			objects:    []client.Object{twinA, twinB},
 			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: "verdict of pod b"}},
@@ -603,6 +608,11 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 				ws.Status.Conditions = []metav1.Condition{
 					{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: tt.reported.Reason, Message: tt.reported.Message},
 					{Type: ConditionTypeProgressing, Status: metav1.ConditionFalse, Reason: tt.reported.Reason, Message: tt.reported.Message},
+				}
+			}
+			if tt.reportedStep != nil {
+				ws.Status.Conditions = []metav1.Condition{
+					{Type: ConditionTypeProgressing, Status: metav1.ConditionTrue, Reason: tt.reportedStep.Reason, Message: tt.reportedStep.Message},
 				}
 			}
 			step, failure := rm.WorkspaceStartStep(context.Background(), ws)

@@ -154,6 +154,18 @@ func reportedStartFailure(workspace *workspacev1alpha1.Workspace) *StartFailure 
 	return &StartFailure{Reason: degraded.Reason, Message: degraded.Message}
 }
 
+// startStepReasons are the Progressing reasons of a start under way.
+var startStepReasons = map[string]bool{ReasonWaitingForNode: true, ReasonPullingImage: true, ReasonStartingContainer: true}
+
+// reportedStartStep returns the step the workspace's Progressing condition already carries, or nil.
+func reportedStartStep(workspace *workspacev1alpha1.Workspace) *StartStep {
+	progressing := FindCondition(&workspace.Status.Conditions, ConditionTypeProgressing)
+	if progressing == nil || progressing.Status != metav1.ConditionTrue || !startStepReasons[progressing.Reason] {
+		return nil
+	}
+	return &StartStep{Reason: progressing.Reason, Message: progressing.Message}
+}
+
 // crashLoopingContainer returns the first container of the pod, init containers first, that is in a crash
 // loop, or nil: a restarted container that is not ready, has exited again or restarted at least twice, and
 // whose last exit is younger than crashLoopResetAfter and ended a run shorter than it. The kubelet restarts a first exit without back-off,
@@ -477,7 +489,7 @@ func (rm *ResourceManager) WorkspaceStartStep(
 	if err != nil {
 		// a failed list says nothing new about the pod; what the workspace already reports stands
 		logf.FromContext(ctx).Error(err, "Failed to list workspace pods for the start step")
-		return nil, reportedStartFailure(workspace)
+		return reportedStartStep(workspace), reportedStartFailure(workspace)
 	}
 	if pod == nil {
 		return nil, nil
@@ -533,7 +545,9 @@ func (rm *ResourceManager) workspaceStartingPod(ctx context.Context, workspace *
 // startEventsInterval per workspace and at most startEventsPerSecond across workspaces, and reused in
 // between. A failed read, a timeout included, keeps the previous events and counts as a read, so the
 // interval holds through an API outage; a read the shared limiter denies does not, so the next reconcile
-// tries again.
+// tries again. Events are text that anyone with event write access in the namespace can create: they
+// supply messages, and the only verdict they touch is the count of failed attempts, which a forged event
+// can bring forward for a reason the pod status already reports.
 func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspacev1alpha1.Workspace, pod *corev1.Pod) []corev1.Event {
 	if rm.eventReader == nil {
 		return nil
