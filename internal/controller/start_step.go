@@ -264,7 +264,7 @@ func podScheduled(pod *corev1.Pod) bool {
 // is the newest event from a component other than the kube-scheduler, whose FailedScheduling text is
 // already the PodScheduled message (the fallback); autoscalers such as Karpenter record their verdicts
 // under their own component. With a node, the kubelet's waiting reason stays ContainerCreating through
-// a pull or a failed mount, so its newest event about the pod or a container not yet started is the
+// a pull or a failed mount, so its newest event about the pod or a container not yet ready is the
 // message and the waiting reason the fallback.
 func podStartStep(pod *corev1.Pod, events []corev1.Event) StartStep {
 	if !podScheduled(pod) {
@@ -318,20 +318,19 @@ func isKubeletEvent(event *corev1.Event) bool {
 // containerFieldPath is the involvedObject.fieldPath the kubelet gives a container's events.
 var containerFieldPath = regexp.MustCompile(`^spec\.(?:containers|initContainers|ephemeralContainers)\{(.+)\}$`)
 
-// kubeletStartEvent keeps the kubelet's events about the pod itself and about containers that have not
-// started. An event about a started container, Started, Killing or Unhealthy, is not about the start, and
-// a sidecar's would otherwise outrank the main container's pull.
+// kubeletStartEvent keeps the kubelet's events about the pod itself and about containers that are not
+// ready yet. A ready sidecar's Started event would otherwise outrank the main container's pull.
 func kubeletStartEvent(pod *corev1.Pod) func(*corev1.Event) bool {
-	started := map[string]bool{}
+	ready := map[string]bool{}
 	for _, status := range containerStatuses(pod) {
-		started[status.Name] = status.State.Waiting == nil
+		ready[status.Name] = status.Ready
 	}
 	return func(event *corev1.Event) bool {
 		if !isKubeletEvent(event) {
 			return false
 		}
 		match := containerFieldPath.FindStringSubmatch(event.InvolvedObject.FieldPath)
-		return match == nil || !started[match[1]]
+		return match == nil || !ready[match[1]]
 	}
 }
 

@@ -29,7 +29,7 @@ While the workspace pod is not ready, `Progressing=True` names the step the star
 |--------|------|---------|
 | `WaitingForNode` | The pod has no node yet | The newest event a component other than the scheduler recorded on the pod, for example Karpenter's `Pod should schedule on: nodeclaim/...` or `Failed to schedule pod, all available instance types exceed limits for nodepool "gpu"`; the scheduler's `PodScheduled` message (`0/3 nodes are available: ...`) when there is none |
 | `PullingImage` | The kubelet is pulling the image | The kubelet's `Pulling image "..."` event |
-| `StartingContainer` | The pod has a node and its container is not ready | The kubelet's newest event for the pod (`Successfully pulled image ...`, `Started container ...`, `Readiness probe failed: ...`), or the waiting container's reason and message (`ContainerCreating`, `PodInitializing`, `ErrImagePull: ...`) while the kubelet has recorded no event |
+| `StartingContainer` | The pod has a node and its container is not ready | The kubelet's newest event about the pod or about a container that is not ready yet (`Successfully pulled image ...`, `Started container ...`, `Readiness probe failed: ...`), or the waiting container's reason and message (`ContainerCreating`, `PodInitializing`, `ErrImagePull: ...`) while the kubelet has recorded no event |
 
 The operator does not interpret these messages; it copies them, cut at 1024 bytes. The step appears on `Available=False` with the same reason. Events are read for a starting pod at most every 5 seconds, and a few times per second across all workspaces, so many workspaces starting at once do not crowd out the operator's other API calls; the status is written only when the message changes.
 
@@ -95,7 +95,7 @@ conditions:
     reason: ComputeStalled
 ```
 
-The message is the start step's message above (the scheduler's or the autoscaler's verdict while the pod has no node, otherwise the kubelet's newest event, for example `Failed to create pod sandbox ...` or `Readiness probe failed: ...`), or the Deployment's own message when the workspace has no pod. A Warning event with reason `WorkspaceComputeStalled` is recorded on the workspace when the condition first appears, so `kubectl describe workspace` shows it too.
+The message is the start step's message above (the scheduler's or the autoscaler's verdict while the pod has no node, otherwise the kubelet's newest event about the pod or a container not yet ready, for example `Failed to create pod sandbox ...` or `Readiness probe failed: ...`), or the Deployment's own message when the workspace has no pod. A Warning event with reason `WorkspaceComputeStalled` is recorded on the workspace when the condition first appears, so `kubectl describe workspace` shows it too.
 
 The verdict is not final. The pod stays pending, and once it is scheduled and ready, for example after an autoscaler adds a node, the workspace returns to `Available=True` with `Degraded=False`. Stopping the workspace also clears the condition. A workspace that keeps stalling needs a change to its spec or template, applied with a stop and a start: the operator applies spec changes to the Deployment only while the workspace is `Available`.
 

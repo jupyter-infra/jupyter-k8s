@@ -47,9 +47,10 @@ func runningStatus() corev1.ContainerStatus {
 	return corev1.ContainerStatus{Name: containerNameMain, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}
 }
 
-func startedSidecar() corev1.ContainerStatus {
+func readySidecar() corev1.ContainerStatus {
 	sidecar := runningStatus()
 	sidecar.Name = stepTestOtherName
+	sidecar.Ready = true
 	return sidecar
 }
 
@@ -312,8 +313,8 @@ func TestPodStartStep(t *testing.T) {
 			expected: StartStep{Reason: ReasonPullingImage, Message: stepTestPulling},
 		},
 		{
-			name: "a sidecar's newer Started event does not hide the main container's pull",
-			pod:  scheduledPod(waitingStatus(kubeletReasonContainerCreating, ""), startedSidecar()),
+			name: "a ready sidecar's newer Started event does not hide the main container's pull",
+			pod:  scheduledPod(waitingStatus(kubeletReasonContainerCreating, ""), readySidecar()),
 			events: []corev1.Event{
 				containerEvent("pulling", containerNameMain, kubeletEventPulling, stepTestPulling, base),
 				containerEvent("started", stepTestOtherName, "Started", "Started container "+stepTestOtherName, base.Add(10*time.Second)),
@@ -321,10 +322,12 @@ func TestPodStartStep(t *testing.T) {
 			expected: StartStep{Reason: ReasonPullingImage, Message: stepTestPulling},
 		},
 		{
-			name:     "a kubelet event about a started container is not a start step",
-			pod:      scheduledPod(runningStatus()),
-			events:   []corev1.Event{containerEvent("killing", containerNameMain, "Killing", "Stopping container "+containerNameMain, base)},
-			expected: StartStep{Reason: ReasonStartingContainer, Message: startingContainerMessage},
+			name: "an event about a container that runs but is not ready counts",
+			pod:  scheduledPod(runningStatus()),
+			events: []corev1.Event{
+				containerEvent("unhealthy", containerNameMain, "Unhealthy", "Readiness probe failed: connection refused", base),
+			},
+			expected: StartStep{Reason: ReasonStartingContainer, Message: "Readiness probe failed: connection refused"},
 		},
 		{
 			name:     "an event without a message does not count",
