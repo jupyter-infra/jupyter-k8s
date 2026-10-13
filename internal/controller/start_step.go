@@ -193,16 +193,17 @@ var pullAttemptReasons = map[string]bool{
 }
 
 // pullRetrying reports whether the container whose ImagePullBackOff the workspace reports is in a pull
-// attempt. The reported message quotes the image with the default tag the kubelet applies, so a sidecar
-// retrying another image does not hold the back-off.
+// attempt. The reported message quotes the container's image, so a sidecar retrying another image does not
+// hold the back-off; kubelets before 1.33 quote the image as written and later ones with the default tag.
 func pullRetrying(pod *corev1.Pod, reported *StartFailure) bool {
 	for _, containerStatus := range containerStatuses(pod) {
 		waiting := containerStatus.State.Waiting
 		if waiting == nil || !pullAttemptReasons[waiting.Reason] {
 			continue
 		}
-		if image, found := containerImage(pod, containerStatus.Name); found &&
-			strings.Contains(reported.Message, strconv.Quote(imageWithDefaultTag(image))) {
+		image, found := containerImage(pod, containerStatus.Name)
+		if found && (strings.Contains(reported.Message, strconv.Quote(image)) ||
+			strings.Contains(reported.Message, strconv.Quote(imageWithDefaultTag(image)))) {
 			return true
 		}
 	}
@@ -210,7 +211,7 @@ func pullRetrying(pod *corev1.Pod, reported *StartFailure) bool {
 }
 
 // imageWithDefaultTag appends the kubelet's default tag to an image reference that carries no tag or digest,
-// the form the kubelet quotes in its messages.
+// the form kubelets from 1.33 on quote in their messages.
 func imageWithDefaultTag(image string) string {
 	lastSegment := image[strings.LastIndex(image, "/")+1:]
 	if strings.Contains(image, "@") || strings.Contains(lastSegment, ":") {
