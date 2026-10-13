@@ -337,6 +337,23 @@ func eventCount(event *corev1.Event) int {
 	return 1
 }
 
+// logUnmatchedFailedAttempts notes, at verbosity 1, a container waiting on a retried error whose Failed events
+// all report other text, so a change in the kubelet's wording shows in the operator log instead of holding
+// the container at a step until the progress deadline.
+func logUnmatchedFailedAttempts(ctx context.Context, pod *corev1.Pod, events []corev1.Event) {
+	for _, containerStatus := range containerStatuses(pod) {
+		waiting := containerStatus.State.Waiting
+		if waiting == nil || !retriedStartReasons[waiting.Reason] || waiting.Message == "" ||
+			failedAttempts(events, containerStatus.Name, waiting.Message) > 0 {
+			continue
+		}
+		if all := failedAttempts(events, containerStatus.Name, ""); all > 0 {
+			logf.FromContext(ctx).V(1).Info("The container's Failed events report another error than its waiting state",
+				"container", containerStatus.Name, "waiting", waiting.Message, "attempts", all)
+		}
+	}
+}
+
 // definitiveStartFailure returns the failure of the first container, init containers first, that the
 // kubelet reports as unable to start, or nil. A retried create or start error needs two failed attempts
 // among the pod's events.
@@ -474,7 +491,8 @@ func (rm *ResourceManager) SetEventReader(reader client.Reader) {
 }
 
 // SetEventCacheReader sets the manager's cached client as the event reader, once EventInvolvedObjectUID is
-// registered as the eventInvolvedObjectUIDField index; its reads cost no API request and are not limited.
+// registered as the eventInvolvedObjectUIDField index; its reads cost no API request, so they run on every
+// reconcile without the interval or the limiter, and the per-workspace cache only covers a failed read.
 func (rm *ResourceManager) SetEventCacheReader(reader client.Reader) {
 	rm.eventReader = reader
 	rm.eventReaderCached = true
@@ -511,6 +529,7 @@ func (rm *ResourceManager) WorkspaceStartStep(
 	if failure := definitiveStartFailure(pod, events); failure != nil {
 		return nil, failure
 	}
+	logUnmatchedFailedAttempts(ctx, pod, events)
 	if crashLooping := crashLoopingContainer(pod, rm.now()); crashLooping != nil {
 		return nil, crashLoopFailure(crashLooping)
 	}
@@ -554,11 +573,11 @@ func (rm *ResourceManager) workspaceStartingPod(ctx context.Context, workspace *
 	return newest, nil
 }
 
-// startEvents returns the events recorded on the pod, read through the event reader at most once per
+// startEvents returns the events recorded on the pod, read through the API reader at most once per
 // startEventsInterval per workspace and at most startEventsPerSecond across workspaces, and reused in
-// between. A failed read, a timeout included, keeps the previous events and counts as a read, so the
-// interval holds through an API outage; a read the shared limiter denies does not, so the next reconcile
-// tries again. Events are text that anyone with event write access in the namespace can create: they
+// between, or through the manager cache on every call. A failed read, a timeout included, keeps the
+// previous events and counts as a read, so the interval holds through an API outage; a read the shared
+// limiter denies does not, so the next reconcile tries again. Events are text that anyone with event write access in the namespace can create: they
 // supply messages, and the only verdict they touch is the count of failed attempts, which a forged event
 // can bring forward for a reason the pod status already reports.
 func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspacev1alpha1.Workspace, pod *corev1.Pod) []corev1.Event {
@@ -571,7 +590,7 @@ func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspace
 	rm.startEventsMu.Lock()
 	cached, found := rm.cachedStartEvents[key]
 	rm.startEventsMu.Unlock()
-	if found && cached.podUID == pod.UID && now.Sub(cached.readAt) < startEventsInterval {
+	if !rm.eventReaderCached && found && cached.podUID == pod.UID && now.Sub(cached.readAt) < startEventsInterval {
 		return cached.events
 	}
 	if !rm.eventReaderCached && !rm.eventReadLimiter.Allow() {
