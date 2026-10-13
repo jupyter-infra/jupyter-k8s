@@ -224,6 +224,12 @@ var pullAttemptReasons = map[string]bool{
 	kubeletReasonErrImagePull: true, kubeletReasonRegistryUnavailable: true, kubeletReasonSignatureValidationFailed: true,
 }
 
+// attemptReasons are the waiting reasons of one failed attempt the kubelet retries: a pull, a create or a start.
+var attemptReasons = map[string]bool{
+	kubeletReasonErrImagePull: true, kubeletReasonRegistryUnavailable: true, kubeletReasonSignatureValidationFailed: true,
+	kubeletReasonCreateContainerError: true, kubeletReasonRunContainerError: true,
+}
+
 // pullRetrying reports whether the container whose ImagePullBackOff the workspace reports is in a pull
 // attempt. The reported message quotes the container's image, so a sidecar retrying another image does not
 // hold the back-off; kubelets before 1.33 quote the image as written and later ones with the default tag.
@@ -414,8 +420,9 @@ func podStartStep(pod *corev1.Pod, events []corev1.Event) StartStep {
 	if kubeletEvent != nil && isKubeletEvent(kubeletEvent) && kubeletEvent.Reason == kubeletEventPulling {
 		return StartStep{Reason: ReasonPullingImage, Message: kubeletEvent.Message}
 	}
-	// a create or start error the kubelet is retrying names the error; its Failed event only says "Error: ..."
-	if message := waitingContainerMessage(pod, retriedStartReasons); message != "" {
+	// an attempt the kubelet is retrying names its error in the waiting state; its Failed events only say
+	// "Error: ErrImagePull" or "Error: ..."
+	if message := waitingContainerMessage(pod, attemptReasons); message != "" {
 		return StartStep{Reason: ReasonStartingContainer, Message: message}
 	}
 	if kubeletEvent != nil && kubeletEvent.Message != "" {

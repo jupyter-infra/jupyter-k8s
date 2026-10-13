@@ -339,6 +339,15 @@ func TestPodStartStep(t *testing.T) {
 			expected: StartStep{Reason: ReasonWaitingForNode, Message: waitingForNodeMessage},
 		},
 		{
+			name: "a failed pull attempt is a step named after the error, not after its two Failed events",
+			pod:  scheduledPod(waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")),
+			events: []corev1.Event{
+				containerEvent("main.1", containerNameMain, kubeletEventFailed, "Failed to pull image \"x:1\": rpc error: not found", base),
+				containerEvent("main.2", containerNameMain, kubeletEventFailed, "Error: ErrImagePull", base),
+			},
+			expected: StartStep{Reason: ReasonStartingContainer, Message: kubeletReasonErrImagePull + ": rpc error: not found"},
+		},
+		{
 			name:     "a create error the kubelet is retrying is a step named after the error, not its Failed event",
 			pod:      scheduledPod(waitingStatus(kubeletReasonCreateContainerError, stepTestCreateErrorText)),
 			events:   []corev1.Event{containerEvent("failed", containerNameMain, kubeletEventFailed, "Error: "+stepTestCreateErrorText, base)},
