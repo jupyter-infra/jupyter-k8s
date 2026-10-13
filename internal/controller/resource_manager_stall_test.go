@@ -13,10 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-const (
-	testSchedulingMessage = "0/3 nodes are available: 3 Insufficient nvidia.com/gpu."
-	testStalledMessage    = "ReplicaSet \"jupyter-test-workspace-abc\" has timed out progressing."
-)
+const testStalledMessage = "ReplicaSet \"jupyter-test-workspace-abc\" has timed out progressing."
 
 func TestResourceManager_IsDeploymentProgressDeadlineExceeded(t *testing.T) {
 	progressing := func(status corev1.ConditionStatus, reason, message string) *appsv1.Deployment {

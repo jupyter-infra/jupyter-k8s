@@ -24,10 +24,7 @@ import (
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
 
-const (
-	newReplicaSetAvailableReason = "NewReplicaSetAvailable"
-	initContainerTestName        = "init"
-)
+const newReplicaSetAvailableReason = "NewReplicaSetAvailable"
 
 var _ = Describe("reconcileDesiredRunningStatus without access strategy", func() {
 	var (
@@ -245,8 +242,8 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 	Context("stalled rollout, failed starts and start steps", func() {
 		const (
 			deploymentStalledMessage = "ReplicaSet \"sm-simple\" has timed out progressing."
-			schedulingMessage        = "0/1 nodes are available: 1 Insufficient nvidia.com/gpu."
-			imagePullMessage         = "ImagePullBackOff: Back-off pulling image \"example.com/missing:1\""
+			backOffMessage           = "Back-off pulling image \"example.com/missing:1\""
+			imagePullMessage         = kubeletReasonImagePullBackOff + ": " + backOffMessage
 		)
 
 		setDeploymentStatus := func(dep *appsv1.Deployment, status appsv1.DeploymentStatus) {
@@ -376,7 +373,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			workspace := newWorkspace()
 			dep := createNotReadyDeployment(workspace)
 			svc := createService(workspace)
-			pod := createPendingPod(workspace, unschedulable(schedulingMessage))
+			pod := createPendingPod(workspace, unschedulable(stepTestSchedulingMessage))
 			defer func() { _ = k8sClient.Delete(ctx, pod) }()
 			defer func() { _ = k8sClient.Delete(ctx, dep) }()
 			defer func() { _ = k8sClient.Delete(ctx, svc) }()
@@ -388,11 +385,11 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(LongRequeueDelay))
 
-			expectStalled(workspace, schedulingMessage)
+			expectStalled(workspace, stepTestSchedulingMessage)
 			Expect(workspace.Status.DeploymentName).To(Equal(dep.Name))
 			Expect(workspace.Status.ServiceName).To(Equal(svc.Name))
 			Expect(recorder.Events).To(HaveLen(1))
-			Expect(recorder.Events).To(Receive(stallEvent(schedulingMessage)))
+			Expect(recorder.Events).To(Receive(stallEvent(stepTestSchedulingMessage)))
 		})
 
 		It("should keep the kubelet's reason rather than ComputeStalled when a pull failure outlasts the deadline", func() {
@@ -400,7 +397,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			dep := createNotReadyDeployment(workspace)
 			svc := createService(workspace)
 			pod := createPendingPod(workspace,
-				waitingContainer(kubeletReasonImagePullBackOff, "Back-off pulling image \"example.com/missing:1\""))
+				waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
 			defer func() { _ = k8sClient.Delete(ctx, pod) }()
 			defer func() { _ = k8sClient.Delete(ctx, dep) }()
 			defer func() { _ = k8sClient.Delete(ctx, svc) }()
@@ -414,7 +411,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 
 			for _, condType := range []string{ConditionTypeDegraded, ConditionTypeAvailable, ConditionTypeProgressing} {
 				Expect(getCondition(workspace, condType).Reason).To(Equal(kubeletReasonImagePullBackOff), condType)
-				Expect(getCondition(workspace, condType).Message).To(Equal("Back-off pulling image \"example.com/missing:1\""), condType)
+				Expect(getCondition(workspace, condType).Message).To(Equal(backOffMessage), condType)
 			}
 			Expect(getCondition(workspace, ConditionTypeDegraded).Status).To(Equal(metav1.ConditionTrue))
 			Expect(recorder.Events).To(HaveLen(1))
@@ -443,13 +440,13 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			workspace := newWorkspace()
 			dep := createNotReadyDeployment(workspace)
 			svc := createService(workspace)
-			pod := createPendingPod(workspace, unschedulable(schedulingMessage))
+			pod := createPendingPod(workspace, unschedulable(stepTestSchedulingMessage))
 			defer func() { _ = k8sClient.Delete(ctx, dep) }()
 			defer func() { _ = k8sClient.Delete(ctx, svc) }()
 			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
 			// a finalizer keeps the deleted pod around with a deletionTimestamp, as a terminating pod is
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), pod)).To(Succeed())
-			pod.Finalizers = []string{"test.jupyter.org/keep"}
+			pod.Finalizers = []string{stepTestFinalizer}
 			Expect(k8sClient.Update(ctx, pod)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, pod)).To(Succeed())
 			defer func() {
@@ -470,7 +467,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			workspace := newWorkspace()
 			dep := createNotReadyDeployment(workspace)
 			svc := createService(workspace)
-			pod := createPendingPod(workspace, unschedulable(schedulingMessage))
+			pod := createPendingPod(workspace, unschedulable(stepTestSchedulingMessage))
 			defer func() { _ = k8sClient.Delete(ctx, pod) }()
 			defer func() { _ = k8sClient.Delete(ctx, dep) }()
 			defer func() { _ = k8sClient.Delete(ctx, svc) }()
@@ -480,7 +477,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			sm := buildStateMachine()
 			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 			Expect(err).NotTo(HaveOccurred())
-			expectStalled(workspace, schedulingMessage)
+			expectStalled(workspace, stepTestSchedulingMessage)
 
 			newMessage := "0/2 nodes are available: 2 Insufficient nvidia.com/gpu."
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), pod)).To(Succeed())
@@ -669,13 +666,11 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 		})
 
 		Context("start steps", func() {
-			const nominatedMessage = "Pod should schedule on: nodeclaim/workspace-gpu-abc12"
-
 			It("should report WaitingForNode with the scheduler's verdict while the pod has no node", func() {
 				workspace := newWorkspace()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
-				pod := createPendingPod(workspace, unschedulable(schedulingMessage))
+				pod := createPendingPod(workspace, unschedulable(stepTestSchedulingMessage))
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
 				defer func() { _ = k8sClient.Delete(ctx, dep) }()
 				defer func() { _ = k8sClient.Delete(ctx, svc) }()
@@ -687,7 +682,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.RequeueAfter).To(Equal(PollRequeueDelay))
 
-				expectStartStep(workspace, ReasonWaitingForNode, schedulingMessage)
+				expectStartStep(workspace, ReasonWaitingForNode, stepTestSchedulingMessage)
 				Expect(recorder.Events).To(BeEmpty())
 			})
 
@@ -695,10 +690,10 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				workspace := newWorkspace()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
-				pod := createPendingPod(workspace, unschedulable(schedulingMessage))
+				pod := createPendingPod(workspace, unschedulable(stepTestSchedulingMessage))
 				now := time.Now()
-				nominated := createPodEvent(pod, "nominated", "karpenter", "Nominated", nominatedMessage, now.Add(-time.Minute))
-				scheduler := createPodEvent(pod, "sched", "default-scheduler", eventReasonFailedScheduling, schedulingMessage, now)
+				nominated := createPodEvent(pod, "nominated", "karpenter", "Nominated", stepTestNominated, now.Add(-time.Minute))
+				scheduler := createPodEvent(pod, "sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedulingMessage, now)
 				defer func() { _ = k8sClient.Delete(ctx, nominated) }()
 				defer func() { _ = k8sClient.Delete(ctx, scheduler) }()
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
@@ -711,7 +706,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				expectStartStep(workspace, ReasonWaitingForNode, nominatedMessage)
+				expectStartStep(workspace, ReasonWaitingForNode, stepTestNominated)
 			})
 
 			It("should report PullingImage while the kubelet pulls the image", func() {
@@ -757,9 +752,9 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				workspace := newWorkspace()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
-				pod := createPendingPod(workspace, unschedulable(schedulingMessage))
+				pod := createPendingPod(workspace, unschedulable(stepTestSchedulingMessage))
 				now := time.Now()
-				nominated := createPodEvent(pod, "nominated", "karpenter", "Nominated", nominatedMessage, now)
+				nominated := createPodEvent(pod, "nominated", "karpenter", "Nominated", stepTestNominated, now)
 				defer func() { _ = k8sClient.Delete(ctx, nominated) }()
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
 				defer func() { _ = k8sClient.Delete(ctx, dep) }()
@@ -772,7 +767,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				sm.resourceManager.now = func() time.Time { return clock }
 				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 				Expect(err).NotTo(HaveOccurred())
-				expectStartStep(workspace, ReasonWaitingForNode, nominatedMessage)
+				expectStartStep(workspace, ReasonWaitingForNode, stepTestNominated)
 
 				limits := createPodEvent(pod, "limits", "karpenter", eventReasonFailedScheduling, stepTestLimits,
 					now.Add(time.Second))
@@ -780,7 +775,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				clock = now.Add(startEventsInterval / 2)
 				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
 				Expect(err).NotTo(HaveOccurred())
-				expectStartStep(workspace, ReasonWaitingForNode, nominatedMessage)
+				expectStartStep(workspace, ReasonWaitingForNode, stepTestNominated)
 
 				clock = now.Add(2 * startEventsInterval)
 				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
@@ -791,10 +786,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 		})
 
 		Context("failed start", func() {
-			const (
-				backOffMessage = "Back-off pulling image \"example.com/missing:1\""
-				pullErrMessage = "rpc error: code = NotFound desc = failed to pull and unpack image"
-			)
+			const pullErrMessage = "rpc error: code = NotFound desc = failed to pull and unpack image"
 			failedEvent := func(reason, message string) OmegaMatcher {
 				return Equal(fmt.Sprintf("%s %s %s: %s", corev1.EventTypeWarning, EventWorkspaceStartFailed, reason, message))
 			}
@@ -909,7 +901,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(recorder.Events).To(HaveLen(1))
 				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonImagePullBackOff, backOffMessage)))
 
-				// the kubelet's next attempt shows ErrImagePull again; the back-off verdict holds and no event repeats
+				// the kubelet's next pull attempt shows ErrImagePull again
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), pod)).To(Succeed())
 				pod.Status = waitingContainer(kubeletReasonErrImagePull, pullErrMessage)
 				pod.Status.Phase = corev1.PodPending
@@ -934,9 +926,9 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
 				status := waitingContainer("PodInitializing", "")
-				status.InitContainerStatuses = []corev1.ContainerStatus{{Name: initContainerTestName, RestartCount: 4,
+				status.InitContainerStatuses = []corev1.ContainerStatus{{Name: stepTestInitName, RestartCount: 4,
 					State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{
-						Reason: kubeletReasonCrashLoopBackOff, Message: "back-off 10s restarting failed container=" + initContainerTestName,
+						Reason: kubeletReasonCrashLoopBackOff, Message: "back-off 10s restarting failed container=" + stepTestInitName,
 					}},
 					LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
 						ExitCode: 2, Reason: terminatedReasonError, FinishedAt: metav1.Now(),
@@ -954,7 +946,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(err).NotTo(HaveOccurred())
 
 				expectStartFailed(workspace, kubeletReasonCrashLoopBackOff,
-					"container "+initContainerTestName+" exited with code 2 (Error), restart count 4")
+					"container "+stepTestInitName+" exited with code 2 (Error), restart count 4")
 			})
 
 			It("should record the event when a start failure follows an operator error", func() {

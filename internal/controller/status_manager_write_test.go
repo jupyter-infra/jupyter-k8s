@@ -50,7 +50,7 @@ func TestStatusManagerWritesOnlyWhenTheStatusChanged(t *testing.T) {
 	require.NoError(t, sm.UpdateStartingStatus(ctx, workspace, readiness, workspace.Status.DeepCopy()))
 	assert.Equal(t, 1, c.status.updates, "an unchanged status is not written")
 
-	readiness.computeStep = &StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedMsg}
+	readiness.computeStep = &StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedulingMessage}
 	require.NoError(t, sm.UpdateStartingStatus(ctx, workspace, readiness, workspace.Status.DeepCopy()))
 	assert.Equal(t, 2, c.status.updates, "a new message is written")
 

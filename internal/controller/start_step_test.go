@@ -24,16 +24,16 @@ import (
 )
 
 const (
-	stepTestPodName   = "ws-pod"
-	stepTestInitName  = "init"
-	stepTestFinalizer = "test.jupyter.org/keep"
-	stepTestOtherName = "other"
-	stepTestPodUID    = types.UID("pod-uid-1")
-	stepTestSchedMsg  = "0/1 nodes are available: 1 Insufficient nvidia.com/gpu."
-	stepTestNominated = "Pod should schedule on: nodeclaim/workspace-gpu-abc12"
-	stepTestPulling   = "Pulling image \"jupyter/base-notebook:latest\""
-	stepTestLimits    = "Failed to schedule pod, all available instance types exceed limits for nodepool \"gpu\""
-	stepTestMount     = "MountVolume.SetUp failed for volume \"config\" : configmap \"settings\" not found"
+	stepTestPodName           = "ws-pod"
+	stepTestInitName          = "init"
+	stepTestFinalizer         = "test.jupyter.org/keep"
+	stepTestOtherName         = "other"
+	stepTestPodUID            = types.UID("pod-uid-1")
+	stepTestSchedulingMessage = "0/1 nodes are available: 1 Insufficient nvidia.com/gpu."
+	stepTestNominated         = "Pod should schedule on: nodeclaim/workspace-gpu-abc12"
+	stepTestPulling           = "Pulling image \"jupyter/base-notebook:latest\""
+	stepTestLimits            = "Failed to schedule pod, all available instance types exceed limits for nodepool \"gpu\""
+	stepTestMount             = "MountVolume.SetUp failed for volume \"config\" : configmap \"settings\" not found"
 
 	eventReasonFailedScheduling    = "FailedScheduling"
 	kubeletReasonContainerCreating = "ContainerCreating"
@@ -239,7 +239,7 @@ func TestIsDefinitiveStartFailureReason(t *testing.T) {
 }
 
 func TestPodStartStep(t *testing.T) {
-	base := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	base := stepTestClock
 	tests := []struct {
 		name     string
 		pod      *corev1.Pod
@@ -248,8 +248,8 @@ func TestPodStartStep(t *testing.T) {
 	}{
 		{
 			name:     "unscheduled pod without events carries the scheduler's verdict",
-			pod:      unscheduledPod(stepTestSchedMsg),
-			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedMsg},
+			pod:      unscheduledPod(stepTestSchedulingMessage),
+			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedulingMessage},
 		},
 		{
 			name:     "unscheduled pod without verdict or events",
@@ -258,39 +258,39 @@ func TestPodStartStep(t *testing.T) {
 		},
 		{
 			name: "a scheduler repeat reported through reportingComponent, with no source, still loses to the autoscaler",
-			pod:  unscheduledPod(stepTestSchedMsg),
+			pod:  unscheduledPod(stepTestSchedulingMessage),
 			events: []corev1.Event{
-				reportedEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedMsg, base.Add(30*time.Second)),
+				reportedEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedulingMessage, base.Add(30*time.Second)),
 				podEvent("nominated", "karpenter", "Nominated", stepTestNominated, base),
 			},
 			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestNominated},
 		},
 		{
 			name: "the autoscaler's event wins over a newer FailedScheduling repeat",
-			pod:  unscheduledPod(stepTestSchedMsg),
+			pod:  unscheduledPod(stepTestSchedulingMessage),
 			events: []corev1.Event{
-				podEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedMsg, base.Add(30*time.Second)),
+				podEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedulingMessage, base.Add(30*time.Second)),
 				podEvent("nominated", "karpenter", "Nominated", stepTestNominated, base),
 			},
 			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestNominated},
 		},
 		{
 			name: "the autoscaler's FailedScheduling counts, the kube-scheduler's newer repeat does not",
-			pod:  unscheduledPod(stepTestSchedMsg),
+			pod:  unscheduledPod(stepTestSchedulingMessage),
 			events: []corev1.Event{
 				podEvent("nominated", "karpenter", "Nominated", stepTestNominated, base),
 				podEvent("limits", "karpenter", eventReasonFailedScheduling, stepTestLimits, base.Add(2*time.Minute)),
-				podEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedMsg, base.Add(3*time.Minute)),
+				podEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedulingMessage, base.Add(3*time.Minute)),
 			},
 			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestLimits},
 		},
 		{
 			name: "only scheduler events fall back to the verdict",
-			pod:  unscheduledPod(stepTestSchedMsg),
+			pod:  unscheduledPod(stepTestSchedulingMessage),
 			events: []corev1.Event{
-				podEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedMsg, base),
+				podEvent("sched", "default-scheduler", eventReasonFailedScheduling, stepTestSchedulingMessage, base),
 			},
-			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedMsg},
+			expected: StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedulingMessage},
 		},
 		{
 			name:     "scheduled pod pulling its image",
@@ -352,7 +352,7 @@ func TestPodStartStep(t *testing.T) {
 }
 
 func TestEventTime(t *testing.T) {
-	base := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	base := stepTestClock
 	event := corev1.Event{FirstTimestamp: metav1.NewTime(base), LastTimestamp: metav1.NewTime(base.Add(time.Minute))}
 	assert.Equal(t, base.Add(time.Minute), eventTime(&event))
 	// events.k8s.io style: eventTime and series, no last timestamp
@@ -406,7 +406,7 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 	older.Name = "older"
 	older.UID = "pod-uid-older"
 	older.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Minute))
-	newer := labeled(unscheduledPod(stepTestSchedMsg))
+	newer := labeled(unscheduledPod(stepTestSchedulingMessage))
 	newer.CreationTimestamp = metav1.NewTime(time.Now())
 
 	oversized := podEvent("oversized", "karpenter", "Nominated", strings.Repeat("x", 40000), time.Now())
@@ -421,9 +421,9 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 	}{
 		{name: "no pod yet", withReader: true},
 		{name: "a failed pod list reports nothing", withReader: true, listErr: errInjected,
-			objects: []client.Object{labeled(unscheduledPod(stepTestSchedMsg))}},
+			objects: []client.Object{labeled(unscheduledPod(stepTestSchedulingMessage))}},
 		{name: "an oversized event message is cut", withReader: true,
-			objects:    []client.Object{labeled(unscheduledPod(stepTestSchedMsg)), &oversized},
+			objects:    []client.Object{labeled(unscheduledPod(stepTestSchedulingMessage)), &oversized},
 			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: truncateMessage(oversized.Message, maxCopiedMessageBytes)}},
 		{name: "an oversized waiting message is cut", withReader: true,
 			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, strings.Repeat("x", 40000))))},
@@ -434,17 +434,17 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 		{name: "only an evicted pod is no starting pod", withReader: true, objects: []client.Object{evicted}},
 		{name: "the newest live pod decides", withReader: true,
 			objects:    []client.Object{older, newer},
-			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedMsg}},
-		{name: "a pod of another workspace is ignored", withReader: true, objects: []client.Object{unscheduledPod(stepTestSchedMsg)}},
+			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedulingMessage}},
+		{name: "a pod of another workspace is ignored", withReader: true, objects: []client.Object{unscheduledPod(stepTestSchedulingMessage)}},
 		{name: "failure is reported before any step", withReader: true,
 			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, "Back-off pulling image")))},
 			expectFailed: &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: "Back-off pulling image"}},
 		{name: "waiting for a node with the autoscaler's message", withReader: true,
-			objects:    []client.Object{labeled(unscheduledPod(stepTestSchedMsg)), &nominated},
+			objects:    []client.Object{labeled(unscheduledPod(stepTestSchedulingMessage)), &nominated},
 			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: stepTestNominated}},
 		{name: "without an event reader the pod's own verdict is the message",
-			objects:    []client.Object{labeled(unscheduledPod(stepTestSchedMsg)), &nominated},
-			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedMsg}},
+			objects:    []client.Object{labeled(unscheduledPod(stepTestSchedulingMessage)), &nominated},
+			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedulingMessage}},
 		{name: "a pod being deleted is skipped", withReader: true,
 			objects:    []client.Object{deleting, labeled(scheduledPod(waitingStatus(kubeletReasonContainerCreating, "")))},
 			expectStep: &StartStep{Reason: ReasonStartingContainer, Message: kubeletReasonContainerCreating}},
@@ -590,7 +590,7 @@ func TestResourceManager_WorkspaceStartStep_HoldsReportedBackOffWhileRetrying(t 
 
 func TestResourceManager_StartEventsShareARateLimit(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
-	pod := unscheduledPod(stepTestSchedMsg)
+	pod := unscheduledPod(stepTestSchedulingMessage)
 	pod.Labels = GenerateLabels(testWorkspaceName)
 	nominated := podEvent("nominated", "karpenter", "Nominated", stepTestNominated, time.Now())
 	c := eventIndexedClient(t, pod, &nominated)
@@ -600,7 +600,7 @@ func TestResourceManager_StartEventsShareARateLimit(t *testing.T) {
 	rm.SetEventReader(reader)
 	// one read in the bucket and no refill
 	rm.eventReadLimiter = rate.NewLimiter(0, 1)
-	clock := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	clock := stepTestClock
 	rm.now = func() time.Time { return clock }
 	ctx := context.Background()
 
@@ -621,7 +621,7 @@ func TestResourceManager_StartEventsShareARateLimit(t *testing.T) {
 
 func TestResourceManager_StartEventsAreThrottled(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
-	pod := unscheduledPod(stepTestSchedMsg)
+	pod := unscheduledPod(stepTestSchedulingMessage)
 	pod.Labels = GenerateLabels(testWorkspaceName)
 	nominated := podEvent("nominated", "karpenter", "Nominated", stepTestNominated, time.Now())
 	c := eventIndexedClient(t, pod, &nominated)
@@ -630,7 +630,7 @@ func TestResourceManager_StartEventsAreThrottled(t *testing.T) {
 	require.NotNil(t, rm)
 	rm.SetEventReader(reader)
 	rm.eventReadLimiter = rate.NewLimiter(rate.Inf, 0)
-	clock := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	clock := stepTestClock
 	rm.now = func() time.Time { return clock }
 	ctx := context.Background()
 
@@ -639,7 +639,7 @@ func TestResourceManager_StartEventsAreThrottled(t *testing.T) {
 	assert.Equal(t, stepTestNominated, step.Message)
 	assert.Equal(t, 1, reader.lists)
 
-	// A new event within the interval is not seen: the cached events are reused.
+	// A new event within the interval is not seen.
 	limits := podEvent("limits", "karpenter", eventReasonFailedScheduling, stepTestLimits, time.Now().Add(time.Minute))
 	require.NoError(t, c.Create(ctx, &limits))
 	clock = clock.Add(startEventsInterval / 2)
@@ -673,14 +673,14 @@ func TestResourceManager_StartEventsAreThrottled(t *testing.T) {
 
 	// A new pod of the same workspace is read at once.
 	require.NoError(t, c.Delete(ctx, pod))
-	replacement := unscheduledPod(stepTestSchedMsg)
+	replacement := unscheduledPod(stepTestSchedulingMessage)
 	replacement.Name = "ws-pod-2"
 	replacement.UID = "pod-uid-2"
 	replacement.Labels = GenerateLabels(testWorkspaceName)
 	require.NoError(t, c.Create(ctx, replacement))
 	step, _ = rm.WorkspaceStartStep(ctx, workspace)
 	assert.Equal(t, 5, reader.lists)
-	assert.Equal(t, stepTestSchedMsg, step.Message, "the new pod has no events, so the scheduler's verdict is the message")
+	assert.Equal(t, stepTestSchedulingMessage, step.Message, "the new pod has no events, so the scheduler's verdict is the message")
 
 	// Entries older than the retention are evicted on the next read.
 	rm.cachedStartEvents[client.ObjectKey{Namespace: testNamespaceName, Name: stepTestOtherName}] = startEventsEntry{readAt: clock.Add(-2 * startEventsRetention)}
@@ -728,7 +728,7 @@ func TestWaitingContainerMessage(t *testing.T) {
 			name: "scheduled pod reports the waiting container's reason and message",
 			status: corev1.PodStatus{
 				Conditions:        []corev1.PodCondition{scheduled},
-				ContainerStatuses: []corev1.ContainerStatus{waiting("workspace", "ImagePullBackOff", `Back-off pulling image "example.com/missing:1"`)},
+				ContainerStatuses: []corev1.ContainerStatus{waiting("workspace", kubeletReasonImagePullBackOff, `Back-off pulling image "example.com/missing:1"`)},
 			},
 			expected: `ImagePullBackOff: Back-off pulling image "example.com/missing:1"`,
 		},
@@ -736,15 +736,15 @@ func TestWaitingContainerMessage(t *testing.T) {
 			name: "waiting container without a message reports the reason alone",
 			status: corev1.PodStatus{
 				Conditions:        []corev1.PodCondition{scheduled},
-				ContainerStatuses: []corev1.ContainerStatus{waiting("workspace", "ContainerCreating", "")},
+				ContainerStatuses: []corev1.ContainerStatus{waiting("workspace", kubeletReasonContainerCreating, "")},
 			},
-			expected: "ContainerCreating",
+			expected: kubeletReasonContainerCreating,
 		},
 		{
 			name: "a waiting init container is reported before the main container",
 			status: corev1.PodStatus{
 				Conditions:            []corev1.PodCondition{scheduled},
-				InitContainerStatuses: []corev1.ContainerStatus{waiting("init", "CrashLoopBackOff", "back-off 5m0s restarting failed container=init")},
+				InitContainerStatuses: []corev1.ContainerStatus{waiting(stepTestInitName, kubeletReasonCrashLoopBackOff, "back-off 5m0s restarting failed container=init")},
 				ContainerStatuses:     []corev1.ContainerStatus{waiting("workspace", "PodInitializing", "")},
 			},
 			expected: "CrashLoopBackOff: back-off 5m0s restarting failed container=init",
@@ -755,7 +755,7 @@ func TestWaitingContainerMessage(t *testing.T) {
 				Conditions: []corev1.PodCondition{scheduled},
 				ContainerStatuses: []corev1.ContainerStatus{
 					running,
-					waiting("sidecar", "CreateContainerConfigError", `secret "token" not found`),
+					waiting("sidecar", kubeletReasonCreateConfigError, `secret "token" not found`),
 				},
 			},
 			expected: `CreateContainerConfigError: secret "token" not found`,
