@@ -209,12 +209,19 @@ func TestDefinitiveStartFailure(t *testing.T) {
 				return []corev1.Event{event}
 			}(),
 			expected: &StartFailure{Reason: kubeletReasonRunContainerError, Message: "failed to start container"}},
-		{name: "the attempts of an earlier error do not count towards this one", pod: createError,
+		{name: "the attempts of an earlier error on the container count towards this one", pod: createError,
 			events: func() []corev1.Event {
 				configError := containerEvent("config", containerNameMain, kubeletEventFailed, "Error: secret \"s\" not found", now.Add(-time.Hour))
 				configError.Count = 50
 				return []corev1.Event{configError, failedAttempt("f1", 1)}
-			}()},
+			}(),
+			expected: &StartFailure{Reason: kubeletReasonCreateContainerError, Message: stepTestCreateErrorText}},
+		{name: "attempts whose text differs from the waiting state count", pod: createError,
+			events: []corev1.Event{
+				containerEvent("f1", containerNameMain, kubeletEventFailed, "Error: failed to create shim task for container 0a1b: deadline exceeded", now),
+				containerEvent("f2", containerNameMain, kubeletEventFailed, "Error: failed to create shim task for container 9c8d: deadline exceeded", now),
+			},
+			expected: &StartFailure{Reason: kubeletReasonCreateContainerError, Message: stepTestCreateErrorText}},
 		{name: "a reason the CRD would reject is guarded", pod: scheduledPod(waitingStatus("Err/ImagePull", "not found")),
 			expected: &StartFailure{Reason: ReasonContainerStartFailed, Message: "Err/ImagePull: not found"}},
 		{name: "pod initializing is not a failure", pod: scheduledPod(waitingStatus("PodInitializing", ""))},

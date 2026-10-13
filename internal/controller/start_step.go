@@ -309,19 +309,16 @@ func isPullFailureMessage(message string) bool {
 	return false
 }
 
-// failedAttempts counts the kubelet's Failed events about create or start attempts of the named container
-// that report the error the container is waiting on, each repeated event standing for its count. The
-// kubelet writes the same text to the waiting state and to the event, behind "Error: ", so events of an
-// earlier error, such as a Secret that was missing, do not count towards this one. Without a waiting message
-// every create or start attempt counts.
-func failedAttempts(events []corev1.Event, container, waitingMessage string) int {
+// failedAttempts counts the kubelet's Failed events about create or start attempts of the named container,
+// each repeated event standing for its count. The text is not matched against the waiting state: a runtime
+// error can carry the container id, which changes with every attempt, so matching would hold such a
+// container at a step until the progress deadline. The attempts of an earlier error on the same container
+// count too, so a create error right after a missing Secret appears reads Degraded until the next read.
+func failedAttempts(events []corev1.Event, container string) int {
 	attempts := 0
 	for i := range events {
 		event := &events[i]
 		if event.Reason != kubeletEventFailed || !isKubeletEvent(event) || isPullFailureMessage(event.Message) {
-			continue
-		}
-		if waitingMessage != "" && event.Message != kubeletErrorEventPrefix+waitingMessage {
 			continue
 		}
 		if match := containerFieldPathPattern.FindStringSubmatch(event.InvolvedObject.FieldPath); match != nil && match[1] == container {
@@ -343,23 +340,6 @@ func eventCount(event *corev1.Event) int {
 	return 1
 }
 
-// logUnmatchedFailedAttempts notes, at verbosity 1, a container waiting on a retried error whose Failed events
-// all report other text, so a change in the kubelet's wording shows in the operator log instead of holding
-// the container at a step until the progress deadline.
-func logUnmatchedFailedAttempts(ctx context.Context, pod *corev1.Pod, events []corev1.Event) {
-	for _, containerStatus := range containerStatuses(pod) {
-		waiting := containerStatus.State.Waiting
-		if waiting == nil || !retriedStartReasons[waiting.Reason] || waiting.Message == "" ||
-			failedAttempts(events, containerStatus.Name, waiting.Message) > 0 {
-			continue
-		}
-		if all := failedAttempts(events, containerStatus.Name, ""); all > 0 {
-			logf.FromContext(ctx).V(1).Info("The container's Failed events report another error than its waiting state",
-				"container", containerStatus.Name, "waiting", waiting.Message, "attempts", all)
-		}
-	}
-}
-
 // definitiveStartFailure returns the failure of the first container, init containers first, that the
 // kubelet reports as unable to start, or nil. A retried create or start error needs two failed attempts
 // among the pod's events.
@@ -371,7 +351,7 @@ func definitiveStartFailure(pod *corev1.Pod, events []corev1.Event) *StartFailur
 		if waiting == nil || !isDefinitiveStartFailureReason(waiting.Reason) {
 			continue
 		}
-		if retriedStartReasons[waiting.Reason] && failedAttempts(events, containerStatus.Name, waiting.Message) < 2 {
+		if retriedStartReasons[waiting.Reason] && failedAttempts(events, containerStatus.Name) < 2 {
 			continue
 		}
 		if waiting.Reason == kubeletReasonCrashLoopBackOff {
@@ -536,7 +516,6 @@ func (rm *ResourceManager) WorkspaceStartStep(
 	if failure := definitiveStartFailure(pod, events); failure != nil {
 		return nil, failure
 	}
-	logUnmatchedFailedAttempts(ctx, pod, events)
 	if crashLooping := crashLoopingContainer(pod, rm.now()); crashLooping != nil {
 		return nil, crashLoopFailure(crashLooping)
 	}
