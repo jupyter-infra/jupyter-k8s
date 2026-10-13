@@ -1,6 +1,4 @@
-# A workspace whose container exits at once: the kubelet restarts it with back-off and reports
-# CrashLoopBackOff. The Degraded State specs in workspace_status_test.go assert the workspace reports
-# that reason as soon as the kubelet does, clears it when stopped, and starts once the command is removed.
+# A workspace whose container exits at once, so the kubelet restarts it with back-off and reports CrashLoopBackOff.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: Workspace
 metadata:

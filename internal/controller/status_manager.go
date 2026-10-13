@@ -175,9 +175,7 @@ func (sm *StatusManager) UpdateErrorStatus(
 }
 
 // UpdateDegradedRunningStatus sets Degraded=True, Available=False, Progressing=False, Stopped=False for
-// a workspace whose desired state is Running. The caller decides whether to keep reconciling: a stalled
-// rollout recovers through the ready path once its pod becomes ready, while an access startup probe
-// that exceeded its failure threshold is not retried until the workspace restarts.
+// a workspace whose desired state is Running.
 func (sm *StatusManager) UpdateDegradedRunningStatus(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,

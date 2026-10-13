@@ -345,8 +345,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	}
 
 	// A container the kubelet cannot start as specified (ImagePullBackOff, CrashLoopBackOff, ...) is
-	// reported now rather than at the progress deadline. Otherwise the step the pod is in becomes the
-	// Starting reason and message, and the stall message should the deadline pass.
+	// reported now rather than at the progress deadline.
 	var startStep *StartStep
 	if !deploymentReady {
 		var failure *StartFailure
@@ -395,9 +394,7 @@ type degradedStart struct {
 }
 
 // reconcileDegradedStart writes a degradedStart and requeues at its delay. The event follows the status
-// write, so a write conflict, which reconciles again, does not repeat it. Recovery needs no action here: the
-// Deployment watch reconciles the workspace when its pod becomes ready and the ready path resets the
-// conditions; the requeue refreshes the message and sees the kubelet stop reporting the failure.
+// write, so a write conflict, which reconciles again, does not repeat it.
 func (sm *StateMachine) reconcileDegradedStart(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,

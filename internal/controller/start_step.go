@@ -26,8 +26,8 @@ const (
 	// startEventsInterval is the shortest interval between two reads of a starting pod's events. The
 	// running path reconciles every PollRequeueDelay (200ms); event reads must not follow that loop.
 	startEventsInterval = 5 * time.Second
-	// startEventsRetention bounds how long a workspace's cached events outlive their last read, so a
-	// workspace that stopped mid-start does not keep an entry forever.
+	// startEventsRetention bounds how long a workspace's cached events outlive their last read, so entries
+	// of workspaces that are no longer reconciled do not accumulate.
 	startEventsRetention = 10 * time.Minute
 	// startEventsPerSecond and startEventsBurst bound event reads across all workspaces, so a hundred
 	// workspaces starting at once do not spend the manager's API client budget (20 requests per second by
@@ -48,8 +48,7 @@ const (
 	startingContainerMessage = "Starting the container"
 
 	// crashLoopResetAfter is how long a container has to run before the kubelet resets its restart back-off
-	// (https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy); an exit older than
-	// that no longer marks a crash loop.
+	// (https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy).
 	crashLoopResetAfter = 10 * time.Minute
 
 	// maxCopiedMessageBytes bounds a message copied from an event or a container state onto a condition,
@@ -91,9 +90,8 @@ func startFailure(reason, message string) *StartFailure {
 	return &StartFailure{Reason: reason, Message: message}
 }
 
-// prefixReason joins a reason and its message the way kubectl prints them, the reason alone when the
-// message is empty or is the reason itself (a StartFailure without a kubelet message carries the reason
-// as its message).
+// prefixReason joins a reason and its message as "Reason: message"; the reason alone when the message is
+// empty or repeats the reason, as a StartFailure without a kubelet message does.
 func prefixReason(reason, message string) string {
 	if message == "" || message == reason {
 		return reason
@@ -102,11 +100,8 @@ func prefixReason(reason, message string) string {
 }
 
 // isDefinitiveStartFailureReason reports whether reason is one the kubelet uses for a container it cannot
-// start as specified: an image it is backing off from pulling, a missing Secret or ConfigMap, a command
-// that keeps failing. Argo CD's health check applies the same rule, any reason starting with Err or ending
-// with Error or BackOff (ImagePullBackOff, ErrImageNeverPull, CreateContainerConfigError, RunContainerError,
-// CrashLoopBackOff); InvalidImageName matches neither and is named. ErrImagePull is one failed pull
-// attempt, which the kubelet reports for a few seconds before ImagePullBackOff, and stays a step.
+// start as specified: any reason starting with Err or ending in Error or BackOff, the rule Argo CD's health
+// check applies, plus InvalidImageName. ErrImagePull is one failed pull attempt and stays a step.
 func isDefinitiveStartFailureReason(reason string) bool {
 	// the operator's own Degraded reasons end in Error as well
 	if reason == ReasonDeploymentError || reason == ReasonServiceError || reason == kubeletReasonErrImagePull {
@@ -143,9 +138,8 @@ func reportedStartFailure(workspace *workspacev1alpha1.Workspace) *StartFailure 
 // crashLoopingContainer returns the first container of the pod, init containers first, that is in a crash
 // loop, or nil: a restarted container that is not ready, has exited again or restarted at least twice, and
 // whose last exit is younger than crashLoopResetAfter. The kubelet restarts a first exit without back-off,
-// exit code 0 included, and backs off from the second; between an exit and the next CrashLoopBackOff
-// report the container shows as Running or Terminated rather than Waiting, and on Kubernetes 1.37 the
-// Waiting report lasts about a second per restart where 1.33 held it for the whole back-off.
+// and on Kubernetes 1.37 its CrashLoopBackOff waiting report lasts about a second per restart, so the
+// Waiting state alone cannot mark the loop.
 func crashLoopingContainer(pod *corev1.Pod, now time.Time) *corev1.ContainerStatus {
 	statuses := containerStatuses(pod)
 	for i := range statuses {
@@ -216,8 +210,8 @@ func waitingContainerMessage(pod *corev1.Pod) string {
 	return ""
 }
 
-// definitiveStartFailure returns the first container, init containers first, that the kubelet reports
-// as unable to start, or nil.
+// definitiveStartFailure returns the failure of the first container, init containers first, that the
+// kubelet reports as unable to start, or nil.
 func definitiveStartFailure(pod *corev1.Pod) *StartFailure {
 	statuses := containerStatuses(pod)
 	for i := range statuses {
@@ -318,10 +312,9 @@ func newestEvent(events []corev1.Event, keep func(*corev1.Event) bool) *corev1.E
 	return newest
 }
 
-// SetEventReader sets the reader used for a starting pod's events. The manager's API reader is used so
-// that events are fetched for one pod at a time; the manager caches events cluster-wide only when
-// workspace pod watching is enabled, which is off by default. Without a reader the step falls back to
-// what the pod itself reports.
+// SetEventReader sets the reader used for a starting pod's events. The manager's API reader fetches one
+// pod's events at a time, where its cached client would hold every event in the cluster. Without a reader
+// the step falls back to what the pod itself reports.
 func (rm *ResourceManager) SetEventReader(reader client.Reader) {
 	rm.eventReader = reader
 }
