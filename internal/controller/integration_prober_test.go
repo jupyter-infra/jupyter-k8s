@@ -503,10 +503,10 @@ func TestTruncateProbeMessage(t *testing.T) {
 
 	t.Run("over cap -> clipped with marker, stays valid UTF-8", func(t *testing.T) {
 		got := truncateProbeMessage(strings.Repeat("a", maxProbeMessageBytes+500))
-		if len(got) > maxProbeMessageBytes+len(" ...(truncated)") {
+		if len(got) > maxProbeMessageBytes+len(TruncatedMessageSuffix) {
 			t.Errorf("clipped message exceeds cap+marker: len=%d", len(got))
 		}
-		if !strings.HasSuffix(got, " ...(truncated)") {
+		if !strings.HasSuffix(got, TruncatedMessageSuffix) {
 			t.Errorf("clipped message must carry the truncation marker, got tail %q", got[len(got)-20:])
 		}
 		if !utf8.ValidString(got) {
@@ -522,7 +522,7 @@ func TestTruncateProbeMessage(t *testing.T) {
 		if !utf8.ValidString(got) {
 			t.Error("truncation split a multi-byte rune -> invalid UTF-8")
 		}
-		if !strings.HasSuffix(got, " ...(truncated)") {
+		if !strings.HasSuffix(got, TruncatedMessageSuffix) {
 			t.Error("multi-byte clip must still carry the truncation marker")
 		}
 	})

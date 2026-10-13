@@ -109,5 +109,5 @@ func truncateMessage(msg string, maxBytes int) string {
 	for len(clipped) > 0 && !utf8.ValidString(clipped) {
 		clipped = clipped[:len(clipped)-1]
 	}
-	return clipped + " ...(truncated)"
+	return clipped + TruncatedMessageSuffix
 }

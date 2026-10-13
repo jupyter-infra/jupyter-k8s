@@ -84,6 +84,8 @@ const (
 	MessageRunning = "Jupyter server is running"
 	// MessageStopped is the status message for stopped workspaces
 	MessageStopped = "Jupyter server stopped successfully"
+	// TruncatedMessageSuffix marks a condition message cut to its length ceiling
+	TruncatedMessageSuffix = " ...(truncated)"
 
 	// DefaultDesiredStatus is the default desired status for workspaces
 	DefaultDesiredStatus = "Running"
