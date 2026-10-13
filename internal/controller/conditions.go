@@ -59,8 +59,9 @@ const (
 	// ReasonComputeStalled is set on Degraded, Available and Progressing while the workspace Deployment
 	// reports Progressing=False with reason ProgressDeadlineExceeded; it clears when the pod becomes ready.
 	ReasonComputeStalled = "ComputeStalled"
-	// ReasonContainerStartFailed replaces a kubelet waiting reason that the CRD would reject as a condition
-	// reason; the raw reason then opens the message.
+	// ReasonContainerStartFailed replaces a kubelet waiting reason that is not a valid condition reason:
+	// metav1.Condition limits a reason to 1024 bytes of letters, digits and a few separators. The message
+	// then starts with the kubelet's reason.
 	ReasonContainerStartFailed = "ContainerStartFailed"
 
 	// Start steps, set on Progressing=True and Available=False while the workspace pod is not ready, with
@@ -88,18 +89,18 @@ const (
 	IntegrationReasonNotResolved = "NotResolved"
 
 	// Kubernetes Event reasons for integration status transitions (recorded on the Workspace via the
-	// EventRecorder, surfaced by `kubectl describe workspace`). These are EDGE-TRIGGERED: an event is
-	// emitted only when an integration's probe verdict changes, never on every report-only probe cadence
-	// (see getIntegrationStatusEvent), so a persistently-degraded integration does not spam the event stream.
+	// EventRecorder, surfaced by `kubectl describe workspace`). An event is recorded once, when an
+	// integration's probe verdict changes (see getIntegrationStatusEvent); an integration that stays
+	// degraded does not repeat it on every probe.
 	IntegrationEventDegraded  = "IntegrationDegraded"
 	IntegrationEventRecovered = "IntegrationRecovered"
 
-	// EventWorkspaceComputeStalled is recorded (Warning) when the workspace Deployment first reports
-	// ProgressDeadlineExceeded. Edge-triggered, so a workspace that stays stalled does not repeat it.
+	// EventWorkspaceComputeStalled is recorded (Warning) once, when the workspace Deployment first reports
+	// ProgressDeadlineExceeded; a workspace that stays stalled does not repeat it.
 	EventWorkspaceComputeStalled = "WorkspaceComputeStalled"
 
-	// EventWorkspaceStartFailed is recorded (Warning) when the kubelet first reports a container it cannot
-	// start. Edge-triggered, so one failed start records it once whatever kubelet reasons it passes through.
+	// EventWorkspaceStartFailed is recorded (Warning) once, when the kubelet first reports a container it
+	// cannot start; a start that stays failed does not repeat it whatever kubelet reasons it passes through.
 	EventWorkspaceStartFailed = "WorkspaceStartFailed"
 )
 
