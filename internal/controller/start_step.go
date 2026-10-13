@@ -143,10 +143,10 @@ func reportedStartFailure(workspace *workspacev1alpha1.Workspace) *StartFailure 
 
 // crashLoopingContainer returns the first container of the pod, init containers first, that is in a crash
 // loop, or nil: a restarted container that is not ready, has exited again or restarted at least twice, and
-// whose last run was shorter than crashLoopResetAfter. The kubelet restarts a first exit without back-off,
+// whose last exit is younger than crashLoopResetAfter and ended a run shorter than it. The kubelet restarts a first exit without back-off,
 // and on Kubernetes 1.37 its CrashLoopBackOff waiting report lasts about a second per restart, so the
 // Waiting state alone cannot mark the loop.
-func crashLoopingContainer(pod *corev1.Pod) *corev1.ContainerStatus {
+func crashLoopingContainer(pod *corev1.Pod, now time.Time) *corev1.ContainerStatus {
 	statuses := containerStatuses(pod)
 	for i := range statuses {
 		containerStatus := &statuses[i]
@@ -156,7 +156,8 @@ func crashLoopingContainer(pod *corev1.Pod) *corev1.ContainerStatus {
 		if containerStatus.State.Terminated == nil && containerStatus.RestartCount < 2 {
 			continue
 		}
-		if last := lastExit(containerStatus); last != nil && last.FinishedAt.Sub(last.StartedAt.Time) < crashLoopResetAfter {
+		if last := lastExit(containerStatus); last != nil && now.Sub(last.FinishedAt.Time) < crashLoopResetAfter &&
+			last.FinishedAt.Sub(last.StartedAt.Time) < crashLoopResetAfter {
 			return containerStatus
 		}
 	}
@@ -391,7 +392,7 @@ func (rm *ResourceManager) WorkspaceStartStep(
 	if failure := definitiveStartFailure(pod); failure != nil {
 		return nil, failure
 	}
-	if crashLooping := crashLoopingContainer(pod); crashLooping != nil {
+	if crashLooping := crashLoopingContainer(pod, rm.now()); crashLooping != nil {
 		return nil, crashLoopFailure(crashLooping)
 	}
 	// a retry after a back-off does not clear the reported back-off; only a pull that succeeds does

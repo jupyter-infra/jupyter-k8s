@@ -567,12 +567,14 @@ func TestCrashLoopingContainer(t *testing.T) {
 			status: corev1.ContainerStatus{Name: containerNameMain, RestartCount: 2, State: running, LastTerminationState: exit(recent)}},
 		{name: "two restarts after a run of an hour",
 			status: corev1.ContainerStatus{Name: containerNameMain, RestartCount: 2, State: running, LastTerminationState: exitAfter(time.Hour, recent)}},
+		{name: "two restarts and an exit an hour ago",
+			status: corev1.ContainerStatus{Name: containerNameMain, RestartCount: 2, State: running, LastTerminationState: exit(old)}},
 		{name: "ready after two restarts",
 			status: corev1.ContainerStatus{Name: containerNameMain, Ready: true, RestartCount: 2, State: running, LastTerminationState: exit(recent)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			crashLooping := crashLoopingContainer(scheduledPod(tt.status))
+			crashLooping := crashLoopingContainer(scheduledPod(tt.status), stepTestClock)
 			if tt.crashLoop {
 				assert.Equal(t, &tt.status, crashLooping)
 			} else {
