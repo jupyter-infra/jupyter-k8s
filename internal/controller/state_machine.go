@@ -305,6 +305,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		case ProbeAlreadySucceeded:
 			accessResourcesReady = true
 		case ProbeFailureThresholdExceeded:
+			sm.resourceManager.ForgetStartEvents(workspace)
 			if statusErr := sm.statusManager.UpdateDegradedRunningStatus(
 				ctx, workspace, ReasonAccessProbeThresholdExceeded, ReasonAccessNotReady,
 				"Access startup probe failed: threshold exceeded",
