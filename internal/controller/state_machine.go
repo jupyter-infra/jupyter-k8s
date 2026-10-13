@@ -361,6 +361,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		if stalled, deploymentMessage := sm.resourceManager.IsDeploymentProgressDeadlineExceeded(deployment); stalled {
 			return sm.reconcileStalledRollout(ctx, workspace, deployment, service, startStep, deploymentMessage, snapshotStatus)
 		}
+		requeueDelay = startStepRequeueDelay(startStep)
 	}
 
 	// Resources are being created/started but not fully ready yet
@@ -383,6 +384,22 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 
 	// Requeue to check resource readiness again later
 	return ctrl.Result{RequeueAfter: requeueDelay}, nil
+}
+
+// startStepRequeueDelay is how long the running path waits before reading a not-ready pod again, by the
+// step it is in; nil is a Deployment whose pod does not exist yet.
+func startStepRequeueDelay(step *StartStep) time.Duration {
+	if step == nil {
+		return NoPodRequeueDelay
+	}
+	switch step.Reason {
+	case ReasonWaitingForNode:
+		return WaitingForNodeRequeueDelay
+	case ReasonPullingImage:
+		return PullingImageRequeueDelay
+	default:
+		return StartingContainerRequeueDelay
+	}
 }
 
 // degradedStart is a start that cannot complete: the reason and message for the Degraded, Available and
