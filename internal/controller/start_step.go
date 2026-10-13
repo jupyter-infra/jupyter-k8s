@@ -282,10 +282,10 @@ func podScheduled(pod *corev1.Pod) bool {
 }
 
 // podStartStep derives the step from the pod and the events recorded on it. Without a node, the message
-// is the event whose text appeared last, the scheduler's verdict or an autoscaler's such as Karpenter's
-// nomination, and the PodScheduled message the fallback. With a node, the kubelet's waiting reason stays
-// ContainerCreating through a pull or a failed mount, so its newest event about the pod or a container
-// not yet ready is the message and the waiting reason the fallback.
+// is the newest event by first appearance, from the scheduler or an autoscaler such as Karpenter; the
+// PodScheduled condition's message is the fallback. With a node, the kubelet's waiting reason stays
+// ContainerCreating through a pull or a failed mount, so the message is the kubelet's newest event about
+// the pod or a container that is not ready yet; the waiting reason is the fallback.
 func podStartStep(pod *corev1.Pod, events []corev1.Event) StartStep {
 	if !podScheduled(pod) {
 		if event := newestEvent(events, nil); event != nil {
@@ -328,8 +328,8 @@ func isKubeletEvent(event *corev1.Event) bool {
 	return event.Source.Component == kubeletComponent || event.ReportingController == kubeletComponent
 }
 
-// containerFieldPath is the involvedObject.fieldPath the kubelet gives a container's events.
-var containerFieldPath = regexp.MustCompile(`^spec\.(?:containers|initContainers|ephemeralContainers)\{(.+)\}$`)
+// containerFieldPathPattern is the involvedObject.fieldPath the kubelet gives a container's events.
+var containerFieldPathPattern = regexp.MustCompile(`^spec\.(?:containers|initContainers|ephemeralContainers)\{(.+)\}$`)
 
 // kubeletStartEvent keeps the kubelet's events about the pod itself and about containers that are not
 // ready yet. A ready sidecar's Started event would otherwise outrank the main container's pull.
@@ -342,15 +342,15 @@ func kubeletStartEvent(pod *corev1.Pod) func(*corev1.Event) bool {
 		if !isKubeletEvent(event) {
 			return false
 		}
-		match := containerFieldPath.FindStringSubmatch(event.InvolvedObject.FieldPath)
+		match := containerFieldPathPattern.FindStringSubmatch(event.InvolvedObject.FieldPath)
 		return match == nil || !ready[match[1]]
 	}
 }
 
-// newestEvent returns the event with a message whose text appeared last among those keep accepts, every
-// event when keep is nil, or nil. Equal timestamps go to the later event in list order: the kubelet
-// records timestamps at second resolution, and the API lists events by name, which embeds their creation
-// time.
+// newestEvent returns the event with a message whose text appeared last, among those keep accepts or among
+// all events when keep is nil; nil when there is none. Equal timestamps go to the later event in list
+// order: the kubelet records timestamps at second resolution, and the API lists events by name, which
+// embeds their creation time.
 func newestEvent(events []corev1.Event, keep func(*corev1.Event) bool) *corev1.Event {
 	var newest *corev1.Event
 	for i := range events {

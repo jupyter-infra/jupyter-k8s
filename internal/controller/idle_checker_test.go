@@ -290,7 +290,7 @@ func TestWorkspaceIdleChecker_CheckWorkspaceIdle_TerminatingPodSkipped(t *testin
 
 	workspace := createTestWorkspace()
 
-	// a Running pod being torn down; a finalizer keeps the fake client from dropping the deletion timestamp
+	// the fake client refuses a pod with a deletion timestamp and no finalizer
 	now := metav1.Now()
 	terminatingPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -298,7 +298,7 @@ func TestWorkspaceIdleChecker_CheckWorkspaceIdle_TerminatingPodSkipped(t *testin
 			Namespace:         workspace.Namespace,
 			Labels:            GenerateLabels(workspace.Name),
 			DeletionTimestamp: &now,
-			Finalizers:        []string{"test.jupyter.org/keep"},
+			Finalizers:        []string{stepTestFinalizer},
 		},
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
@@ -313,8 +313,7 @@ func TestWorkspaceIdleChecker_CheckWorkspaceIdle_TerminatingPodSkipped(t *testin
 
 	result, err := checker.CheckWorkspaceIdle(context.Background(), workspace, nil, idleConfig)
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no running pod found for workspace")
+	assert.ErrorIs(t, err, errNoRunningPod)
 	assert.NotNil(t, result)
 	assert.True(t, result.ShouldRetry)
 }

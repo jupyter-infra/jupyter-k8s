@@ -265,9 +265,9 @@ func getIntegrationStatusEvent(name string, prior, next *workspacev1alpha1.Integ
 	}
 }
 
-// FindRunningPod locates the workspace's running pod, the lookup the idle checker shares.
+// FindRunningPod returns the workspace's running pod that is not being deleted.
 func (p *IntegrationProber) FindRunningPod(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.Pod, error) {
-	return runningWorkspacePod(ctx, p.client, workspace)
+	return workspaceRunningPod(ctx, p.client, workspace)
 }
 
 func resolveIntegrationProbeTimeout(probe *workspacev1alpha1.IntegrationStatusProbe) int32 {

@@ -19,7 +19,7 @@ import (
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
 
-func TestRunningWorkspacePod(t *testing.T) {
+func TestWorkspaceRunningPod(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
 	pod := func(name string, labels map[string]string, phase corev1.PodPhase) *corev1.Pod {
 		return &corev1.Pod{
@@ -53,7 +53,7 @@ func TestRunningWorkspacePod(t *testing.T) {
 			if tt.listErr != nil {
 				c = &MockClient{Client: c, listFunc: func(context.Context, client.ObjectList, ...client.ListOption) error { return tt.listErr }}
 			}
-			found, err := runningWorkspacePod(context.Background(), c, workspace)
+			found, err := workspaceRunningPod(context.Background(), c, workspace)
 			switch {
 			case tt.listErr != nil:
 				require.ErrorIs(t, err, tt.listErr)

@@ -50,7 +50,7 @@ func runningStatus() corev1.ContainerStatus {
 	return corev1.ContainerStatus{Name: containerNameMain, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}
 }
 
-func readySidecar() corev1.ContainerStatus {
+func readySidecarStatus() corev1.ContainerStatus {
 	sidecar := runningStatus()
 	sidecar.Name = stepTestOtherName
 	sidecar.Ready = true
@@ -115,15 +115,15 @@ func podEvent(name, component, reason, message string, at time.Time) corev1.Even
 	}
 }
 
-// repeatedEvent is an event the recorder aggregated: its text first appeared at first and was last repeated at last.
-func repeatedEvent(name, component, reason, message string, first, last time.Time) corev1.Event {
-	event := podEvent(name, component, reason, message, last)
-	event.FirstTimestamp = metav1.NewTime(first)
+// repeatedEvent is an event the recorder aggregated, whose text appeared at firstSeen and was last repeated at lastSeen.
+func repeatedEvent(name, component, reason, message string, firstSeen, lastSeen time.Time) corev1.Event {
+	event := podEvent(name, component, reason, message, lastSeen)
+	event.FirstTimestamp = metav1.NewTime(firstSeen)
 	event.Count = 9
 	return event
 }
 
-// containerEvent is a kubelet event about one container, which names it in involvedObject.fieldPath.
+// containerEvent is a kubelet event about one container, named in involvedObject.fieldPath.
 func containerEvent(name, container, reason, message string, at time.Time) corev1.Event {
 	event := podEvent(name, kubeletComponent, reason, message, at)
 	event.InvolvedObject.FieldPath = "spec.containers{" + container + "}"
@@ -338,7 +338,7 @@ func TestPodStartStep(t *testing.T) {
 		},
 		{
 			name: "a ready sidecar's newer Started event does not hide the main container's pull",
-			pod:  scheduledPod(waitingStatus(kubeletReasonContainerCreating, ""), readySidecar()),
+			pod:  scheduledPod(waitingStatus(kubeletReasonContainerCreating, ""), readySidecarStatus()),
 			events: []corev1.Event{
 				containerEvent("pulling", containerNameMain, kubeletEventPulling, stepTestPulling, base),
 				containerEvent("started", stepTestOtherName, "Started", "Started container "+stepTestOtherName, base.Add(10*time.Second)),

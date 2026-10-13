@@ -31,10 +31,10 @@ func workspacePods(ctx context.Context, c client.Reader, workspace *workspacev1a
 	return podList.Items, nil
 }
 
-// runningWorkspacePod returns the workspace's running pod that is not being deleted, or errNoRunningPod.
+// workspaceRunningPod returns the workspace's running pod that is not being deleted, or errNoRunningPod.
 // Under the Recreate strategy the previous pod can still report Running while it is torn down, and a probe
-// or an idle check against it would answer for the pod on its way out.
-func runningWorkspacePod(ctx context.Context, c client.Reader, workspace *workspacev1alpha1.Workspace) (*corev1.Pod, error) {
+// or an idle check against it would report on the pod being torn down.
+func workspaceRunningPod(ctx context.Context, c client.Reader, workspace *workspacev1alpha1.Workspace) (*corev1.Pod, error) {
 	pods, err := workspacePods(ctx, c, workspace)
 	if err != nil {
 		return nil, err

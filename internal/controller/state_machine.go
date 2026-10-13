@@ -346,7 +346,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	}
 
 	// A container the kubelet cannot start as specified (ImagePullBackOff, CrashLoopBackOff, ...) is
-	// reported now rather than at the progress deadline.
+	// reported at once, not at the progress deadline.
 	var startStep *StartStep
 	if !deploymentReady {
 		var failure *StartFailure
