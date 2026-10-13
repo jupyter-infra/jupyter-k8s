@@ -386,7 +386,7 @@ var _ = Describe("Workspace Status", Ordered, func() {
 			reasons, degradedSeen := progressingReasonsUntilAvailable(runningWorkspace, statusTestNamespace)
 			for reason := range reasons {
 				Expect(reason).To(BeElementOf(
-					controller.ReasonResourcesNotReady, controller.ReasonComputeNotReady, controller.ReasonServiceNotReady,
+					controller.ReasonResourcesNotReady, controller.ReasonServiceNotReady,
 					controller.ReasonAccessNotReady, controller.ReasonWaitingForNode, controller.ReasonPullingImage,
 					controller.ReasonStartingContainer), "unexpected Progressing reason during a start")
 			}

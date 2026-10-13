@@ -86,44 +86,6 @@ var _ = Describe("StatusManager", func() {
 		})
 
 		Describe("UpdateStartingStatus", func() {
-			It("should set appropriate reason when compute not ready", func() {
-				readiness := WorkspaceRunningReadiness{
-					computeReady:         false,
-					serviceReady:         true,
-					accessResourcesReady: true,
-				}
-
-				snapshot := workspace.Status.DeepCopy()
-				err := statusManager.UpdateStartingStatus(ctx, workspace, readiness, snapshot)
-				Expect(err).NotTo(HaveOccurred())
-
-				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
-
-				// Verify exactly 4 conditions
-				Expect(workspace.Status.Conditions).To(HaveLen(5))
-
-				// Verify Available=False with ComputeNotReady reason
-				availableCond := findCondition(workspace.Status.Conditions, ConditionTypeAvailable)
-				Expect(availableCond).NotTo(BeNil())
-				Expect(availableCond.Status).To(Equal(metav1.ConditionFalse))
-				Expect(availableCond.Reason).To(Equal(ReasonComputeNotReady))
-
-				// Verify Progressing=True
-				progressingCond := findCondition(workspace.Status.Conditions, ConditionTypeProgressing)
-				Expect(progressingCond).NotTo(BeNil())
-				Expect(progressingCond.Status).To(Equal(metav1.ConditionTrue))
-
-				// Verify Degraded=False
-				degradedCond := findCondition(workspace.Status.Conditions, ConditionTypeDegraded)
-				Expect(degradedCond).NotTo(BeNil())
-				Expect(degradedCond.Status).To(Equal(metav1.ConditionFalse))
-
-				// Verify Stopped=False
-				stoppedCond := findCondition(workspace.Status.Conditions, ConditionTypeStopped)
-				Expect(stoppedCond).NotTo(BeNil())
-				Expect(stoppedCond.Status).To(Equal(metav1.ConditionFalse))
-			})
-
 			It("should carry the compute step as reason and message while compute is not ready", func() {
 				readiness := WorkspaceRunningReadiness{
 					computeReady:         false,
