@@ -43,6 +43,7 @@ const (
 	kubeletReasonErrImageNeverPull = "ErrImageNeverPull"
 	kubeletReasonCreateConfigError = "CreateContainerConfigError"
 	stepTestCreateErrorText        = "context deadline exceeded"
+	stepTestMultiAttach            = "Multi-Attach error for volume \"pvc-1\" Volume is already used by pod(s) old"
 	terminatedReasonError          = "Error"
 )
 
@@ -418,6 +419,15 @@ func TestPodStartStep(t *testing.T) {
 				podEvent("pulled", kubeletComponent, "Pulled", "Successfully pulled image in 42s", base.Add(42*time.Second)),
 			},
 			expected: StartStep{Reason: ReasonStartingContainer, Message: "Successfully pulled image in 42s"},
+		},
+		{
+			name: "a volume attach failure reported about the pod by another controller is the message",
+			pod:  scheduledPod(waitingStatus(kubeletReasonContainerCreating, "")),
+			events: []corev1.Event{
+				podEvent("scheduled", "default-scheduler", "Scheduled", "Successfully assigned default/pod to node-a", base),
+				podEvent("attach", "attachdetach-controller", "FailedAttachVolume", stepTestMultiAttach, base.Add(time.Second)),
+			},
+			expected: StartStep{Reason: ReasonStartingContainer, Message: stepTestMultiAttach},
 		},
 		{
 			name:     "a kubelet warning while the container is creating is the message",

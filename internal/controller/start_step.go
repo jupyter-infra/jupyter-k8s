@@ -354,8 +354,8 @@ func podScheduled(pod *corev1.Pod) bool {
 // podStartStep derives the step from the pod and the events recorded on it. Without a node, the message
 // is the newest event by first appearance, from the scheduler or an autoscaler such as Karpenter; the
 // PodScheduled condition's message is the fallback. With a node, the kubelet's waiting reason stays
-// ContainerCreating through a pull or a failed mount, so the message is the kubelet's newest event about
-// the pod or a container that is not ready yet; the waiting reason is the fallback.
+// ContainerCreating through a pull or a failed mount, so the message is the newest event about the pod
+// or the kubelet's about a container that is not ready yet; the waiting reason is the fallback.
 func podStartStep(pod *corev1.Pod, events []corev1.Event) StartStep {
 	if !podScheduled(pod) {
 		if event := newestEvent(events, nil); event != nil {
@@ -368,8 +368,8 @@ func podStartStep(pod *corev1.Pod, events []corev1.Event) StartStep {
 		}
 		return StartStep{Reason: ReasonWaitingForNode, Message: waitingForNodeMessage}
 	}
-	kubeletEvent := newestEvent(events, kubeletStartEvent(pod))
-	if kubeletEvent != nil && kubeletEvent.Reason == kubeletEventPulling {
+	kubeletEvent := newestEvent(events, startingPodEvent(pod))
+	if kubeletEvent != nil && isKubeletEvent(kubeletEvent) && kubeletEvent.Reason == kubeletEventPulling {
 		return StartStep{Reason: ReasonPullingImage, Message: kubeletEvent.Message}
 	}
 	// a create or start error the kubelet is retrying names the error; its Failed event only says "Error: ..."
@@ -405,19 +405,20 @@ func isKubeletEvent(event *corev1.Event) bool {
 // containerFieldPathPattern is the involvedObject.fieldPath the kubelet gives a container's events.
 var containerFieldPathPattern = regexp.MustCompile(`^spec\.(?:containers|initContainers|ephemeralContainers)\{(.+)\}$`)
 
-// kubeletStartEvent keeps the kubelet's events about the pod itself and about containers that are not
-// ready yet. A ready sidecar's Started event would otherwise outrank the main container's pull.
-func kubeletStartEvent(pod *corev1.Pod) func(*corev1.Event) bool {
+// startingPodEvent keeps the events about the pod itself from any component, such as the volume attach
+// controller's FailedAttachVolume, and the kubelet's events about containers that are not ready yet. A
+// ready sidecar's Started event would otherwise outrank the main container's pull.
+func startingPodEvent(pod *corev1.Pod) func(*corev1.Event) bool {
 	ready := map[string]bool{}
 	for _, status := range containerStatuses(pod) {
 		ready[status.Name] = status.Ready
 	}
 	return func(event *corev1.Event) bool {
-		if !isKubeletEvent(event) {
-			return false
-		}
 		match := containerFieldPathPattern.FindStringSubmatch(event.InvolvedObject.FieldPath)
-		return match == nil || !ready[match[1]]
+		if match == nil {
+			return event.InvolvedObject.FieldPath == ""
+		}
+		return isKubeletEvent(event) && !ready[match[1]]
 	}
 }
 
