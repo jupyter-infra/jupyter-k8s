@@ -645,6 +645,7 @@ func (sm *StateMachine) stopWorkspaceDueToIdle(ctx context.Context, workspace *w
 func (sm *StateMachine) ReconcileDeletion(ctx context.Context, workspace *workspacev1alpha1.Workspace) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 	logger.Info("Handling workspace deletion", "workspace", workspace.Name)
+	sm.resourceManager.ForgetStartEvents(workspace)
 
 	if !controllerutil.ContainsFinalizer(workspace, WorkspaceFinalizerName) {
 		logger.Info("No finalizer present, allowing deletion")
@@ -653,7 +654,6 @@ func (sm *StateMachine) ReconcileDeletion(ctx context.Context, workspace *worksp
 
 	// Update status to Deleting
 	snapshotStatus := workspace.Status.DeepCopy()
-	sm.resourceManager.ForgetStartEvents(workspace)
 	if err := sm.statusManager.UpdateDeletingStatus(ctx, workspace, snapshotStatus); err != nil {
 		logger.Error(err, "Failed to update deleting status")
 		return ctrl.Result{}, err

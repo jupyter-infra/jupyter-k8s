@@ -32,6 +32,8 @@ const (
 	stepTestSchedulingMessage = "0/1 nodes are available: 1 Insufficient nvidia.com/gpu."
 	stepTestNominated         = "Pod should schedule on: nodeclaim/workspace-gpu-abc12"
 	stepTestNotReadyTaint     = "0/2 nodes are available: 1 node(s) had untolerated taint {node.kubernetes.io/not-ready: }."
+	stepTestBackOffText       = "Back-off pulling image"
+	stepTestMissingImage      = "example.com/missing:1"
 	stepTestPulling           = "Pulling image \"jupyter/base-notebook:latest\""
 	stepTestLimits            = "Failed to schedule pod, all available instance types exceed limits for nodepool \"gpu\""
 	stepTestMount             = "MountVolume.SetUp failed for volume \"config\" : configmap \"settings\" not found"
@@ -469,6 +471,12 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 	older.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Minute))
 	newer := labeled(unscheduledPod(stepTestSchedulingMessage))
 	newer.CreationTimestamp = metav1.NewTime(time.Now())
+	sameSecond := metav1.NewTime(time.Now().Truncate(time.Second))
+	twinA := labeled(unscheduledPod("verdict of pod a"))
+	twinA.Name, twinA.UID, twinA.CreationTimestamp = "twin-a", "pod-uid-twin-a", sameSecond
+	twinB := labeled(unscheduledPod("verdict of pod b"))
+	twinB.Name, twinB.UID, twinB.CreationTimestamp = "twin-b", "pod-uid-twin-b", sameSecond
+	reportedBackOff := &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: stepTestBackOffText}
 
 	oversized := podEvent("oversized", "karpenter", "Nominated", strings.Repeat("x", 40000), time.Now())
 
@@ -477,12 +485,18 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 		objects      []client.Object
 		withReader   bool
 		listErr      error
+		reported     *StartFailure
 		expectStep   *StartStep
 		expectFailed *StartFailure
 	}{
 		{name: "no pod yet", withReader: true},
 		{name: "a failed pod list reports nothing", withReader: true, listErr: errInjected,
 			objects: []client.Object{labeled(unscheduledPod(stepTestSchedulingMessage))}},
+		{name: "a failed pod list keeps the reported failure", withReader: true, listErr: errInjected,
+			objects: []client.Object{labeled(unscheduledPod(stepTestSchedulingMessage))}, reported: reportedBackOff, expectFailed: reportedBackOff},
+		{name: "pods created in the same second resolve by name", withReader: true,
+			objects:    []client.Object{twinA, twinB},
+			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: "verdict of pod b"}},
 		{name: "an oversized event message is cut", withReader: true,
 			objects:    []client.Object{labeled(unscheduledPod(stepTestSchedulingMessage)), &oversized},
 			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: truncateMessage(oversized.Message, maxCopiedMessageBytes)}},
@@ -498,8 +512,8 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedulingMessage}},
 		{name: "a pod of another workspace is ignored", withReader: true, objects: []client.Object{unscheduledPod(stepTestSchedulingMessage)}},
 		{name: "failure is reported before any step", withReader: true,
-			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, "Back-off pulling image")))},
-			expectFailed: &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: "Back-off pulling image"}},
+			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, stepTestBackOffText)))},
+			expectFailed: &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: stepTestBackOffText}},
 		{name: "waiting for a node with the autoscaler's message", withReader: true,
 			objects:    []client.Object{labeled(unscheduledPod(stepTestSchedulingMessage)), &nominated},
 			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: stepTestNominated}},
@@ -523,7 +537,14 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 			if tt.withReader {
 				rm.SetEventReader(c)
 			}
-			step, failure := rm.WorkspaceStartStep(context.Background(), workspace)
+			ws := workspace.DeepCopy()
+			if tt.reported != nil {
+				ws.Status.Conditions = []metav1.Condition{
+					{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: tt.reported.Reason, Message: tt.reported.Message},
+					{Type: ConditionTypeProgressing, Status: metav1.ConditionFalse, Reason: tt.reported.Reason, Message: tt.reported.Message},
+				}
+			}
+			step, failure := rm.WorkspaceStartStep(context.Background(), ws)
 			assert.Equal(t, tt.expectStep, step)
 			assert.Equal(t, tt.expectFailed, failure)
 		})
@@ -640,29 +661,39 @@ func TestResourceManager_WorkspaceStartStep_CrashLoop(t *testing.T) {
 }
 
 func TestResourceManager_WorkspaceStartStep_HoldsReportedBackOffWhileRetrying(t *testing.T) {
-	const backOff = "Back-off pulling image \"example.com/missing:1\""
+	backOff := stepTestBackOffText + " \"" + stepTestMissingImage + "\""
 	sidecarRetrying := waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")
 	sidecarRetrying.Name = stepTestOtherName
 	tests := []struct {
 		name     string
+		image    string
+		reported string
 		statuses []corev1.ContainerStatus
 		held     bool
 	}{
 		{name: "the reported container retrying its pull holds the back-off",
+			image: stepTestMissingImage, reported: backOff,
 			statuses: []corev1.ContainerStatus{waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")}, held: true},
 		{name: "a sidecar retrying its own image does not hold another container's resolved back-off",
+			image: stepTestMissingImage, reported: backOff,
 			statuses: []corev1.ContainerStatus{runningStatus(), sidecarRetrying}, held: false},
+		{name: "an untagged image is quoted with the default tag the kubelet applies",
+			image: "example.com/missing", reported: "Back-off pulling image \"example.com/missing:latest\"",
+			statuses: []corev1.ContainerStatus{waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")}, held: true},
+		{name: "a runtime reporting RegistryUnavailable for the attempt holds the back-off",
+			image: stepTestMissingImage, reported: backOff,
+			statuses: []corev1.ContainerStatus{waitingStatus(kubeletReasonRegistryUnavailable, "registry timed out")}, held: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
 			workspace.Status.Conditions = []metav1.Condition{
-				{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: kubeletReasonImagePullBackOff, Message: backOff},
-				{Type: ConditionTypeProgressing, Status: metav1.ConditionFalse, Reason: kubeletReasonImagePullBackOff, Message: backOff},
+				{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: kubeletReasonImagePullBackOff, Message: tt.reported},
+				{Type: ConditionTypeProgressing, Status: metav1.ConditionFalse, Reason: kubeletReasonImagePullBackOff, Message: tt.reported},
 			}
 			pod := scheduledPod(tt.statuses...)
 			pod.Spec.Containers = []corev1.Container{
-				{Name: containerNameMain, Image: "example.com/missing:1"}, {Name: stepTestOtherName, Image: "example.com/sidecar:1"},
+				{Name: containerNameMain, Image: tt.image}, {Name: stepTestOtherName, Image: "example.com/sidecar:1"},
 			}
 			pod.Labels = GenerateLabels(testWorkspaceName)
 			c := eventIndexedClient(t, pod)
@@ -673,7 +704,7 @@ func TestResourceManager_WorkspaceStartStep_HoldsReportedBackOffWhileRetrying(t 
 			step, failure := rm.WorkspaceStartStep(context.Background(), workspace)
 			if tt.held {
 				assert.Nil(t, step)
-				assert.Equal(t, &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: backOff}, failure)
+				assert.Equal(t, &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: tt.reported}, failure)
 				return
 			}
 			assert.Nil(t, failure)
@@ -788,7 +819,7 @@ func TestPrefixReason(t *testing.T) {
 	tests := []struct {
 		name, reason, message, expected string
 	}{
-		{name: "reason and message", reason: kubeletReasonImagePullBackOff, message: "Back-off pulling image",
+		{name: "reason and message", reason: kubeletReasonImagePullBackOff, message: stepTestBackOffText,
 			expected: kubeletReasonImagePullBackOff + ": Back-off pulling image"},
 		{name: "no message", reason: kubeletReasonContainerCreating, message: "", expected: kubeletReasonContainerCreating},
 		{name: "message that repeats the reason", reason: kubeletReasonCrashLoopBackOff,
@@ -822,9 +853,9 @@ func TestWaitingContainerMessage(t *testing.T) {
 			name: "scheduled pod reports the waiting container's reason and message",
 			status: corev1.PodStatus{
 				Conditions:        []corev1.PodCondition{scheduled},
-				ContainerStatuses: []corev1.ContainerStatus{waiting("workspace", kubeletReasonImagePullBackOff, `Back-off pulling image "example.com/missing:1"`)},
+				ContainerStatuses: []corev1.ContainerStatus{waiting("workspace", kubeletReasonImagePullBackOff, `Back-off pulling image stepTestMissingImage`)},
 			},
-			expected: `ImagePullBackOff: Back-off pulling image "example.com/missing:1"`,
+			expected: `ImagePullBackOff: Back-off pulling image stepTestMissingImage`,
 		},
 		{
 			name: "waiting container without a message reports the reason alone",

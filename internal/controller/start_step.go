@@ -37,12 +37,16 @@ const (
 	startEventsBurst     = 4
 
 	// Vocabulary of core Kubernetes components; k8s.io/kubernetes/pkg/kubelet is not importable.
-	kubeletComponent              = "kubelet"
-	kubeletEventPulling           = "Pulling"
-	kubeletReasonErrImagePull     = "ErrImagePull"
-	kubeletReasonImagePullBackOff = "ImagePullBackOff"
-	kubeletReasonInvalidImageName = "InvalidImageName"
-	kubeletReasonCrashLoopBackOff = "CrashLoopBackOff"
+	kubeletComponent          = "kubelet"
+	kubeletEventPulling       = "Pulling"
+	kubeletReasonErrImagePull = "ErrImagePull"
+	// kubeletReasonRegistryUnavailable and kubeletReasonSignatureValidationFailed are the attempt reasons a
+	// runtime following the CRI error convention makes the kubelet report instead of ErrImagePull.
+	kubeletReasonRegistryUnavailable       = "RegistryUnavailable"
+	kubeletReasonSignatureValidationFailed = "SignatureValidationFailed"
+	kubeletReasonImagePullBackOff          = "ImagePullBackOff"
+	kubeletReasonInvalidImageName          = "InvalidImageName"
+	kubeletReasonCrashLoopBackOff          = "CrashLoopBackOff"
 
 	// Fallback messages when neither the pod nor its events carry one.
 	waitingForNodeMessage    = "Waiting for a node to run the pod"
@@ -180,21 +184,37 @@ func crashLoopFailure(containerStatus *corev1.ContainerStatus) *StartFailure {
 	return startFailure(kubeletReasonCrashLoopBackOff, message)
 }
 
-// pullRetrying reports whether the container whose back-off the workspace reports is in a pull attempt,
-// which the kubelet reports as ErrImagePull for a few seconds each time its back-off expires. The back-off
-// message quotes the container's image, which tells that container from a sidecar retrying its own pull.
+// pullAttemptReasons are the waiting reasons of a failed pull attempt, which the kubelet reports for a few
+// seconds each time its back-off expires.
+var pullAttemptReasons = map[string]bool{
+	kubeletReasonErrImagePull: true, kubeletReasonRegistryUnavailable: true, kubeletReasonSignatureValidationFailed: true,
+}
+
+// pullRetrying reports whether the container whose ImagePullBackOff the workspace reports is in a pull
+// attempt. The reported message quotes the image with the default tag the kubelet applies, so a sidecar
+// retrying another image does not hold the back-off.
 func pullRetrying(pod *corev1.Pod, reported *StartFailure) bool {
 	for _, containerStatus := range containerStatuses(pod) {
 		waiting := containerStatus.State.Waiting
-		if waiting == nil || waiting.Reason != kubeletReasonErrImagePull {
+		if waiting == nil || !pullAttemptReasons[waiting.Reason] {
 			continue
 		}
 		if image, found := containerImage(pod, containerStatus.Name); found &&
-			strings.Contains(reported.Message, strconv.Quote(image)) {
+			strings.Contains(reported.Message, strconv.Quote(imageWithDefaultTag(image))) {
 			return true
 		}
 	}
 	return false
+}
+
+// imageWithDefaultTag appends the kubelet's default tag to an image reference that carries no tag or digest,
+// the form the kubelet quotes in its messages.
+func imageWithDefaultTag(image string) string {
+	lastSegment := image[strings.LastIndex(image, "/")+1:]
+	if strings.Contains(image, "@") || strings.Contains(lastSegment, ":") {
+		return image
+	}
+	return image + ":latest"
 }
 
 // containerImage returns the image the pod spec gives the named container, init containers included.
@@ -358,7 +378,12 @@ func (rm *ResourceManager) WorkspaceStartStep(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
 ) (*StartStep, *StartFailure) {
-	pod := rm.workspaceStartingPod(ctx, workspace)
+	pod, err := rm.workspaceStartingPod(ctx, workspace)
+	if err != nil {
+		// a failed list says nothing new about the pod; what the workspace already reports stands
+		logf.FromContext(ctx).Error(err, "Failed to list workspace pods for the start step")
+		return nil, reportedStartFailure(workspace)
+	}
 	if pod == nil {
 		return nil, nil
 	}
@@ -402,12 +427,12 @@ func (rm *ResourceManager) ForgetStartEvents(workspace *workspacev1alpha1.Worksp
 // workspaceStartingPod returns the newest live pod of the workspace, or nil. Pods being deleted and pods
 // that have terminated are skipped: under the Recreate strategy the previous pod can still be
 // terminating while the next one is pending, and an evicted pod stays in phase Failed next to its
-// replacement. The cached list has no stable order, so the newest creation time decides.
-func (rm *ResourceManager) workspaceStartingPod(ctx context.Context, workspace *workspacev1alpha1.Workspace) *corev1.Pod {
+// replacement. The cached list has no stable order, so the newest creation time decides, and the name
+// within one second.
+func (rm *ResourceManager) workspaceStartingPod(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.Pod, error) {
 	pods, err := workspacePods(ctx, rm.client, workspace)
 	if err != nil {
-		logf.FromContext(ctx).Error(err, "Failed to list workspace pods for the start step")
-		return nil
+		return nil, err
 	}
 	var newest *corev1.Pod
 	for i := range pods {
@@ -415,11 +440,12 @@ func (rm *ResourceManager) workspaceStartingPod(ctx context.Context, workspace *
 		if pod.DeletionTimestamp != nil || pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
 			continue
 		}
-		if newest == nil || pod.CreationTimestamp.After(newest.CreationTimestamp.Time) {
+		if newest == nil || pod.CreationTimestamp.After(newest.CreationTimestamp.Time) ||
+			(pod.CreationTimestamp.Equal(&newest.CreationTimestamp) && pod.Name > newest.Name) {
 			newest = pod
 		}
 	}
-	return newest
+	return newest, nil
 }
 
 // startEvents returns the events recorded on the pod, read through the event reader at most once per
