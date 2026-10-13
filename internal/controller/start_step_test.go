@@ -58,18 +58,19 @@ func readySidecar() corev1.ContainerStatus {
 // stepTestClock is the fixed time the start-step tests run at.
 var stepTestClock = time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 
-// restartedStatus is a container the kubelet restarted twice, the last time 30 seconds ago, after it
-// exited with exitCode.
+// restartedStatus is a container the kubelet restarted twice, the last time 30 seconds ago, after a run
+// of five seconds that exited with exitCode.
 func restartedStatus(ready bool, exitCode int32) corev1.ContainerStatus {
 	reason := terminatedReasonError
 	if exitCode == 0 {
 		reason = "Completed"
 	}
+	finished := stepTestClock.Add(-30 * time.Second)
 	return corev1.ContainerStatus{
 		Name: containerNameMain, Ready: ready, RestartCount: 2,
 		State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
 		LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
-			ExitCode: exitCode, Reason: reason, FinishedAt: metav1.NewTime(stepTestClock.Add(-30 * time.Second)),
+			ExitCode: exitCode, Reason: reason, StartedAt: metav1.NewTime(finished.Add(-5 * time.Second)), FinishedAt: metav1.NewTime(finished),
 		}},
 	}
 }
@@ -531,11 +532,12 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 
 func TestCrashLoopingContainer(t *testing.T) {
 	running := corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}
-	exit := func(at time.Time) corev1.ContainerState {
+	exitAfter := func(run time.Duration, at time.Time) corev1.ContainerState {
 		return corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
-			ExitCode: 1, Reason: terminatedReasonError, FinishedAt: metav1.NewTime(at),
+			ExitCode: 1, Reason: terminatedReasonError, StartedAt: metav1.NewTime(at.Add(-run)), FinishedAt: metav1.NewTime(at),
 		}}
 	}
+	exit := func(at time.Time) corev1.ContainerState { return exitAfter(5*time.Second, at) }
 	recent := stepTestClock.Add(-30 * time.Second)
 	old := stepTestClock.Add(-time.Hour)
 	tests := []struct {
@@ -550,14 +552,14 @@ func TestCrashLoopingContainer(t *testing.T) {
 			status: corev1.ContainerStatus{Name: containerNameMain, RestartCount: 1, State: exit(recent), LastTerminationState: exit(old)}},
 		{name: "two restarts and running", crashLoop: true,
 			status: corev1.ContainerStatus{Name: containerNameMain, RestartCount: 2, State: running, LastTerminationState: exit(recent)}},
-		{name: "two restarts and an old exit",
-			status: corev1.ContainerStatus{Name: containerNameMain, RestartCount: 2, State: running, LastTerminationState: exit(old)}},
+		{name: "two restarts after a run of an hour",
+			status: corev1.ContainerStatus{Name: containerNameMain, RestartCount: 2, State: running, LastTerminationState: exitAfter(time.Hour, recent)}},
 		{name: "ready after two restarts",
 			status: corev1.ContainerStatus{Name: containerNameMain, Ready: true, RestartCount: 2, State: running, LastTerminationState: exit(recent)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			crashLooping := crashLoopingContainer(scheduledPod(tt.status), stepTestClock)
+			crashLooping := crashLoopingContainer(scheduledPod(tt.status))
 			if tt.crashLoop {
 				assert.Equal(t, &tt.status, crashLooping)
 			} else {
@@ -569,13 +571,14 @@ func TestCrashLoopingContainer(t *testing.T) {
 
 func TestResourceManager_WorkspaceStartStep_CrashLoop(t *testing.T) {
 	const recordedExit = "container main exited with code 1 (Error), restart count 2"
-	longAgo := restartedStatus(false, 137)
-	longAgo.LastTerminationState.Terminated.Reason = "OOMKilled"
-	longAgo.LastTerminationState.Terminated.FinishedAt = metav1.NewTime(stepTestClock.Add(-time.Hour))
+	longRun := restartedStatus(false, 137)
+	longRun.LastTerminationState.Terminated.Reason = "OOMKilled"
+	longRun.LastTerminationState.Terminated.StartedAt = metav1.NewTime(stepTestClock.Add(-time.Hour))
 	terminatedAgain := restartedStatus(false, 1)
 	terminatedAgain.RestartCount = 1
 	terminatedAgain.State = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
-		ExitCode: 1, Reason: terminatedReasonError, FinishedAt: metav1.NewTime(stepTestClock.Add(-10 * time.Second)),
+		ExitCode: 1, Reason: terminatedReasonError,
+		StartedAt: metav1.NewTime(stepTestClock.Add(-15 * time.Second)), FinishedAt: metav1.NewTime(stepTestClock.Add(-10 * time.Second)),
 	}}
 	onceRunning := restartedStatus(false, 1)
 	onceRunning.RestartCount = 1
@@ -610,7 +613,7 @@ func TestResourceManager_WorkspaceStartStep_CrashLoop(t *testing.T) {
 				"container main exited with code 1 ("+strings.Repeat("x", 2*maxCopiedMessageBytes)+"), restart count 2",
 				maxCopiedMessageBytes)}},
 		{name: "a container running again after one exit is a step, not a failure", status: onceRunning},
-		{name: "a container that restarted an hour ago and is not ready is a step, not a failure", status: longAgo},
+		{name: "a container that ran an hour before it exited is a step, not a failure", status: longRun},
 		{name: "a container on its first run is a step, not a failure", status: runningStatus()},
 		{name: "a ready container is a step, not a failure", status: restartedStatus(true, 1)},
 	}

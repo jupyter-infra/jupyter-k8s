@@ -1001,7 +1001,8 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 					ContainerStatuses: []corev1.ContainerStatus{{Name: containerNameMain, RestartCount: restartCount,
 						State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
 						LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
-							ExitCode: 1, Reason: terminatedReasonError, FinishedAt: metav1.NewTime(finishedAt),
+							ExitCode: 1, Reason: terminatedReasonError,
+							StartedAt: metav1.NewTime(finishedAt.Add(-5 * time.Second)), FinishedAt: metav1.NewTime(finishedAt),
 						}},
 					}},
 				}
