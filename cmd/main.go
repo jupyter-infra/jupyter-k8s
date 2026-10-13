@@ -37,6 +37,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -290,16 +291,25 @@ func main() {
 		// LeaderElectionReleaseOnCancel: true,
 	}
 
+	// Every pod reader (the idle checker, the integration prober, the start step and the optional pod
+	// watch) wants workspace pods only, so the cache holds just the pods that carry the workspace label
+	// instead of every pod in the cluster.
+	workspacePodSelector, err := labels.Parse(controller.LabelWorkspaceName)
+	if err != nil {
+		setupLog.Error(err, "unable to build the workspace pod selector")
+		os.Exit(1)
+	}
+	mgrOptions.Cache = cache.Options{
+		ByObject: map[client.Object]cache.ByObject{
+			&corev1.Pod{}: {Label: workspacePodSelector},
+		},
+	}
 	// Scope Secret watching to the controller's namespace to avoid requiring
 	// cluster-wide secret list/watch permissions (needed for JWT secret informer).
 	if podNamespace := os.Getenv("CONTROLLER_POD_NAMESPACE"); podNamespace != "" {
-		mgrOptions.Cache = cache.Options{
-			ByObject: map[client.Object]cache.ByObject{
-				&corev1.Secret{}: {
-					Namespaces: map[string]cache.Config{
-						podNamespace: {},
-					},
-				},
+		mgrOptions.Cache.ByObject[&corev1.Secret{}] = cache.ByObject{
+			Namespaces: map[string]cache.Config{
+				podNamespace: {},
 			},
 		}
 	}
