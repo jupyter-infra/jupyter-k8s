@@ -852,6 +852,40 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonImagePullBackOff, backOffMessage)))
 			})
 
+			It("should hold a create error as a step until the kubelet has failed twice", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonCreateContainerError, stepTestCreateErrorText))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				now := time.Now()
+				clock := now
+				sm.resourceManager.now = func() time.Time { return clock }
+				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				expectStartStep(workspace, ReasonStartingContainer, kubeletReasonCreateContainerError+": "+stepTestCreateErrorText)
+				Expect(recorder.Events).To(BeEmpty())
+
+				// the kubelet's second failed attempt raises its Failed event to a count of two
+				failed := createPodEvent(pod, "failed", kubeletComponent, kubeletEventFailed, "Error: "+stepTestCreateErrorText, now)
+				defer func() { _ = k8sClient.Delete(ctx, failed) }()
+				failed.InvolvedObject.FieldPath = "spec.containers{" + containerNameMain + "}"
+				failed.Count = 2
+				Expect(k8sClient.Update(ctx, failed)).To(Succeed())
+				clock = now.Add(2 * startEventsInterval)
+				result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(FailedStartRequeueDelay))
+				expectStartFailed(workspace, kubeletReasonCreateContainerError, stepTestCreateErrorText)
+				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonCreateContainerError, stepTestCreateErrorText)))
+			})
+
 			It("should record the event only once the status write has succeeded", func() {
 				workspace := newWorkspace()
 				dep := createNotReadyDeployment(workspace)

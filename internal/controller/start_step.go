@@ -51,6 +51,11 @@ const (
 	kubeletReasonImagePullBackOff          = "ImagePullBackOff"
 	kubeletReasonInvalidImageName          = "InvalidImageName"
 	kubeletReasonCrashLoopBackOff          = "CrashLoopBackOff"
+	kubeletReasonCreateContainerError      = "CreateContainerError"
+	kubeletReasonRunContainerError         = "RunContainerError"
+	// kubeletEventFailed is the reason of the kubelet's Warning event for a pull, create or start attempt
+	// that did not succeed.
+	kubeletEventFailed = "Failed"
 
 	// Fallback messages when neither the pod nor its events carry one.
 	waitingForNodeMessage    = "Waiting for a node to run the pod"
@@ -111,7 +116,8 @@ func prefixReason(reason, message string) string {
 
 // isDefinitiveStartFailureReason reports whether reason is one the kubelet uses for a container it cannot
 // start as specified: any reason starting with Err or ending in Error or BackOff, the rule Argo CD's health
-// check applies, plus InvalidImageName. ErrImagePull is one failed pull attempt and stays a step.
+// check applies, plus InvalidImageName. ErrImagePull is one failed pull attempt and stays a step;
+// retriedStartReasons count only once the kubelet has failed twice (definitiveStartFailure).
 func isDefinitiveStartFailureReason(reason string) bool {
 	// the operator's own Degraded reasons end in Error as well
 	if reason == ReasonDeploymentError || reason == ReasonServiceError || reason == kubeletReasonErrImagePull {
@@ -244,11 +250,12 @@ func containerStatuses(pod *corev1.Pod) []corev1.ContainerStatus {
 }
 
 // waitingContainerMessage returns the reason and message of the first waiting container, init
-// containers first (e.g. "ImagePullBackOff: Back-off pulling image ..."), or "".
-func waitingContainerMessage(pod *corev1.Pod) string {
+// containers first (e.g. "ImagePullBackOff: Back-off pulling image ..."), or "". With reasons set, only a
+// container waiting on one of them counts.
+func waitingContainerMessage(pod *corev1.Pod, reasons map[string]bool) string {
 	for _, containerStatus := range containerStatuses(pod) {
 		waiting := containerStatus.State.Waiting
-		if waiting == nil || waiting.Reason == "" {
+		if waiting == nil || waiting.Reason == "" || (reasons != nil && !reasons[waiting.Reason]) {
 			continue
 		}
 		return prefixReason(waiting.Reason, waiting.Message)
@@ -256,14 +263,51 @@ func waitingContainerMessage(pod *corev1.Pod) string {
 	return ""
 }
 
+// retriedStartReasons are the waiting reasons of a create or start attempt the kubelet retries after its
+// back-off: a loaded node reports them once and clears them, so they count as a failure only once the
+// kubelet has failed twice for the container, which its Failed events record.
+var retriedStartReasons = map[string]bool{kubeletReasonCreateContainerError: true, kubeletReasonRunContainerError: true}
+
+// failedAttempts counts the kubelet's Failed events about the named container, each repeated event
+// standing for its count.
+func failedAttempts(events []corev1.Event, container string) int {
+	attempts := 0
+	for i := range events {
+		event := &events[i]
+		if event.Reason != kubeletEventFailed || !isKubeletEvent(event) {
+			continue
+		}
+		if match := containerFieldPathPattern.FindStringSubmatch(event.InvolvedObject.FieldPath); match != nil && match[1] == container {
+			attempts += eventCount(event)
+		}
+	}
+	return attempts
+}
+
+// eventCount returns how many times an event's text was recorded: the series count of an events/v1
+// event, the count of a core/v1 one, and one for an event that carries neither.
+func eventCount(event *corev1.Event) int {
+	if event.Series != nil && event.Series.Count > 0 {
+		return int(event.Series.Count)
+	}
+	if event.Count > 0 {
+		return int(event.Count)
+	}
+	return 1
+}
+
 // definitiveStartFailure returns the failure of the first container, init containers first, that the
-// kubelet reports as unable to start, or nil.
-func definitiveStartFailure(pod *corev1.Pod) *StartFailure {
+// kubelet reports as unable to start, or nil. A retried create or start error needs two failed attempts
+// among the pod's events.
+func definitiveStartFailure(pod *corev1.Pod, events []corev1.Event) *StartFailure {
 	statuses := containerStatuses(pod)
 	for i := range statuses {
 		containerStatus := &statuses[i]
 		waiting := containerStatus.State.Waiting
 		if waiting == nil || !isDefinitiveStartFailureReason(waiting.Reason) {
+			continue
+		}
+		if retriedStartReasons[waiting.Reason] && failedAttempts(events, containerStatus.Name) < 2 {
 			continue
 		}
 		if waiting.Reason == kubeletReasonCrashLoopBackOff {
@@ -312,10 +356,14 @@ func podStartStep(pod *corev1.Pod, events []corev1.Event) StartStep {
 	if kubeletEvent != nil && kubeletEvent.Reason == kubeletEventPulling {
 		return StartStep{Reason: ReasonPullingImage, Message: kubeletEvent.Message}
 	}
+	// a create or start error the kubelet is retrying names the error; its Failed event only says "Error: ..."
+	if message := waitingContainerMessage(pod, retriedStartReasons); message != "" {
+		return StartStep{Reason: ReasonStartingContainer, Message: message}
+	}
 	if kubeletEvent != nil && kubeletEvent.Message != "" {
 		return StartStep{Reason: ReasonStartingContainer, Message: kubeletEvent.Message}
 	}
-	if message := waitingContainerMessage(pod); message != "" {
+	if message := waitingContainerMessage(pod, nil); message != "" {
 		return StartStep{Reason: ReasonStartingContainer, Message: message}
 	}
 	return StartStep{Reason: ReasonStartingContainer, Message: startingContainerMessage}
@@ -394,7 +442,8 @@ func EventInvolvedObjectUID(obj client.Object) []string {
 
 // WorkspaceStartStep reports what the workspace's starting pod is doing: a failure the kubelet
 // recorded as definitive or a crash loop read from a restarted container, if any, otherwise the step
-// it is in with the newest relevant message. Both are nil while no pod exists yet.
+// it is in with the newest relevant message. Both are nil while no pod exists yet. The pod's events are
+// read once for both verdicts.
 func (rm *ResourceManager) WorkspaceStartStep(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
@@ -408,7 +457,8 @@ func (rm *ResourceManager) WorkspaceStartStep(
 	if pod == nil {
 		return nil, nil
 	}
-	if failure := definitiveStartFailure(pod); failure != nil {
+	events := rm.startEvents(ctx, workspace, pod)
+	if failure := definitiveStartFailure(pod, events); failure != nil {
 		return nil, failure
 	}
 	if crashLooping := crashLoopingContainer(pod, rm.now()); crashLooping != nil {
@@ -419,7 +469,7 @@ func (rm *ResourceManager) WorkspaceStartStep(
 		reported.Reason == kubeletReasonImagePullBackOff && pullRetrying(pod, reported) {
 		return nil, reported
 	}
-	step := podStartStep(pod, rm.startEvents(ctx, workspace, pod))
+	step := podStartStep(pod, events)
 	return &step, nil
 }
 

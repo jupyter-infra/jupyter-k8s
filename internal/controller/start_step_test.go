@@ -41,8 +41,8 @@ const (
 	eventReasonFailedScheduling    = "FailedScheduling"
 	kubeletReasonContainerCreating = "ContainerCreating"
 	kubeletReasonErrImageNeverPull = "ErrImageNeverPull"
-	kubeletReasonRunContainerError = "RunContainerError"
 	kubeletReasonCreateConfigError = "CreateContainerConfigError"
+	stepTestCreateErrorText        = "context deadline exceeded"
 	terminatedReasonError          = "Error"
 )
 
@@ -139,9 +139,17 @@ func reportedEvent(name, component, reason, message string, at time.Time) corev1
 }
 
 func TestDefinitiveStartFailure(t *testing.T) {
+	now := stepTestClock
+	createError := scheduledPod(waitingStatus(kubeletReasonCreateContainerError, stepTestCreateErrorText))
+	failedAttempt := func(name string, count int32) corev1.Event {
+		event := containerEvent(name, containerNameMain, kubeletEventFailed, "Error: "+stepTestCreateErrorText, now)
+		event.Count = count
+		return event
+	}
 	tests := []struct {
 		name     string
 		pod      *corev1.Pod
+		events   []corev1.Event
 		expected *StartFailure
 	}{
 		{name: "no container statuses", pod: scheduledPod()},
@@ -157,7 +165,38 @@ func TestDefinitiveStartFailure(t *testing.T) {
 			expected: &StartFailure{Reason: kubeletReasonCreateConfigError, Message: "secret \"s\" not found"}},
 		{name: "image absent under pull policy Never", pod: scheduledPod(waitingStatus(kubeletReasonErrImageNeverPull, "Container image \"x:1\" is not present with pull policy of Never")),
 			expected: &StartFailure{Reason: kubeletReasonErrImageNeverPull, Message: "Container image \"x:1\" is not present with pull policy of Never"}},
-		{name: "any kubelet error reason counts", pod: scheduledPod(waitingStatus(kubeletReasonRunContainerError, "failed to start container")),
+		{name: "a create error with no failed attempt recorded is not yet a failure", pod: createError},
+		{name: "a create error after one failed attempt is not yet a failure", pod: createError,
+			events: []corev1.Event{failedAttempt("f1", 1)}},
+		{name: "a create error the kubelet failed twice is a failure", pod: createError,
+			events:   []corev1.Event{failedAttempt("f1", 2)},
+			expected: &StartFailure{Reason: kubeletReasonCreateContainerError, Message: stepTestCreateErrorText}},
+		{name: "two failed attempts recorded as separate events count together", pod: createError,
+			events:   []corev1.Event{failedAttempt("f1", 1), failedAttempt("f2", 0)},
+			expected: &StartFailure{Reason: kubeletReasonCreateContainerError, Message: stepTestCreateErrorText}},
+		{name: "a repeat recorded as an events/v1 series counts", pod: createError,
+			events: func() []corev1.Event {
+				event := failedAttempt("f1", 0)
+				event.Series = &corev1.EventSeries{Count: 2}
+				return []corev1.Event{event}
+			}(),
+			expected: &StartFailure{Reason: kubeletReasonCreateContainerError, Message: stepTestCreateErrorText}},
+		{name: "failed attempts of another container do not count", pod: createError,
+			events: func() []corev1.Event {
+				event := failedAttempt("f1", 2)
+				event.InvolvedObject.FieldPath = "spec.containers{sidecar}"
+				return []corev1.Event{event}
+			}()},
+		{name: "a failed attempt recorded by another component does not count", pod: createError,
+			events: func() []corev1.Event {
+				event := failedAttempt("f1", 2)
+				event.Source.Component = "karpenter"
+				return []corev1.Event{event}
+			}()},
+		{name: "a run error follows the same rule", pod: scheduledPod(waitingStatus(kubeletReasonRunContainerError, "failed to start container")),
+			events: []corev1.Event{failedAttempt("f1", 1)}},
+		{name: "a run error the kubelet failed twice is a failure", pod: scheduledPod(waitingStatus(kubeletReasonRunContainerError, "failed to start container")),
+			events:   []corev1.Event{failedAttempt("f1", 2)},
 			expected: &StartFailure{Reason: kubeletReasonRunContainerError, Message: "failed to start container"}},
 		{name: "a reason the CRD would reject is guarded", pod: scheduledPod(waitingStatus("Err/ImagePull", "not found")),
 			expected: &StartFailure{Reason: ReasonContainerStartFailed, Message: "Err/ImagePull: not found"}},
@@ -191,7 +230,7 @@ func TestDefinitiveStartFailure(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, definitiveStartFailure(tt.pod))
+			assert.Equal(t, tt.expected, definitiveStartFailure(tt.pod, tt.events))
 		})
 	}
 }
@@ -281,6 +320,12 @@ func TestPodStartStep(t *testing.T) {
 			name:     "unscheduled pod without verdict or events",
 			pod:      unscheduledPod(""),
 			expected: StartStep{Reason: ReasonWaitingForNode, Message: waitingForNodeMessage},
+		},
+		{
+			name:     "a create error the kubelet is retrying is a step named after the error, not its Failed event",
+			pod:      scheduledPod(waitingStatus(kubeletReasonCreateContainerError, stepTestCreateErrorText)),
+			events:   []corev1.Event{containerEvent("failed", containerNameMain, kubeletEventFailed, "Error: "+stepTestCreateErrorText, base)},
+			expected: StartStep{Reason: ReasonStartingContainer, Message: kubeletReasonCreateContainerError + ": " + stepTestCreateErrorText},
 		},
 		{
 			name: "a verdict the scheduler keeps repeating counts from its first appearance, so the later nomination wins",
@@ -475,6 +520,10 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 	twinB := labeled(unscheduledPod("verdict of pod b"))
 	twinB.Name, twinB.UID, twinB.CreationTimestamp = "twin-b", "pod-uid-twin-b", sameSecond
 	reportedBackOff := &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: stepTestBackOffText}
+	failedOnce := containerEvent("failed-once", containerNameMain, kubeletEventFailed, "Error: "+stepTestCreateErrorText, time.Now())
+	failedOnce.Count = 1
+	failedTwice := containerEvent("failed-twice", containerNameMain, kubeletEventFailed, "Error: "+stepTestCreateErrorText, time.Now())
+	failedTwice.Count = 2
 
 	tests := []struct {
 		name         string
@@ -504,6 +553,12 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 		{name: "failure is reported before any step", withReader: true,
 			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, stepTestBackOffText)))},
 			expectFailed: &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: stepTestBackOffText}},
+		{name: "a create error after one failed attempt is a step", withReader: true,
+			objects:    []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonCreateContainerError, stepTestCreateErrorText))), &failedOnce},
+			expectStep: &StartStep{Reason: ReasonStartingContainer, Message: kubeletReasonCreateContainerError + ": " + stepTestCreateErrorText}},
+		{name: "a create error the kubelet failed twice is a failure", withReader: true,
+			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonCreateContainerError, stepTestCreateErrorText))), &failedTwice},
+			expectFailed: &StartFailure{Reason: kubeletReasonCreateContainerError, Message: stepTestCreateErrorText}},
 		{name: "waiting for a node with the autoscaler's message", withReader: true,
 			objects:    []client.Object{labeled(unscheduledPod(stepTestSchedulingMessage)), &nominated},
 			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: stepTestNominated}},
@@ -891,7 +946,7 @@ func TestWaitingContainerMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, waitingContainerMessage(&corev1.Pod{Status: tt.status}))
+			assert.Equal(t, tt.expected, waitingContainerMessage(&corev1.Pod{Status: tt.status}, nil))
 		})
 	}
 }
