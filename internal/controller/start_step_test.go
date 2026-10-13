@@ -650,6 +650,10 @@ func TestCrashLoopingContainer(t *testing.T) {
 			status: corev1.ContainerStatus{Name: containerNameMain, RestartCount: 2, State: running, LastTerminationState: exit(old)}},
 		{name: "ready after two restarts",
 			status: corev1.ContainerStatus{Name: containerNameMain, Ready: true, RestartCount: 2, State: running, LastTerminationState: exit(recent)}},
+		{name: "a start that failed has no start time and counts as a short run", crashLoop: true,
+			status: corev1.ContainerStatus{Name: containerNameMain, RestartCount: 2, State: running, LastTerminationState: corev1.ContainerState{
+				Terminated: &corev1.ContainerStateTerminated{ExitCode: 128, Reason: "StartError",
+					StartedAt: metav1.NewTime(time.Unix(0, 0)), FinishedAt: metav1.NewTime(recent)}}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

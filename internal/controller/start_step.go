@@ -181,12 +181,18 @@ func crashLoopingContainer(pod *corev1.Pod, now time.Time) *corev1.ContainerStat
 		if containerStatus.State.Terminated == nil && containerStatus.RestartCount < 2 {
 			continue
 		}
-		if last := lastExit(containerStatus); last != nil && now.Sub(last.FinishedAt.Time) < crashLoopResetAfter &&
-			last.FinishedAt.Sub(last.StartedAt.Time) < crashLoopResetAfter {
+		if last := lastExit(containerStatus); last != nil && now.Sub(last.FinishedAt.Time) < crashLoopResetAfter && shortRun(last) {
 			return containerStatus
 		}
 	}
 	return nil
+}
+
+// shortRun reports whether an exit ended a run shorter than crashLoopResetAfter. A container whose start
+// itself failed (StartError, exit code 128) has no start time, which the kubelet reports as the Unix epoch.
+func shortRun(exit *corev1.ContainerStateTerminated) bool {
+	started := exit.StartedAt.Time
+	return started.IsZero() || started.Unix() == 0 || exit.FinishedAt.Sub(started) < crashLoopResetAfter
 }
 
 // lastExit returns the exit the pod status records for the container: the current one while it is
