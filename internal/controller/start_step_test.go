@@ -187,6 +187,12 @@ func TestDefinitiveStartFailure(t *testing.T) {
 				event.InvolvedObject.FieldPath = "spec.containers{sidecar}"
 				return []corev1.Event{event}
 			}()},
+		{name: "a failed pull before the create error is not a create attempt", pod: createError,
+			events: []corev1.Event{
+				containerEvent("pull", containerNameMain, kubeletEventFailed, "Failed to pull image \"x:1\": not found", now),
+				containerEvent("pull-start", containerNameMain, kubeletEventFailed, "Error: ErrImagePull", now),
+				failedAttempt("f1", 1),
+			}},
 		{name: "a failed attempt recorded by another component does not count", pod: createError,
 			events: func() []corev1.Event {
 				event := failedAttempt("f1", 2)
@@ -441,11 +447,11 @@ func TestPodStartStep(t *testing.T) {
 			expected: StartStep{Reason: ReasonStartingContainer, Message: startingContainerMessage},
 		},
 		{
-			name: "same-second kubelet events resolve to the later one in list order",
+			name: "same-second kubelet events resolve by name, which the recorder derives from the record time, not by list order",
 			pod:  scheduledPod(runningStatus()),
 			events: []corev1.Event{
-				podEvent("pulling", kubeletComponent, kubeletEventPulling, stepTestPulling, base),
-				podEvent("started", kubeletComponent, "Started", "Started container main", base),
+				podEvent("main.18c2a1b2f3e4d5c7", kubeletComponent, "Started", "Started container main", base),
+				podEvent("main.18c2a1b2f3e4d5c6", kubeletComponent, kubeletEventPulling, stepTestPulling, base),
 			},
 			expected: StartStep{Reason: ReasonStartingContainer, Message: "Started container main"},
 		},

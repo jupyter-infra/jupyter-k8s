@@ -268,13 +268,26 @@ func waitingContainerMessage(pod *corev1.Pod, reasons map[string]bool) string {
 // kubelet has failed twice for the container, which its Failed events record.
 var retriedStartReasons = map[string]bool{kubeletReasonCreateContainerError: true, kubeletReasonRunContainerError: true}
 
-// failedAttempts counts the kubelet's Failed events about the named container, each repeated event
-// standing for its count.
+// pullFailureMessages open the kubelet's Failed events about a pull attempt, which are not create or start
+// attempts: the pull's own report and the start attempt it fails.
+var pullFailureMessages = []string{"Failed to pull image", "Error: " + kubeletReasonErrImagePull, "Error: " + kubeletReasonImagePullBackOff}
+
+func isPullFailureMessage(message string) bool {
+	for _, prefix := range pullFailureMessages {
+		if strings.HasPrefix(message, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// failedAttempts counts the kubelet's Failed events about create or start attempts of the named container,
+// each repeated event standing for its count.
 func failedAttempts(events []corev1.Event, container string) int {
 	attempts := 0
 	for i := range events {
 		event := &events[i]
-		if event.Reason != kubeletEventFailed || !isKubeletEvent(event) {
+		if event.Reason != kubeletEventFailed || !isKubeletEvent(event) || isPullFailureMessage(event.Message) {
 			continue
 		}
 		if match := containerFieldPathPattern.FindStringSubmatch(event.InvolvedObject.FieldPath); match != nil && match[1] == container {
@@ -406,9 +419,9 @@ func kubeletStartEvent(pod *corev1.Pod) func(*corev1.Event) bool {
 }
 
 // newestEvent returns the event with a message whose text appeared last, among those keep accepts or among
-// all events when keep is nil; nil when there is none. Equal timestamps go to the later event in list
-// order: the kubelet records timestamps at second resolution, and the API lists events by name, which
-// embeds their creation time.
+// all events when keep is nil; nil when there is none. The kubelet records timestamps at second resolution,
+// so equal timestamps go to the greater name: the recorder names an event after its creation time in
+// nanoseconds, and a list served from the cache has no order of its own.
 func newestEvent(events []corev1.Event, keep func(*corev1.Event) bool) *corev1.Event {
 	var newest *corev1.Event
 	for i := range events {
@@ -416,7 +429,8 @@ func newestEvent(events []corev1.Event, keep func(*corev1.Event) bool) *corev1.E
 		if event.Message == "" || (keep != nil && !keep(event)) {
 			continue
 		}
-		if newest == nil || !eventFirstSeen(event).Before(eventFirstSeen(newest)) {
+		if newest == nil || eventFirstSeen(event).After(eventFirstSeen(newest)) ||
+			(eventFirstSeen(event).Equal(eventFirstSeen(newest)) && event.Name > newest.Name) {
 			newest = event
 		}
 	}
