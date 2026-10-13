@@ -39,7 +39,6 @@ const (
 const (
 	// ConditionTypeAvailable and ConditionTypeProgressing reasons
 	ReasonResourcesNotReady   = "ResourcesNotReady"
-	ReasonServiceNotReady     = "ServiceNotReady"
 	ReasonAccessNotReady      = "AccessNotReady"
 	ReasonResourcesReady      = "ResourcesReady"
 	ReasonDesiredStateStopped = "DesiredStateStopped"

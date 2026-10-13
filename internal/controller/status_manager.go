@@ -87,18 +87,14 @@ func (sm *StatusManager) UpdateStartingStatus(
 		return fmt.Errorf("invalid call: not all resources should be ready in method UpdateStartingStatus")
 	}
 
-	waitingForService := readiness.computeReady && !readiness.serviceReady && readiness.accessResourcesReady
 	waitingForAccess := readiness.computeReady && readiness.serviceReady && !readiness.accessResourcesReady
 
 	if !readiness.computeReady && readiness.computeStep != nil {
 		startingReason = readiness.computeStep.Reason
-		startingMessage = readiness.computeStep.Message
+		startingMessage = truncateMessage(readiness.computeStep.Message, maxCopiedMessageBytes)
 	} else if waitingForAccess {
 		startingReason = ReasonAccessNotReady
 		startingMessage = "Access is not ready"
-	} else if waitingForService {
-		startingReason = ReasonServiceNotReady
-		startingMessage = "Service is not ready"
 	}
 	// Nothing ready corresponds to the default
 

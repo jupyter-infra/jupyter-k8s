@@ -56,9 +56,10 @@ const (
 	// (https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy).
 	crashLoopResetAfter = 10 * time.Minute
 
-	// maxCopiedMessageBytes bounds a message copied from an event or a container state onto a condition,
-	// which holds at most 32768 bytes, and the Warning event composed from it. The kubelet and the scheduler
-	// stay far below it; a core/v1 event created by hand has no length limit.
+	// maxCopiedMessageBytes bounds a message copied from an event, a container state or a Deployment condition
+	// onto a workspace condition, which holds at most 32768 bytes, and the Warning event composed from it.
+	// The kubelet, the scheduler and the Deployment controller stay far below it; a core/v1 event created by
+	// hand has no length limit.
 	maxCopiedMessageBytes = 1024
 
 	// maxConditionReasonBytes is the CRD's ceiling for a condition reason, from metav1.Condition.
@@ -387,21 +388,6 @@ func (rm *ResourceManager) WorkspaceStartStep(
 	if pod == nil {
 		return nil, nil
 	}
-	step, failure := rm.podStartStepOrFailure(ctx, workspace, pod)
-	if failure != nil {
-		failure.Message = truncateMessage(failure.Message, maxCopiedMessageBytes)
-		return nil, failure
-	}
-	step.Message = truncateMessage(step.Message, maxCopiedMessageBytes)
-	return step, nil
-}
-
-// podStartStepOrFailure is WorkspaceStartStep for a pod that exists, before the message bound.
-func (rm *ResourceManager) podStartStepOrFailure(
-	ctx context.Context,
-	workspace *workspacev1alpha1.Workspace,
-	pod *corev1.Pod,
-) (*StartStep, *StartFailure) {
 	if failure := definitiveStartFailure(pod); failure != nil {
 		return nil, failure
 	}

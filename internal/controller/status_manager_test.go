@@ -7,6 +7,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -108,42 +109,19 @@ var _ = Describe("StatusManager", func() {
 				Expect(findCondition(workspace.Status.Conditions, ConditionTypeDegraded).Status).To(Equal(metav1.ConditionFalse))
 			})
 
-			It("should set appropriate reason when service not ready", func() {
+			It("should bound the compute step message like every copied message", func() {
+				longMessage := strings.Repeat("x", 4*maxCopiedMessageBytes)
 				readiness := WorkspaceRunningReadiness{
-					computeReady:         true,
-					serviceReady:         false,
-					accessResourcesReady: true,
+					computeStep: &StartStep{Reason: ReasonPullingImage, Message: longMessage},
 				}
 
 				snapshot := workspace.Status.DeepCopy()
-				err := statusManager.UpdateStartingStatus(ctx, workspace, readiness, snapshot)
-				Expect(err).NotTo(HaveOccurred())
-
+				Expect(statusManager.UpdateStartingStatus(ctx, workspace, readiness, snapshot)).To(Succeed())
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
-				// Verify exactly 4 conditions
-				Expect(workspace.Status.Conditions).To(HaveLen(5))
-
-				// Verify Available=False with ServiceNotReady reason
-				availableCond := findCondition(workspace.Status.Conditions, ConditionTypeAvailable)
-				Expect(availableCond).NotTo(BeNil())
-				Expect(availableCond.Status).To(Equal(metav1.ConditionFalse))
-				Expect(availableCond.Reason).To(Equal(ReasonServiceNotReady))
-
-				// Verify Progressing=True
-				progressingCond := findCondition(workspace.Status.Conditions, ConditionTypeProgressing)
-				Expect(progressingCond).NotTo(BeNil())
-				Expect(progressingCond.Status).To(Equal(metav1.ConditionTrue))
-
-				// Verify Degraded=False
-				degradedCond := findCondition(workspace.Status.Conditions, ConditionTypeDegraded)
-				Expect(degradedCond).NotTo(BeNil())
-				Expect(degradedCond.Status).To(Equal(metav1.ConditionFalse))
-
-				// Verify Stopped=False
-				stoppedCond := findCondition(workspace.Status.Conditions, ConditionTypeStopped)
-				Expect(stoppedCond).NotTo(BeNil())
-				Expect(stoppedCond.Status).To(Equal(metav1.ConditionFalse))
+				bounded := truncateMessage(longMessage, maxCopiedMessageBytes)
+				Expect(findCondition(workspace.Status.Conditions, ConditionTypeProgressing).Message).To(Equal(bounded))
+				Expect(findCondition(workspace.Status.Conditions, ConditionTypeAvailable).Message).To(Equal(bounded))
 			})
 
 			It("should set appropriate reason when access not ready", func() {

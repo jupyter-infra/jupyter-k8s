@@ -478,8 +478,6 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 	twinB.Name, twinB.UID, twinB.CreationTimestamp = "twin-b", "pod-uid-twin-b", sameSecond
 	reportedBackOff := &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: stepTestBackOffText}
 
-	oversized := podEvent("oversized", "karpenter", "Nominated", strings.Repeat("x", 40000), time.Now())
-
 	tests := []struct {
 		name         string
 		objects      []client.Object
@@ -497,12 +495,6 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 		{name: "pods created in the same second resolve by name", withReader: true,
 			objects:    []client.Object{twinA, twinB},
 			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: "verdict of pod b"}},
-		{name: "an oversized event message is cut", withReader: true,
-			objects:    []client.Object{labeled(unscheduledPod(stepTestSchedulingMessage)), &oversized},
-			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: truncateMessage(oversized.Message, maxCopiedMessageBytes)}},
-		{name: "an oversized waiting message is cut", withReader: true,
-			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, strings.Repeat("x", 40000))))},
-			expectFailed: &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: strings.Repeat("x", maxCopiedMessageBytes) + " ...(truncated)"}},
 		{name: "an evicted pod is skipped for its replacement", withReader: true,
 			objects:    []client.Object{evicted, labeled(scheduledPod(waitingStatus(kubeletReasonContainerCreating, "")))},
 			expectStep: &StartStep{Reason: ReasonStartingContainer, Message: kubeletReasonContainerCreating}},
@@ -607,8 +599,6 @@ func TestResourceManager_WorkspaceStartStep_CrashLoop(t *testing.T) {
 	backingOff.State = corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{
 		Reason: kubeletReasonCrashLoopBackOff, Message: "back-off 20s restarting failed container=main",
 	}}
-	longReason := restartedStatus(false, 1)
-	longReason.LastTerminationState.Terminated.Reason = strings.Repeat("x", 2*maxCopiedMessageBytes)
 	tests := []struct {
 		name         string
 		status       corev1.ContainerStatus
@@ -628,11 +618,6 @@ func TestResourceManager_WorkspaceStartStep_CrashLoop(t *testing.T) {
 			status: terminatedAgain,
 			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff,
 				Message: "container main exited with code 1 (Error), restart count 1"}},
-		{name: "the runtime's exit reason is bounded like every copied message",
-			status: longReason,
-			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: truncateMessage(
-				"container main exited with code 1 ("+strings.Repeat("x", 2*maxCopiedMessageBytes)+"), restart count 2",
-				maxCopiedMessageBytes)}},
 		{name: "a container running again after one exit is a step, not a failure", status: onceRunning},
 		{name: "a container that ran an hour before it exited is a step, not a failure", status: longRun},
 		{name: "a container on its first run is a step, not a failure", status: runningStatus()},
