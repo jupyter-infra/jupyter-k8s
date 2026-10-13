@@ -557,6 +557,8 @@ func TestResourceManager_WorkspaceStartStep_CrashLoop(t *testing.T) {
 	backingOff.State = corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{
 		Reason: kubeletReasonCrashLoopBackOff, Message: "back-off 20s restarting failed container=main",
 	}}
+	longReason := restartedStatus(false, 1)
+	longReason.LastTerminationState.Terminated.Reason = strings.Repeat("x", 2*maxCopiedMessageBytes)
 	tests := []struct {
 		name         string
 		status       corev1.ContainerStatus
@@ -576,6 +578,11 @@ func TestResourceManager_WorkspaceStartStep_CrashLoop(t *testing.T) {
 			status: terminatedAgain,
 			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff,
 				Message: "container main exited with code 1 (Error), restart count 1"}},
+		{name: "the runtime's exit reason is bounded like every copied message",
+			status: longReason,
+			expectFailed: &StartFailure{Reason: kubeletReasonCrashLoopBackOff, Message: truncateMessage(
+				"container main exited with code 1 ("+strings.Repeat("x", 2*maxCopiedMessageBytes)+"), restart count 2",
+				maxCopiedMessageBytes)}},
 		{name: "a container running again after one exit is a step, not a failure", status: onceRunning},
 		{name: "a container that restarted an hour ago and is not ready is a step, not a failure", status: longAgo},
 		{name: "a container on its first run is a step, not a failure", status: runningStatus()},

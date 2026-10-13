@@ -370,8 +370,22 @@ func (rm *ResourceManager) WorkspaceStartStep(
 	if pod == nil {
 		return nil, nil
 	}
-	if failure := definitiveStartFailure(pod); failure != nil {
+	step, failure := rm.podStartStepOrFailure(ctx, workspace, pod)
+	if failure != nil {
 		failure.Message = truncateMessage(failure.Message, maxCopiedMessageBytes)
+		return nil, failure
+	}
+	step.Message = truncateMessage(step.Message, maxCopiedMessageBytes)
+	return step, nil
+}
+
+// podStartStepOrFailure is WorkspaceStartStep for a pod that exists, before the message bound.
+func (rm *ResourceManager) podStartStepOrFailure(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	pod *corev1.Pod,
+) (*StartStep, *StartFailure) {
+	if failure := definitiveStartFailure(pod); failure != nil {
 		return nil, failure
 	}
 	if crashLooping := crashLoopingContainer(pod, rm.now()); crashLooping != nil {
@@ -383,7 +397,6 @@ func (rm *ResourceManager) WorkspaceStartStep(
 		return nil, reported
 	}
 	step := podStartStep(pod, rm.startEvents(ctx, workspace, pod))
-	step.Message = truncateMessage(step.Message, maxCopiedMessageBytes)
 	return &step, nil
 }
 

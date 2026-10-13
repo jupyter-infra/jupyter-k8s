@@ -406,7 +406,8 @@ func (sm *StateMachine) reconcileDegradedStart(
 	workspace.Status.DeploymentName = deployment.GetName()
 	workspace.Status.ServiceName = service.GetName()
 	if err := sm.statusManager.UpdateDegradedRunningStatus(
-		ctx, workspace, start.reason, start.reason, start.message, snapshotStatus); err != nil {
+		ctx, workspace, start.reason, start.reason, truncateMessage(start.message, maxCopiedMessageBytes),
+		snapshotStatus); err != nil {
 		return ctrl.Result{}, err
 	}
 	if !start.alreadyReported {

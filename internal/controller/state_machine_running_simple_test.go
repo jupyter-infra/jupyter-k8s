@@ -436,6 +436,28 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			Expect(recorder.Events).To(Receive(stallEvent(deploymentStalledMessage)))
 		})
 
+		It("should bound the Deployment's message like every copied message", func() {
+			workspace := newWorkspace()
+			dep := createNotReadyDeployment(workspace)
+			svc := createService(workspace)
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+			longMessage := strings.Repeat("x", 4*maxCopiedMessageBytes)
+			setDeploymentStatus(dep, appsv1.DeploymentStatus{Replicas: 1, UpdatedReplicas: 1,
+				Conditions: []appsv1.DeploymentCondition{{
+					Type: appsv1.DeploymentProgressing, Status: corev1.ConditionFalse,
+					Reason: deploymentTimedOutReason, Message: longMessage,
+				}}})
+
+			sm := buildStateMachine()
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			expectStalled(workspace, truncateMessage(longMessage, maxCopiedMessageBytes))
+			Expect(recorder.Events).To(Receive(stallEvent(truncateMessage(longMessage, maxCopiedMessageBytes))))
+		})
+
 		It("should ignore the verdict of a pod that is being deleted", func() {
 			workspace := newWorkspace()
 			dep := createNotReadyDeployment(workspace)
