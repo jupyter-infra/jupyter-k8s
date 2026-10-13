@@ -7,6 +7,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 	"unicode/utf8"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
@@ -101,9 +102,10 @@ func MergeConditionsIfChanged(
 
 // truncateMessage bounds a condition message to maxBytes and appends a marker when it clips, so a message
 // copied from outside can never exceed the CRD's conditions[].message ceiling. Only a rune the cut splits is
-// dropped; an invalid byte elsewhere in the text is copied as it is.
+// dropped; an invalid byte elsewhere in the text is copied as it is. A message this function already bounded
+// is returned as it is, so a stored message can be written again unchanged.
 func truncateMessage(msg string, maxBytes int) string {
-	if len(msg) <= maxBytes {
+	if len(msg) <= maxBytes || (len(msg) <= maxBytes+len(TruncatedMessageSuffix) && strings.HasSuffix(msg, TruncatedMessageSuffix)) {
 		return msg
 	}
 	clipped := msg[:maxBytes]

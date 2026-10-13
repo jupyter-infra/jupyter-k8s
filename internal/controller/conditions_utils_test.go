@@ -135,6 +135,9 @@ func TestTruncateMessage(t *testing.T) {
 		{name: "a longer message is cut at the bound", msg: "123456789", expected: "12345678" + TruncatedMessageSuffix},
 		{name: "a rune the cut splits is dropped whole", msg: "1234567\u00e9x", expected: "1234567" + TruncatedMessageSuffix},
 		{name: "an invalid byte before the cut stays and the cut holds", msg: "1\xff3456789", expected: "1\xff345678" + TruncatedMessageSuffix},
+		{name: "a message already bounded here is left alone", msg: "12345678" + TruncatedMessageSuffix, expected: "12345678" + TruncatedMessageSuffix},
+		{name: "a longer message that ends like the marker is still cut", msg: "123456789012345678" + TruncatedMessageSuffix,
+			expected: "12345678" + TruncatedMessageSuffix},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
