@@ -329,6 +329,8 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		// BEFORE the status write, so they persist in the same Status().Update as the Running conditions.
 		// Non-gating: probe verdicts never change whether the workspace is Available.
 		integrationProbeInterval := sm.probeIntegrationStatus(ctx, workspace)
+		// The start is over: drop the pod events cached for the start step, so the cache holds only
+		// starting workspaces.
 		sm.resourceManager.ForgetStartEvents(workspace)
 
 		if err := sm.statusManager.UpdateRunningStatus(ctx, workspace, snapshotStatus); err != nil {
