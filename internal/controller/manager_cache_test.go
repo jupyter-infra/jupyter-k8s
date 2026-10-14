@@ -19,7 +19,6 @@ import (
 // so a lookup by a fresh pointer would miss.
 func cacheScopes(options cache.Options) (pods, secrets *cache.ByObject) {
 	for obj, scope := range options.ByObject {
-		scope := scope
 		switch obj.(type) {
 		case *corev1.Pod:
 			pods = &scope
