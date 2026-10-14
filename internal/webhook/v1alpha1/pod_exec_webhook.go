@@ -70,7 +70,8 @@ func (v *PodExecValidator) Handle(ctx context.Context, req admission.Request) ad
 	}
 
 	// Controller SA can only exec into workspace pods. The manager cache holds only pods with the
-	// workspace label (cmd/main.go), so a pod it does not hold is not a workspace pod either.
+	// workspace label (ManagerCacheOptions, pinned by TestManagerCacheOptions), so a pod it does not hold
+	// is not a workspace pod either.
 	_, hasWorkspace := pod.Labels[workspaceutil.LabelWorkspaceName]
 	if err != nil || !hasWorkspace {
 		podexeclog.Info("Denying controller exec to non-workspace pod",
