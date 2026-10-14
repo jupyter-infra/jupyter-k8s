@@ -89,19 +89,18 @@ const (
 	// in the operator logs (reconcileIntegrationFreeze); the status message points there.
 	IntegrationReasonNotResolved = "NotResolved"
 
-	// Kubernetes Event reasons for integration status transitions (recorded on the Workspace via the
-	// EventRecorder, surfaced by `kubectl describe workspace`). An event is recorded once, when an
-	// integration's probe verdict changes (see getIntegrationStatusEvent); an integration that stays
-	// degraded does not repeat it on every probe.
+	// Kubernetes Event reasons recorded on the Workspace when an integration turns degraded or recovers; recorded
+	// once per such change, so an integration that stays degraded does not repeat the event on every probe.
 	IntegrationEventDegraded  = "IntegrationDegraded"
 	IntegrationEventRecovered = "IntegrationRecovered"
 
-	// EventWorkspaceComputeStalled is recorded (Warning) once, when the workspace Deployment first reports
-	// ProgressDeadlineExceeded; a workspace that stays stalled does not repeat it.
+	// EventWorkspaceComputeStalled is a Warning event recorded on the Workspace when its Deployment reports
+	// ProgressDeadlineExceeded; recorded once per stall, so a workspace that stays stalled does not repeat it.
 	EventWorkspaceComputeStalled = "WorkspaceComputeStalled"
 
-	// EventWorkspaceStartFailed is recorded (Warning) once, when the kubelet first reports a container it
-	// cannot start; a start that stays failed does not repeat it whatever kubelet reasons it passes through.
+	// EventWorkspaceStartFailed is a Warning event recorded on the Workspace when the kubelet reports a container
+	// it cannot start; recorded once per failed start, so a start that stays failed does not repeat it even when
+	// the kubelet's reason changes.
 	EventWorkspaceStartFailed = "WorkspaceStartFailed"
 )
 
