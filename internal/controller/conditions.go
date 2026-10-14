@@ -59,10 +59,10 @@ const (
 	// ReasonComputeStalled is set on Degraded, Available and Progressing while the workspace Deployment
 	// reports Progressing=False with reason ProgressDeadlineExceeded; it clears when the pod becomes ready.
 	ReasonComputeStalled = "ComputeStalled"
-	// ReasonContainerStartFailed is the Degraded condition's reason when the kubelet's reason cannot be copied
-	// into that field: the Kubernetes API accepts a condition reason only as a word of letters, digits and a
-	// few separators, at most 1024 characters. The kubelet's original reason is then written at the beginning
-	// of the condition's message, as "<reason>: <message>".
+	// ReasonContainerStartFailed is the reason used when the kubelet-provided one cannot be copied into the
+	// Workspace's Degraded condition due to the Kubernetes API's character and length restrictions. The
+	// kubelet's original reason is then written at the beginning of the condition's message, as
+	// "<reason>: <message>".
 	ReasonContainerStartFailed = "ContainerStartFailed"
 
 	// Start steps, set on Progressing=True and Available=False while the workspace pod is not ready, with
