@@ -423,27 +423,30 @@ func TestTimeUntilProbeDeadline_InTheFuture(t *testing.T) {
 }
 
 func TestStalledStep(t *testing.T) {
-	verdict := time.Date(2026, 10, 8, 12, 10, 0, 0, time.UTC)
+	now := time.Date(2026, 10, 8, 12, 10, 0, 0, time.UTC)
+	deadline := defaultDeploymentProgressDeadline
 	tests := []struct {
 		name     string
 		step     *StartStep
 		expected bool
 	}{
 		{name: "no pod", expected: true},
-		{name: "waiting for a node since before the verdict",
-			step: &StartStep{Reason: ReasonWaitingForNode, ProgressedAt: verdict.Add(-10 * time.Minute)}, expected: true},
-		{name: "a pod created at the verdict",
-			step: &StartStep{Reason: ReasonWaitingForNode, ProgressedAt: verdict}, expected: true},
-		{name: "a pod scheduled after the verdict",
-			step: &StartStep{Reason: ReasonStartingContainer, ProgressedAt: verdict.Add(time.Minute)}},
-		{name: "a container that has not become ready since before the verdict",
-			step: &StartStep{Reason: ReasonStartingContainer, ProgressedAt: verdict.Add(-time.Minute)}, expected: true},
-		{name: "a pull under way since before the verdict",
-			step: &StartStep{Reason: ReasonPullingImage, ProgressedAt: verdict.Add(-10 * time.Minute)}},
+		{name: "waiting for a node for the whole deadline",
+			step: &StartStep{Reason: ReasonWaitingForNode, ProgressedAt: now.Add(-deadline)}, expected: true},
+		{name: "a pod that progressed within the deadline",
+			step: &StartStep{Reason: ReasonStartingContainer, ProgressedAt: now.Add(-deadline + time.Minute)}},
+		{name: "a container that has not become ready for the whole deadline",
+			step: &StartStep{Reason: ReasonStartingContainer, ProgressedAt: now.Add(-deadline - time.Minute)}, expected: true},
+		{name: "a pull under way for longer than the deadline",
+			step: &StartStep{Reason: ReasonPullingImage, ProgressedAt: now.Add(-2 * deadline)}},
+		{name: "a pull the kubelet has been retrying for the whole deadline",
+			step: &StartStep{Reason: ReasonPullingImage, Retrying: true, ProgressedAt: now.Add(-deadline)}, expected: true},
+		{name: "a retried create error within the deadline",
+			step: &StartStep{Reason: ReasonStartingContainer, Retrying: true, ProgressedAt: now.Add(-time.Minute)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, stalledStep(tt.step, verdict))
+			assert.Equal(t, tt.expected, stalledStep(tt.step, deadline, now))
 		})
 	}
 }

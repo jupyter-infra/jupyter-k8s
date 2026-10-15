@@ -252,14 +252,18 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			dep.Status = status
 			Expect(k8sClient.Status().Update(ctx, dep)).To(Succeed())
 		}
-		// markDeploymentStalled records the deadline verdict now, after the pod the spec created, as the
-		// Deployment controller does ten minutes into a start.
 		markDeploymentStalled := func(dep *appsv1.Deployment) {
 			setDeploymentStatus(dep, appsv1.DeploymentStatus{Replicas: 1, UpdatedReplicas: 1,
 				Conditions: []appsv1.DeploymentCondition{{
 					Type: appsv1.DeploymentProgressing, Status: corev1.ConditionFalse,
-					Reason: deploymentTimedOutReason, Message: deploymentStalledMessage, LastTransitionTime: metav1.Now(),
+					Reason: deploymentTimedOutReason, Message: deploymentStalledMessage,
 				}}})
+		}
+		// pastDeadline moves the state machine's clock to where a pod created now has made no progress for the
+		// whole progress deadline, the point at which the Deployment's verdict describes it.
+		pastDeadline := func(sm *StateMachine) {
+			later := time.Now().Add(defaultDeploymentProgressDeadline + time.Minute)
+			sm.resourceManager.now = func() time.Time { return later }
 		}
 		markDeploymentProgressing := func(dep *appsv1.Deployment) {
 			setDeploymentStatus(dep, appsv1.DeploymentStatus{Replicas: 1, UpdatedReplicas: 1,
@@ -394,6 +398,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			markDeploymentStalled(dep)
 
 			sm := buildStateMachine()
+			pastDeadline(sm)
 			result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(LongRequeueDelay))
@@ -512,6 +517,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			markDeploymentStalled(dep)
 
 			sm := buildStateMachine()
+			pastDeadline(sm)
 			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 			Expect(err).NotTo(HaveOccurred())
 			expectStalled(workspace, stepTestSchedulingMessage)
@@ -696,6 +702,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			markDeploymentStalled(dep)
 
 			sm := buildStateMachine()
+			pastDeadline(sm)
 			result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(PullingImageRequeueDelay))
@@ -704,22 +711,17 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			Expect(recorder.Events).To(BeEmpty())
 		})
 
-		It("should report the step rather than ComputeStalled for a pod that progressed after the verdict", func() {
+		It("should report the step rather than ComputeStalled for a pod that progressed within the deadline", func() {
 			workspace := newWorkspace()
 			dep := createNotReadyDeployment(workspace)
 			svc := createService(workspace)
-			// the verdict predates the pod: the node arrived ten minutes into the start and the pod is creating
-			setDeploymentStatus(dep, appsv1.DeploymentStatus{Replicas: 1, UpdatedReplicas: 1,
-				Conditions: []appsv1.DeploymentCondition{{
-					Type: appsv1.DeploymentProgressing, Status: corev1.ConditionFalse,
-					Reason: deploymentTimedOutReason, Message: deploymentStalledMessage,
-					LastTransitionTime: metav1.NewTime(time.Now().Add(-time.Hour)),
-				}}})
+			// the node arrived ten minutes into the start: the Deployment's verdict stands, the pod is creating
 			pod := createPendingPod(workspace, waitingContainer(kubeletReasonContainerCreating, ""))
 			defer func() { _ = k8sClient.Delete(ctx, pod) }()
 			defer func() { _ = k8sClient.Delete(ctx, dep) }()
 			defer func() { _ = k8sClient.Delete(ctx, svc) }()
 			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+			markDeploymentStalled(dep)
 
 			sm := buildStateMachine()
 			result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
@@ -728,6 +730,27 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 
 			expectStartStep(workspace, ReasonStartingContainer, kubeletReasonContainerCreating)
 			Expect(recorder.Events).To(BeEmpty())
+		})
+
+		It("should fall back to ComputeStalled for a pull back-off whose attempts it cannot count", func() {
+			workspace := newWorkspace()
+			dep := createNotReadyDeployment(workspace)
+			svc := createService(workspace)
+			pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
+			defer func() { _ = k8sClient.Delete(ctx, pod) }()
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+			markDeploymentStalled(dep)
+
+			sm := buildStateMachine()
+			pastDeadline(sm)
+			result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(LongRequeueDelay))
+
+			expectStalled(workspace, imagePullMessage)
+			Expect(recorder.Events).To(Receive(stallEvent(imagePullMessage)))
 		})
 
 		It("should carry the kubelet's newest event in ComputeStalled for a pod with a node", func() {
@@ -744,6 +767,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			markDeploymentStalled(dep)
 
 			sm := buildStateMachine()
+			pastDeadline(sm)
 			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 			Expect(err).NotTo(HaveOccurred())
 

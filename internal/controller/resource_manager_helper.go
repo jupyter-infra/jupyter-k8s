@@ -18,6 +18,10 @@ import (
 // progressDeadlineSeconds passes without progress; k8s.io/api does not export the constant.
 const deploymentTimedOutReason = "ProgressDeadlineExceeded"
 
+// defaultDeploymentProgressDeadline is the progressDeadlineSeconds the API server sets on a Deployment that
+// declares none, as the operator's do.
+const defaultDeploymentProgressDeadline = 600 * time.Second
+
 // replicaSetReasonFailedCreate is the reason the ReplicaSet controller sets on ReplicaFailure=True when it
 // cannot create a pod, over a ResourceQuota or rejected by admission, with the API server's error as the
 // message; the Deployment controller copies the condition onto the Deployment and both drop it once the pod
@@ -76,21 +80,29 @@ func (rm *ResourceManager) IsDeploymentAvailable(deployment *appsv1.Deployment) 
 // IsDeploymentProgressDeadlineExceeded reports whether the Deployment controller has declared the
 // rollout stalled (Progressing=False with reason ProgressDeadlineExceeded) and returns that
 // condition's message.
-func (rm *ResourceManager) IsDeploymentProgressDeadlineExceeded(
-	deployment *appsv1.Deployment) (stalled bool, message string, since time.Time) {
+func (rm *ResourceManager) IsDeploymentProgressDeadlineExceeded(deployment *appsv1.Deployment) (bool, string) {
 	if deployment == nil {
-		return false, "", time.Time{}
+		return false, ""
 	}
 	for _, condition := range deployment.Status.Conditions {
 		if condition.Type != appsv1.DeploymentProgressing {
 			continue
 		}
 		if condition.Status == corev1.ConditionFalse && condition.Reason == deploymentTimedOutReason {
-			return true, condition.Message, condition.LastTransitionTime.Time
+			return true, condition.Message
 		}
-		return false, "", time.Time{}
+		return false, ""
 	}
-	return false, "", time.Time{}
+	return false, ""
+}
+
+// deploymentProgressDeadline is how long the Deployment controller waits for progress before it declares the
+// rollout stalled: the Deployment's progressDeadlineSeconds, 600 unless set.
+func deploymentProgressDeadline(deployment *appsv1.Deployment) time.Duration {
+	if deployment != nil && deployment.Spec.ProgressDeadlineSeconds != nil {
+		return time.Duration(*deployment.Spec.ProgressDeadlineSeconds) * time.Second
+	}
+	return defaultDeploymentProgressDeadline
 }
 
 // IsDeploymentMissingOrDeleting checks if the Deployment is either missing (nil)

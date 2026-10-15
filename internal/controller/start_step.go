@@ -95,6 +95,9 @@ type StartStep struct {
 	// ProgressedAt is the latest of the pod's creation, a pod condition turning True and a container
 	// starting; the Deployment controller counts only ready replicas, so its stall verdict can predate it.
 	ProgressedAt time.Time
+	// Retrying marks a failed attempt the kubelet retries after a back-off, a pull, a create or a start, as
+	// opposed to work under way.
+	Retrying bool
 }
 
 // StartFailure is a kubelet waiting reason for a container it cannot start as specified, with the
@@ -436,11 +439,11 @@ func podStartStep(pod *corev1.Pod, events []corev1.Event) StartStep {
 	// a failed pull attempt and the back-off before the next one are the pull step; the waiting state names
 	// the image and the error, where the Failed events only say "Error: ErrImagePull"
 	if message := waitingContainerMessage(pod, pullStepReasons); message != "" {
-		return StartStep{Reason: ReasonPullingImage, Message: message}
+		return StartStep{Reason: ReasonPullingImage, Message: message, Retrying: true}
 	}
 	// a create or start attempt the kubelet is retrying names its error in the waiting state as well
 	if message := waitingContainerMessage(pod, retriedStartReasons); message != "" {
-		return StartStep{Reason: ReasonStartingContainer, Message: message}
+		return StartStep{Reason: ReasonStartingContainer, Message: message, Retrying: true}
 	}
 	if kubeletEvent != nil && kubeletEvent.Message != "" {
 		return StartStep{Reason: ReasonStartingContainer, Message: kubeletEvent.Message}

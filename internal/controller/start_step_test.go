@@ -381,18 +381,18 @@ func TestPodStartStep(t *testing.T) {
 				containerEvent("main.1", containerNameMain, kubeletEventFailed, "Failed to pull image \"x:1\": rpc error: not found", base),
 				containerEvent("main.2", containerNameMain, kubeletEventFailed, "Error: ErrImagePull", base),
 			},
-			expected: StartStep{Reason: ReasonPullingImage, Message: kubeletReasonErrImagePull + ": rpc error: not found"},
+			expected: StartStep{Reason: ReasonPullingImage, Message: kubeletReasonErrImagePull + ": rpc error: not found", Retrying: true},
 		},
 		{
 			name:     "the back-off before the next pull attempt is the pull step",
 			pod:      scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, "Back-off pulling image \"x:1\"")),
-			expected: StartStep{Reason: ReasonPullingImage, Message: kubeletReasonImagePullBackOff + ": Back-off pulling image \"x:1\""},
+			expected: StartStep{Reason: ReasonPullingImage, Message: kubeletReasonImagePullBackOff + ": Back-off pulling image \"x:1\"", Retrying: true},
 		},
 		{
 			name:     "a create error the kubelet is retrying is a step named after the error, not its Failed event",
 			pod:      scheduledPod(waitingStatus(kubeletReasonCreateContainerError, stepTestCreateErrorText)),
 			events:   []corev1.Event{containerEvent("failed", containerNameMain, kubeletEventFailed, "Error: "+stepTestCreateErrorText, base)},
-			expected: StartStep{Reason: ReasonStartingContainer, Message: kubeletReasonCreateContainerError + ": " + stepTestCreateErrorText},
+			expected: StartStep{Reason: ReasonStartingContainer, Message: kubeletReasonCreateContainerError + ": " + stepTestCreateErrorText, Retrying: true},
 		},
 		{
 			name: "a verdict the scheduler keeps repeating counts from its first appearance, so the later nomination wins",
@@ -503,7 +503,7 @@ func TestPodStartStep(t *testing.T) {
 		{
 			name:     "a failed pull attempt is the pull step with the kubelet's reason and message",
 			pod:      scheduledPod(waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")),
-			expected: StartStep{Reason: ReasonPullingImage, Message: "ErrImagePull: rpc error: not found"},
+			expected: StartStep{Reason: ReasonPullingImage, Message: "ErrImagePull: rpc error: not found", Retrying: true},
 		},
 		{
 			name:     "running but not ready container reports the kubelet's newest message",
@@ -638,13 +638,13 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 			expectFailed: &StartFailure{Reason: kubeletReasonCreateConfigError, Message: "secret \"s\" not found"}},
 		{name: "a pull back-off after one failed pull is the pull step", withReader: true,
 			objects:    []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, stepTestBackOffText)))},
-			expectStep: &StartStep{Reason: ReasonPullingImage, Message: kubeletReasonImagePullBackOff + ": " + stepTestBackOffText}},
+			expectStep: &StartStep{Reason: ReasonPullingImage, Message: kubeletReasonImagePullBackOff + ": " + stepTestBackOffText, Retrying: true}},
 		{name: "a pull back-off after two failed pulls is a failure", withReader: true,
 			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, stepTestBackOffText))), &pullFailedTwice},
 			expectFailed: &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: stepTestBackOffText}},
 		{name: "a create error after one failed attempt is a step", withReader: true,
 			objects:    []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonCreateContainerError, stepTestCreateErrorText))), &failedOnce},
-			expectStep: &StartStep{Reason: ReasonStartingContainer, Message: kubeletReasonCreateContainerError + ": " + stepTestCreateErrorText}},
+			expectStep: &StartStep{Reason: ReasonStartingContainer, Message: kubeletReasonCreateContainerError + ": " + stepTestCreateErrorText, Retrying: true}},
 		{name: "a create error the kubelet failed twice is a failure", withReader: true,
 			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonCreateContainerError, stepTestCreateErrorText))), &failedTwice},
 			expectFailed: &StartFailure{Reason: kubeletReasonCreateContainerError, Message: stepTestCreateErrorText}},
@@ -690,6 +690,7 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 				require.NotNil(t, step)
 				assert.Equal(t, tt.expectStep.Reason, step.Reason)
 				assert.Equal(t, tt.expectStep.Message, step.Message)
+				assert.Equal(t, tt.expectStep.Retrying, step.Retrying)
 				assert.WithinDuration(t, tt.expectStep.ProgressedAt, step.ProgressedAt, time.Second)
 			}
 			assert.Equal(t, tt.expectFailed, failure)

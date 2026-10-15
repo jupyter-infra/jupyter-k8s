@@ -12,17 +12,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const testStalledMessage = "ReplicaSet \"jupyter-test-workspace-abc\" has timed out progressing."
 
 func TestResourceManager_IsDeploymentProgressDeadlineExceeded(t *testing.T) {
-	deadline := time.Date(2026, 10, 8, 12, 10, 0, 0, time.UTC)
 	progressing := func(status corev1.ConditionStatus, reason, message string) *appsv1.Deployment {
 		return &appsv1.Deployment{Status: appsv1.DeploymentStatus{Conditions: []appsv1.DeploymentCondition{{
 			Type: appsv1.DeploymentProgressing, Status: status, Reason: reason, Message: message,
-			LastTransitionTime: metav1.NewTime(deadline),
 		}}}}
 	}
 
@@ -31,7 +28,6 @@ func TestResourceManager_IsDeploymentProgressDeadlineExceeded(t *testing.T) {
 		deployment      *appsv1.Deployment
 		expectedStalled bool
 		expectedMessage string
-		expectedSince   time.Time
 	}{
 		{name: "nil deployment", deployment: nil},
 		{name: "no conditions", deployment: &appsv1.Deployment{}},
@@ -58,19 +54,26 @@ func TestResourceManager_IsDeploymentProgressDeadlineExceeded(t *testing.T) {
 			deployment:      progressing(corev1.ConditionFalse, deploymentTimedOutReason, testStalledMessage),
 			expectedStalled: true,
 			expectedMessage: testStalledMessage,
-			expectedSince:   deadline,
 		},
 	}
 
 	rm := &ResourceManager{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stalled, message, since := rm.IsDeploymentProgressDeadlineExceeded(tt.deployment)
+			stalled, message := rm.IsDeploymentProgressDeadlineExceeded(tt.deployment)
 			assert.Equal(t, tt.expectedStalled, stalled)
 			assert.Equal(t, tt.expectedMessage, message)
-			assert.True(t, tt.expectedSince.Equal(since), "since %v", since)
 		})
 	}
+}
+
+func TestDeploymentProgressDeadline(t *testing.T) {
+	shorter := int32(300)
+	assert.Equal(t, defaultDeploymentProgressDeadline, deploymentProgressDeadline(nil))
+	assert.Equal(t, defaultDeploymentProgressDeadline, deploymentProgressDeadline(&appsv1.Deployment{}))
+	assert.Equal(t, 5*time.Minute, deploymentProgressDeadline(&appsv1.Deployment{
+		Spec: appsv1.DeploymentSpec{ProgressDeadlineSeconds: &shorter},
+	}))
 }
 
 func TestResourceManager_DeploymentFailedCreate(t *testing.T) {
