@@ -28,7 +28,7 @@ While the workspace pod is not ready, `Progressing=True` names the step the star
 | Reason | When | Message |
 |--------|------|---------|
 | `WaitingForNode` | The pod has no node yet | The scheduler's or the autoscaler's latest message about the pod |
-| `PullingImage` | The kubelet is pulling the image | The kubelet's pull message |
+| `PullingImage` | The kubelet is pulling the image, or waiting to retry a failed pull | The kubelet's pull message, or the failed attempt's reason and error |
 | `StartingContainer` | The pod has a node and a container is not ready yet | The kubelet's latest message about the pod or that container, or the container's waiting reason |
 
 The operator copies these messages unchanged, cut at 1024 bytes; `Available=False` carries the same reason.
@@ -59,7 +59,7 @@ conditions:
     reason: ImagePullBackOff
 ```
 
-A reason counts as a failure when it starts with `Err` or ends in `Error` or `BackOff`, the rule Argo CD's health check applies, plus `InvalidImageName`; `ErrImagePull`, one failed pull attempt, stays a step. `CreateContainerError` and `RunContainerError`, which a loaded node can report once and clear, count from the kubelet's second failed attempt. The kubelet's reasons are an open set; a reason the CRD rejects as a condition reason is written as `ContainerStartFailed`, with the kubelet's reason opening the message.
+A reason counts as a failure when it starts with `Err` or ends in `Error` or `BackOff`, the rule Argo CD's health check applies, plus `InvalidImageName`. The reasons the kubelet retries after a back-off, `ImagePullBackOff`, `CreateContainerError` and `RunContainerError`, which a registry blip or a loaded node can produce once, count from the kubelet's second failed attempt, about ten seconds after the first; until then the pull or the start is a step carrying the kubelet's error. The kubelet's reasons are an open set; a reason the CRD rejects as a condition reason is written as `ContainerStartFailed`, with the kubelet's reason opening the message.
 
 A missing Secret or ConfigMap referenced from `env` reads `CreateContainerConfigError`. Mounted as a volume it keeps the pod in `ContainerCreating`, a `StartingContainer` step with the kubelet's `FailedMount` message until the progress deadline.
 

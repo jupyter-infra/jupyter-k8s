@@ -147,6 +147,12 @@ func TestDefinitiveStartFailure(t *testing.T) {
 		event.Count = count
 		return event
 	}
+	backingOff := scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, "Back-off pulling image \"x:1\""))
+	failedPull := func(name string, count int32) corev1.Event {
+		event := containerEvent(name, containerNameMain, kubeletEventFailed, "Failed to pull image \"x:1\": not found", now)
+		event.Count = count
+		return event
+	}
 	tests := []struct {
 		name     string
 		pod      *corev1.Pod
@@ -157,8 +163,28 @@ func TestDefinitiveStartFailure(t *testing.T) {
 		{name: "container creating is not a failure", pod: scheduledPod(waitingStatus(kubeletReasonContainerCreating, ""))},
 		{name: "running container", pod: scheduledPod(runningStatus())},
 		{name: "a restarted container is not a waiting failure", pod: scheduledPod(restartedStatus(false, 1))},
-		{name: "image pull back-off", pod: scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, "Back-off pulling image \"x:1\"")),
+		{name: "a pull back-off with no failed pull recorded is not yet a failure", pod: backingOff},
+		{name: "a pull back-off after one failed pull is not yet a failure", pod: backingOff, events: []corev1.Event{failedPull("p1", 1)}},
+		{name: "a pull back-off after two failed pulls is a failure", pod: backingOff,
+			events:   []corev1.Event{failedPull("p1", 2)},
 			expected: &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: "Back-off pulling image \"x:1\""}},
+		{name: "two failed pulls recorded as separate events count together", pod: backingOff,
+			events:   []corev1.Event{failedPull("p1", 1), failedPull("p2", 1)},
+			expected: &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: "Back-off pulling image \"x:1\""}},
+		{name: "the start attempts a failed pull fails are not pull attempts", pod: backingOff,
+			events: func() []corev1.Event {
+				errImagePull := containerEvent("e1", containerNameMain, kubeletEventFailed, "Error: ErrImagePull", now)
+				errImagePull.Count = 5
+				backOff := containerEvent("e2", containerNameMain, kubeletEventFailed, "Error: ImagePullBackOff", now)
+				backOff.Count = 50
+				return []corev1.Event{errImagePull, backOff, failedPull("p1", 1)}
+			}()},
+		{name: "failed pulls of another container do not count", pod: backingOff,
+			events: func() []corev1.Event {
+				event := failedPull("p1", 2)
+				event.InvolvedObject.FieldPath = "spec.containers{sidecar}"
+				return []corev1.Event{event}
+			}()},
 		{name: "one failed pull attempt is not a failure", pod: scheduledPod(waitingStatus(kubeletReasonErrImagePull, "rpc error: not found"))},
 		{name: "invalid image name", pod: scheduledPod(waitingStatus(kubeletReasonInvalidImageName, "couldn't parse image name")),
 			expected: &StartFailure{Reason: kubeletReasonInvalidImageName, Message: "couldn't parse image name"}},
@@ -349,13 +375,18 @@ func TestPodStartStep(t *testing.T) {
 			expected: StartStep{Reason: ReasonWaitingForNode, Message: waitingForNodeMessage},
 		},
 		{
-			name: "a failed pull attempt is a step named after the error, not after its two Failed events",
+			name: "a failed pull attempt is the pull step named after the error, not after its two Failed events",
 			pod:  scheduledPod(waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")),
 			events: []corev1.Event{
 				containerEvent("main.1", containerNameMain, kubeletEventFailed, "Failed to pull image \"x:1\": rpc error: not found", base),
 				containerEvent("main.2", containerNameMain, kubeletEventFailed, "Error: ErrImagePull", base),
 			},
-			expected: StartStep{Reason: ReasonStartingContainer, Message: kubeletReasonErrImagePull + ": rpc error: not found"},
+			expected: StartStep{Reason: ReasonPullingImage, Message: kubeletReasonErrImagePull + ": rpc error: not found"},
+		},
+		{
+			name:     "the back-off before the next pull attempt is the pull step",
+			pod:      scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, "Back-off pulling image \"x:1\"")),
+			expected: StartStep{Reason: ReasonPullingImage, Message: kubeletReasonImagePullBackOff + ": Back-off pulling image \"x:1\""},
 		},
 		{
 			name:     "a create error the kubelet is retrying is a step named after the error, not its Failed event",
@@ -470,9 +501,9 @@ func TestPodStartStep(t *testing.T) {
 			expected: StartStep{Reason: ReasonStartingContainer, Message: "PodInitializing"},
 		},
 		{
-			name:     "a failed pull attempt is a step with the kubelet's reason and message",
+			name:     "a failed pull attempt is the pull step with the kubelet's reason and message",
 			pod:      scheduledPod(waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")),
-			expected: StartStep{Reason: ReasonStartingContainer, Message: "ErrImagePull: rpc error: not found"},
+			expected: StartStep{Reason: ReasonPullingImage, Message: "ErrImagePull: rpc error: not found"},
 		},
 		{
 			name:     "running but not ready container reports the kubelet's newest message",
@@ -569,6 +600,8 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 	failedOnce.Count = 1
 	failedTwice := containerEvent("failed-twice", containerNameMain, kubeletEventFailed, "Error: "+stepTestCreateErrorText, time.Now())
 	failedTwice.Count = 2
+	pullFailedTwice := containerEvent("pull-failed-twice", containerNameMain, kubeletEventFailed, "Failed to pull image: not found", time.Now())
+	pullFailedTwice.Count = 2
 
 	tests := []struct {
 		name         string
@@ -601,7 +634,13 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedulingMessage}},
 		{name: "a pod of another workspace is ignored", withReader: true, objects: []client.Object{unscheduledPod(stepTestSchedulingMessage)}},
 		{name: "failure is reported before any step", withReader: true,
-			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, stepTestBackOffText)))},
+			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonCreateConfigError, "secret \"s\" not found")))},
+			expectFailed: &StartFailure{Reason: kubeletReasonCreateConfigError, Message: "secret \"s\" not found"}},
+		{name: "a pull back-off after one failed pull is the pull step", withReader: true,
+			objects:    []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, stepTestBackOffText)))},
+			expectStep: &StartStep{Reason: ReasonPullingImage, Message: kubeletReasonImagePullBackOff + ": " + stepTestBackOffText}},
+		{name: "a pull back-off after two failed pulls is a failure", withReader: true,
+			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, stepTestBackOffText))), &pullFailedTwice},
 			expectFailed: &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: stepTestBackOffText}},
 		{name: "a create error after one failed attempt is a step", withReader: true,
 			objects:    []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonCreateContainerError, stepTestCreateErrorText))), &failedOnce},
@@ -810,7 +849,7 @@ func TestResourceManager_WorkspaceStartStep_HoldsReportedBackOffWhileRetrying(t 
 				return
 			}
 			assert.Nil(t, failure)
-			assert.Equal(t, ReasonStartingContainer, step.Reason)
+			assert.Equal(t, ReasonPullingImage, step.Reason, "the sidecar's own pull attempt is the step")
 		})
 	}
 }

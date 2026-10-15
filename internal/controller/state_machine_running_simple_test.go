@@ -331,6 +331,16 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			return event
 		}
 
+		// createFailedPulls records the kubelet's Failed event of the main container's pull, repeated count times.
+		createFailedPulls := func(pod *corev1.Pod, count int32) *corev1.Event {
+			event := createPodEvent(pod, "pull-failed", kubeletComponent, kubeletEventFailed,
+				"Failed to pull image \""+imageBaseNotebook+"\": not found", time.Now())
+			event.InvolvedObject.FieldPath = "spec.containers{" + containerNameMain + "}"
+			event.Count = count
+			Expect(k8sClient.Update(ctx, event)).To(Succeed())
+			return event
+		}
+
 		expectStalled := func(ws *workspacev1alpha1.Workspace, message string) {
 			GinkgoHelper()
 			for _, condType := range []string{ConditionTypeDegraded, ConditionTypeAvailable, ConditionTypeProgressing} {
@@ -398,6 +408,8 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			svc := createService(workspace)
 			pod := createPendingPod(workspace,
 				waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
+			failedPulls := createFailedPulls(pod, 2)
+			defer func() { _ = k8sClient.Delete(ctx, failedPulls) }()
 			defer func() { _ = k8sClient.Delete(ctx, pod) }()
 			defer func() { _ = k8sClient.Delete(ctx, dep) }()
 			defer func() { _ = k8sClient.Delete(ctx, svc) }()
@@ -813,6 +825,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 
 		Context("failed start", func() {
 			const pullErrMessage = "rpc error: code = NotFound desc = failed to pull and unpack image"
+			const missingSecretMessage = "secret \"notebook-token\" not found"
 			failedEvent := func(reason, message string) OmegaMatcher {
 				return Equal(fmt.Sprintf("%s %s %s: %s", corev1.EventTypeWarning, EventWorkspaceStartFailed, reason, message))
 			}
@@ -833,7 +846,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				workspace := newWorkspace()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
-				pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonCreateConfigError, missingSecretMessage))
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
 				defer func() { _ = k8sClient.Delete(ctx, dep) }()
 				defer func() { _ = k8sClient.Delete(ctx, svc) }()
@@ -845,10 +858,44 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.RequeueAfter).To(Equal(FailedStartRequeueDelay))
 
-				expectStartFailed(workspace, kubeletReasonImagePullBackOff, backOffMessage)
+				expectStartFailed(workspace, kubeletReasonCreateConfigError, missingSecretMessage)
 				Expect(workspace.Status.DeploymentName).To(Equal(dep.Name))
 				Expect(workspace.Status.ServiceName).To(Equal(svc.Name))
 				Expect(recorder.Events).To(HaveLen(1))
+				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonCreateConfigError, missingSecretMessage)))
+			})
+
+			It("should hold a pull back-off as the pull step until the kubelet has failed to pull twice", func() {
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
+				failedPulls := createFailedPulls(pod, 1)
+				defer func() { _ = k8sClient.Delete(ctx, failedPulls) }()
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				markDeploymentProgressing(dep)
+
+				sm := buildStateMachine()
+				now := time.Now()
+				clock := now
+				sm.resourceManager.now = func() time.Time { return clock }
+				result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(PullingImageRequeueDelay))
+				expectStartStep(workspace, ReasonPullingImage, imagePullMessage)
+				Expect(recorder.Events).To(BeEmpty())
+
+				// the kubelet's second failed pull raises its Failed event to a count of two
+				failedPulls.Count = 2
+				Expect(k8sClient.Update(ctx, failedPulls)).To(Succeed())
+				clock = now.Add(2 * startEventsInterval)
+				result, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(FailedStartRequeueDelay))
+				expectStartFailed(workspace, kubeletReasonImagePullBackOff, backOffMessage)
 				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonImagePullBackOff, backOffMessage)))
 			})
 
@@ -931,7 +978,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				workspace := newWorkspace()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
-				pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonCreateConfigError, missingSecretMessage))
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
 				defer func() { _ = k8sClient.Delete(ctx, dep) }()
 				defer func() { _ = k8sClient.Delete(ctx, svc) }()
@@ -947,9 +994,9 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
 				Expect(err).NotTo(HaveOccurred())
-				expectStartFailed(workspace, kubeletReasonImagePullBackOff, backOffMessage)
+				expectStartFailed(workspace, kubeletReasonCreateConfigError, missingSecretMessage)
 				Expect(recorder.Events).To(HaveLen(1))
-				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonImagePullBackOff, backOffMessage)))
+				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonCreateConfigError, missingSecretMessage)))
 			})
 
 			It("should bound the event message like the condition message", func() {
@@ -957,7 +1004,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
 				longMessage := strings.Repeat("x", 4*maxCopiedMessageBytes)
-				pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, longMessage))
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonCreateConfigError, longMessage))
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
 				defer func() { _ = k8sClient.Delete(ctx, dep) }()
 				defer func() { _ = k8sClient.Delete(ctx, svc) }()
@@ -969,9 +1016,9 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(err).NotTo(HaveOccurred())
 
 				conditionMessage := truncateMessage(longMessage, maxCopiedMessageBytes)
-				expectStartFailed(workspace, kubeletReasonImagePullBackOff, conditionMessage)
+				expectStartFailed(workspace, kubeletReasonCreateConfigError, conditionMessage)
 				Expect(recorder.Events).To(Receive(Equal(fmt.Sprintf("%s %s %s", corev1.EventTypeWarning, EventWorkspaceStartFailed,
-					truncateMessage(kubeletReasonImagePullBackOff+": "+conditionMessage, maxCopiedMessageBytes)))))
+					truncateMessage(kubeletReasonCreateConfigError+": "+conditionMessage, maxCopiedMessageBytes)))))
 			})
 
 			It("should report a failed pull attempt as a step and turn Degraded once the kubelet backs off", func() {
@@ -986,15 +1033,22 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				markDeploymentProgressing(dep)
 
 				sm := buildStateMachine()
+				now := time.Now()
+				clock := now
+				sm.resourceManager.now = func() time.Time { return clock }
 				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 				Expect(err).NotTo(HaveOccurred())
-				expectStartStep(workspace, ReasonStartingContainer, kubeletReasonErrImagePull+": "+pullErrMessage)
+				expectStartStep(workspace, ReasonPullingImage, kubeletReasonErrImagePull+": "+pullErrMessage)
 				Expect(recorder.Events).To(BeEmpty())
 
+				// the second pull fails as well and the kubelet backs off
+				failedPulls := createFailedPulls(pod, 2)
+				defer func() { _ = k8sClient.Delete(ctx, failedPulls) }()
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), pod)).To(Succeed())
 				pod.Status = waitingContainer(kubeletReasonImagePullBackOff, backOffMessage)
 				pod.Status.Phase = corev1.PodPending
 				Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+				clock = now.Add(2 * startEventsInterval)
 				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -1055,6 +1109,8 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
 				pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
+				failedPulls := createFailedPulls(pod, 2)
+				defer func() { _ = k8sClient.Delete(ctx, failedPulls) }()
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
 				defer func() { _ = k8sClient.Delete(ctx, dep) }()
 				defer func() { _ = k8sClient.Delete(ctx, svc) }()
@@ -1130,6 +1186,8 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				dep := createBuiltDeployment(workspace)
 				svc := createService(workspace)
 				pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
+				failedPulls := createFailedPulls(pod, 2)
+				defer func() { _ = k8sClient.Delete(ctx, failedPulls) }()
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
 				defer func() { _ = k8sClient.Delete(ctx, dep) }()
 				defer func() { _ = k8sClient.Delete(ctx, svc) }()
@@ -1164,6 +1222,8 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
 				pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
+				failedPulls := createFailedPulls(pod, 2)
+				defer func() { _ = k8sClient.Delete(ctx, failedPulls) }()
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
 				defer func() { _ = k8sClient.Delete(ctx, dep) }()
 				defer func() { _ = k8sClient.Delete(ctx, svc) }()
@@ -1171,21 +1231,28 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				markDeploymentProgressing(dep)
 
 				sm := buildStateMachine()
+				now := time.Now()
+				clock := now
+				sm.resourceManager.now = func() time.Time { return clock }
 				_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 				Expect(err).NotTo(HaveOccurred())
 				expectStartFailed(workspace, kubeletReasonImagePullBackOff, backOffMessage)
 				Expect(recorder.Events).To(Receive())
 
-				// the image was pushed: the kubelet creates the container
+				// the image was pushed: the kubelet pulls it and creates the container
+				pulledMessage := "Successfully pulled image \"" + imageBaseNotebook + "\""
+				pulled := createPodEvent(pod, "pulled", kubeletComponent, "Pulled", pulledMessage, now.Add(time.Minute))
+				defer func() { _ = k8sClient.Delete(ctx, pulled) }()
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), pod)).To(Succeed())
 				pod.Status = waitingContainer(kubeletReasonContainerCreating, "")
 				pod.Status.Phase = corev1.PodPending
 				Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+				clock = now.Add(2 * startEventsInterval)
 				result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.RequeueAfter).To(Equal(StartingContainerRequeueDelay))
 
-				expectStartStep(workspace, ReasonStartingContainer, kubeletReasonContainerCreating)
+				expectStartStep(workspace, ReasonStartingContainer, pulledMessage)
 				Expect(recorder.Events).To(BeEmpty())
 			})
 
@@ -1280,6 +1347,8 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
 				pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
+				failedPulls := createFailedPulls(pod, 2)
+				defer func() { _ = k8sClient.Delete(ctx, failedPulls) }()
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
 				defer func() { _ = k8sClient.Delete(ctx, dep) }()
 				defer func() { _ = k8sClient.Delete(ctx, svc) }()
@@ -1316,6 +1385,8 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				dep := createNotReadyDeployment(workspace)
 				svc := createService(workspace)
 				pod := createPendingPod(workspace, waitingContainer(kubeletReasonImagePullBackOff, backOffMessage))
+				failedPulls := createFailedPulls(pod, 2)
+				defer func() { _ = k8sClient.Delete(ctx, failedPulls) }()
 				defer func() { _ = k8sClient.Delete(ctx, pod) }()
 				defer func() { _ = k8sClient.Delete(ctx, dep) }()
 				defer func() { _ = k8sClient.Delete(ctx, svc) }()

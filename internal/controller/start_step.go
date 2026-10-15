@@ -63,6 +63,8 @@ const (
 	// that did not succeed; kubeletErrorEventPrefix opens its message, followed by the error's text.
 	kubeletEventFailed      = "Failed"
 	kubeletErrorEventPrefix = "Error: "
+	// kubeletPullFailedPrefix opens the kubelet's Failed event about one failed pull attempt.
+	kubeletPullFailedPrefix = "Failed to pull image"
 
 	// Fallback messages when neither the pod nor its events carry one.
 	waitingForNodeMessage    = "Waiting for a node to run the pod"
@@ -124,7 +126,7 @@ func prefixReason(reason, message string) string {
 // isDefinitiveStartFailureReason reports whether reason is one the kubelet uses for a container it cannot
 // start as specified: any reason starting with Err or ending in Error or BackOff, the rule Argo CD's health
 // check applies, plus InvalidImageName. ErrImagePull is one failed pull attempt and stays a step;
-// retriedStartReasons count only once the kubelet has failed twice (definitiveStartFailure).
+// ImagePullBackOff and retriedStartReasons count only once the kubelet has failed twice (definitiveStartFailure).
 func isDefinitiveStartFailureReason(reason string) bool {
 	// the operator's own Degraded reasons end in Error as well
 	if reason == ReasonDeploymentError || reason == ReasonServiceError || reason == kubeletReasonErrImagePull {
@@ -228,10 +230,19 @@ var pullAttemptReasons = map[string]bool{
 	kubeletReasonErrImagePull: true, kubeletReasonRegistryUnavailable: true, kubeletReasonSignatureValidationFailed: true,
 }
 
-// attemptReasons are the waiting reasons of one failed attempt the kubelet retries: a pull, a create or a start.
-var attemptReasons = map[string]bool{
-	kubeletReasonErrImagePull: true, kubeletReasonRegistryUnavailable: true, kubeletReasonSignatureValidationFailed: true,
-	kubeletReasonCreateContainerError: true, kubeletReasonRunContainerError: true,
+// pullStepReasons are the waiting reasons of a pull between two attempts: an attempt's error and the
+// back-off before the next one, which the kubelet reports from the first failed pull on.
+var pullStepReasons = unionReasons(pullAttemptReasons, map[string]bool{kubeletReasonImagePullBackOff: true})
+
+// unionReasons returns one set holding every reason of the given sets.
+func unionReasons(sets ...map[string]bool) map[string]bool {
+	union := map[string]bool{}
+	for _, set := range sets {
+		for reason := range set {
+			union[reason] = true
+		}
+	}
+	return union
 }
 
 // pullRetrying reports whether the container whose ImagePullBackOff the workspace reports is in a pull
@@ -302,7 +313,7 @@ var retriedStartReasons = map[string]bool{kubeletReasonCreateContainerError: tru
 
 // pullFailureMessages open the kubelet's Failed events about a pull attempt, which are not create or start
 // attempts: the pull's own report and the start attempt it fails.
-var pullFailureMessages = []string{"Failed to pull image", kubeletErrorEventPrefix + kubeletReasonErrImagePull, kubeletErrorEventPrefix + kubeletReasonImagePullBackOff}
+var pullFailureMessages = []string{kubeletPullFailedPrefix, kubeletErrorEventPrefix + kubeletReasonErrImagePull, kubeletErrorEventPrefix + kubeletReasonImagePullBackOff}
 
 func isPullFailureMessage(message string) bool {
 	for _, prefix := range pullFailureMessages {
@@ -319,10 +330,22 @@ func isPullFailureMessage(message string) bool {
 // container at a step until the progress deadline. The attempts of an earlier error on the same container
 // count too, so a create error right after a missing Secret appears reads Degraded until the next read.
 func failedAttempts(events []corev1.Event, container string) int {
+	return failedEvents(events, container, func(message string) bool { return !isPullFailureMessage(message) })
+}
+
+// pullAttempts counts the kubelet's Failed events reporting a failed pull of the named container's image, one
+// per attempt; the "Error: ErrImagePull" event of the start that attempt fails is not another attempt.
+func pullAttempts(events []corev1.Event, container string) int {
+	return failedEvents(events, container, func(message string) bool { return strings.HasPrefix(message, kubeletPullFailedPrefix) })
+}
+
+// failedEvents counts the kubelet's Failed events about the named container whose message accept keeps,
+// each repeated event standing for its count.
+func failedEvents(events []corev1.Event, container string, accept func(message string) bool) int {
 	attempts := 0
 	for i := range events {
 		event := &events[i]
-		if event.Reason != kubeletEventFailed || !isKubeletEvent(event) || isPullFailureMessage(event.Message) {
+		if event.Reason != kubeletEventFailed || !isKubeletEvent(event) || !accept(event.Message) {
 			continue
 		}
 		if match := containerFieldPathPattern.FindStringSubmatch(event.InvolvedObject.FieldPath); match != nil && match[1] == container {
@@ -356,6 +379,9 @@ func definitiveStartFailure(pod *corev1.Pod, events []corev1.Event) *StartFailur
 			continue
 		}
 		if retriedStartReasons[waiting.Reason] && failedAttempts(events, containerStatus.Name) < 2 {
+			continue
+		}
+		if waiting.Reason == kubeletReasonImagePullBackOff && pullAttempts(events, containerStatus.Name) < 2 {
 			continue
 		}
 		if waiting.Reason == kubeletReasonCrashLoopBackOff {
@@ -404,9 +430,13 @@ func podStartStep(pod *corev1.Pod, events []corev1.Event) StartStep {
 	if kubeletEvent != nil && isKubeletEvent(kubeletEvent) && kubeletEvent.Reason == kubeletEventPulling {
 		return StartStep{Reason: ReasonPullingImage, Message: kubeletEvent.Message}
 	}
-	// an attempt the kubelet is retrying names its error in the waiting state; its Failed events only say
-	// "Error: ErrImagePull" or "Error: ..."
-	if message := waitingContainerMessage(pod, attemptReasons); message != "" {
+	// a failed pull attempt and the back-off before the next one are the pull step; the waiting state names
+	// the image and the error, where the Failed events only say "Error: ErrImagePull"
+	if message := waitingContainerMessage(pod, pullStepReasons); message != "" {
+		return StartStep{Reason: ReasonPullingImage, Message: message}
+	}
+	// a create or start attempt the kubelet is retrying names its error in the waiting state as well
+	if message := waitingContainerMessage(pod, retriedStartReasons); message != "" {
 		return StartStep{Reason: ReasonStartingContainer, Message: message}
 	}
 	if kubeletEvent != nil && kubeletEvent.Message != "" {
