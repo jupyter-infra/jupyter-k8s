@@ -347,12 +347,18 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		return result, nil
 	}
 
-	// A container the kubelet cannot start as specified (ImagePullBackOff, CrashLoopBackOff, ...) is
-	// reported at once, not at the progress deadline.
+	// A container the kubelet cannot start as specified (ImagePullBackOff, CrashLoopBackOff, ...) and a pod
+	// the ReplicaSet controller cannot create (FailedCreate) are reported at once, not at the progress deadline.
 	var startStep *StartStep
 	if !deploymentReady {
 		var failure *StartFailure
 		startStep, failure = sm.resourceManager.WorkspaceStartStep(ctx, workspace)
+		if startStep == nil && failure == nil {
+			// no pod: a pod over quota or rejected by admission is reported on the Deployment
+			if message, failed := sm.resourceManager.DeploymentFailedCreate(deployment); failed {
+				failure = startFailure(replicaSetReasonFailedCreate, message)
+			}
+		}
 		if failure != nil {
 			return sm.reconcileFailedStart(ctx, workspace, deployment, service, failure, snapshotStatus)
 		}
@@ -474,9 +480,9 @@ func stalledMessage(startStep *StartStep, deploymentMessage string, alreadyRepor
 	}
 }
 
-// reconcileFailedStart reports a workspace whose container the kubelet says cannot start as Degraded with
-// the kubelet's reason and message, at once rather than at the progress deadline. A change of kubelet reason
-// and a crash loop's restarts are one failure.
+// reconcileFailedStart reports a workspace whose container the kubelet says cannot start, or whose pod the
+// ReplicaSet controller cannot create, as Degraded with that reason and message, at once rather than at the
+// progress deadline. A change of reason and a crash loop's restarts are one failure.
 func (sm *StateMachine) reconcileFailedStart(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
@@ -484,7 +490,7 @@ func (sm *StateMachine) reconcileFailedStart(
 	service *corev1.Service,
 	failure *StartFailure,
 	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (ctrl.Result, error) {
-	logf.FromContext(ctx).Info("Workspace container cannot start", "reason", failure.Reason, "message", failure.Message)
+	logf.FromContext(ctx).Info("Workspace pod cannot start", "reason", failure.Reason, "message", failure.Message)
 
 	return sm.reconcileDegradedStart(ctx, workspace, deployment, service, degradedStart{
 		reason: failure.Reason, message: failure.Message,

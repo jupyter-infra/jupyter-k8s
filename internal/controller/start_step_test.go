@@ -303,6 +303,9 @@ func TestReportedStartFailure(t *testing.T) {
 		{name: "a guarded reason on Degraded and Progressing",
 			conditions: conditions(ReasonContainerStartFailed, ReasonContainerStartFailed),
 			expected:   &StartFailure{Reason: ReasonContainerStartFailed, Message: "m"}},
+		{name: "the ReplicaSet controller's FailedCreate on Degraded and Progressing",
+			conditions: conditions(replicaSetReasonFailedCreate, replicaSetReasonFailedCreate),
+			expected:   &StartFailure{Reason: replicaSetReasonFailedCreate, Message: "m"}},
 		{name: "an operator error on Degraded alone", conditions: conditions(ReasonDeploymentError, ReasonStartingContainer)},
 		{name: "a stall", conditions: conditions(ReasonComputeStalled, ReasonComputeStalled)},
 	}

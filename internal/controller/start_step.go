@@ -93,7 +93,7 @@ type StartStep struct {
 }
 
 // StartFailure is a kubelet waiting reason for a container it cannot start as specified, with the
-// kubelet's message.
+// kubelet's message, or the ReplicaSet controller's FailedCreate for a pod it cannot create.
 type StartFailure struct {
 	Reason  string
 	Message string
@@ -142,9 +142,9 @@ type startEventsEntry struct {
 }
 
 // reportedStartFailure returns the start failure the workspace's conditions already carry, written by
-// reconcileFailedStart as Degraded=True and Progressing with the same kubelet reason or with
-// ContainerStartFailed, or nil. UpdateErrorStatus writes Degraded alone, so an operator error such as
-// ComputeError does not count.
+// reconcileFailedStart as Degraded=True and Progressing with the same kubelet reason, with
+// ContainerStartFailed or with FailedCreate, or nil. UpdateErrorStatus writes Degraded alone, so an operator
+// error such as ComputeError does not count.
 func reportedStartFailure(workspace *workspacev1alpha1.Workspace) *StartFailure {
 	degraded := FindCondition(&workspace.Status.Conditions, ConditionTypeDegraded)
 	progressing := FindCondition(&workspace.Status.Conditions, ConditionTypeProgressing)
@@ -152,7 +152,8 @@ func reportedStartFailure(workspace *workspacev1alpha1.Workspace) *StartFailure 
 		progressing.Reason != degraded.Reason {
 		return nil
 	}
-	if degraded.Reason != ReasonContainerStartFailed && !isDefinitiveStartFailureReason(degraded.Reason) {
+	if degraded.Reason != ReasonContainerStartFailed && degraded.Reason != replicaSetReasonFailedCreate &&
+		!isDefinitiveStartFailureReason(degraded.Reason) {
 		return nil
 	}
 	return &StartFailure{Reason: degraded.Reason, Message: degraded.Message}

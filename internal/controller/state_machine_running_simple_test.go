@@ -852,6 +852,47 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonImagePullBackOff, backOffMessage)))
 			})
 
+			It("should report FailedCreate with the ReplicaSet's message while the pod cannot be created", func() {
+				const quotaMessage = `pods "sm-simple-abc" is forbidden: exceeded quota: gpu, ` +
+					`requested: requests.nvidia.com/gpu=1, used: requests.nvidia.com/gpu=4, limited: requests.nvidia.com/gpu=4`
+				workspace := newWorkspace()
+				dep := createNotReadyDeployment(workspace)
+				svc := createService(workspace)
+				defer func() { _ = k8sClient.Delete(ctx, dep) }()
+				defer func() { _ = k8sClient.Delete(ctx, svc) }()
+				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+				setDeploymentStatus(dep, appsv1.DeploymentStatus{Replicas: 0, UpdatedReplicas: 0,
+					Conditions: []appsv1.DeploymentCondition{
+						{Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: "ReplicaSetUpdated"},
+						{Type: appsv1.DeploymentReplicaFailure, Status: corev1.ConditionTrue,
+							Reason: replicaSetReasonFailedCreate, Message: quotaMessage},
+					}})
+
+				sm := buildStateMachine()
+				result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(FailedStartRequeueDelay))
+				expectStartFailed(workspace, replicaSetReasonFailedCreate, quotaMessage)
+				Expect(recorder.Events).To(HaveLen(1))
+				Expect(recorder.Events).To(Receive(failedEvent(replicaSetReasonFailedCreate, quotaMessage)))
+
+				// the failure lasts: no second event
+				_, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				expectStartFailed(workspace, replicaSetReasonFailedCreate, quotaMessage)
+				Expect(recorder.Events).To(BeEmpty())
+
+				// quota freed: the ReplicaSet controller creates the pod and drops the condition
+				pod := createPendingPod(workspace, waitingContainer(kubeletReasonContainerCreating, ""))
+				defer func() { _ = k8sClient.Delete(ctx, pod) }()
+				markDeploymentProgressing(dep)
+				result, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(StartingContainerRequeueDelay))
+				expectStartStep(workspace, ReasonStartingContainer, kubeletReasonContainerCreating)
+				Expect(recorder.Events).To(BeEmpty())
+			})
+
 			It("should hold a create error as a step until the kubelet has failed twice", func() {
 				workspace := newWorkspace()
 				dep := createNotReadyDeployment(workspace)

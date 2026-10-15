@@ -16,6 +16,30 @@ import (
 // progressDeadlineSeconds passes without progress; k8s.io/api does not export the constant.
 const deploymentTimedOutReason = "ProgressDeadlineExceeded"
 
+// replicaSetReasonFailedCreate is the reason the ReplicaSet controller sets on ReplicaFailure=True when it
+// cannot create a pod, over a ResourceQuota or rejected by admission, with the API server's error as the
+// message; the Deployment controller copies the condition onto the Deployment and both drop it once the pod
+// exists. k8s.io/api does not export the constant.
+const replicaSetReasonFailedCreate = "FailedCreate"
+
+// DeploymentFailedCreate returns the message of the Deployment's ReplicaFailure=True condition with reason
+// FailedCreate, the ReplicaSet controller's report that the pod cannot be created, or "" and false.
+func (rm *ResourceManager) DeploymentFailedCreate(deployment *appsv1.Deployment) (string, bool) {
+	if deployment == nil {
+		return "", false
+	}
+	for _, condition := range deployment.Status.Conditions {
+		if condition.Type != appsv1.DeploymentReplicaFailure {
+			continue
+		}
+		if condition.Status == corev1.ConditionTrue && condition.Reason == replicaSetReasonFailedCreate {
+			return condition.Message, true
+		}
+		return "", false
+	}
+	return "", false
+}
+
 // IsWorkspaceAvailable checks if the workspace is in Available=True state
 func (rm *ResourceManager) IsWorkspaceAvailable(workspace *workspacev1alpha1.Workspace) bool {
 	for _, condition := range workspace.Status.Conditions {
