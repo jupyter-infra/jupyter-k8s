@@ -24,8 +24,9 @@ import (
 )
 
 const (
-	// startEventsInterval is the shortest interval between two reads of a starting pod's events. The
-	// running path reconciles every PollRequeueDelay (200ms); event reads must not follow that loop.
+	// startEventsInterval is the shortest interval between two API reads of a starting pod's events: a
+	// not-ready workspace reconciles every one to five seconds by step, plus once per status write, and its
+	// event reads must not follow every reconcile.
 	startEventsInterval = 5 * time.Second
 	// startEventsRetention bounds how long a workspace's cached events outlive their last read, so entries
 	// of workspaces that are no longer reconciled do not accumulate.
@@ -34,12 +35,12 @@ const (
 	// reader startEvents runs on every reconcile, and the map only holds starting workspaces.
 	startEventsSweepInterval = time.Minute
 	// startEventsPerSecond and startEventsBurst bound event reads across all workspaces, so a hundred
-	// workspaces starting at once do not spend the manager's API client budget (20 requests per second by
-	// default) on events; each workspace then refreshes its events less often than startEventsInterval.
+	// workspaces starting at once do not load the API server with event lists or hold the single reconcile
+	// worker; each starting workspace then refreshes its events less often than startEventsInterval.
 	startEventsPerSecond = 4
 	startEventsBurst     = 4
 	// startEventsReadTimeout bounds one event read: one reconcile worker serves every workspace, so a slow
-	// API server must not hold it. KubeSpawner bounds its API calls the same way.
+	// API server must not hold it.
 	startEventsReadTimeout = 3 * time.Second
 
 	// eventInvolvedObjectUIDField selects the events recorded about one object, as a field selector on the
