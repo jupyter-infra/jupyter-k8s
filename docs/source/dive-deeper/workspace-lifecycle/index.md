@@ -31,7 +31,7 @@ While the workspace pod is not ready, `Progressing=True` names the step the star
 | `PullingImage` | The kubelet is pulling the image, or waiting to retry a failed pull | The kubelet's pull message, or the failed attempt's reason and error |
 | `StartingContainer` | The pod has a node and a container is not ready yet | The kubelet's latest message about the pod or that container, or the container's waiting reason |
 
-The operator copies these messages unchanged, cut at 1024 bytes. `Available=False` carries the same reason.
+The operator copies these messages unchanged, cut at 1024 bytes.
 
 ```yaml
 conditions:
