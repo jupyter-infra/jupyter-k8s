@@ -1100,6 +1100,15 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(result.RequeueAfter).To(Equal(FailedStartRequeueDelay))
 				expectStartFailed(workspace, kubeletReasonCreateContainerError, stepTestCreateErrorText)
 				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonCreateContainerError, stepTestCreateErrorText)))
+
+				// the event expires an hour later; the reported failure holds while the kubelet keeps retrying
+				Expect(k8sClient.Delete(ctx, failed)).To(Succeed())
+				clock = now.Add(time.Hour)
+				result, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(FailedStartRequeueDelay))
+				expectStartFailed(workspace, kubeletReasonCreateContainerError, stepTestCreateErrorText)
+				Expect(recorder.Events).To(BeEmpty())
 			})
 
 			It("should record the event only once the status write has succeeded", func() {

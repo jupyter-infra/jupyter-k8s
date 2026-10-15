@@ -1,0 +1,20 @@
+# A workspace in a namespace whose ResourceQuota allows no pods, so the ReplicaSet controller cannot create
+# the pod and reports FailedCreate on the Deployment until the quota is lifted.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-quota-blocked
+  namespace: status-quota
+spec:
+  displayName: "Status Test - Pod Over Quota"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  storage:
+    size: 1Gi

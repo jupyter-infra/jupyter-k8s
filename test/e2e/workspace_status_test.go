@@ -510,6 +510,56 @@ var _ = Describe("Workspace Status", Ordered, func() {
 		})
 	})
 
+	Context("Degraded State, pod over quota", func() {
+		const (
+			quotaWorkspace = "workspace-quota-blocked"
+			quotaNamespace = "status-quota"
+			quotaName      = "block-pods"
+		)
+
+		It("should report FailedCreate while a ResourceQuota blocks the pod, and start once it is lifted", func() {
+			By("creating a namespace whose quota allows no pods")
+			_, err := utils.Run(exec.Command("kubectl", "create", "namespace", quotaNamespace))
+			Expect(err).NotTo(HaveOccurred())
+			DeferCleanup(func() {
+				_, _ = utils.Run(exec.Command("kubectl", "delete", "workspace", quotaWorkspace, "-n", quotaNamespace,
+					"--ignore-not-found", "--wait=true", "--timeout=120s"))
+				_, _ = utils.Run(exec.Command("kubectl", "delete", "namespace", quotaNamespace,
+					"--ignore-not-found", "--wait=true", "--timeout=120s"))
+			})
+			_, err = utils.Run(exec.Command("kubectl", "create", "quota", quotaName, "--hard=pods=0", "-n", quotaNamespace))
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating a workspace there")
+			createWorkspaceForTest(quotaWorkspace, statusGroupDir, statusSubgroupDir)
+
+			By("waiting for Degraded=True with reason FailedCreate carrying the API server's quota message")
+			waitForWorkspaceDegradedStart(quotaWorkspace, quotaNamespace, []string{"FailedCreate"},
+				ContainSubstring("exceeded quota: "+quotaName))
+			expectSingleStartFailedEvent(quotaWorkspace, quotaNamespace, ContainSubstring(quotaName))
+			VerifyWorkspaceConditions(quotaWorkspace, quotaNamespace, map[string]string{
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionTrue,
+				ConditionTypeAvailable:   ConditionFalse,
+				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionFalse,
+			})
+
+			By("lifting the quota and waiting for the workspace to become Available without a restart")
+			_, err = utils.Run(exec.Command("kubectl", "delete", "quota", quotaName, "-n", quotaNamespace))
+			Expect(err).NotTo(HaveOccurred())
+			WaitForWorkspaceToReachCondition(quotaWorkspace, quotaNamespace, ConditionTypeAvailable, ConditionTrue)
+			VerifyWorkspaceConditions(quotaWorkspace, quotaNamespace, map[string]string{
+				ConditionTypeProgressing: ConditionFalse,
+				ConditionTypeDegraded:    ConditionFalse,
+				ConditionTypeAvailable:   ConditionTrue,
+				ConditionTypeStopped:     ConditionFalse,
+				ConditionTypeDeleting:    ConditionFalse,
+			})
+			expectSingleStartFailedEvent(quotaWorkspace, quotaNamespace, ContainSubstring(quotaName))
+		})
+	})
+
 	Context("Deleting State", func() {
 		const deletionWorkspace = "workspace-deletion-test"
 
