@@ -342,6 +342,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 		createFailedPulls := func(pod *corev1.Pod, count int32) *corev1.Event {
 			event := createPodEvent(pod, "pull-failed", kubeletComponent, kubeletEventFailed,
 				"Failed to pull image \""+imageBaseNotebook+"\": not found", time.Now())
+			event.Type = corev1.EventTypeWarning
 			event.InvolvedObject.FieldPath = "spec.containers{" + containerNameMain + "}"
 			event.Count = count
 			Expect(k8sClient.Update(ctx, event)).To(Succeed())
@@ -1003,6 +1004,15 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				Expect(result.RequeueAfter).To(Equal(FailedStartRequeueDelay))
 				expectStartFailed(workspace, kubeletReasonImagePullBackOff, backOffMessage)
 				Expect(recorder.Events).To(Receive(failedEvent(kubeletReasonImagePullBackOff, backOffMessage)))
+
+				// the event expires an hour later; the reported failure holds while the kubelet keeps backing off
+				Expect(k8sClient.Delete(ctx, failedPulls)).To(Succeed())
+				clock = now.Add(time.Hour)
+				result, err = sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(FailedStartRequeueDelay))
+				expectStartFailed(workspace, kubeletReasonImagePullBackOff, backOffMessage)
+				Expect(recorder.Events).To(BeEmpty())
 			})
 
 			It("should report FailedCreate with the ReplicaSet's message while the pod cannot be created", func() {

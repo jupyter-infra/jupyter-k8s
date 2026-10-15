@@ -251,13 +251,14 @@ func unionReasons(sets ...map[string]bool) map[string]bool {
 	return union
 }
 
-// pullRetrying reports whether the container whose ImagePullBackOff the workspace reports is in a pull
-// attempt. The reported message quotes the container's image, so a sidecar retrying another image does not
-// hold the back-off; kubelets before 1.33 quote the image as written and later ones with the default tag.
+// pullRetrying reports whether the container whose ImagePullBackOff the workspace reports is still in a pull
+// state, an attempt or the back-off before the next. The reported message quotes the container's image, so a
+// sidecar retrying another image does not hold the back-off; kubelets before 1.33 quote the image as written
+// and later ones with the default tag.
 func pullRetrying(pod *corev1.Pod, reported *StartFailure) bool {
 	for _, containerStatus := range containerStatuses(pod) {
 		waiting := containerStatus.State.Waiting
-		if waiting == nil || !pullAttemptReasons[waiting.Reason] {
+		if waiting == nil || !pullStepReasons[waiting.Reason] {
 			continue
 		}
 		image, found := containerImage(pod, containerStatus.Name)
@@ -559,14 +560,28 @@ func (rm *ResourceManager) WorkspaceStartStep(
 	if crashLooping := crashLoopingContainer(pod, rm.now()); crashLooping != nil {
 		return nil, crashLoopFailure(crashLooping)
 	}
-	// a retry after a back-off does not clear the reported back-off; only a pull that succeeds does
-	if reported := reportedStartFailure(workspace); reported != nil &&
-		reported.Reason == kubeletReasonImagePullBackOff && pullRetrying(pod, reported) {
+	// a retry after a back-off does not clear a reported failure; only an attempt that succeeds does
+	if reported := reportedStartFailure(workspace); reported != nil && retriedFailureHolds(pod, reported) {
 		return nil, reported
 	}
 	step := podStartStep(pod, events)
 	step.ProgressedAt = podProgressedAt(pod)
 	return &step, nil
+}
+
+// retriedFailureHolds reports whether a reported failure of a kind the kubelet retries after a back-off is
+// still being retried: an ImagePullBackOff while the container whose image it names is in a pull state, a
+// CreateContainerError or RunContainerError while a container waits on a create or start error. The count
+// of failed attempts gates the first report only: the kubelet's events can be rate-limited away or expire
+// while the failure lasts, and a count that drops must not turn a reported failure back into a step.
+func retriedFailureHolds(pod *corev1.Pod, reported *StartFailure) bool {
+	switch {
+	case reported.Reason == kubeletReasonImagePullBackOff:
+		return pullRetrying(pod, reported)
+	case retriedStartReasons[reported.Reason]:
+		return waitingContainerMessage(pod, retriedStartReasons) != ""
+	}
+	return false
 }
 
 // podProgressedAt returns the latest time the pod made progress: its creation, a condition turning True, a
