@@ -25,6 +25,7 @@ import (
 )
 
 const newReplicaSetAvailableReason = "NewReplicaSetAvailable"
+const replicaSetUpdatedReason = "ReplicaSetUpdated"
 
 var _ = Describe("reconcileDesiredRunningStatus without access strategy", func() {
 	var (
@@ -263,7 +264,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 		markDeploymentProgressing := func(dep *appsv1.Deployment) {
 			setDeploymentStatus(dep, appsv1.DeploymentStatus{Replicas: 1, UpdatedReplicas: 1,
 				Conditions: []appsv1.DeploymentCondition{{
-					Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: "ReplicaSetUpdated",
+					Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: replicaSetUpdatedReason,
 				}}})
 		}
 		markDeploymentAvailable := func(dep *appsv1.Deployment, progressing appsv1.DeploymentCondition) {
@@ -961,7 +962,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 				defer func() { _ = k8sClient.Delete(ctx, workspace) }()
 				setDeploymentStatus(dep, appsv1.DeploymentStatus{Replicas: 0, UpdatedReplicas: 0,
 					Conditions: []appsv1.DeploymentCondition{
-						{Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: "ReplicaSetUpdated"},
+						{Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: replicaSetUpdatedReason},
 						{Type: appsv1.DeploymentReplicaFailure, Status: corev1.ConditionTrue,
 							Reason: replicaSetReasonFailedCreate, Message: quotaMessage},
 					}})

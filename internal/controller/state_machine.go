@@ -352,13 +352,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	var startStep *StartStep
 	if !deploymentReady {
 		var failure *StartFailure
-		startStep, failure = sm.resourceManager.WorkspaceStartStep(ctx, workspace)
-		if startStep == nil && failure == nil {
-			// no pod: a pod over quota or rejected by admission is reported on the Deployment
-			if message, failed := sm.resourceManager.DeploymentFailedCreate(deployment); failed {
-				failure = startFailure(replicaSetReasonFailedCreate, message)
-			}
-		}
+		startStep, failure = sm.workspaceStartVerdict(ctx, workspace, deployment)
 		if failure != nil {
 			return sm.reconcileFailedStart(ctx, workspace, deployment, service, failure, snapshotStatus)
 		}
@@ -392,6 +386,22 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 
 	// Requeue to check resource readiness again later
 	return ctrl.Result{RequeueAfter: requeueDelay}, nil
+}
+
+// workspaceStartVerdict returns the step a starting workspace is in, or the failure that stops it: the
+// kubelet's verdict on the pod, or, while there is no pod, the ReplicaSet controller's FailedCreate on the
+// Deployment for a pod over quota or rejected by admission.
+func (sm *StateMachine) workspaceStartVerdict(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	deployment *appsv1.Deployment) (*StartStep, *StartFailure) {
+	startStep, failure := sm.resourceManager.WorkspaceStartStep(ctx, workspace)
+	if startStep == nil && failure == nil {
+		if message, failed := sm.resourceManager.DeploymentFailedCreate(deployment); failed {
+			failure = startFailure(replicaSetReasonFailedCreate, message)
+		}
+	}
+	return startStep, failure
 }
 
 // stalledStep reports whether the Deployment's stall verdict, recorded at since, still describes the pod: there

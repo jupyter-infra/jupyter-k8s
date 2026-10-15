@@ -43,7 +43,7 @@ func TestResourceManager_IsDeploymentProgressDeadlineExceeded(t *testing.T) {
 		},
 		{
 			name:       "rollout in progress",
-			deployment: progressing(corev1.ConditionTrue, "ReplicaSetUpdated", "ReplicaSet is progressing."),
+			deployment: progressing(corev1.ConditionTrue, replicaSetUpdatedReason, "ReplicaSet is progressing."),
 		},
 		{
 			name:       "rollout complete",
@@ -78,7 +78,7 @@ func TestResourceManager_DeploymentFailedCreate(t *testing.T) {
 		`used: requests.nvidia.com/gpu=4, limited: requests.nvidia.com/gpu=4`
 	replicaFailure := func(status corev1.ConditionStatus, reason, message string) *appsv1.Deployment {
 		return &appsv1.Deployment{Status: appsv1.DeploymentStatus{Conditions: []appsv1.DeploymentCondition{
-			{Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: "ReplicaSetUpdated"},
+			{Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: replicaSetUpdatedReason},
 			{Type: appsv1.DeploymentReplicaFailure, Status: status, Reason: reason, Message: message},
 		}}}
 	}
@@ -90,7 +90,7 @@ func TestResourceManager_DeploymentFailedCreate(t *testing.T) {
 		expectedMessage string
 	}{
 		{name: "nil deployment"},
-		{name: "no conditions", deployment: &appsv1.Deployment{}},
+		{name: "a deployment without conditions", deployment: &appsv1.Deployment{}},
 		{name: "progressing without a replica failure", deployment: &appsv1.Deployment{Status: appsv1.DeploymentStatus{
 			Conditions: []appsv1.DeploymentCondition{{Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue}}}}},
 		{name: "a pod the ReplicaSet controller cannot create",
