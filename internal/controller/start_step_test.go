@@ -131,6 +131,27 @@ func containerEvent(name, container, reason, message string, at time.Time) corev
 	return event
 }
 
+// failedEvent is the kubelet's Failed event about the main container, repeated count times.
+func failedEvent(name, message string, count int32, at time.Time) corev1.Event {
+	event := containerEvent(name, containerNameMain, kubeletEventFailed, message, at)
+	event.Count = count
+	return event
+}
+
+// labeled gives the pod the labels the operator puts on a workspace's pods.
+func labeled(pod *corev1.Pod) *corev1.Pod {
+	pod.Labels = GenerateLabels(testWorkspaceName)
+	return pod
+}
+
+// reportedConditions are the Degraded and Progressing conditions reconcileFailedStart writes for a failure.
+func reportedConditions(reason, message string) []metav1.Condition {
+	return []metav1.Condition{
+		{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: reason, Message: message},
+		{Type: ConditionTypeProgressing, Status: metav1.ConditionFalse, Reason: reason, Message: message},
+	}
+}
+
 // reportedEvent is an event written through events/v1: the component sits in reportingComponent and source is empty.
 func reportedEvent(name, component, reason, message string, at time.Time) corev1.Event {
 	event := podEvent(name, component, reason, message, at)
@@ -143,15 +164,11 @@ func TestDefinitiveStartFailure(t *testing.T) {
 	now := stepTestClock
 	createError := scheduledPod(waitingStatus(kubeletReasonCreateContainerError, stepTestCreateErrorText))
 	failedAttempt := func(name string, count int32) corev1.Event {
-		event := containerEvent(name, containerNameMain, kubeletEventFailed, "Error: "+stepTestCreateErrorText, now)
-		event.Count = count
-		return event
+		return failedEvent(name, "Error: "+stepTestCreateErrorText, count, now)
 	}
 	backingOff := scheduledPod(waitingStatus(kubeletReasonImagePullBackOff, "Back-off pulling image \"x:1\""))
 	failedPull := func(name string, count int32) corev1.Event {
-		event := containerEvent(name, containerNameMain, kubeletEventFailed, "Failed to pull image \"x:1\": not found", now)
-		event.Count = count
-		return event
+		return failedEvent(name, "Failed to pull image \"x:1\": not found", count, now)
 	}
 	tests := []struct {
 		name     string
@@ -566,10 +583,6 @@ func eventIndexedClient(t *testing.T, objects ...client.Object) client.Client {
 
 func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
-	labeled := func(pod *corev1.Pod) *corev1.Pod {
-		pod.Labels = GenerateLabels(testWorkspaceName)
-		return pod
-	}
 	now := metav1.Now()
 	deleting := labeled(unscheduledPod("stale verdict"))
 	deleting.Name = "terminating"
@@ -596,13 +609,9 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 	twinB := labeled(unscheduledPod("verdict of pod b"))
 	twinB.Name, twinB.UID, twinB.CreationTimestamp = "twin-b", "pod-uid-twin-b", sameSecond
 	reportedBackOff := &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: stepTestBackOffText}
-	failedOnce := containerEvent("failed-once", containerNameMain, kubeletEventFailed, "Error: "+stepTestCreateErrorText, time.Now())
-	failedOnce.Count = 1
-	failedTwice := containerEvent("failed-twice", containerNameMain, kubeletEventFailed, "Error: "+stepTestCreateErrorText, time.Now())
-	failedTwice.Count = 2
-	pullFailedTwice := containerEvent("pull-failed-twice", containerNameMain, kubeletEventFailed,
-		"Failed to pull image \"example.com/missing:1\": not found", time.Now())
-	pullFailedTwice.Count = 2
+	failedOnce := failedEvent("failed-once", "Error: "+stepTestCreateErrorText, 1, time.Now())
+	failedTwice := failedEvent("failed-twice", "Error: "+stepTestCreateErrorText, 2, time.Now())
+	pullFailedTwice := failedEvent("pull-failed-twice", "Failed to pull image \"example.com/missing:1\": not found", 2, time.Now())
 
 	tests := []struct {
 		name         string
@@ -677,10 +686,7 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 			}
 			ws := workspace.DeepCopy()
 			if tt.reported != nil {
-				ws.Status.Conditions = []metav1.Condition{
-					{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: tt.reported.Reason, Message: tt.reported.Message},
-					{Type: ConditionTypeProgressing, Status: metav1.ConditionFalse, Reason: tt.reported.Reason, Message: tt.reported.Message},
-				}
+				ws.Status.Conditions = reportedConditions(tt.reported.Reason, tt.reported.Message)
 			}
 			if tt.reportedStep != nil {
 				ws.Status.Conditions = []metav1.Condition{
@@ -813,7 +819,7 @@ func TestResourceManager_WorkspaceStartStep_CrashLoop(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
 			pod := scheduledPod(tt.status)
-			pod.Labels = GenerateLabels(testWorkspaceName)
+			labeled(pod)
 			c := eventIndexedClient(t, pod)
 			rm := newResourceManagerForCRUD(c, crudScheme(t))
 			require.NotNil(t, rm)
@@ -831,52 +837,60 @@ func TestResourceManager_WorkspaceStartStep_CrashLoop(t *testing.T) {
 	}
 }
 
-func TestResourceManager_WorkspaceStartStep_HoldsReportedBackOffWhileRetrying(t *testing.T) {
-	backOff := stepTestBackOffText + " \"" + stepTestMissingImage + "\""
+func TestResourceManager_WorkspaceStartStep_HoldsReportedFailureWhileRetrying(t *testing.T) {
+	backOffFor := func(image string) *StartFailure {
+		return &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: stepTestBackOffText + " \"" + image + "\""}
+	}
+	createError := &StartFailure{Reason: kubeletReasonCreateContainerError, Message: stepTestCreateErrorText}
 	sidecarRetrying := waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")
 	sidecarRetrying.Name = stepTestOtherName
 	tests := []struct {
 		name     string
-		image    string
-		reported string
+		reported *StartFailure
+		image    string // the main container's image, which a reported back-off quotes
 		statuses []corev1.ContainerStatus
 		held     bool
-		step     string // the step reported instead when the back-off does not hold
+		step     string // the step reported instead when the failure does not hold
 	}{
 		{name: "the reported container retrying its pull holds the back-off",
-			image: stepTestMissingImage, reported: backOff,
+			reported: backOffFor(stepTestMissingImage), image: stepTestMissingImage,
 			statuses: []corev1.ContainerStatus{waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")}, held: true},
 		{name: "a sidecar retrying its own image does not hold another container's resolved back-off",
-			image: stepTestMissingImage, reported: backOff,
-			statuses: []corev1.ContainerStatus{runningStatus(), sidecarRetrying}, held: false, step: ReasonPullingImage},
+			reported: backOffFor(stepTestMissingImage), image: stepTestMissingImage,
+			statuses: []corev1.ContainerStatus{runningStatus(), sidecarRetrying}, step: ReasonPullingImage},
 		{name: "an untagged image is quoted with the default tag by kubelets from 1.33 on",
-			image: "example.com/missing", reported: "Back-off pulling image \"example.com/missing:latest\"",
+			reported: backOffFor("example.com/missing:latest"), image: "example.com/missing",
 			statuses: []corev1.ContainerStatus{waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")}, held: true},
 		{name: "an untagged image is quoted as written by older kubelets",
-			image: "example.com/missing", reported: "Back-off pulling image \"example.com/missing\"",
+			reported: backOffFor("example.com/missing"), image: "example.com/missing",
 			statuses: []corev1.ContainerStatus{waitingStatus(kubeletReasonErrImagePull, "rpc error: not found")}, held: true},
 		{name: "a runtime reporting RegistryUnavailable for the attempt holds the back-off",
-			image: stepTestMissingImage, reported: backOff,
+			reported: backOffFor(stepTestMissingImage), image: stepTestMissingImage,
 			statuses: []corev1.ContainerStatus{waitingStatus(kubeletReasonRegistryUnavailable, "registry timed out")}, held: true},
 		{name: "the back-off itself holds the back-off once its failed-pull events are gone",
-			image: stepTestMissingImage, reported: backOff,
-			statuses: []corev1.ContainerStatus{waitingStatus(kubeletReasonImagePullBackOff, backOff)}, held: true},
+			reported: backOffFor(stepTestMissingImage), image: stepTestMissingImage,
+			statuses: []corev1.ContainerStatus{waitingStatus(kubeletReasonImagePullBackOff, backOffFor(stepTestMissingImage).Message)}, held: true},
 		{name: "a container past its pull does not hold the back-off",
-			image: stepTestMissingImage, reported: backOff,
-			statuses: []corev1.ContainerStatus{waitingStatus(kubeletReasonContainerCreating, "")}, held: false, step: ReasonStartingContainer},
+			reported: backOffFor(stepTestMissingImage), image: stepTestMissingImage,
+			statuses: []corev1.ContainerStatus{waitingStatus(kubeletReasonContainerCreating, "")}, step: ReasonStartingContainer},
+		{name: "a container still failing to be created holds the reported error with no attempt recorded",
+			reported: createError, image: stepTestMissingImage,
+			statuses: []corev1.ContainerStatus{waitingStatus(kubeletReasonCreateContainerError, stepTestCreateErrorText)}, held: true},
+		{name: "a container failing to start holds a reported create error",
+			reported: createError, image: stepTestMissingImage,
+			statuses: []corev1.ContainerStatus{waitingStatus(kubeletReasonRunContainerError, "failed to start container")}, held: true},
+		{name: "a container being created no longer holds a create error",
+			reported: createError, image: stepTestMissingImage,
+			statuses: []corev1.ContainerStatus{waitingStatus(kubeletReasonContainerCreating, "")}, step: ReasonStartingContainer},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
-			workspace.Status.Conditions = []metav1.Condition{
-				{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: kubeletReasonImagePullBackOff, Message: tt.reported},
-				{Type: ConditionTypeProgressing, Status: metav1.ConditionFalse, Reason: kubeletReasonImagePullBackOff, Message: tt.reported},
-			}
-			pod := scheduledPod(tt.statuses...)
+			workspace.Status.Conditions = reportedConditions(tt.reported.Reason, tt.reported.Message)
+			pod := labeled(scheduledPod(tt.statuses...))
 			pod.Spec.Containers = []corev1.Container{
 				{Name: containerNameMain, Image: tt.image}, {Name: stepTestOtherName, Image: "example.com/sidecar:1"},
 			}
-			pod.Labels = GenerateLabels(testWorkspaceName)
 			c := eventIndexedClient(t, pod)
 			rm := newResourceManagerForCRUD(c, crudScheme(t))
 			require.NotNil(t, rm)
@@ -885,51 +899,11 @@ func TestResourceManager_WorkspaceStartStep_HoldsReportedBackOffWhileRetrying(t 
 			step, failure := rm.WorkspaceStartStep(context.Background(), workspace)
 			if tt.held {
 				assert.Nil(t, step)
-				assert.Equal(t, &StartFailure{Reason: kubeletReasonImagePullBackOff, Message: tt.reported}, failure)
+				assert.Equal(t, tt.reported, failure)
 				return
 			}
 			assert.Nil(t, failure)
 			assert.Equal(t, tt.step, step.Reason)
-		})
-	}
-}
-
-func TestResourceManager_WorkspaceStartStep_HoldsReportedCreateErrorWhileRetrying(t *testing.T) {
-	reported := &StartFailure{Reason: kubeletReasonCreateContainerError, Message: stepTestCreateErrorText}
-	tests := []struct {
-		name   string
-		status corev1.ContainerStatus
-		held   bool
-	}{
-		{name: "a container still failing to be created holds the reported error with no attempt recorded",
-			status: waitingStatus(kubeletReasonCreateContainerError, stepTestCreateErrorText), held: true},
-		{name: "a container failing to start holds a reported create error",
-			status: waitingStatus(kubeletReasonRunContainerError, "failed to start container"), held: true},
-		{name: "a container being created no longer holds it",
-			status: waitingStatus(kubeletReasonContainerCreating, "")},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
-			workspace.Status.Conditions = []metav1.Condition{
-				{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: reported.Reason, Message: reported.Message},
-				{Type: ConditionTypeProgressing, Status: metav1.ConditionFalse, Reason: reported.Reason, Message: reported.Message},
-			}
-			pod := scheduledPod(tt.status)
-			pod.Labels = GenerateLabels(testWorkspaceName)
-			c := eventIndexedClient(t, pod)
-			rm := newResourceManagerForCRUD(c, crudScheme(t))
-			require.NotNil(t, rm)
-			rm.SetEventReader(c)
-
-			step, failure := rm.WorkspaceStartStep(context.Background(), workspace)
-			if tt.held {
-				assert.Nil(t, step)
-				assert.Equal(t, reported, failure)
-				return
-			}
-			assert.Nil(t, failure)
-			assert.Equal(t, ReasonStartingContainer, step.Reason)
 		})
 	}
 }
@@ -945,7 +919,7 @@ func (r *blockingReader) List(ctx context.Context, _ client.ObjectList, _ ...cli
 func TestResourceManager_StartEventsReadIsBounded(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
 	pod := unscheduledPod(stepTestSchedulingMessage)
-	pod.Labels = GenerateLabels(testWorkspaceName)
+	labeled(pod)
 	nominated := podEvent("nominated", "karpenter", "Nominated", stepTestNominated, time.Now())
 	c := eventIndexedClient(t, pod, &nominated)
 	rm := newResourceManagerForCRUD(c, crudScheme(t))
@@ -974,7 +948,7 @@ func TestResourceManager_StartEventsReadIsBounded(t *testing.T) {
 func TestResourceManager_StartEventsShareARateLimit(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
 	pod := unscheduledPod(stepTestSchedulingMessage)
-	pod.Labels = GenerateLabels(testWorkspaceName)
+	labeled(pod)
 	nominated := podEvent("nominated", "karpenter", "Nominated", stepTestNominated, time.Now())
 	c := eventIndexedClient(t, pod, &nominated)
 	reader := &countingReader{Reader: c}
@@ -1012,7 +986,7 @@ func TestResourceManager_StartEventsShareARateLimit(t *testing.T) {
 func TestResourceManager_StartEventsAreThrottled(t *testing.T) {
 	workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
 	pod := unscheduledPod(stepTestSchedulingMessage)
-	pod.Labels = GenerateLabels(testWorkspaceName)
+	labeled(pod)
 	nominated := podEvent("nominated", "karpenter", "Nominated", stepTestNominated, time.Now())
 	c := eventIndexedClient(t, pod, &nominated)
 	reader := &countingReader{Reader: c}
@@ -1066,7 +1040,7 @@ func TestResourceManager_StartEventsAreThrottled(t *testing.T) {
 	replacement := unscheduledPod(stepTestSchedulingMessage)
 	replacement.Name = "ws-pod-2"
 	replacement.UID = "pod-uid-2"
-	replacement.Labels = GenerateLabels(testWorkspaceName)
+	labeled(replacement)
 	require.NoError(t, c.Create(ctx, replacement))
 	step, _ = rm.WorkspaceStartStep(ctx, workspace)
 	assert.Equal(t, 5, reader.lists)
