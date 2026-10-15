@@ -443,6 +443,8 @@ func TestStalledStep(t *testing.T) {
 			step: &StartStep{Reason: ReasonPullingImage, Retrying: true, ProgressedAt: now.Add(-deadline)}, expected: true},
 		{name: "a retried create error within the deadline",
 			step: &StartStep{Reason: ReasonStartingContainer, Retrying: true, ProgressedAt: now.Add(-time.Minute)}},
+		{name: "a step read back from the status after a failed pod list",
+			step: &StartStep{Reason: ReasonStartingContainer}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

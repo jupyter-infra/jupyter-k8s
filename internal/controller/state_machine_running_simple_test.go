@@ -732,6 +732,36 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			Expect(recorder.Events).To(BeEmpty())
 		})
 
+		It("should keep the step through a failed pod list while the Deployment's verdict stands", func() {
+			workspace := newWorkspace()
+			dep := createNotReadyDeployment(workspace)
+			svc := createService(workspace)
+			pod := createPendingPod(workspace, waitingContainer(kubeletReasonContainerCreating, ""))
+			defer func() { _ = k8sClient.Delete(ctx, pod) }()
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+			markDeploymentStalled(dep)
+
+			sm := buildStateMachine()
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+			expectStartStep(workspace, ReasonStartingContainer, kubeletReasonContainerCreating)
+
+			sm.resourceManager.client = &MockClient{Client: k8sClient,
+				listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+					if _, ok := list.(*corev1.PodList); ok {
+						return errInjected
+					}
+					return k8sClient.List(ctx, list, opts...)
+				}}
+			result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(StartingContainerRequeueDelay))
+			expectStartStep(workspace, ReasonStartingContainer, kubeletReasonContainerCreating)
+			Expect(recorder.Events).To(BeEmpty())
+		})
+
 		It("should fall back to ComputeStalled for a pull back-off whose attempts it cannot count", func() {
 			workspace := newWorkspace()
 			dep := createNotReadyDeployment(workspace)

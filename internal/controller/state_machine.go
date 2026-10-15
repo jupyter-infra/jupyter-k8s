@@ -412,6 +412,11 @@ func stalledStep(step *StartStep, deadline time.Duration, now time.Time) bool {
 	if step == nil {
 		return true
 	}
+	// a step read back from the status after a failed pod list carries no progress time; the list said
+	// nothing new, so the step stands
+	if step.ProgressedAt.IsZero() {
+		return false
+	}
 	if step.Reason == ReasonPullingImage && !step.Retrying {
 		return false
 	}

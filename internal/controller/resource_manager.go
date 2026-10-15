@@ -35,7 +35,9 @@ type ResourceManager struct {
 	accessResourcesBuilder *AccessResourcesBuilder
 	statusManager          *StatusManager
 
-	// eventReader reads a starting pod's events; nil leaves the start step to what the pod reports.
+	// eventReader reads a starting pod's events; nil leaves the start step to what the pod reports, and the
+	// reasons whose attempts are counted from events (ImagePullBackOff, CreateContainerError,
+	// RunContainerError) then stay a step until the progress deadline.
 	eventReader       client.Reader
 	eventReaderCached bool
 	eventReadTimeout  time.Duration
