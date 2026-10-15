@@ -42,7 +42,9 @@ type ResourceManager struct {
 	eventReadLimiter  *rate.Limiter
 	cachedStartEvents map[client.ObjectKey]startEventsEntry
 	startEventsMu     sync.Mutex
-	now               func() time.Time
+	// startEventsSweptAt is when cachedStartEvents was last swept for entries past startEventsRetention.
+	startEventsSweptAt time.Time
+	now                func() time.Time
 }
 
 // NewResourceManager creates a new ResourceManager

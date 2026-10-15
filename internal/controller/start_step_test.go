@@ -950,11 +950,16 @@ func TestResourceManager_StartEventsAreThrottled(t *testing.T) {
 	assert.Equal(t, 5, reader.lists)
 	assert.Equal(t, stepTestSchedulingMessage, step.Message, "the new pod has no events, so the scheduler's verdict is the message")
 
-	// Entries older than the retention are evicted on the next read.
-	rm.cachedStartEvents[client.ObjectKey{Namespace: testNamespaceName, Name: stepTestOtherName}] = startEventsEntry{readAt: clock.Add(-2 * startEventsRetention)}
+	// Entries older than the retention are evicted by the first read a minute after the last sweep.
+	stale := client.ObjectKey{Namespace: testNamespaceName, Name: stepTestOtherName}
+	rm.cachedStartEvents[stale] = startEventsEntry{readAt: clock.Add(-2 * startEventsRetention)}
 	clock = clock.Add(startEventsInterval)
 	_, _ = rm.WorkspaceStartStep(ctx, workspace)
-	_, kept := rm.cachedStartEvents[client.ObjectKey{Namespace: testNamespaceName, Name: stepTestOtherName}]
+	_, kept := rm.cachedStartEvents[stale]
+	assert.True(t, kept, "a read within the sweep interval does not walk the map")
+	clock = clock.Add(startEventsSweepInterval)
+	_, _ = rm.WorkspaceStartStep(ctx, workspace)
+	_, kept = rm.cachedStartEvents[stale]
 	assert.False(t, kept)
 }
 

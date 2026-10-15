@@ -30,6 +30,9 @@ const (
 	// startEventsRetention bounds how long a workspace's cached events outlive their last read, so entries
 	// of workspaces that are no longer reconciled do not accumulate.
 	startEventsRetention = 10 * time.Minute
+	// startEventsSweepInterval is how often a read drops the entries past startEventsRetention; with a cached
+	// reader startEvents runs on every reconcile, and the map only holds starting workspaces.
+	startEventsSweepInterval = time.Minute
 	// startEventsPerSecond and startEventsBurst bound event reads across all workspaces, so a hundred
 	// workspaces starting at once do not spend the manager's API client budget (20 requests per second by
 	// default) on events; each workspace then refreshes its events less often than startEventsInterval.
@@ -606,10 +609,13 @@ func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspace
 	}
 
 	rm.startEventsMu.Lock()
-	for cachedKey, entry := range rm.cachedStartEvents {
-		if now.Sub(entry.readAt) > startEventsRetention {
-			delete(rm.cachedStartEvents, cachedKey)
+	if now.Sub(rm.startEventsSweptAt) >= startEventsSweepInterval {
+		for cachedKey, entry := range rm.cachedStartEvents {
+			if now.Sub(entry.readAt) > startEventsRetention {
+				delete(rm.cachedStartEvents, cachedKey)
+			}
 		}
+		rm.startEventsSweptAt = now
 	}
 	rm.cachedStartEvents[key] = startEventsEntry{podUID: pod.UID, readAt: now, events: events}
 	rm.startEventsMu.Unlock()
