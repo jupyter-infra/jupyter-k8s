@@ -388,16 +388,23 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 	return ctrl.Result{RequeueAfter: requeueDelay}, nil
 }
 
+// failedCreateGrace is how long a Deployment's FailedCreate condition must stand before it is a failed start.
+// The ReplicaSet controller records any create error, an API server or admission blip included, and clears
+// it on its next successful retry, within seconds; ten seconds is the kubelet's back-off period, so a pod
+// that cannot be created is reported no later than a container that cannot start.
+const failedCreateGrace = 10 * time.Second
+
 // workspaceStartVerdict returns the step a starting workspace is in, or the failure that stops it: the
 // kubelet's verdict on the pod, or, while there is no pod, the ReplicaSet controller's FailedCreate on the
-// Deployment for a pod over quota or rejected by admission.
+// Deployment for a pod over quota or rejected by admission, once it has stood for failedCreateGrace.
 func (sm *StateMachine) workspaceStartVerdict(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
 	deployment *appsv1.Deployment) (*StartStep, *StartFailure) {
 	startStep, failure := sm.resourceManager.WorkspaceStartStep(ctx, workspace)
 	if startStep == nil && failure == nil {
-		if message, failed := sm.resourceManager.DeploymentFailedCreate(deployment); failed {
+		message, since, failed := sm.resourceManager.DeploymentFailedCreate(deployment)
+		if failed && sm.resourceManager.now().Sub(since) >= failedCreateGrace {
 			failure = startFailure(replicaSetReasonFailedCreate, message)
 		}
 	}

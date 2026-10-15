@@ -29,21 +29,23 @@ const defaultDeploymentProgressDeadline = 600 * time.Second
 const replicaSetReasonFailedCreate = "FailedCreate"
 
 // DeploymentFailedCreate returns the message of the Deployment's ReplicaFailure=True condition with reason
-// FailedCreate, the ReplicaSet controller's report that the pod cannot be created, or "" and false.
-func (rm *ResourceManager) DeploymentFailedCreate(deployment *appsv1.Deployment) (string, bool) {
+// FailedCreate, the ReplicaSet controller's report that the pod cannot be created, and when the condition
+// appeared, or false.
+func (rm *ResourceManager) DeploymentFailedCreate(
+	deployment *appsv1.Deployment) (message string, since time.Time, failed bool) {
 	if deployment == nil {
-		return "", false
+		return "", time.Time{}, false
 	}
 	for _, condition := range deployment.Status.Conditions {
 		if condition.Type != appsv1.DeploymentReplicaFailure {
 			continue
 		}
 		if condition.Status == corev1.ConditionTrue && condition.Reason == replicaSetReasonFailedCreate {
-			return condition.Message, true
+			return condition.Message, condition.LastTransitionTime.Time, true
 		}
-		return "", false
+		return "", time.Time{}, false
 	}
-	return "", false
+	return "", time.Time{}, false
 }
 
 // IsWorkspaceAvailable checks if the workspace is in Available=True state

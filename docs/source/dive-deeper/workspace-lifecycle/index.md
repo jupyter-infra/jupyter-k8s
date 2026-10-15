@@ -63,7 +63,7 @@ A reason counts as a failure when it starts with `Err` or ends in `Error` or `Ba
 
 A missing Secret or ConfigMap referenced from `env` reads `CreateContainerConfigError`. Mounted as a volume it keeps the pod in `ContainerCreating`, a `StartingContainer` step with the kubelet's `FailedMount` message until the progress deadline.
 
-A pod the cluster refuses to create, over a `ResourceQuota` or rejected by an admission webhook or Pod Security admission, never reaches a kubelet. The ReplicaSet controller reports it on the Deployment as `ReplicaFailure=True` with reason `FailedCreate`, and the workspace copies that reason with the API server's message, for example `pods "ws-abc" is forbidden: exceeded quota: gpu, ...`. The ReplicaSet controller keeps retrying, so the failure clears once the pod exists.
+A pod the cluster refuses to create, over a `ResourceQuota` or rejected by an admission webhook or Pod Security admission, never reaches a kubelet. The ReplicaSet controller reports it on the Deployment as `ReplicaFailure=True` with reason `FailedCreate`, and the workspace copies that reason with the API server's message, for example `pods "ws-abc" is forbidden: exceeded quota: gpu, ...`, once the condition has stood for ten seconds: the ReplicaSet controller records any create error, an API server or admission blip included, and clears it on its next successful retry. It keeps retrying, so the failure clears once the pod exists.
 
 A crash loop is a restarted container that exits again. The kubelet restarts a first exit without back-off, so a container that exits once and comes back never reads `Degraded`. The message names the container, the exit code and reason, and the restart count:
 

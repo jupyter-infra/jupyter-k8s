@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const testStalledMessage = "ReplicaSet \"jupyter-test-workspace-abc\" has timed out progressing."
@@ -79,10 +80,12 @@ func TestDeploymentProgressDeadline(t *testing.T) {
 func TestResourceManager_DeploymentFailedCreate(t *testing.T) {
 	const quotaMessage = `pods "ws-abc" is forbidden: exceeded quota: gpu, requested: requests.nvidia.com/gpu=1, ` +
 		`used: requests.nvidia.com/gpu=4, limited: requests.nvidia.com/gpu=4`
+	appeared := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	replicaFailure := func(status corev1.ConditionStatus, reason, message string) *appsv1.Deployment {
 		return &appsv1.Deployment{Status: appsv1.DeploymentStatus{Conditions: []appsv1.DeploymentCondition{
 			{Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: replicaSetUpdatedReason},
-			{Type: appsv1.DeploymentReplicaFailure, Status: status, Reason: reason, Message: message},
+			{Type: appsv1.DeploymentReplicaFailure, Status: status, Reason: reason, Message: message,
+				LastTransitionTime: metav1.NewTime(appeared)},
 		}}}
 	}
 
@@ -108,9 +111,14 @@ func TestResourceManager_DeploymentFailedCreate(t *testing.T) {
 	rm := &ResourceManager{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			message, failed := rm.DeploymentFailedCreate(tt.deployment)
+			message, since, failed := rm.DeploymentFailedCreate(tt.deployment)
 			assert.Equal(t, tt.expectedFailed, failed)
 			assert.Equal(t, tt.expectedMessage, message)
+			if failed {
+				assert.True(t, appeared.Equal(since), "since %v", since)
+			} else {
+				assert.True(t, since.IsZero())
+			}
 		})
 	}
 }

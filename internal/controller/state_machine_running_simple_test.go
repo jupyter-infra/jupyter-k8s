@@ -1028,11 +1028,23 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 					Conditions: []appsv1.DeploymentCondition{
 						{Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue, Reason: replicaSetUpdatedReason},
 						{Type: appsv1.DeploymentReplicaFailure, Status: corev1.ConditionTrue,
-							Reason: replicaSetReasonFailedCreate, Message: quotaMessage},
+							Reason: replicaSetReasonFailedCreate, Message: quotaMessage, LastTransitionTime: metav1.Now()},
 					}})
 
 				sm := buildStateMachine()
+				now := time.Now()
+				clock := now
+				sm.resourceManager.now = func() time.Time { return clock }
+				// a condition that just appeared can be an API server or admission blip the ReplicaSet controller
+				// clears on its next retry; it is not reported yet
 				result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(NoPodRequeueDelay))
+				expectNotDegraded(workspace)
+				Expect(recorder.Events).To(BeEmpty())
+
+				clock = now.Add(failedCreateGrace)
+				result, err = sm.ReconcileDesiredState(ctx, workspace, nil)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.RequeueAfter).To(Equal(FailedStartRequeueDelay))
 				expectStartFailed(workspace, replicaSetReasonFailedCreate, quotaMessage)
