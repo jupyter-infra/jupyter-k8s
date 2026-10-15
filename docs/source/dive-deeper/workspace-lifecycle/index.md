@@ -43,7 +43,7 @@ conditions:
 
 ## Failed starts
 
-A container the kubelet cannot start as specified turns the workspace `Degraded` at once instead of at the progress deadline below. The kubelet's waiting reason becomes the reason of `Degraded`, `Available` and `Progressing`, and `Progressing` is `False` while the failure lasts:
+A container the kubelet cannot start as specified turns the workspace `Degraded` within about half a minute instead of at the progress deadline below. The kubelet's waiting reason becomes the reason of `Degraded`, `Available` and `Progressing`, and `Progressing` is `False` while the failure lasts:
 
 ```yaml
 conditions:
@@ -59,8 +59,6 @@ conditions:
     reason: ImagePullBackOff
 ```
 
-A reason counts as a failure when it starts with `Err` or ends in `Error` or `BackOff`, plus `InvalidImageName`. `ImagePullBackOff`, `CreateContainerError` and `RunContainerError` count from the kubelet's second failed attempt, so one transient failure does not turn the workspace `Degraded` and a real one is reported within about half a minute; until then the pull or the start is a step carrying the kubelet's error, and once reported the failure holds until an attempt succeeds. A reason the CRD rejects as a condition reason is written as `ContainerStartFailed`, with the kubelet's reason opening the message.
-
 A missing Secret or ConfigMap referenced from `env` reads `CreateContainerConfigError`. Mounted as a volume it keeps the pod in `ContainerCreating`, a `StartingContainer` step with the kubelet's `FailedMount` message until the progress deadline.
 
 A pod the cluster refuses to create, over a `ResourceQuota` or rejected by admission, reads `FailedCreate` with the API server's message, for example `pods "ws-abc" is forbidden: exceeded quota: gpu, ...`, once the failure has lasted ten seconds. It clears once the pod exists, which after a long block can take minutes from the moment the quota is freed.
@@ -74,8 +72,6 @@ conditions:
     reason: CrashLoopBackOff
     message: "container workspace exited with code 1 (Error), restart count 4"
 ```
-
-A container leaves the loop when its last exit is ten minutes old or ended a run of ten minutes.
 
 The operator records one Warning event, `WorkspaceStartFailed`, per failed start, and clears the condition once the start resumes or the workspace stops. A missing Secret that appears later resolves on its own; a wrong image or a failing command needs a stop and a start.
 
@@ -99,7 +95,7 @@ conditions:
 
 The message is the start step's message, or the Deployment's own message when the workspace has no pod. The operator records one Warning event, `WorkspaceComputeStalled`, when the condition first appears.
 
-The verdict applies only while the pod itself has made no progress for as long as the deadline. A pod that gets its node ten minutes into the start is reported by its step and stalls only if nothing happens for another ten minutes, and a first pull under way is never a stall, so a GPU node that arrives late reads `PullingImage` while the image downloads. A pull that makes no progress is failed by the container runtime and retried; the retry stalls at the deadline like any other step, and a second failure reads `ImagePullBackOff`.
+The verdict applies only while the pod itself has made no progress for as long as the deadline, so a node that arrives late or an image still downloading reads its step instead.
 
 The verdict is not final: once the pod is scheduled and ready, for example after an autoscaler adds a node, the workspace returns to `Available=True` with `Degraded=False`, and stopping the workspace also clears it. A workspace that keeps stalling needs a spec or template change, applied with a stop and a start, since the operator applies spec changes to the Deployment only while the workspace is `Available`.
 
