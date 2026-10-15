@@ -571,9 +571,11 @@ func (rm *ResourceManager) WorkspaceStartStep(
 
 // retriedFailureHolds reports whether a reported failure of a kind the kubelet retries after a back-off is
 // still being retried: an ImagePullBackOff while the container whose image it names is in a pull state, a
-// CreateContainerError or RunContainerError while a container waits on a create or start error. The count
-// of failed attempts gates the first report only: the kubelet's events can be rate-limited away or expire
-// while the failure lasts, and a count that drops must not turn a reported failure back into a step.
+// CreateContainerError or RunContainerError while any container waits on a create or start error, since the
+// kubelet's message names no container and a runtime error's container id changes with every attempt; a
+// failure that moves from one container to another keeps the first message until the second is counted. The
+// count of failed attempts gates the first report only: the kubelet's events can be rate-limited away or
+// expire while the failure lasts, and a count that drops must not turn a reported failure back into a step.
 func retriedFailureHolds(pod *corev1.Pod, reported *StartFailure) bool {
 	switch {
 	case reported.Reason == kubeletReasonImagePullBackOff:
