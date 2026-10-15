@@ -77,7 +77,7 @@ conditions:
 
 A container leaves the loop when its last exit is ten minutes old or ended a run of ten minutes.
 
-The operator records one Warning event, `WorkspaceStartFailed`, per failed start, and clears the condition when the kubelet drops the failure, at once when the pod becomes ready or the workspace stops. A missing Secret that appears later resolves on its own; a wrong image or a failing command needs a stop and a start.
+The operator records one Warning event, `WorkspaceStartFailed`, per failed start, and clears the condition once the start resumes or the workspace stops. A missing Secret that appears later resolves on its own; a wrong image or a failing command needs a stop and a start.
 
 ## Stalled starts
 

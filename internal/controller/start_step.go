@@ -131,9 +131,9 @@ func prefixReason(reason, message string) string {
 }
 
 // isDefinitiveStartFailureReason reports whether reason is one the kubelet uses for a container it cannot
-// start as specified: any reason starting with Err or ending in Error or BackOff, the rule Argo CD's health
-// check applies, plus InvalidImageName. ErrImagePull is one failed pull attempt and stays a step;
-// ImagePullBackOff and retriedStartReasons count only once the kubelet has failed twice (definitiveStartFailure).
+// start as specified: any reason starting with Err or ending in Error or BackOff, plus InvalidImageName.
+// ErrImagePull is one failed pull attempt and stays a step; ImagePullBackOff and retriedStartReasons count
+// only once the kubelet has failed twice (definitiveStartFailure).
 func isDefinitiveStartFailureReason(reason string) bool {
 	// the operator's own Degraded reasons end in Error as well
 	if reason == ReasonDeploymentError || reason == ReasonServiceError || reason == kubeletReasonErrImagePull {
