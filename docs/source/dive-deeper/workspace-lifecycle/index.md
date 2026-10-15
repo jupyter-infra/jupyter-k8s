@@ -61,9 +61,9 @@ conditions:
 
 A missing Secret or ConfigMap referenced from `env` reads `CreateContainerConfigError`. Mounted as a volume it keeps the pod in `ContainerCreating`, a `StartingContainer` step with the kubelet's `FailedMount` message until the progress deadline.
 
-A pod the cluster refuses to create, over a `ResourceQuota` or rejected by admission, reads `FailedCreate` with the API server's message, for example `pods "ws-abc" is forbidden: exceeded quota: gpu, ...`, once the failure has lasted ten seconds. It clears once the pod exists, which after a long block can take minutes from the moment the quota is freed.
+A pod the cluster refuses to create, over a `ResourceQuota` or rejected by admission, reads `FailedCreate` with the API server's message, for example `pods "ws-abc" is forbidden: exceeded quota: gpu, ...`, once the refusal has lasted ten seconds. It clears once the pod exists, which after a long block can take minutes from the moment the quota is freed.
 
-A crash loop is a restarted container that exits again. The kubelet restarts a first exit without back-off, so a container that exits once and comes back never reads `Degraded`. The message names the container, the exit code and reason, and the restart count:
+A crash loop is a restarted container that exits again; a container that exits once and comes back does not read `Degraded`. The message names the container, the exit code and reason, and the restart count:
 
 ```yaml
 conditions:
@@ -95,9 +95,9 @@ conditions:
 
 The message is the start step's message, or the Deployment's own message when the workspace has no pod. The operator records one Warning event, `WorkspaceComputeStalled`, when the condition first appears.
 
-The verdict applies only while the pod itself has made no progress for as long as the deadline, so a node that arrives late or an image still downloading reads its step instead.
+`ComputeStalled` applies only while the pod itself has made no progress for as long as the deadline, so a node that arrives late or an image still downloading reads its step instead.
 
-The verdict is not final: once the pod is scheduled and ready, for example after an autoscaler adds a node, the workspace returns to `Available=True` with `Degraded=False`, and stopping the workspace also clears it. A workspace that keeps stalling needs a spec or template change, applied with a stop and a start, since the operator applies spec changes to the Deployment only while the workspace is `Available`.
+`ComputeStalled` is not final: once the pod is scheduled and ready, for example after an autoscaler adds a node, the workspace returns to `Available=True` with `Degraded=False`, and stopping the workspace also clears it. A workspace that keeps stalling needs a spec or template change, applied with a stop and a start, since the operator applies spec changes to the Deployment only while the workspace is `Available`.
 
 ## Status fields
 

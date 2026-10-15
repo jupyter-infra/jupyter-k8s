@@ -333,10 +333,8 @@ func isPullFailureMessage(message string) bool {
 }
 
 // failedAttempts counts the kubelet's Failed events about create or start attempts of the named container,
-// each repeated event standing for its count. The text is not matched against the waiting state: a runtime
-// error can carry the container id, which changes with every attempt, so matching would hold such a
-// container at a step until the progress deadline. The attempts of an earlier error on the same container
-// count too, so a create error right after a missing Secret appears reads Degraded until the next read.
+// each repeated event standing for its count. The text is not matched against the waiting state, since a
+// runtime error can carry a container id that changes with every attempt.
 func failedAttempts(events []corev1.Event, container string) int {
 	return failedEvents(events, container, func(message string) bool { return !isPullFailureMessage(message) })
 }
@@ -570,13 +568,10 @@ func (rm *ResourceManager) WorkspaceStartStep(
 	return &step, nil
 }
 
-// retriedFailureHolds reports whether a reported failure of a kind the kubelet retries after a back-off is
-// still being retried: an ImagePullBackOff while the container whose image it names is in a pull state, a
-// CreateContainerError or RunContainerError while any container waits on a create or start error, since the
-// kubelet's message names no container and a runtime error's container id changes with every attempt; a
-// failure that moves from one container to another keeps the first message until the second is counted. The
-// count of failed attempts gates the first report only: the kubelet's events can be rate-limited away or
-// expire while the failure lasts, and a count that drops must not turn a reported failure back into a step.
+// retriedFailureHolds reports whether a reported failure the kubelet retries is still being retried: an
+// ImagePullBackOff while the container whose image it names is in a pull state, a create or start error while
+// any container waits on one, since the kubelet's message names no container. The attempt count gates the
+// first report only; the kubelet's events can be rate-limited away or expire while the failure lasts.
 func retriedFailureHolds(pod *corev1.Pod, reported *StartFailure) bool {
 	switch {
 	case reported.Reason == kubeletReasonImagePullBackOff:
@@ -635,13 +630,12 @@ func (rm *ResourceManager) workspaceStartingPod(ctx context.Context, workspace *
 	return newest, nil
 }
 
-// startEvents returns the events recorded on the pod, read through the API reader at most once per
-// startEventsInterval per workspace and at most startEventsPerSecond across workspaces, and reused in
-// between, or through the manager cache on every call. A failed read, a timeout included, keeps the
-// previous events and counts as a read, so the interval holds through an API outage; a read the shared
-// limiter denies does not, so the next reconcile tries again. Events are text that anyone with event write access in the namespace can create: they
-// supply messages, and the only verdict they touch is the count of failed attempts, which a forged event
-// can bring forward for a reason the pod status already reports.
+// startEvents returns the events recorded on the pod: through the API reader at most once per
+// startEventsInterval per workspace and startEventsPerSecond across workspaces, reused in between, or through
+// the manager cache on every call. A failed read keeps the previous events and holds the interval; a denied
+// read does not. Events are text anyone with event write access in the namespace can create; they supply
+// messages, and the only verdict they touch is the count of failed attempts, for a reason the pod status
+// already reports.
 func (rm *ResourceManager) startEvents(ctx context.Context, workspace *workspacev1alpha1.Workspace, pod *corev1.Pod) []corev1.Event {
 	if rm.eventReader == nil {
 		return nil
