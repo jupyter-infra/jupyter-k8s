@@ -413,8 +413,9 @@ func (sm *StateMachine) workspaceStartVerdict(
 
 // stalledStep reports whether the Deployment's deadline verdict still describes the pod: there is none, or
 // the pod has made no progress for as long as the deadline and is not pulling its image. The Deployment
-// controller counts only ready replicas, so its verdict outlives a node that arrives late and a failure that
-// clears; a pull under way is progress it cannot see, and a stuck pull ends in the kubelet's own back-off.
+// controller sees progress only in pods created or ready, so its verdict outlives a node that arrives late
+// and a failure that clears; a pull under way is progress it cannot see, and a pull that makes no progress
+// is failed by the container runtime, after which the kubelet's back-off counts as a failed start.
 func stalledStep(step *StartStep, deadline time.Duration, now time.Time) bool {
 	if step == nil {
 		return true
