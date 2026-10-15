@@ -363,8 +363,10 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 			return sm.reconcileFailedStart(ctx, workspace, deployment, service, failure, snapshotStatus)
 		}
 		// The Deployment controller declares a rollout stalled once progressDeadlineSeconds (600 by default,
-		// unset by the operator) passes without a replica becoming ready, e.g. a pod that no node can take.
-		if stalled, deploymentMessage := sm.resourceManager.IsDeploymentProgressDeadlineExceeded(deployment); stalled {
+		// unset by the operator) passes without a replica becoming ready, e.g. a pod that no node can take,
+		// and keeps the verdict until one is ready; stalledStep tells whether it still describes the pod.
+		stalled, deploymentMessage, since := sm.resourceManager.IsDeploymentProgressDeadlineExceeded(deployment)
+		if stalled && stalledStep(startStep, since) {
 			return sm.reconcileStalledRollout(ctx, workspace, deployment, service, startStep, deploymentMessage, snapshotStatus)
 		}
 		requeueDelay = startStepRequeueDelay(startStep)
@@ -390,6 +392,13 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 
 	// Requeue to check resource readiness again later
 	return ctrl.Result{RequeueAfter: requeueDelay}, nil
+}
+
+// stalledStep reports whether the Deployment's stall verdict, recorded at since, still describes the pod: there
+// is none, or it has made no progress since and is not pulling its image. A pull is progress the Deployment
+// controller cannot see, and a stuck pull ends in the kubelet's own back-off, which counts as a failed start.
+func stalledStep(step *StartStep, since time.Time) bool {
+	return step == nil || (step.Reason != ReasonPullingImage && !step.ProgressedAt.After(since))
 }
 
 // startStepRequeueDelay is how long the running path waits before reading a not-ready pod again, by the

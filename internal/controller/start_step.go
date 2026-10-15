@@ -88,10 +88,13 @@ const (
 var conditionReasonPattern = regexp.MustCompile(`^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$`)
 
 // StartStep is the step a starting workspace pod is in: the Progressing reason and the message the
-// component responsible for that step recorded, copied unchanged.
+// component responsible for that step recorded, copied unchanged, and when the pod last made progress.
 type StartStep struct {
 	Reason  string
 	Message string
+	// ProgressedAt is the latest of the pod's creation, a pod condition turning True and a container
+	// starting; the Deployment controller counts only ready replicas, so its stall verdict can predate it.
+	ProgressedAt time.Time
 }
 
 // StartFailure is a kubelet waiting reason for a container it cannot start as specified, with the
@@ -559,7 +562,25 @@ func (rm *ResourceManager) WorkspaceStartStep(
 		return nil, reported
 	}
 	step := podStartStep(pod, events)
+	step.ProgressedAt = podProgressedAt(pod)
 	return &step, nil
+}
+
+// podProgressedAt returns the latest time the pod made progress: its creation, a condition turning True, a
+// container starting.
+func podProgressedAt(pod *corev1.Pod) time.Time {
+	latest := pod.CreationTimestamp.Time
+	for _, condition := range pod.Status.Conditions {
+		if condition.Status == corev1.ConditionTrue && condition.LastTransitionTime.After(latest) {
+			latest = condition.LastTransitionTime.Time
+		}
+	}
+	for _, containerStatus := range containerStatuses(pod) {
+		if running := containerStatus.State.Running; running != nil && running.StartedAt.After(latest) {
+			latest = running.StartedAt.Time
+		}
+	}
+	return latest
 }
 
 // ForgetStartEvents drops the cached events of a workspace whose start is over.

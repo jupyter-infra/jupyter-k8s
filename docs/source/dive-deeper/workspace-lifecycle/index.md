@@ -99,6 +99,8 @@ conditions:
 
 The message is the start step's message, or the Deployment's own message when the workspace has no pod. The operator records one Warning event, `WorkspaceComputeStalled`, when the condition first appears.
 
+The Deployment controller counts only ready replicas and keeps the verdict until one is ready, so the operator applies it only while the pod has made no progress since the verdict: a pod that is scheduled, or whose container starts, after the deadline is reported by its step, and a pull in progress is always a step, since the kubelet gives up on a stuck pull itself and the back-off then counts as a failed start. A GPU node that arrives after ten minutes therefore reads `PullingImage`, not `ComputeStalled`, while the image downloads.
+
 The verdict is not final: once the pod is scheduled and ready, for example after an autoscaler adds a node, the workspace returns to `Available=True` with `Degraded=False`, and stopping the workspace also clears it. A workspace that keeps stalling needs a spec or template change, applied with a stop and a start, since the operator applies spec changes to the Deployment only while the workspace is `Available`.
 
 ## Status fields

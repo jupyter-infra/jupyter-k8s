@@ -422,6 +422,32 @@ func TestTimeUntilProbeDeadline_InTheFuture(t *testing.T) {
 	assert.True(t, remaining > 0 && remaining <= 5*time.Second)
 }
 
+func TestStalledStep(t *testing.T) {
+	verdict := time.Date(2026, 10, 8, 12, 10, 0, 0, time.UTC)
+	tests := []struct {
+		name     string
+		step     *StartStep
+		expected bool
+	}{
+		{name: "no pod", expected: true},
+		{name: "waiting for a node since before the verdict",
+			step: &StartStep{Reason: ReasonWaitingForNode, ProgressedAt: verdict.Add(-10 * time.Minute)}, expected: true},
+		{name: "a pod created at the verdict",
+			step: &StartStep{Reason: ReasonWaitingForNode, ProgressedAt: verdict}, expected: true},
+		{name: "a pod scheduled after the verdict",
+			step: &StartStep{Reason: ReasonStartingContainer, ProgressedAt: verdict.Add(time.Minute)}},
+		{name: "a container that has not become ready since before the verdict",
+			step: &StartStep{Reason: ReasonStartingContainer, ProgressedAt: verdict.Add(-time.Minute)}, expected: true},
+		{name: "a pull under way since before the verdict",
+			step: &StartStep{Reason: ReasonPullingImage, ProgressedAt: verdict.Add(-10 * time.Minute)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, stalledStep(tt.step, verdict))
+		})
+	}
+}
+
 func TestStalledMessage(t *testing.T) {
 	reported := &metav1.Condition{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: ReasonComputeStalled, Message: "0/3 nodes are available"}
 	tests := []struct {

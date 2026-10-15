@@ -6,6 +6,8 @@ Distributed under the terms of the MIT license
 package controller
 
 import (
+	"time"
+
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -74,20 +76,21 @@ func (rm *ResourceManager) IsDeploymentAvailable(deployment *appsv1.Deployment) 
 // IsDeploymentProgressDeadlineExceeded reports whether the Deployment controller has declared the
 // rollout stalled (Progressing=False with reason ProgressDeadlineExceeded) and returns that
 // condition's message.
-func (rm *ResourceManager) IsDeploymentProgressDeadlineExceeded(deployment *appsv1.Deployment) (bool, string) {
+func (rm *ResourceManager) IsDeploymentProgressDeadlineExceeded(
+	deployment *appsv1.Deployment) (stalled bool, message string, since time.Time) {
 	if deployment == nil {
-		return false, ""
+		return false, "", time.Time{}
 	}
 	for _, condition := range deployment.Status.Conditions {
 		if condition.Type != appsv1.DeploymentProgressing {
 			continue
 		}
 		if condition.Status == corev1.ConditionFalse && condition.Reason == deploymentTimedOutReason {
-			return true, condition.Message
+			return true, condition.Message, condition.LastTransitionTime.Time
 		}
-		return false, ""
+		return false, "", time.Time{}
 	}
-	return false, ""
+	return false, "", time.Time{}
 }
 
 // IsDeploymentMissingOrDeleting checks if the Deployment is either missing (nil)

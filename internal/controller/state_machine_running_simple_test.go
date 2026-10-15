@@ -251,11 +251,13 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			dep.Status = status
 			Expect(k8sClient.Status().Update(ctx, dep)).To(Succeed())
 		}
+		// markDeploymentStalled records the deadline verdict now, after the pod the spec created, as the
+		// Deployment controller does ten minutes into a start.
 		markDeploymentStalled := func(dep *appsv1.Deployment) {
 			setDeploymentStatus(dep, appsv1.DeploymentStatus{Replicas: 1, UpdatedReplicas: 1,
 				Conditions: []appsv1.DeploymentCondition{{
 					Type: appsv1.DeploymentProgressing, Status: corev1.ConditionFalse,
-					Reason: deploymentTimedOutReason, Message: deploymentStalledMessage,
+					Reason: deploymentTimedOutReason, Message: deploymentStalledMessage, LastTransitionTime: metav1.Now(),
 				}}})
 		}
 		markDeploymentProgressing := func(dep *appsv1.Deployment) {
@@ -676,6 +678,55 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to update Workspace.Status"))
+		})
+
+		It("should keep PullingImage rather than ComputeStalled while a pull outlasts the deadline", func() {
+			workspace := newWorkspace()
+			dep := createNotReadyDeployment(workspace)
+			svc := createService(workspace)
+			pod := createPendingPod(workspace, waitingContainer(kubeletReasonContainerCreating, ""))
+			pulling := createPodEvent(pod, "pulling", kubeletComponent, kubeletEventPulling,
+				"Pulling image \"jupyter/base-notebook:latest\"", time.Now())
+			defer func() { _ = k8sClient.Delete(ctx, pulling) }()
+			defer func() { _ = k8sClient.Delete(ctx, pod) }()
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+			markDeploymentStalled(dep)
+
+			sm := buildStateMachine()
+			result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(PullingImageRequeueDelay))
+
+			expectStartStep(workspace, ReasonPullingImage, "Pulling image \"jupyter/base-notebook:latest\"")
+			Expect(recorder.Events).To(BeEmpty())
+		})
+
+		It("should report the step rather than ComputeStalled for a pod that progressed after the verdict", func() {
+			workspace := newWorkspace()
+			dep := createNotReadyDeployment(workspace)
+			svc := createService(workspace)
+			// the verdict predates the pod: the node arrived ten minutes into the start and the pod is creating
+			setDeploymentStatus(dep, appsv1.DeploymentStatus{Replicas: 1, UpdatedReplicas: 1,
+				Conditions: []appsv1.DeploymentCondition{{
+					Type: appsv1.DeploymentProgressing, Status: corev1.ConditionFalse,
+					Reason: deploymentTimedOutReason, Message: deploymentStalledMessage,
+					LastTransitionTime: metav1.NewTime(time.Now().Add(-time.Hour)),
+				}}})
+			pod := createPendingPod(workspace, waitingContainer(kubeletReasonContainerCreating, ""))
+			defer func() { _ = k8sClient.Delete(ctx, pod) }()
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			sm := buildStateMachine()
+			result, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(StartingContainerRequeueDelay))
+
+			expectStartStep(workspace, ReasonStartingContainer, kubeletReasonContainerCreating)
+			Expect(recorder.Events).To(BeEmpty())
 		})
 
 		It("should carry the kubelet's newest event in ComputeStalled for a pod with a node", func() {

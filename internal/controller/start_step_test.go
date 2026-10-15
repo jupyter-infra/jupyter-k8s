@@ -624,14 +624,14 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 			expectStep:   &StartStep{Reason: ReasonPullingImage, Message: stepTestPulling}},
 		{name: "pods created in the same second resolve by name", withReader: true,
 			objects:    []client.Object{twinA, twinB},
-			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: "verdict of pod b"}},
+			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: "verdict of pod b", ProgressedAt: sameSecond.Time}},
 		{name: "an evicted pod is skipped for its replacement", withReader: true,
 			objects:    []client.Object{evicted, labeled(scheduledPod(waitingStatus(kubeletReasonContainerCreating, "")))},
 			expectStep: &StartStep{Reason: ReasonStartingContainer, Message: kubeletReasonContainerCreating}},
 		{name: "only an evicted pod is no starting pod", withReader: true, objects: []client.Object{evicted}},
 		{name: "the newest live pod decides", withReader: true,
 			objects:    []client.Object{older, newer},
-			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedulingMessage}},
+			expectStep: &StartStep{Reason: ReasonWaitingForNode, Message: stepTestSchedulingMessage, ProgressedAt: newer.CreationTimestamp.Time}},
 		{name: "a pod of another workspace is ignored", withReader: true, objects: []client.Object{unscheduledPod(stepTestSchedulingMessage)}},
 		{name: "failure is reported before any step", withReader: true,
 			objects:      []client.Object{labeled(scheduledPod(waitingStatus(kubeletReasonCreateConfigError, "secret \"s\" not found")))},
@@ -684,10 +684,38 @@ func TestResourceManager_WorkspaceStartStep(t *testing.T) {
 				}
 			}
 			step, failure := rm.WorkspaceStartStep(context.Background(), ws)
-			assert.Equal(t, tt.expectStep, step)
+			if tt.expectStep == nil {
+				assert.Nil(t, step)
+			} else {
+				require.NotNil(t, step)
+				assert.Equal(t, tt.expectStep.Reason, step.Reason)
+				assert.Equal(t, tt.expectStep.Message, step.Message)
+				assert.WithinDuration(t, tt.expectStep.ProgressedAt, step.ProgressedAt, time.Second)
+			}
 			assert.Equal(t, tt.expectFailed, failure)
 		})
 	}
+}
+
+func TestPodProgressedAt(t *testing.T) {
+	created := stepTestClock
+	scheduledAt := created.Add(50 * time.Second)
+	startedAt := created.Add(70 * time.Second)
+	pod := unscheduledPod(stepTestSchedulingMessage)
+	pod.CreationTimestamp = metav1.NewTime(created)
+	assert.Equal(t, created, podProgressedAt(pod), "an unscheduled pod progressed last at its creation")
+
+	pod.Status.Conditions = []corev1.PodCondition{
+		{Type: corev1.PodScheduled, Status: corev1.ConditionTrue, LastTransitionTime: metav1.NewTime(scheduledAt)},
+		{Type: corev1.ContainersReady, Status: corev1.ConditionFalse, LastTransitionTime: metav1.NewTime(created.Add(time.Hour))},
+	}
+	assert.Equal(t, scheduledAt, podProgressedAt(pod), "a condition turning True is progress, one staying False is not")
+
+	pod.Status.InitContainerStatuses = []corev1.ContainerStatus{{Name: stepTestInitName, State: corev1.ContainerState{
+		Running: &corev1.ContainerStateRunning{StartedAt: metav1.NewTime(startedAt)},
+	}}}
+	pod.Status.ContainerStatuses = []corev1.ContainerStatus{waitingStatus(kubeletReasonContainerCreating, "")}
+	assert.Equal(t, startedAt, podProgressedAt(pod), "a container starting is progress")
 }
 
 func TestCrashLoopingContainer(t *testing.T) {
