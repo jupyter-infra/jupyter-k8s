@@ -9,6 +9,10 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"sync"
+	"time"
+
+	"golang.org/x/time/rate"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 
@@ -30,6 +34,19 @@ type ResourceManager struct {
 	pvcBuilder             *PVCBuilder
 	accessResourcesBuilder *AccessResourcesBuilder
 	statusManager          *StatusManager
+
+	// eventReader reads a starting pod's events; nil leaves the start step to what the pod reports, and the
+	// reasons whose attempts are counted from events (ImagePullBackOff, CreateContainerError,
+	// RunContainerError) then stay a step until the progress deadline.
+	eventReader       client.Reader
+	eventReaderCached bool
+	eventReadTimeout  time.Duration
+	eventReadLimiter  *rate.Limiter
+	cachedStartEvents map[client.ObjectKey]startEventsEntry
+	startEventsMu     sync.Mutex
+	// startEventsSweptAt is when cachedStartEvents was last swept for entries past startEventsRetention.
+	startEventsSweptAt time.Time
+	now                func() time.Time
 }
 
 // NewResourceManager creates a new ResourceManager
@@ -50,6 +67,10 @@ func NewResourceManager(
 		pvcBuilder:             pvcBuilder,
 		accessResourcesBuilder: accessResourcesBuilder,
 		statusManager:          statusManager,
+		eventReadTimeout:       startEventsReadTimeout,
+		eventReadLimiter:       rate.NewLimiter(startEventsPerSecond, startEventsBurst),
+		cachedStartEvents:      map[client.ObjectKey]startEventsEntry{},
+		now:                    time.Now,
 	}
 }
 

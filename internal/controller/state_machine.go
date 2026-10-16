@@ -12,7 +12,9 @@ import (
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -178,6 +180,7 @@ func (sm *StateMachine) reconcileDesiredStoppedStatus(
 				sm.recorder.Event(workspace, corev1.EventTypeNormal, "WorkspaceStopped", "Workspace has been stopped")
 			}
 
+			sm.resourceManager.ForgetStartEvents(workspace)
 			if err := sm.statusManager.UpdateStoppedStatus(ctx, workspace, snapshotStatus); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -302,7 +305,8 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		case ProbeAlreadySucceeded:
 			accessResourcesReady = true
 		case ProbeFailureThresholdExceeded:
-			if statusErr := sm.statusManager.UpdatePermanentDegradedRunningStatus(
+			sm.resourceManager.ForgetStartEvents(workspace)
+			if statusErr := sm.statusManager.UpdateDegradedRunningStatus(
 				ctx, workspace, ReasonAccessProbeThresholdExceeded, ReasonAccessNotReady,
 				"Access startup probe failed: threshold exceeded",
 				snapshotStatus); statusErr != nil {
@@ -325,6 +329,9 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		// BEFORE the status write, so they persist in the same Status().Update as the Running conditions.
 		// Non-gating: probe verdicts never change whether the workspace is Available.
 		integrationProbeInterval := sm.probeIntegrationStatus(ctx, workspace)
+		// The start is over: drop the pod events cached for the start step, so the cache holds only
+		// starting workspaces.
+		sm.resourceManager.ForgetStartEvents(workspace)
 
 		if err := sm.statusManager.UpdateRunningStatus(ctx, workspace, snapshotStatus); err != nil {
 			return ctrl.Result{}, err
@@ -340,6 +347,25 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		return result, nil
 	}
 
+	// A container the kubelet cannot start as specified (ImagePullBackOff, CrashLoopBackOff, ...) and a pod
+	// the ReplicaSet controller cannot create (FailedCreate) are reported at once, not at the progress deadline.
+	var startStep *StartStep
+	if !deploymentReady {
+		var failure *StartFailure
+		startStep, failure = sm.workspaceStartVerdict(ctx, workspace, deployment)
+		if failure != nil {
+			return sm.reconcileFailedStart(ctx, workspace, deployment, service, failure, snapshotStatus)
+		}
+		// The Deployment controller declares a rollout stalled once progressDeadlineSeconds (600 by default,
+		// unset by the operator) passes without a replica becoming ready, e.g. a pod that no node can take,
+		// and keeps the verdict until one is ready; stalledStep tells whether it still describes the pod.
+		stalled, deploymentMessage := sm.resourceManager.IsDeploymentProgressDeadlineExceeded(deployment)
+		if stalled && stalledStep(startStep, deploymentProgressDeadline(deployment), sm.resourceManager.now()) {
+			return sm.reconcileStalledRollout(ctx, workspace, deployment, service, startStep, deploymentMessage, snapshotStatus)
+		}
+		requeueDelay = startStepRequeueDelay(startStep)
+	}
+
 	// Resources are being created/started but not fully ready yet
 	// Update status to Starting and requeue to check again later
 	logger.Info("Resources not fully ready",
@@ -351,6 +377,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		computeReady:         deploymentReady,
 		serviceReady:         serviceReady,
 		accessResourcesReady: accessResourcesReady,
+		computeStep:          startStep,
 	}
 	if err := sm.statusManager.UpdateStartingStatus(
 		ctx, workspace, readiness, snapshotStatus); err != nil {
@@ -359,6 +386,156 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 
 	// Requeue to check resource readiness again later
 	return ctrl.Result{RequeueAfter: requeueDelay}, nil
+}
+
+// failedCreateGrace is how long a Deployment's FailedCreate condition must stand before it is a failed start.
+// The ReplicaSet controller records any create error, an API server or admission blip included, and clears
+// it on its next successful retry, within seconds; ten seconds is the kubelet's back-off period, so a pod
+// that cannot be created is reported no later than a container that cannot start.
+const failedCreateGrace = 10 * time.Second
+
+// workspaceStartVerdict returns the step a starting workspace is in, or the failure that stops it: the
+// kubelet's verdict on the pod, or, while there is no pod, the ReplicaSet controller's FailedCreate on the
+// Deployment for a pod over quota or rejected by admission, once it has stood for failedCreateGrace.
+func (sm *StateMachine) workspaceStartVerdict(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	deployment *appsv1.Deployment) (*StartStep, *StartFailure) {
+	startStep, failure := sm.resourceManager.WorkspaceStartStep(ctx, workspace)
+	if startStep == nil && failure == nil {
+		message, since, failed := sm.resourceManager.DeploymentFailedCreate(deployment)
+		if failed && sm.resourceManager.now().Sub(since) >= failedCreateGrace {
+			failure = startFailure(replicaSetReasonFailedCreate, message)
+		}
+	}
+	return startStep, failure
+}
+
+// stalledStep reports whether the Deployment's deadline verdict still describes the pod: there is none, or
+// the pod has made no progress for as long as the deadline and is not in its first pull. The Deployment
+// controller counts only pods created or ready, so its verdict outlives a late node or a cleared failure; a
+// first pull is progress it cannot see, and a pull the kubelet retries reads as Retrying and stalls like any step.
+func stalledStep(step *StartStep, deadline time.Duration, now time.Time) bool {
+	if step == nil {
+		return true
+	}
+	// a step read back from the status after a failed pod list carries no progress time; the list said
+	// nothing new, so the step stands
+	if step.ProgressedAt.IsZero() {
+		return false
+	}
+	if step.Reason == ReasonPullingImage && !step.Retrying {
+		return false
+	}
+	return now.Sub(step.ProgressedAt) >= deadline
+}
+
+// startStepRequeueDelay is how long the running path waits before reading a not-ready pod again, by the
+// step it is in; nil is a Deployment whose pod does not exist yet.
+func startStepRequeueDelay(step *StartStep) time.Duration {
+	if step == nil {
+		return NoPodRequeueDelay
+	}
+	switch step.Reason {
+	case ReasonWaitingForNode:
+		return WaitingForNodeRequeueDelay
+	case ReasonPullingImage:
+		return PullingImageRequeueDelay
+	default:
+		return StartingContainerRequeueDelay
+	}
+}
+
+// degradedStart is a start that cannot complete: the reason and message for the Degraded, Available and
+// Progressing conditions, the Warning event that marks the transition, whether the conditions already
+// report this failure so that a workspace that stays degraded does not repeat the event, and the delay
+// until the pod is read again.
+type degradedStart struct {
+	reason, message           string
+	eventReason, eventMessage string
+	alreadyReported           bool
+	requeueAfter              time.Duration
+}
+
+// reconcileDegradedStart writes a degradedStart and requeues at its delay. The event follows the status
+// write, so a write conflict, which reconciles again, does not repeat it.
+func (sm *StateMachine) reconcileDegradedStart(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	deployment *appsv1.Deployment,
+	service *corev1.Service,
+	start degradedStart,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (ctrl.Result, error) {
+	workspace.Status.DeploymentName = deployment.GetName()
+	workspace.Status.ServiceName = service.GetName()
+	if err := sm.statusManager.UpdateDegradedRunningStatus(
+		ctx, workspace, start.reason, start.reason, truncateMessage(start.message, maxCopiedMessageBytes),
+		snapshotStatus); err != nil {
+		return ctrl.Result{}, err
+	}
+	if !start.alreadyReported {
+		sm.recorder.Event(workspace, corev1.EventTypeWarning, start.eventReason,
+			truncateMessage(start.eventMessage, maxCopiedMessageBytes))
+	}
+	return ctrl.Result{RequeueAfter: start.requeueAfter}, nil
+}
+
+// reconcileStalledRollout reports a workspace whose Deployment exceeded its progress deadline as
+// Degraded with reason ComputeStalled, carrying the pod's start step message or, when the workspace has
+// no live pod, the Deployment's own message.
+func (sm *StateMachine) reconcileStalledRollout(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	deployment *appsv1.Deployment,
+	service *corev1.Service,
+	startStep *StartStep,
+	deploymentMessage string,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (ctrl.Result, error) {
+	degraded := FindCondition(&workspace.Status.Conditions, ConditionTypeDegraded)
+	alreadyReported := degraded != nil && degraded.Status == metav1.ConditionTrue && degraded.Reason == ReasonComputeStalled
+	message := stalledMessage(startStep, deploymentMessage, alreadyReported, degraded)
+	logf.FromContext(ctx).Info("Deployment rollout stalled", "deployment", deployment.GetName(), "message", message)
+
+	return sm.reconcileDegradedStart(ctx, workspace, deployment, service, degradedStart{
+		reason: ReasonComputeStalled, message: message,
+		eventReason: EventWorkspaceComputeStalled, eventMessage: message,
+		alreadyReported: alreadyReported,
+		requeueAfter:    LongRequeueDelay,
+	}, snapshotStatus)
+}
+
+// stalledMessage is the message of a stalled start: the pod's step message, else the verdict a stall already
+// reported, since a step that is missing while the stall is on record means the pod list failed or the pod
+// is gone and the Deployment's own text would say less, else the Deployment's message.
+func stalledMessage(startStep *StartStep, deploymentMessage string, alreadyReported bool, degraded *metav1.Condition) string {
+	switch {
+	case startStep != nil:
+		return startStep.Message
+	case alreadyReported && degraded.Message != "":
+		return degraded.Message
+	default:
+		return deploymentMessage
+	}
+}
+
+// reconcileFailedStart reports a workspace whose container the kubelet says cannot start, or whose pod the
+// ReplicaSet controller cannot create, as Degraded with that reason and message, at once rather than at the
+// progress deadline. A change of reason and a crash loop's restarts are one failure.
+func (sm *StateMachine) reconcileFailedStart(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	deployment *appsv1.Deployment,
+	service *corev1.Service,
+	failure *StartFailure,
+	snapshotStatus *workspacev1alpha1.WorkspaceStatus) (ctrl.Result, error) {
+	logf.FromContext(ctx).Info("Workspace pod cannot start", "reason", failure.Reason, "message", failure.Message)
+
+	return sm.reconcileDegradedStart(ctx, workspace, deployment, service, degradedStart{
+		reason: failure.Reason, message: failure.Message,
+		eventReason: EventWorkspaceStartFailed, eventMessage: prefixReason(failure.Reason, failure.Message),
+		alreadyReported: reportedStartFailure(workspace) != nil,
+		requeueAfter:    FailedStartRequeueDelay,
+	}, snapshotStatus)
 }
 
 // probeIntegrationStatus runs each attached integration's report-only statusProbe and writes one
@@ -543,6 +720,7 @@ func (sm *StateMachine) stopWorkspaceDueToIdle(ctx context.Context, workspace *w
 func (sm *StateMachine) ReconcileDeletion(ctx context.Context, workspace *workspacev1alpha1.Workspace) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 	logger.Info("Handling workspace deletion", "workspace", workspace.Name)
+	sm.resourceManager.ForgetStartEvents(workspace)
 
 	if !controllerutil.ContainsFinalizer(workspace, WorkspaceFinalizerName) {
 		logger.Info("No finalizer present, allowing deletion")

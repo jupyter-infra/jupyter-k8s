@@ -41,7 +41,7 @@ func (sm *StatusManager) updateStatus(
 		workspace.Status.Conditions = *conditionsToUpdate
 	}
 
-	if reflect.DeepEqual(workspace.Status, snapshotStatus) {
+	if reflect.DeepEqual(&workspace.Status, snapshotStatus) {
 		// no-op: status hasn't changed
 		return nil
 	}
@@ -68,6 +68,8 @@ type WorkspaceRunningReadiness struct {
 	computeReady         bool
 	serviceReady         bool
 	accessResourcesReady bool
+	// computeStep is the step the workspace pod is in while computeReady is false, when known.
+	computeStep *StartStep
 }
 
 // UpdateStartingStatus sets Available to false and Progressing to true
@@ -85,19 +87,14 @@ func (sm *StatusManager) UpdateStartingStatus(
 		return fmt.Errorf("invalid call: not all resources should be ready in method UpdateStartingStatus")
 	}
 
-	waitingForCompute := !readiness.computeReady && readiness.serviceReady && readiness.accessResourcesReady
-	waitingForService := readiness.computeReady && !readiness.serviceReady && readiness.accessResourcesReady
 	waitingForAccess := readiness.computeReady && readiness.serviceReady && !readiness.accessResourcesReady
 
-	if waitingForCompute {
-		startingReason = ReasonComputeNotReady
-		startingMessage = "Compute is not ready"
+	if !readiness.computeReady && readiness.computeStep != nil {
+		startingReason = readiness.computeStep.Reason
+		startingMessage = truncateMessage(readiness.computeStep.Message, maxCopiedMessageBytes)
 	} else if waitingForAccess {
 		startingReason = ReasonAccessNotReady
 		startingMessage = "Access is not ready"
-	} else if waitingForService {
-		startingReason = ReasonServiceNotReady
-		startingMessage = "Service is not ready"
 	}
 	// Nothing ready corresponds to the default
 
@@ -169,10 +166,9 @@ func (sm *StatusManager) UpdateErrorStatus(
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
-// UpdatePermanentDegradedRunningStatus sets Degraded=True, Available=False, Progressing=False, Stopped=False.
-// Use when the controller has given up on a workspace whose desired state is Running
-// and will not retry without external intervention (e.g. access startup probe threshold exceeded).
-func (sm *StatusManager) UpdatePermanentDegradedRunningStatus(
+// UpdateDegradedRunningStatus sets Degraded=True, Available=False, Progressing=False, Stopped=False for
+// a workspace whose desired state is Running.
+func (sm *StatusManager) UpdateDegradedRunningStatus(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
 	degradedReason string,
@@ -192,7 +188,7 @@ func (sm *StatusManager) UpdatePermanentDegradedRunningStatus(
 	return sm.updateStatus(ctx, workspace, &conditionsToUpdate, snapshotStatus)
 }
 
-// If a Stopped-path equivalent is needed, add UpdatePermanentDegradedStoppedStatus
+// If a Stopped-path equivalent is needed, add UpdateDegradedStoppedStatus
 // mirroring this method: use ReasonDesiredStateStopped on Available, degradedReason
 // on Progressing, and stoppedReason on Stopped.
 

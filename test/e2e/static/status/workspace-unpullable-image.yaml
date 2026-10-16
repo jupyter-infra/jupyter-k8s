@@ -1,0 +1,19 @@
+# A workspace whose image exists nowhere, so the kubelet reports the pull failure as the container's waiting reason.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-unpullable-image
+  namespace: default
+spec:
+  displayName: "Status Test - Unpullable Image"
+  image: jk8s-e2e-missing-image:latest
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  storage:
+    size: 1Gi

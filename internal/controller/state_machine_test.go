@@ -421,3 +421,59 @@ func TestTimeUntilProbeDeadline_InTheFuture(t *testing.T) {
 	remaining := timeUntilProbeDeadline(ws)
 	assert.True(t, remaining > 0 && remaining <= 5*time.Second)
 }
+
+func TestStalledStep(t *testing.T) {
+	now := time.Date(2026, 10, 8, 12, 10, 0, 0, time.UTC)
+	deadline := defaultDeploymentProgressDeadline
+	tests := []struct {
+		name     string
+		step     *StartStep
+		expected bool
+	}{
+		{name: "no pod", expected: true},
+		{name: "waiting for a node for the whole deadline",
+			step: &StartStep{Reason: ReasonWaitingForNode, ProgressedAt: now.Add(-deadline)}, expected: true},
+		{name: "a pod that progressed within the deadline",
+			step: &StartStep{Reason: ReasonStartingContainer, ProgressedAt: now.Add(-deadline + time.Minute)}},
+		{name: "a container that has not become ready for the whole deadline",
+			step: &StartStep{Reason: ReasonStartingContainer, ProgressedAt: now.Add(-deadline - time.Minute)}, expected: true},
+		{name: "a pull under way for longer than the deadline",
+			step: &StartStep{Reason: ReasonPullingImage, ProgressedAt: now.Add(-2 * deadline)}},
+		{name: "a pull the kubelet has been retrying for the whole deadline",
+			step: &StartStep{Reason: ReasonPullingImage, Retrying: true, ProgressedAt: now.Add(-deadline)}, expected: true},
+		{name: "a retried create error within the deadline",
+			step: &StartStep{Reason: ReasonStartingContainer, Retrying: true, ProgressedAt: now.Add(-time.Minute)}},
+		{name: "a step read back from the status after a failed pod list",
+			step: &StartStep{Reason: ReasonStartingContainer}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, stalledStep(tt.step, deadline, now))
+		})
+	}
+}
+
+func TestStalledMessage(t *testing.T) {
+	reported := &metav1.Condition{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: ReasonComputeStalled, Message: "0/3 nodes are available"}
+	tests := []struct {
+		name            string
+		step            *StartStep
+		alreadyReported bool
+		degraded        *metav1.Condition
+		expected        string
+	}{
+		{name: "the pod's step message wins", step: &StartStep{Reason: ReasonWaitingForNode, Message: "nominated"},
+			alreadyReported: true, degraded: reported, expected: "nominated"},
+		{name: "a stall on record keeps its verdict when the pod reports nothing", alreadyReported: true, degraded: reported,
+			expected: "0/3 nodes are available"},
+		{name: "a new stall without a pod carries the Deployment's message", degraded: nil, expected: "ProgressDeadlineExceeded"},
+		{name: "a stall on record without a message falls back to the Deployment's", alreadyReported: true,
+			degraded: &metav1.Condition{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: ReasonComputeStalled},
+			expected: "ProgressDeadlineExceeded"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, stalledMessage(tt.step, "ProgressDeadlineExceeded", tt.alreadyReported, tt.degraded))
+		})
+	}
+}

@@ -84,6 +84,8 @@ const (
 	MessageRunning = "Jupyter server is running"
 	// MessageStopped is the status message for stopped workspaces
 	MessageStopped = "Jupyter server stopped successfully"
+	// TruncatedMessageSuffix marks a condition message cut to its length ceiling
+	TruncatedMessageSuffix = " ...(truncated)"
 
 	// DefaultDesiredStatus is the default desired status for workspaces
 	DefaultDesiredStatus = "Running"
@@ -108,8 +110,22 @@ const (
 	MinimalRequeueDelay = 10 * time.Millisecond
 	// PollRequeueDelay is the delay for polling reconciliation
 	PollRequeueDelay = 200 * time.Millisecond
+	// NoPodRequeueDelay is the running path's wait while the Deployment has no pod yet. It and the per-step
+	// delays below replace PollRequeueDelay while the pod is not ready: the step's events refresh every
+	// startEventsInterval, so a node wait or an image pull is read again at that cadence, and the pod itself
+	// is read at every reconcile, so a failure during the short steps still surfaces within about a second.
+	NoPodRequeueDelay = time.Second
+	// WaitingForNodeRequeueDelay is the wait while the pod has no node.
+	WaitingForNodeRequeueDelay = 5 * time.Second
+	// PullingImageRequeueDelay is the wait while the kubelet pulls the image.
+	PullingImageRequeueDelay = 5 * time.Second
+	// StartingContainerRequeueDelay is the wait while the pod has a node and a container is not ready.
+	StartingContainerRequeueDelay = time.Second
 	// LongRequeueDelay is the delay for long reconciliation cycles
 	LongRequeueDelay = 60 * time.Second
+	// FailedStartRequeueDelay is the delay between reads of a pod whose container the kubelet cannot start. A
+	// change of waiting reason does not reach the Deployment watch, so only the requeue sees the kubelet recover.
+	FailedStartRequeueDelay = 15 * time.Second
 
 	// DefaultIdleCheckInterval is the default interval for checking workspace idle status
 	DefaultIdleCheckInterval = 5 * time.Minute

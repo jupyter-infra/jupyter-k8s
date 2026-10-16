@@ -7,6 +7,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -345,6 +346,19 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 		NewAccessResourcesBuilder(),
 		statusManager,
 	)
+	// The start step reads a starting pod's core/v1 Events, selected by involvedObject.uid, for the messages
+	// the pod status does not carry (start_step.go). With pod watching on, the Event watch below already caches
+	// every event in the cluster, so the reads come from that cache through a field index; otherwise they go to
+	// the API server, since an index on the cached client would start that cluster-wide informer.
+	if options.EnableWorkspacePodWatching {
+		if err := mgr.GetFieldIndexer().IndexField(
+			context.Background(), &corev1.Event{}, eventInvolvedObjectUIDField, EventInvolvedObjectUID); err != nil {
+			return fmt.Errorf("failed to index events by involved object: %w", err)
+		}
+		resourceManager.SetEventCacheReader(k8sClient)
+	} else {
+		resourceManager.SetEventReader(mgr.GetAPIReader())
+	}
 
 	// Create state machine
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")

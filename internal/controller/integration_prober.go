@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"net"
 	"time"
-	"unicode/utf8"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -159,15 +158,7 @@ type exitStatusError interface {
 // can never blow past the CRD conditions[].message ceiling (32768) and fail the status write. A "(truncated)"
 // marker is appended when the message is clipped so a reader knows the tail was dropped.
 func truncateProbeMessage(msg string) string {
-	if len(msg) <= maxProbeMessageBytes {
-		return msg
-	}
-	clipped := msg[:maxProbeMessageBytes]
-	// Back off to the last valid UTF-8 boundary so we never split a multi-byte rune.
-	for len(clipped) > 0 && !utf8.ValidString(clipped) {
-		clipped = clipped[:len(clipped)-1]
-	}
-	return clipped + " ...(truncated)"
+	return truncateMessage(msg, maxProbeMessageBytes)
 }
 
 // buildIntegrationStatus builds a KRO-style IntegrationStatus: a coarse State plus a single "Ready"
@@ -274,23 +265,9 @@ func getIntegrationStatusEvent(name string, prior, next *workspacev1alpha1.Integ
 	}
 }
 
-// FindRunningPod locates a running pod for the workspace by its labels (mirrors the idle checker).
+// FindRunningPod returns the workspace's running pod that is not being deleted.
 func (p *IntegrationProber) FindRunningPod(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.Pod, error) {
-	podList := &corev1.PodList{}
-	if err := p.client.List(ctx, podList,
-		client.InNamespace(workspace.Namespace),
-		client.MatchingLabels(GenerateLabels(workspace.Name)),
-	); err != nil {
-		return nil, fmt.Errorf("failed to list pods: %w", err)
-	}
-	for i := range podList.Items {
-		// Skip a terminating pod: during a Recreate rollout the old pod can still report Running while it
-		// is being torn down, and probing it would yield a stale verdict for the incoming pod.
-		if podList.Items[i].Status.Phase == corev1.PodRunning && podList.Items[i].DeletionTimestamp == nil {
-			return &podList.Items[i], nil
-		}
-	}
-	return nil, fmt.Errorf("no running pod found for workspace")
+	return workspaceRunningPod(ctx, p.client, workspace)
 }
 
 func resolveIntegrationProbeTimeout(probe *workspacev1alpha1.IntegrationStatusProbe) int32 {

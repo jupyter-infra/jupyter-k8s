@@ -401,9 +401,11 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 			sm := buildStateMachine()
+			sm.resourceManager.cachedStartEvents[client.ObjectKeyFromObject(workspace)] = startEventsEntry{}
 			result, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
+			Expect(sm.resourceManager.cachedStartEvents).NotTo(HaveKey(client.ObjectKeyFromObject(workspace)))
 
 			degraded := getCondition(workspace, ConditionTypeDegraded)
 			Expect(degraded).NotTo(BeNil())
@@ -832,7 +834,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(err.Error()).To(ContainSubstring("failed to parse URL template"))
 		})
 
-		It("should propagate UpdatePermanentDegradedRunningStatus failure on threshold exceeded", func() {
+		It("should propagate UpdateDegradedRunningStatus failure on threshold exceeded", func() {
 			mockProber.ready = false
 			workspace := newWorkspaceWithAccessStrategy()
 			dep := createReadyDeployment(workspace)

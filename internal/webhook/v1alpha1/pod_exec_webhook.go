@@ -12,6 +12,7 @@ import (
 	"os"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -58,18 +59,21 @@ func (v *PodExecValidator) Handle(ctx context.Context, req admission.Request) ad
 	// Controller SA - validate it can only exec into workspace pods
 	// Get the target pod
 	pod := &corev1.Pod{}
-	if err := v.Get(ctx, types.NamespacedName{
+	err := v.Get(ctx, types.NamespacedName{
 		Name:      req.Name,
 		Namespace: req.Namespace,
-	}, pod); err != nil {
+	}, pod)
+	if err != nil && !apierrors.IsNotFound(err) {
 		podexeclog.Error(err, "Failed to get pod for exec validation")
 		return admission.Errored(http.StatusInternalServerError,
 			fmt.Errorf("failed to get pod: %w", err))
 	}
 
-	// Controller SA can only exec into workspace pods
+	// Controller SA can only exec into workspace pods. The manager cache holds only pods with the
+	// workspace label (ManagerCacheOptions, pinned by TestManagerCacheOptions), so a pod it does not hold
+	// is not a workspace pod either.
 	_, hasWorkspace := pod.Labels[workspaceutil.LabelWorkspaceName]
-	if !hasWorkspace {
+	if err != nil || !hasWorkspace {
 		podexeclog.Info("Denying controller exec to non-workspace pod",
 			"user", req.UserInfo.Username,
 			"pod", req.Name,

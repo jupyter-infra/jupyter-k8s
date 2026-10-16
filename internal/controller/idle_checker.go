@@ -121,33 +121,13 @@ func (w *WorkspaceIdleChecker) checkViaNetwork(ctx context.Context, workspace *w
 func (w *WorkspaceIdleChecker) checkViaPodExec(ctx context.Context, workspace *workspacev1alpha1.Workspace, idleConfig *workspacev1alpha1.IdleShutdownSpec) (*IdleCheckResult, error) {
 	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name)
 
-	pod, err := w.findWorkspacePod(ctx, workspace)
+	pod, err := workspaceRunningPod(ctx, w.client, workspace)
 	if err != nil {
 		logger.Error(err, "Failed to find workspace pod")
 		return &IdleCheckResult{IsIdle: false, ShouldRetry: true}, fmt.Errorf("failed to find workspace pod: %w", err)
 	}
+	logger.V(1).Info("Found running workspace pod", "pod", pod.Name)
 
 	detector := NewPodExecHTTPGetDetectorForPod(pod)
 	return detector.CheckIdle(ctx, workspace, "localhost", idleConfig)
-}
-
-// findWorkspacePod finds the pod for a workspace
-func (w *WorkspaceIdleChecker) findWorkspacePod(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.Pod, error) {
-	logger := logf.FromContext(ctx).WithValues("workspace", workspace.Name)
-
-	podList := &corev1.PodList{}
-	labels := GenerateLabels(workspace.Name)
-
-	if err := w.client.List(ctx, podList, client.InNamespace(workspace.Namespace), client.MatchingLabels(labels)); err != nil {
-		return nil, fmt.Errorf("failed to list pods: %w", err)
-	}
-
-	for _, pod := range podList.Items {
-		if pod.Status.Phase == corev1.PodRunning {
-			logger.V(1).Info("Found running workspace pod", "pod", pod.Name)
-			return &pod, nil
-		}
-	}
-
-	return nil, fmt.Errorf("no running pod found for workspace")
 }

@@ -159,8 +159,8 @@ var _ = Describe("PodExec Webhook", func() {
 			Expect(resp.Result.Message).To(Equal("exec request allowed"))
 		})
 
-		It("should handle pod not found errors", func() {
-			// Create fake client without any pods
+		It("should deny controller exec to a pod the cache does not hold", func() {
+			// The manager cache holds only workspace pods, so a missing pod is not a workspace pod.
 			validator.Client = fake.NewClientBuilder().
 				WithScheme(scheme).
 				Build()
@@ -176,12 +176,10 @@ var _ = Describe("PodExec Webhook", func() {
 				},
 			}
 
-			// Validate the request
 			resp := validator.Handle(ctx, req)
 
-			// Should be an error
 			Expect(resp.Allowed).To(BeFalse())
-			Expect(resp.Result.Code).To(Equal(int32(500)))
+			Expect(resp.Result.Message).To(Equal("controller service account can only exec into workspace pods"))
 		})
 
 	})
