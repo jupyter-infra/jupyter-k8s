@@ -526,3 +526,7 @@ type WorkspaceList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Workspace `json:"items"`
 }
+
+func init() {
+	SchemeBuilder.Register(&Workspace{}, &WorkspaceList{})
+}

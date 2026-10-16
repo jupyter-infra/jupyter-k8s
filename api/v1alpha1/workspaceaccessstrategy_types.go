@@ -233,3 +233,7 @@ type WorkspaceAccessStrategyList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []WorkspaceAccessStrategy `json:"items"`
 }
+
+func init() {
+	SchemeBuilder.Register(&WorkspaceAccessStrategy{}, &WorkspaceAccessStrategyList{})
+}

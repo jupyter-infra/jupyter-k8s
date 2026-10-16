@@ -15,6 +15,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -32,7 +33,7 @@ type StateMachineInterface interface {
 type StateMachine struct {
 	resourceManager     *ResourceManager
 	statusManager       *StatusManager
-	recorder            EventRecorder
+	recorder            record.EventRecorder
 	idleChecker         WorkspaceIdleCheckerInterface
 	accessStartupProber AccessStartupProberInterface
 	// integrationProber runs each integration's report-only statusProbe and writes the verdict into
@@ -46,7 +47,7 @@ type StateMachine struct {
 func NewStateMachine(
 	resourceManager *ResourceManager,
 	statusManager *StatusManager,
-	recorder EventRecorder,
+	recorder record.EventRecorder,
 	idleChecker WorkspaceIdleCheckerInterface,
 	accessStartupProber AccessStartupProberInterface,
 	integrationProber IntegrationProberInterface,

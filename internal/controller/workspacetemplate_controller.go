@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -31,7 +32,7 @@ const (
 type WorkspaceTemplateReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	recorder EventRecorder
+	recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=workspace.jupyter.org,resources=workspacetemplates/status,verbs=get;update;patch
@@ -334,7 +335,7 @@ func SetupWorkspaceTemplateController(mgr ctrl.Manager) error {
 
 	k8sClient := mgr.GetClient()
 	scheme := mgr.GetScheme()
-	eventRecorder := newEventRecorder(mgr.GetEventRecorder("workspacetemplate-controller"))
+	eventRecorder := mgr.GetEventRecorderFor("workspacetemplate-controller") //nolint:staticcheck // Preserve core/v1 event behavior in this CVE-only patch.
 
 	reconciler := &WorkspaceTemplateReconciler{
 		Client:   k8sClient,
