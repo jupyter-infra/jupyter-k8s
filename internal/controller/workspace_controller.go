@@ -361,7 +361,8 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	}
 
 	// Create state machine
-	eventRecorder := mgr.GetEventRecorderFor("workspace-controller") //nolint:staticcheck // Preserve core/v1 event behavior in this CVE-only patch.
+	//nolint:staticcheck // Preserve core/v1 event behavior in this CVE-only patch.
+	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
 	idleChecker := NewWorkspaceIdleChecker(k8sClient, options.IdleCheckInterval)
 	accessStartupProber := NewAccessStartupProber(NewAccessResourcesBuilder())
 

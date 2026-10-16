@@ -271,7 +271,8 @@ func (r *WorkspaceAccessStrategyReconciler) findAccessStrategiesForTemplate(ctx 
 func SetupWorkspaceAccessStrategyController(mgr ctrl.Manager) error {
 	k8sClient := mgr.GetClient()
 	scheme := mgr.GetScheme()
-	eventRecorder := mgr.GetEventRecorderFor("workspaceaccessstrategy-controller") //nolint:staticcheck // Preserve core/v1 event behavior in this CVE-only patch.
+	//nolint:staticcheck // Preserve core/v1 event behavior in this CVE-only patch.
+	eventRecorder := mgr.GetEventRecorderFor("workspaceaccessstrategy-controller")
 
 	reconciler := &WorkspaceAccessStrategyReconciler{
 		Client:        k8sClient,
