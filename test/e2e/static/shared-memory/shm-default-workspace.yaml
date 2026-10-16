@@ -1,0 +1,11 @@
+# Default flow: no sharedMemory anywhere, the volume follows the template's 512Mi memory limit.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-default-workspace
+spec:
+  displayName: "shm-default-workspace"
+  templateRef:
+    name: shm-template
+    namespace: jupyter-k8s-shared
+  ownershipType: Public

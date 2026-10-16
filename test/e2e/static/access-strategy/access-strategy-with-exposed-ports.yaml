@@ -1,0 +1,27 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: access-strategy-with-exposed-ports
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: Test Access Strategy With Exposed Sidecar Ports
+  accessResourceTemplates: []
+  deploymentModifications:
+    podModifications:
+      additionalContainers:
+        # Declares two ports; only "sidecar-ws" is opted into the workspace Service below.
+        # "sidecar-admin" stays reachable inside the pod but is not routed, which is the
+        # behaviour exposedPorts exists to make explicit.
+        - name: port-sidecar
+          image: busybox:latest
+          command: ["sh", "-c", "sleep infinity"]
+          ports:
+            - name: sidecar-ws
+              containerPort: 8080
+              protocol: TCP
+            - name: sidecar-admin
+              containerPort: 9090
+              protocol: TCP
+      exposedPorts:
+        - sidecar-ws
+  accessURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"

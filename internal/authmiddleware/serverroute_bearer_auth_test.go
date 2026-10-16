@@ -84,6 +84,62 @@ func TestHandleBearerAuthMissingToken(t *testing.T) {
 	}
 }
 
+func TestHandleBearerAuthWithAuthorizationHeader(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	server := &Server{
+		logger: logger,
+		config: &Config{
+			PathRegexPattern:            DefaultPathRegexPattern,
+			RoutingMode:                 DefaultRoutingMode,
+			WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+			WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
+	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/")
+	req.Header.Set(HeaderForwardedHost, "test.example.com")
+	req.Header.Set(HeaderAuthorization, "Bearer valid-token")
+	w := httptest.NewRecorder()
+
+	server.handleBearerAuth(w, req)
+
+	// Should proceed past token extraction — will fail later at BearerTokenReview
+	// because no k8s client is configured, but the point is it didn't fail at token extraction
+	assert.NotContains(t, w.Body.String(), "Missing token parameter")
+	assert.NotContains(t, w.Body.String(), "Invalid Authorization header")
+}
+
+func TestHandleBearerAuthInvalidAuthorizationHeader(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	server := &Server{logger: logger}
+
+	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
+	req.Header.Set(HeaderForwardedURI, "/workspaces/default/workspace")
+	req.Header.Set(HeaderAuthorization, "Basic dXNlcjpwYXNz")
+	w := httptest.NewRecorder()
+
+	server.handleBearerAuth(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "Invalid Authorization header")
+}
+
+func TestHandleBearerAuthEmptyBearerToken(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	server := &Server{logger: logger}
+
+	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
+	req.Header.Set(HeaderForwardedURI, "/workspaces/default/workspace")
+	req.Header.Set(HeaderAuthorization, "Bearer ")
+	w := httptest.NewRecorder()
+
+	server.handleBearerAuth(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "Invalid Authorization header")
+}
+
 func TestHandleBearerAuthMissingForwardedHost(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server := &Server{
@@ -239,6 +295,99 @@ func TestHandleBearerAuth_BearerTokenReview_PathMismatch(t *testing.T) {
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.Contains(t, w.Body.String(), "Token path mismatch")
+}
+
+func TestHandleBearerAuth_BearerTokenReview_SubPathClaim(t *testing.T) {
+	mockServer := NewMockK8sServer(t)
+	defer mockServer.Close()
+
+	response := CreateBearerTokenReviewResponse(
+		TestDefaultNamespace,
+		true,
+		"/workspaces/default/myworkspace/ssh-ws", // token scoped to a sub-path of the workspace
+		testUserValue, testUIDValue, []string{testUsersValue}, nil,
+		"",
+	)
+	mockServer.SetupServerBearerTokenReview200OK(response)
+
+	restClient, err := mockServer.CreateRESTClient()
+	require.NoError(t, err)
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	jwtHandler := &MockJWTHandler{
+		GenerateTokenFunc: func(_ string, _ []string, _ string, _ map[string][]string, path string, _ string, _ string) (string, error) {
+			assert.Equal(t, "/workspaces/default/myworkspace", path)
+			return "session-token", nil
+		},
+	}
+	var cookieSet bool
+	cookieHandler := &MockCookieHandler{
+		SetCookieFunc: func(_ http.ResponseWriter, _ string, _ string, _ string) {
+			cookieSet = true
+		},
+	}
+	server := &Server{
+		logger:        logger,
+		restClient:    restClient,
+		jwtManager:    jwtHandler,
+		cookieManager: cookieHandler,
+		config: &Config{
+			PathRegexPattern:            DefaultPathRegexPattern,
+			RoutingMode:                 DefaultRoutingMode,
+			WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+			WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
+	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/ssh-ws?token=valid-token")
+	req.Header.Set(HeaderForwardedHost, testDomainValue)
+	w := httptest.NewRecorder()
+
+	server.handleBearerAuth(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, cookieSet, "sub-path claim under the same workspace should authenticate")
+}
+
+func TestHandleBearerAuth_BearerTokenReview_SubPathClaimDifferentWorkspace(t *testing.T) {
+	mockServer := NewMockK8sServer(t)
+	defer mockServer.Close()
+
+	response := CreateBearerTokenReviewResponse(
+		TestDefaultNamespace,
+		true,
+		"/workspaces/default/otherworkspace/ssh-ws", // sub-path token scoped to a DIFFERENT workspace
+		testUserValue, testUIDValue, []string{testUsersValue}, nil,
+		"",
+	)
+	mockServer.SetupServerBearerTokenReview200OK(response)
+
+	restClient, err := mockServer.CreateRESTClient()
+	require.NoError(t, err)
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	server := &Server{
+		logger:     logger,
+		restClient: restClient,
+		config: &Config{
+			PathRegexPattern:            DefaultPathRegexPattern,
+			RoutingMode:                 DefaultRoutingMode,
+			WorkspaceNamespacePathRegex: DefaultWorkspaceNamespacePathRegex,
+			WorkspaceNamePathRegex:      DefaultWorkspaceNamePathRegex,
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/bearer-auth", nil)
+	req.Header.Set(HeaderForwardedURI, "/workspaces/default/myworkspace/ssh-ws?token=valid-token")
+	req.Header.Set(HeaderForwardedHost, testDomainValue)
+	w := httptest.NewRecorder()
+
+	server.handleBearerAuth(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "Token path mismatch",
+		"a sub-path token for a different workspace must not authenticate")
 }
 
 func TestHandleBearerAuth_BearerTokenReview_Success(t *testing.T) {

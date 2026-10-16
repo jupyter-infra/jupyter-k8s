@@ -1,0 +1,11 @@
+# The template's off switch reaches the pod: no /dev/shm volume.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-disabled-workspace
+spec:
+  displayName: "shm-disabled-workspace"
+  templateRef:
+    name: shm-template-disabled
+    namespace: jupyter-k8s-shared
+  ownershipType: Public

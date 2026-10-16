@@ -1,0 +1,9 @@
+# Without a template and without asking, the workspace keeps the 64MiB container default.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-no-template-unset-workspace
+spec:
+  displayName: "shm-no-template-unset-workspace"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running

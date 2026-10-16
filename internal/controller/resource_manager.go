@@ -9,6 +9,10 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"sync"
+	"time"
+
+	"golang.org/x/time/rate"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 
@@ -30,6 +34,19 @@ type ResourceManager struct {
 	pvcBuilder             *PVCBuilder
 	accessResourcesBuilder *AccessResourcesBuilder
 	statusManager          *StatusManager
+
+	// eventReader reads a starting pod's events; nil leaves the start step to what the pod reports, and the
+	// reasons whose attempts are counted from events (ImagePullBackOff, CreateContainerError,
+	// RunContainerError) then stay a step until the progress deadline.
+	eventReader       client.Reader
+	eventReaderCached bool
+	eventReadTimeout  time.Duration
+	eventReadLimiter  *rate.Limiter
+	cachedStartEvents map[client.ObjectKey]startEventsEntry
+	startEventsMu     sync.Mutex
+	// startEventsSweptAt is when cachedStartEvents was last swept for entries past startEventsRetention.
+	startEventsSweptAt time.Time
+	now                func() time.Time
 }
 
 // NewResourceManager creates a new ResourceManager
@@ -50,6 +67,10 @@ func NewResourceManager(
 		pvcBuilder:             pvcBuilder,
 		accessResourcesBuilder: accessResourcesBuilder,
 		statusManager:          statusManager,
+		eventReadTimeout:       startEventsReadTimeout,
+		eventReadLimiter:       rate.NewLimiter(startEventsPerSecond, startEventsBurst),
+		cachedStartEvents:      map[client.ObjectKey]startEventsEntry{},
+		now:                    time.Now,
 	}
 }
 
@@ -112,10 +133,13 @@ func (rm *ResourceManager) createDeployment(ctx context.Context, workspace *work
 }
 
 // CreateService creates a new service for the Workspace
-func (rm *ResourceManager) createService(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.Service, error) {
+func (rm *ResourceManager) createService(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*corev1.Service, error) {
 	logger := logf.FromContext(ctx)
 
-	service, err := rm.serviceBuilder.BuildService(workspace)
+	service, err := rm.serviceBuilder.BuildService(workspace, accessStrategy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build service: %w", err)
 	}
@@ -280,44 +304,67 @@ func (rm *ResourceManager) updateDeployment(ctx context.Context, deployment *app
 	return deployment, nil
 }
 
-// EnsureServiceExists creates a service if it doesn't exist, or updates it if the spec differs
-func (rm *ResourceManager) EnsureServiceExists(ctx context.Context, workspace *workspacev1alpha1.Workspace) (*corev1.Service, error) {
+// EnsureServiceExists creates a service if it doesn't exist, or updates it if the spec differs.
+// The accessStrategy determines which sidecar ports the service exposes, so it is threaded
+// through the whole create/update path.
+func (rm *ResourceManager) EnsureServiceExists(
+	ctx context.Context,
+	workspace *workspacev1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*corev1.Service, error) {
 	service, err := rm.getService(ctx, workspace)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return rm.createService(ctx, workspace)
+			return rm.createService(ctx, workspace, accessStrategy)
 		}
 		return nil, fmt.Errorf("failed to get service: %w", err)
 	}
 
-	return rm.ensureServiceUpToDate(ctx, service, workspace)
+	return rm.ensureServiceUpToDate(ctx, service, workspace, accessStrategy)
 }
 
 // ensureServiceUpToDate checks if service needs update and updates it if necessary
-func (rm *ResourceManager) ensureServiceUpToDate(ctx context.Context, service *corev1.Service, workspace *workspacev1alpha1.Workspace) (*corev1.Service, error) {
+func (rm *ResourceManager) ensureServiceUpToDate(
+	ctx context.Context,
+	service *corev1.Service,
+	workspace *workspacev1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*corev1.Service, error) {
 	// Only perform updates when workspace is available to avoid interfering with creation
 	if !rm.statusManager.IsWorkspaceAvailable(workspace) {
 		return service, nil
 	}
 
-	needsUpdate, err := rm.serviceBuilder.NeedsUpdate(ctx, service, workspace)
+	// Use the provided accessStrategy instead of fetching it again
+	if accessStrategy == nil && workspace.Spec.AccessStrategy != nil {
+		// This should not happen as it should be provided already, but handle it gracefully
+		var err error
+		accessStrategy, err = rm.GetAccessStrategyForWorkspace(ctx, workspace)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve access strategy for comparison: %w", err)
+		}
+	}
+
+	needsUpdate, err := rm.serviceBuilder.NeedsUpdate(ctx, service, workspace, accessStrategy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check if service needs update: %w", err)
 	}
 
 	if needsUpdate {
-		return rm.updateService(ctx, service, workspace)
+		return rm.updateService(ctx, service, workspace, accessStrategy)
 	}
 
 	return service, nil
 }
 
 // updateService updates an existing service with new spec
-func (rm *ResourceManager) updateService(ctx context.Context, service *corev1.Service, workspace *workspacev1alpha1.Workspace) (*corev1.Service, error) {
+func (rm *ResourceManager) updateService(
+	ctx context.Context,
+	service *corev1.Service,
+	workspace *workspacev1alpha1.Workspace,
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (*corev1.Service, error) {
 	logger := logf.FromContext(ctx)
 
 	// Update the service spec using the builder
-	if err := rm.serviceBuilder.UpdateServiceSpec(ctx, service, workspace); err != nil {
+	if err := rm.serviceBuilder.UpdateServiceSpec(ctx, service, workspace, accessStrategy); err != nil {
 		return nil, fmt.Errorf("failed to update service spec: %w", err)
 	}
 

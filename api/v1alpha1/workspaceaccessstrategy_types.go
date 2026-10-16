@@ -51,6 +51,14 @@ type PodModifications struct {
 	// +optional
 	AdditionalContainers []corev1.Container `json:"additionalContainers,omitempty"`
 
+	// ExposedPorts lists the container port names to publish on the workspace Service (opt-in).
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=15
+	// +kubebuilder:validation:items:Pattern=`^[a-z0-9-]+$`
+	ExposedPorts []string `json:"exposedPorts,omitempty"`
+
 	// Volumes to add to the pod
 	// +optional
 	Volumes []corev1.Volume `json:"volumes,omitempty"`
@@ -149,6 +157,10 @@ type WorkspaceAccessStrategySpec struct {
 	// Used by the extension API to generate initial authentication URLs
 	// +optional
 	BearerAuthURLTemplate string `json:"bearerAuthURLTemplate,omitempty"`
+
+	// WebSocketURLTemplate constructs the WebSocket (ssh-over-websocket) connection URL; required to enable WebSocket connections. Template vars: .Workspace, .AccessStrategy.
+	// +optional
+	WebSocketURLTemplate string `json:"webSocketURLTemplate,omitempty"`
 
 	// CreateConnectionHandler specifies the default handler for connection creation (e.g., "k8s-native").
 	// Used as fallback when CreateConnectionHandlerMap does not contain the requested connection type.

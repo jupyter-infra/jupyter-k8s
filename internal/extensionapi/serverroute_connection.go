@@ -156,6 +156,51 @@ func (s *ExtensionServer) generateBearerTokenURL(r *http.Request, ws *workspacev
 	return fmt.Sprintf("%s?token=%s", bearerURL, token), nil
 }
 
+// generateWebSocketConnectionURL generates a WebSocket connection URL with JWT token.
+// Used for k8s-native remote connections (WebSocket proxy sidecar).
+// Returns a wss:// URL with the token as a query parameter. The client (Toolkit/connect script)
+// extracts the token and passes it via Authorization: Bearer header to the proxy.
+func (s *ExtensionServer) generateWebSocketConnectionURL(r *http.Request, ws *workspacev1alpha1.Workspace, accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (string, error) {
+	user := GetUser(r)
+	if user == "" {
+		return "", fmt.Errorf("user information not found in request headers")
+	}
+	groups := GetGroups(r)
+	extra := GetExtra(r)
+
+	if accessStrategy == nil {
+		return "", fmt.Errorf("no AccessStrategy configured for workspace")
+	}
+	if accessStrategy.Spec.WebSocketURLTemplate == "" {
+		return "", fmt.Errorf("WebSocketURLTemplate not configured in AccessStrategy")
+	}
+
+	// Create signer based on access strategy
+	signer, err := s.signerFactory.CreateSigner(accessStrategy)
+	if err != nil {
+		return "", fmt.Errorf("failed to create signer: %w", err)
+	}
+
+	renderedURL, err := s.renderBearerAuthURL(accessStrategy.Spec.WebSocketURLTemplate, ws, accessStrategy)
+	if err != nil {
+		return "", fmt.Errorf("failed to render WebSocket URL: %w", err)
+	}
+
+	parsedURL, err := url.Parse(renderedURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse generated URL: %w", err)
+	}
+	parsedURL.Scheme = "wss"
+
+	// Token is scoped to the WebSocket path; the auth middleware normalizes it to the app path.
+	token, err := signer.GenerateToken(user, groups, user, extra, parsedURL.Path, parsedURL.Host, jwt.TokenTypeBootstrap, true)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate JWT token: %w", err)
+	}
+
+	return fmt.Sprintf("%s?token=%s", parsedURL.String(), token), nil
+}
+
 // generatePluginConnectionURL delegates connection URL generation to a plugin.
 func (s *ExtensionServer) generatePluginConnectionURL(r *http.Request, ws *workspacev1alpha1.Workspace, pluginName, action, connectionType string, resolvedContext map[string]string, namespace string) (string, error) {
 	pc, ok := s.pluginClients[pluginName]
@@ -269,6 +314,14 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 		responseURL, err = s.generateBearerTokenURL(r, ws, accessStrategy)
 		responseType = connectionv1alpha1.ConnectionTypeWebUI
 
+	case connectionv1alpha1.ConnectionTypeWebSocket:
+		if !hasWebSocketEnabled(accessStrategy) {
+			WriteKubernetesError(w, http.StatusBadRequest, "WebSocket access is not enabled for this workspace")
+			return
+		}
+		responseURL, err = s.generateWebSocketConnectionURL(r, ws, accessStrategy)
+		responseType = connectionv1alpha1.ConnectionTypeWebSocket
+
 	default:
 		// All *-remote types go through the plugin handler map
 		pluginName, action, found := resolveConnectionHandler(accessStrategy, connectionType)
@@ -277,15 +330,20 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 			return
 		}
 		if pluginName == handlerK8sNative {
-			WriteKubernetesError(w, http.StatusBadRequest, fmt.Sprintf("k8s-native handler is not supported for remote connections (requested %q)", connectionType))
-			return
+			if !hasWebSocketEnabled(accessStrategy) {
+				WriteKubernetesError(w, http.StatusBadRequest, "WebSocket access is not enabled for this workspace")
+				return
+			}
+			responseURL, err = s.generateWebSocketConnectionURL(r, ws, accessStrategy)
+			responseType = connectionType
+		} else {
+			if _, ok := s.pluginClients[pluginName]; !ok {
+				WriteKubernetesError(w, http.StatusBadRequest, "plugin endpoints not configured. Please configure controller.plugins in helm values")
+				return
+			}
+			responseURL, err = s.generatePluginConnectionURL(r, ws, pluginName, action, connectionType, resolvedContext, namespace)
+			responseType = connectionType
 		}
-		if _, ok := s.pluginClients[pluginName]; !ok {
-			WriteKubernetesError(w, http.StatusBadRequest, "plugin endpoints not configured. Please configure controller.plugins in helm values")
-			return
-		}
-		responseURL, err = s.generatePluginConnectionURL(r, ws, pluginName, action, connectionType, resolvedContext, namespace)
-		responseType = connectionType
 	}
 
 	if err != nil {
@@ -335,14 +393,16 @@ func validateWorkspaceConnectionRequest(req *connectionv1alpha1.WorkspaceConnect
 
 	connectionType := req.Spec.WorkspaceConnectionType
 
-	// Accept web-ui, known remote types, and any *-remote pattern
+	// Accept web-ui, websocket, known remote types, and any *-remote pattern
 	switch {
 	case connectionType == connectionv1alpha1.ConnectionTypeWebUI:
+		// valid
+	case connectionType == connectionv1alpha1.ConnectionTypeWebSocket:
 		// valid
 	case isRemoteConnectionType(connectionType):
 		// valid — known or unknown remote types are accepted
 	default:
-		return fmt.Errorf("invalid workspaceConnectionType: '%s'. Must be 'web-ui' or follow the '{ide}-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')", connectionType)
+		return fmt.Errorf("invalid workspaceConnectionType: '%s'. Must be 'web-ui', 'ssh-over-websocket', or follow the '{ide}-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')", connectionType)
 	}
 
 	return nil
@@ -364,6 +424,14 @@ func hasWebUIEnabled(accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) 
 		return false
 	}
 	return accessStrategy.Spec.BearerAuthURLTemplate != ""
+}
+
+// hasWebSocketEnabled checks if WebSocketURLTemplate is defined in the access strategy.
+func hasWebSocketEnabled(accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) bool {
+	if accessStrategy == nil {
+		return false
+	}
+	return accessStrategy.Spec.WebSocketURLTemplate != ""
 }
 
 // renderBearerAuthURL renders the BearerAuthURLTemplate with workspace variables

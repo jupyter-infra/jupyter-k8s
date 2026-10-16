@@ -8,6 +8,7 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
@@ -92,4 +93,55 @@ func TestMergeConditionsIfChanged(t *testing.T) {
 	}
 	result = MergeConditionsIfChanged(ctx, workspace, &unchangedConditions)
 	assert.Empty(t, result, "Should return empty slice when no changes")
+}
+
+func TestMergeConditionsIfChangedKeepsLastTransitionTimeWhileStatusHolds(t *testing.T) {
+	ctx := context.Background()
+	old := metav1.NewTime(time.Now().Add(-time.Hour).Truncate(time.Second))
+	workspace := &workspacev1alpha1.Workspace{}
+	workspace.Status.Conditions = []metav1.Condition{
+		{Type: conditionTypeExisting, Status: metav1.ConditionTrue, Reason: "A", Message: "a", LastTransitionTime: old},
+		{Type: conditionTypeToUpdate, Status: metav1.ConditionTrue, Reason: "B", Message: "b", LastTransitionTime: old},
+		{Type: "Third", Status: metav1.ConditionFalse, Reason: "C", Message: "c", LastTransitionTime: old},
+	}
+
+	result := MergeConditionsIfChanged(ctx, workspace, &[]metav1.Condition{
+		NewCondition(conditionTypeExisting, metav1.ConditionTrue, "A2", "a2"),
+		NewCondition(conditionTypeToUpdate, metav1.ConditionFalse, "B", "b"),
+		NewCondition("Third", metav1.ConditionFalse, "C", "c"),
+	})
+	assert.Len(t, result, 3)
+	for _, cond := range result {
+		switch cond.Type {
+		case conditionTypeExisting:
+			assert.Equal(t, "A2", cond.Reason)
+			assert.True(t, cond.LastTransitionTime.Equal(&old), "a new reason under the same status keeps lastTransitionTime")
+		case conditionTypeToUpdate:
+			assert.False(t, cond.LastTransitionTime.Equal(&old), "a status flip moves lastTransitionTime")
+		case "Third":
+			assert.True(t, cond.LastTransitionTime.Equal(&old), "an unchanged condition keeps lastTransitionTime")
+		}
+	}
+}
+
+func TestTruncateMessage(t *testing.T) {
+	tests := []struct {
+		name     string
+		msg      string
+		expected string
+	}{
+		{name: "a message within the bound is untouched", msg: "short", expected: "short"},
+		{name: "a message at the bound is untouched", msg: "12345678", expected: "12345678"},
+		{name: "a longer message is cut at the bound", msg: "123456789", expected: "12345678" + TruncatedMessageSuffix},
+		{name: "a rune the cut splits is dropped whole", msg: "1234567\u00e9x", expected: "1234567" + TruncatedMessageSuffix},
+		{name: "an invalid byte before the cut stays and the cut holds", msg: "1\xff3456789", expected: "1\xff345678" + TruncatedMessageSuffix},
+		{name: "a message already bounded here is left alone", msg: "12345678" + TruncatedMessageSuffix, expected: "12345678" + TruncatedMessageSuffix},
+		{name: "a longer message that ends like the marker is still cut", msg: "123456789012345678" + TruncatedMessageSuffix,
+			expected: "12345678" + TruncatedMessageSuffix},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, truncateMessage(tt.msg, 8))
+		})
+	}
 }

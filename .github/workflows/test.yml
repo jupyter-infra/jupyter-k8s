@@ -6,6 +6,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Read-only: this job compiles and runs PR-authored code, so it must not hold a
+# write-capable token. Coverage is published as an artifact and commented on the
+# PR by the separate coverage.yml workflow (workflow_run, trusted context).
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Unit Tests
@@ -23,3 +29,41 @@ jobs:
         run: |
           go mod tidy
           make test
+
+      - name: Compute coverage
+        id: cover
+        env:
+          COVERAGE_THRESHOLD: "80"
+        run: |
+          total=$(go tool cover -func=cover.out | awk 'END {gsub("%","",$NF); print $NF}')
+          echo "total=$total" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Test coverage: ${total}%"
+            echo ""
+            echo "Threshold: ${COVERAGE_THRESHOLD}%"
+            echo ""
+            echo "<details><summary>Per-function coverage</summary>"
+            echo ""
+            echo '```'
+            go tool cover -func=cover.out
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Write coverage artifact
+        # Persist the number and the PR it belongs to for coverage.yml to post.
+        run: |
+          mkdir -p coverage
+          echo "${{ steps.cover.outputs.total }}" > coverage/total.txt
+          echo "${{ github.event.pull_request.number }}" > coverage/pr.txt
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+      - name: Enforce coverage threshold
+        run: make cover-check COVERAGE_THRESHOLD=80

@@ -1,0 +1,23 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceAccessStrategy
+metadata:
+  name: access-strategy-invalid-exposed-port
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: Test Access Strategy With An Unresolvable Exposed Port
+  accessResourceTemplates: []
+  deploymentModifications:
+    podModifications:
+      additionalContainers:
+        - name: port-sidecar
+          image: busybox:latest
+          command: ["sh", "-c", "sleep infinity"]
+          ports:
+            - name: sidecar-ws
+              containerPort: 8080
+              protocol: TCP
+      # No container declares a port by this name, so the Service cannot be built and the
+      # workspace must report the failure instead of silently exposing nothing.
+      exposedPorts:
+        - no-such-port
+  accessURLTemplate: "https://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/"

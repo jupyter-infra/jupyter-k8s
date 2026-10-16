@@ -1,0 +1,14 @@
+# No memory limit: the volume falls back to the 384Mi memory request.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-request-only-workspace
+spec:
+  displayName: "shm-request-only-workspace"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: 200m
+      memory: 384Mi
+  sharedMemory: {}

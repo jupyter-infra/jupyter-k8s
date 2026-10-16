@@ -7,6 +7,8 @@ package controller
 
 import (
 	"context"
+	"strings"
+	"unicode/utf8"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -70,9 +72,14 @@ func MergeConditionsIfChanged(
 			existingCondition.Reason == condition.Reason &&
 			existingCondition.Message == condition.Message {
 			unchangedConditionNames = append(unchangedConditionNames, condition.Type)
+			condition.LastTransitionTime = existingCondition.LastTransitionTime
 			conditionsToUpdate = append(conditionsToUpdate, condition)
 		} else {
-			// Update the condition by removing old entry and appending new one
+			// lastTransitionTime marks the last status flip (API conventions); a new reason or message
+			// under the same status keeps it.
+			if existingCondition.Status == condition.Status {
+				condition.LastTransitionTime = existingCondition.LastTransitionTime
+			}
 			updated = true
 			updatedConditionNames = append(updatedConditionNames, condition.Type)
 			conditionsToUpdate = append(conditionsToUpdate, condition)
@@ -91,4 +98,24 @@ func MergeConditionsIfChanged(
 		)
 		return conditionsToUpdate
 	}
+}
+
+// truncateMessage bounds a condition message to maxBytes and appends a marker when it clips, so a message
+// copied from outside can never exceed the CRD's conditions[].message ceiling. Only a rune the cut splits is
+// dropped; an invalid byte elsewhere in the text is copied as it is. A message this function already bounded
+// is returned as it is, so a stored message can be written again unchanged.
+func truncateMessage(msg string, maxBytes int) string {
+	if len(msg) <= maxBytes || (len(msg) <= maxBytes+len(TruncatedMessageSuffix) && strings.HasSuffix(msg, TruncatedMessageSuffix)) {
+		return msg
+	}
+	clipped := msg[:maxBytes]
+	for i := len(clipped) - 1; i >= 0 && i >= len(clipped)-utf8.UTFMax; i-- {
+		if utf8.RuneStart(clipped[i]) {
+			if !utf8.FullRuneInString(clipped[i:]) {
+				clipped = clipped[:i]
+			}
+			break
+		}
+	}
+	return clipped + TruncatedMessageSuffix
 }

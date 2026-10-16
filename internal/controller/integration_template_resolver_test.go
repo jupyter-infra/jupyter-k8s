@@ -319,7 +319,7 @@ func TestResolvePodModifications_FailClosedPropagatesFieldError(t *testing.T) {
 func TestResolveTemplateExpression_JSONPathArrayIndex(t *testing.T) {
 	u := &unstructured.Unstructured{}
 	u.SetGroupVersionKind(schema.GroupVersionKind{Group: "ray.io", Version: "v1", Kind: rayClusterKind})
-	_ = unstructured.SetNestedStringSlice(u.Object, []string{"first", "second"}, "status", "hosts")
+	_ = unstructured.SetNestedStringSlice(u.Object, []string{literalFirst, literalSecond}, "status", "hosts")
 	r := NewIntegrationTemplateResolver(NewLiveResourceValueProvider(map[string]*unstructured.Unstructured{rayClusterHandle: u}))
 
 	out, err := r.ResolveTemplateExpression(`{{ resource "rayCluster" "{.status.hosts[1]}" }}`, IntegrationTemplateData{})

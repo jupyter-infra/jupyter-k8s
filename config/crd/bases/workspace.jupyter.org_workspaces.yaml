@@ -3750,6 +3750,19 @@ spec:
                 description: ServiceAccountName specifies the name of the ServiceAccount
                   to use for the workspace pod
                 type: string
+              sharedMemory:
+                description: |-
+                  SharedMemory asks for the memory-backed /dev/shm volume in the workspace's primary container.
+                  Absent means the container default. Copied from the template's defaultSharedMemory when the
+                  workspace sets none, and held to it when the template's sharedMemoryOverrides lock it. A volume
+                  the workspace declares at /dev/shm takes precedence.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled mounts the volume. Unset means true; false keeps the container default, which lets a
+                      workspace turn off a template's default.
+                    type: boolean
+                type: object
               storage:
                 description: Storage specifies the storage configuration
                 properties:
@@ -3891,6 +3904,8 @@ spec:
                 x-kubernetes-validations:
                 - message: volume name 'workspace-storage' is reserved
                   rule: '!self.exists(v, v.name == ''workspace-storage'')'
+                - message: volume name 'workspace-shm' is reserved
+                  rule: '!self.exists(v, v.name == ''workspace-shm'')'
             required:
             - displayName
             type: object

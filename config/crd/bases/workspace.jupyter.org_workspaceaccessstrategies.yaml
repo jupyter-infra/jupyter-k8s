@@ -1712,6 +1712,16 @@ spec:
                           - name
                           type: object
                         type: array
+                      exposedPorts:
+                        description: ExposedPorts lists the container port names to
+                          publish on the workspace Service (opt-in).
+                        items:
+                          maxLength: 15
+                          minLength: 1
+                          pattern: ^[a-z0-9-]+$
+                          type: string
+                        type: array
+                        x-kubernetes-list-type: set
                       initContainers:
                         description: InitContainers to add to the pod
                         items:
@@ -5274,6 +5284,11 @@ spec:
                 description: |-
                   PodEventsHandler specifies the handler for pod lifecycle events in "plugin:action" format.
                   Example: "aws:ssm-remote-access"
+                type: string
+              webSocketURLTemplate:
+                description: 'WebSocketURLTemplate constructs the WebSocket (ssh-over-websocket)
+                  connection URL; required to enable WebSocket connections. Template
+                  vars: .Workspace, .AccessStrategy.'
                 type: string
             required:
             - accessResourceTemplates

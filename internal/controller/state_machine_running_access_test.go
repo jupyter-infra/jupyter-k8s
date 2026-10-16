@@ -401,9 +401,11 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 
 			sm := buildStateMachine()
+			sm.resourceManager.cachedStartEvents[client.ObjectKeyFromObject(workspace)] = startEventsEntry{}
 			result, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(time.Duration(0)))
+			Expect(sm.resourceManager.cachedStartEvents).NotTo(HaveKey(client.ObjectKeyFromObject(workspace)))
 
 			degraded := getCondition(workspace, ConditionTypeDegraded)
 			Expect(degraded).NotTo(BeNil())
@@ -556,6 +558,217 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 		})
 	})
 
+	// The access strategy has to reach EnsureServiceExists for sidecar ports to land on the
+	// Service. Dropping that argument leaves every service_builder_test spec green while the
+	// feature is dead, so these assert on the Service the reconcile actually produced. They
+	// deliberately do not pre-create it.
+	Context("sidecar service ports", func() {
+		newWorkspaceForPorts := func(withStrategyRef bool) *workspacev1alpha1.Workspace {
+			ws := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("sm-ports-%d", time.Now().UnixNano()),
+					Namespace: testNamespace,
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					Image:         imageBaseNotebook,
+					DesiredStatus: DesiredStateRunning,
+				},
+			}
+			if withStrategyRef {
+				ws.Spec.AccessStrategy = &workspacev1alpha1.AccessStrategyRef{Name: testStrategyName}
+			}
+			Expect(k8sClient.Create(ctx, ws)).To(Succeed())
+			return ws
+		}
+
+		// sidecarStrategy injects one sidecar declaring the given ports and opts every named
+		// port into the Service, mirroring an author listing them in exposedPorts.
+		sidecarStrategy := func(ports ...corev1.ContainerPort) *workspacev1alpha1.WorkspaceAccessStrategy {
+			var exposed []string
+			for _, port := range ports {
+				if port.Name != "" {
+					exposed = append(exposed, port.Name)
+				}
+			}
+			return &workspacev1alpha1.WorkspaceAccessStrategy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       testStrategyName,
+					Namespace:  testNamespace,
+					UID:        types.UID(testUID),
+					Generation: 1,
+				},
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					DisplayName:             testStrategyDisplayName,
+					AccessResourceTemplates: []workspacev1alpha1.AccessResourceTemplate{},
+					DeploymentModifications: &workspacev1alpha1.DeploymentModifications{
+						PodModifications: &workspacev1alpha1.PodModifications{
+							AdditionalContainers: []corev1.Container{{
+								Name:  nameWSProxy,
+								Image: imageBaseNotebook,
+								Ports: ports,
+							}},
+							ExposedPorts: exposed,
+						},
+					},
+				},
+			}
+		}
+
+		reconciledService := func(ws *workspacev1alpha1.Workspace) *corev1.Service {
+			svc := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Name:      GenerateServiceName(ws.Name),
+				Namespace: ws.Namespace,
+			}, svc)).To(Succeed())
+			return svc
+		}
+
+		portNumbers := func(svc *corev1.Service) []int32 {
+			numbers := make([]int32, 0, len(svc.Spec.Ports))
+			for _, port := range svc.Spec.Ports {
+				numbers = append(numbers, port.Port)
+			}
+			return numbers
+		}
+
+		// markOperatorDeploymentReady flips the Deployment the operator itself created to Available.
+		// The update path needs the workspace Available, and reconciling twice over a
+		// hand-built Deployment would fail on its immutable selector, so the operator must own it.
+		markOperatorDeploymentReady := func(ws *workspacev1alpha1.Workspace) *appsv1.Deployment {
+			dep := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Name:      GenerateDeploymentName(ws.Name),
+				Namespace: ws.Namespace,
+			}, dep)).To(Succeed())
+
+			dep.Status.AvailableReplicas = 1
+			dep.Status.ReadyReplicas = 1
+			dep.Status.Replicas = 1
+			dep.Status.Conditions = []appsv1.DeploymentCondition{{
+				Type:   appsv1.DeploymentAvailable,
+				Status: corev1.ConditionTrue,
+			}}
+			Expect(k8sClient.Status().Update(ctx, dep)).To(Succeed())
+			return dep
+		}
+
+		BeforeEach(func() {
+			mockProber.ready = true
+		})
+
+		It("exposes a sidecar port declared by the access strategy", func() {
+			workspace := newWorkspaceForPorts(true)
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			sm := buildStateMachine()
+			_, err := sm.ReconcileDesiredState(ctx, workspace,
+				sidecarStrategy(corev1.ContainerPort{Name: nameWSProxy, ContainerPort: 8080}))
+			Expect(err).NotTo(HaveOccurred())
+
+			svc := reconciledService(workspace)
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			Expect(portNumbers(svc)).To(ConsistOf(int32(JupyterPort), int32(8080)))
+		})
+
+		It("exposes only the application port when the strategy declares no ports", func() {
+			workspace := newWorkspaceForPorts(true)
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			sm := buildStateMachine()
+			_, err := sm.ReconcileDesiredState(ctx, workspace, sidecarStrategy())
+			Expect(err).NotTo(HaveOccurred())
+
+			svc := reconciledService(workspace)
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			Expect(portNumbers(svc)).To(ConsistOf(int32(JupyterPort)))
+		})
+
+		It("exposes only the application port with no access strategy", func() {
+			workspace := newWorkspaceForPorts(false)
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			sm := buildStateMachine()
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			svc := reconciledService(workspace)
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			Expect(portNumbers(svc)).To(ConsistOf(int32(JupyterPort)))
+		})
+
+		// The update path only runs once the workspace is Available, which takes an initial
+		// reconcile to create the resources and a second one to observe them ready.
+		reconcileToAvailable := func(
+			sm *StateMachine,
+			ws *workspacev1alpha1.Workspace,
+			strategy *workspacev1alpha1.WorkspaceAccessStrategy,
+		) {
+			_, err := sm.ReconcileDesiredState(ctx, ws, strategy)
+			Expect(err).NotTo(HaveOccurred())
+
+			markOperatorDeploymentReady(ws)
+
+			_, err = sm.ReconcileDesiredState(ctx, ws, strategy)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sm.statusManager.IsWorkspaceAvailable(ws)).To(BeTrue())
+		}
+
+		It("adds a sidecar port once the access strategy declares one", func() {
+			workspace := newWorkspaceForPorts(true)
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			sm := buildStateMachine()
+			reconcileToAvailable(sm, workspace, sidecarStrategy())
+
+			svc := reconciledService(workspace)
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			Expect(portNumbers(svc)).To(ConsistOf(int32(JupyterPort)))
+
+			_, err := sm.ReconcileDesiredState(ctx, workspace,
+				sidecarStrategy(corev1.ContainerPort{Name: nameWSProxy, ContainerPort: 8080}))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(portNumbers(reconciledService(workspace))).To(ConsistOf(int32(JupyterPort), int32(8080)))
+		})
+
+		It("removes the sidecar port when the access strategy stops declaring it", func() {
+			workspace := newWorkspaceForPorts(true)
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			sm := buildStateMachine()
+			reconcileToAvailable(sm, workspace,
+				sidecarStrategy(corev1.ContainerPort{Name: nameWSProxy, ContainerPort: 8080}))
+
+			svc := reconciledService(workspace)
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			Expect(portNumbers(svc)).To(ConsistOf(int32(JupyterPort), int32(8080)))
+
+			_, err := sm.ReconcileDesiredState(ctx, workspace, sidecarStrategy())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(portNumbers(reconciledService(workspace))).To(ConsistOf(int32(JupyterPort)))
+		})
+
+		It("does not rewrite the service when the declared ports are unchanged", func() {
+			workspace := newWorkspaceForPorts(true)
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			strategy := sidecarStrategy(corev1.ContainerPort{Name: nameWSProxy, ContainerPort: 8080})
+			sm := buildStateMachine()
+			reconcileToAvailable(sm, workspace, strategy)
+
+			svc := reconciledService(workspace)
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			resourceVersionBefore := svc.ResourceVersion
+
+			_, err := sm.ReconcileDesiredState(ctx, workspace, strategy)
+			Expect(err).NotTo(HaveOccurred())
+
+			// A stable desired spec must not issue an Update, or every reconcile churns the Service.
+			after := reconciledService(workspace)
+			Expect(portNumbers(after)).To(ConsistOf(int32(JupyterPort), int32(8080)))
+			Expect(after.ResourceVersion).To(Equal(resourceVersionBefore))
+		})
+	})
+
 	Context("error paths", func() {
 		var accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
 
@@ -621,7 +834,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(err.Error()).To(ContainSubstring("failed to parse URL template"))
 		})
 
-		It("should propagate UpdatePermanentDegradedRunningStatus failure on threshold exceeded", func() {
+		It("should propagate UpdateDegradedRunningStatus failure on threshold exceeded", func() {
 			mockProber.ready = false
 			workspace := newWorkspaceWithAccessStrategy()
 			dep := createReadyDeployment(workspace)

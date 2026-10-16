@@ -30,7 +30,7 @@ Handles authentication via a pre-signed bearer token URL.
 2. The reverse proxy forwards the request to `/bearer-auth`.
 3. The middleware extracts the `token` query parameter from the forwarded URI.
 4. It calls [`BearerTokenReview`](../../concepts/connections/token-review) on the **Extension API** to validate the token and get the user identity.
-5. It verifies the token's path matches the request path.
+5. It verifies the token and request resolve to the same workspace: both paths are normalized to `/workspaces/<namespace>/<name>` before comparing, so a token scoped to a sub-path (e.g. a WebSocket route under the workspace) authenticates for that workspace while a token for a different workspace is rejected.
 6. On success, it generates a long-lived JWT session cookie.
 7. It returns 200 OK.
 

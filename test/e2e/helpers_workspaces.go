@@ -9,15 +9,26 @@ Distributed under the terms of the MIT license
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
 	"time"
 
-	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
+	"github.com/jupyter-infra/jupyter-k8s/test/utils"
 )
+
+// stallDeadlineSeconds is the progress deadline the stall specs set on a workspace Deployment. The
+// operator leaves the Kubernetes default of 600s in place; a spec cannot wait that long.
+const stallDeadlineSeconds = 30
 
 // WaitForWorkspaceToReachCondition polls a Workspace.status till a condition reaches the expected status
 // nolint:unparam // namespace is always "default" now but may change in future tests
@@ -46,9 +57,10 @@ func WaitForWorkspaceToReachCondition(
 	}).WithTimeout(5 * time.Minute).WithPolling(5 * time.Second).Should(gomega.Succeed())
 }
 
-// VerifyWorkspaceConditions verifies workspace status conditions exactly.
-// expectedConditions is a map of condition type to expected status (e.g., "Progressing" -> "True").
-// The workspace must have exactly the conditions specified — no more, no less.
+// VerifyWorkspaceConditions polls until the workspace has exactly the conditions in
+// expectedConditions (condition type to status, e.g. "Progressing" -> "True"), no more, no less.
+// The controller re-evaluates readiness on every reconcile and rewrites the whole condition set,
+// so a single read right after a transition may not see the settled set (#350).
 func VerifyWorkspaceConditions(
 	workspaceName string,
 	namespace string,
@@ -56,31 +68,23 @@ func VerifyWorkspaceConditions(
 ) {
 	ginkgo.GinkgoHelper()
 
-	// Get all condition statuses in a single kubectl call
 	// Format: "Type=Status Type=Status ..."
 	jsonPath := "{range .status.conditions[*]}{.type}{\"=\"}{.status}{\" \"}{end}"
-	output, err := kubectlGet("workspace", workspaceName, namespace, jsonPath)
-	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	gomega.Eventually(func(g gomega.Gomega) {
+		output, err := kubectlGet("workspace", workspaceName, namespace, jsonPath)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	// Parse conditions from output (format: "Type=Status Type=Status ...")
-	actualConditions := make(map[string]string)
-	pairs := strings.Fields(output)
-	for _, pair := range pairs {
-		parts := strings.Split(pair, "=")
-		if len(parts) == 2 {
-			actualConditions[parts[0]] = parts[1]
+		actualConditions := make(map[string]string)
+		for _, pair := range strings.Fields(output) {
+			parts := strings.Split(pair, "=")
+			if len(parts) == 2 {
+				actualConditions[parts[0]] = parts[1]
+			}
 		}
-	}
 
-	// Verify the number of conditions matches
-	gomega.Expect(actualConditions).To(gomega.HaveLen(len(expectedConditions)),
-		"Expected %d conditions but found %d", len(expectedConditions), len(actualConditions))
-
-	// Assert on each expected condition
-	for conditionType, expectedStatus := range expectedConditions {
-		gomega.Expect(actualConditions[conditionType]).To(gomega.Equal(expectedStatus),
-			"%s condition should be %s but got %s", conditionType, expectedStatus, actualConditions[conditionType])
-	}
+		g.Expect(actualConditions).To(gomega.Equal(expectedConditions),
+			"conditions of workspace %s/%s", namespace, workspaceName)
+	}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(gomega.Succeed())
 }
 
 // VerifyConsistentWorkspaceConditions polls workspace conditions for the given duration
@@ -233,6 +237,176 @@ func WaitForWorkspaceDeletion(workspaceName, namespace string) {
 	}).WithTimeout(2 * time.Minute).WithPolling(3 * time.Second).Should(gomega.Succeed())
 }
 
+// GetWorkspaceDeploymentName waits until the Workspace reports the Deployment it owns and returns its name.
+func GetWorkspaceDeploymentName(workspaceName, namespace string) string {
+	ginkgo.GinkgoHelper()
+
+	var deploymentName string
+	gomega.Eventually(func(g gomega.Gomega) {
+		name, err := kubectlGet("workspace", workspaceName, namespace, "{.status.deploymentName}")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(name).NotTo(gomega.BeEmpty(), "workspace.status.deploymentName should be set")
+		deploymentName = name
+	}, 2*time.Minute, 2*time.Second).Should(gomega.Succeed())
+
+	return deploymentName
+}
+
+// setDeploymentProgressDeadline patches progressDeadlineSeconds on a workspace Deployment. The patch
+// survives reconciles: the operator rewrites a Deployment only when its pod template drifted.
+func setDeploymentProgressDeadline(deploymentName, namespace string, seconds int) {
+	ginkgo.GinkgoHelper()
+
+	ginkgo.By(fmt.Sprintf("setting progressDeadlineSeconds=%d on deployment %s", seconds, deploymentName))
+	cmd := exec.Command("kubectl", "patch", "deployment", deploymentName, "-n", namespace,
+		"--type=merge", "-p", fmt.Sprintf(`{"spec":{"progressDeadlineSeconds":%d}}`, seconds))
+	_, err := utils.Run(cmd)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+}
+
+// workspaceEvents returns the events with the given reason recorded on the workspace with the given
+// UID. Events outlive the object they were recorded on, so a selection by name would also return the
+// events of an earlier workspace of the same name, which specs reuse across runs.
+func workspaceEvents(workspaceUID, namespace, reason string) ([]corev1.Event, error) {
+	cmd := exec.Command("kubectl", verbGet, "events", "-n", namespace,
+		"--field-selector", fmt.Sprintf("involvedObject.uid=%s,reason=%s", workspaceUID, reason),
+		"-o", "json")
+	output, err := utils.Run(cmd)
+	if err != nil {
+		return nil, err
+	}
+	var events corev1.EventList
+	if err := json.Unmarshal([]byte(output), &events); err != nil {
+		return nil, err
+	}
+	return events.Items, nil
+}
+
+// expectSingleStallEvent asserts that exactly one Warning WorkspaceComputeStalled event is recorded on
+// the workspace, once, with a message matching messageMatcher.
+func expectSingleStallEvent(workspaceName, namespace string, messageMatcher gomega.OmegaMatcher) {
+	ginkgo.GinkgoHelper()
+	expectSingleWarningEvent(workspaceName, namespace, controller.EventWorkspaceComputeStalled, messageMatcher)
+}
+
+// expectSingleStartFailedEvent asserts that exactly one Warning WorkspaceStartFailed event is recorded
+// on the workspace, once, with a message matching messageMatcher.
+func expectSingleStartFailedEvent(workspaceName, namespace string, messageMatcher gomega.OmegaMatcher) {
+	ginkgo.GinkgoHelper()
+	expectSingleWarningEvent(workspaceName, namespace, controller.EventWorkspaceStartFailed, messageMatcher)
+}
+
+func expectSingleWarningEvent(workspaceName, namespace, reason string, messageMatcher gomega.OmegaMatcher) {
+	ginkgo.GinkgoHelper()
+
+	workspaceUID, err := kubectlGet("workspace", workspaceName, namespace, "{.metadata.uid}")
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	gomega.Expect(workspaceUID).NotTo(gomega.BeEmpty())
+
+	gomega.Eventually(func(g gomega.Gomega) {
+		events, err := workspaceEvents(workspaceUID, namespace, reason)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(events).To(gomega.HaveLen(1))
+		g.Expect(events[0].Type).To(gomega.Equal(corev1.EventTypeWarning))
+		g.Expect(events[0].Count).To(gomega.BeNumerically("<=", 1))
+		g.Expect(events[0].Message).To(messageMatcher)
+	}).WithTimeout(30 * time.Second).WithPolling(2 * time.Second).Should(gomega.Succeed())
+}
+
+// waitForWorkspaceStartStep polls until the workspace reports Progressing=True with the step as its
+// reason and a message matching messageMatcher, and Available=False under the same reason.
+func waitForWorkspaceStartStep(workspaceName, namespace, step string, messageMatcher gomega.OmegaMatcher) {
+	ginkgo.GinkgoHelper()
+
+	gomega.Eventually(func(g gomega.Gomega) {
+		var ws workspacev1alpha1.Workspace
+		g.Expect(kubectlGetInto("workspace", workspaceName, namespace, &ws)).To(gomega.Succeed())
+		progressing := meta.FindStatusCondition(ws.Status.Conditions, ConditionTypeProgressing)
+		g.Expect(progressing).NotTo(gomega.BeNil())
+		g.Expect(string(progressing.Status)).To(gomega.Equal(ConditionTrue))
+		g.Expect(progressing.Reason).To(gomega.Equal(step))
+		g.Expect(progressing.Message).To(messageMatcher)
+		available := meta.FindStatusCondition(ws.Status.Conditions, ConditionTypeAvailable)
+		g.Expect(available).NotTo(gomega.BeNil())
+		g.Expect(string(available.Status)).To(gomega.Equal(ConditionFalse))
+		g.Expect(available.Reason).To(gomega.Equal(step))
+	}).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(gomega.Succeed())
+}
+
+// waitForWorkspaceDegradedStart waits until the workspace reports a failed or stalled start: Degraded=True
+// with a reason among reasons and a message matching messageMatcher, and Available=False and
+// Progressing=False under the same reason and message.
+//
+//nolint:unparam // helper kept general; current callers happen to share the namespace
+func waitForWorkspaceDegradedStart(
+	workspaceName, namespace string, reasons []string, messageMatcher gomega.OmegaMatcher) {
+	ginkgo.GinkgoHelper()
+
+	gomega.Eventually(func(g gomega.Gomega) {
+		var ws workspacev1alpha1.Workspace
+		g.Expect(kubectlGetInto("workspace", workspaceName, namespace, &ws)).To(gomega.Succeed())
+		degraded := meta.FindStatusCondition(ws.Status.Conditions, ConditionTypeDegraded)
+		g.Expect(degraded).NotTo(gomega.BeNil())
+		g.Expect(string(degraded.Status)).To(gomega.Equal(ConditionTrue))
+		g.Expect(degraded.Reason).To(gomega.BeElementOf(reasons))
+		g.Expect(degraded.Message).To(messageMatcher)
+		for _, conditionType := range []string{ConditionTypeAvailable, ConditionTypeProgressing} {
+			condition := meta.FindStatusCondition(ws.Status.Conditions, conditionType)
+			g.Expect(condition).NotTo(gomega.BeNil(), conditionType)
+			g.Expect(string(condition.Status)).To(gomega.Equal(ConditionFalse), conditionType)
+			g.Expect(condition.Reason).To(gomega.Equal(degraded.Reason), conditionType)
+			g.Expect(condition.Message).To(gomega.Equal(degraded.Message), conditionType)
+		}
+	}).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(gomega.Succeed())
+}
+
+// progressingReasonsUntilAvailable polls the workspace until Available=True and returns every reason
+// its Progressing condition carried on the way, with the Degraded status values seen.
+func progressingReasonsUntilAvailable(
+	workspaceName, namespace string) (reasons map[string]bool, degradedSeen map[string]bool) {
+	ginkgo.GinkgoHelper()
+	reasons, degradedSeen = map[string]bool{}, map[string]bool{}
+
+	gomega.Eventually(func(g gomega.Gomega) {
+		var ws workspacev1alpha1.Workspace
+		g.Expect(kubectlGetInto("workspace", workspaceName, namespace, &ws)).To(gomega.Succeed())
+		if progressing := meta.FindStatusCondition(ws.Status.Conditions, ConditionTypeProgressing); progressing != nil &&
+			progressing.Status == metav1.ConditionTrue {
+			reasons[progressing.Reason] = true
+		}
+		if degraded := meta.FindStatusCondition(ws.Status.Conditions, ConditionTypeDegraded); degraded != nil {
+			degradedSeen[string(degraded.Status)] = true
+		}
+		available := meta.FindStatusCondition(ws.Status.Conditions, ConditionTypeAvailable)
+		g.Expect(available).NotTo(gomega.BeNil())
+		g.Expect(string(available.Status)).To(gomega.Equal(ConditionTrue))
+	}).WithTimeout(5 * time.Minute).WithPolling(500 * time.Millisecond).Should(gomega.Succeed())
+	return reasons, degradedSeen
+}
+
+// GetWorkspaceServiceName waits until the Workspace reports the Service it owns and returns its name.
+func GetWorkspaceServiceName(workspaceName, namespace string) string {
+	ginkgo.GinkgoHelper()
+
+	var serviceName string
+	gomega.Eventually(func(g gomega.Gomega) {
+		name, err := kubectlGet("workspace", workspaceName, namespace, "{.status.serviceName}")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(name).NotTo(gomega.BeEmpty(), "workspace.status.serviceName should be set")
+		serviceName = name
+	}, 2*time.Minute, 5*time.Second).Should(gomega.Succeed())
+
+	return serviceName
+}
+
+// GetServicePortNames returns the names of every port on a Service, space separated.
+func GetServicePortNames(serviceName, namespace string) (string, error) {
+	ginkgo.GinkgoHelper()
+
+	return kubectlGet("service", serviceName, namespace,
+		"{range .spec.ports[*]}{.name}{\" \"}{end}")
+}
+
 // deleteWorkspaceAsUser deletes a workspace with kubectl impersonation
 func deleteWorkspaceAsUser(name, user string, groups []string) error {
 	ginkgo.GinkgoHelper()
@@ -244,4 +418,47 @@ func deleteWorkspaceAsUser(name, user string, groups []string) error {
 	cmd := exec.Command("kubectl", args...)
 	_, err := utils.Run(cmd)
 	return err
+}
+
+// deleteWorkspaceForTest removes one workspace by name, so it can never delete unrelated objects
+// sharing the namespace. A missing workspace is not an error.
+//
+//nolint:unparam // helper kept general; current callers happen to share the namespace
+func deleteWorkspaceForTest(workspaceName, namespace string) {
+	ginkgo.GinkgoHelper()
+	if workspaceName == "" {
+		return
+	}
+	ginkgo.By(fmt.Sprintf("cleaning up workspace %s", workspaceName))
+	cmd := exec.Command("kubectl", "delete", "workspace", workspaceName,
+		"-n", namespace, "--ignore-not-found", "--wait=true", "--timeout=120s")
+	_, _ = utils.Run(cmd)
+}
+
+// patchWorkspaceForTest applies a JSON merge patch to a workspace and returns kubectl's output, so a
+// caller can assert on either an accepted or a rejected change.
+//
+//nolint:unparam // helper kept general; current callers happen to share the namespace
+func patchWorkspaceForTest(workspaceName, namespace, patch string) (string, error) {
+	cmd := exec.Command("kubectl", "patch", "workspace", workspaceName,
+		"-n", namespace, "--type=merge", "-p", patch)
+	return utils.Run(cmd)
+}
+
+// patchTemplateForTest applies a JSON merge patch to a template in the shared namespace.
+func patchTemplateForTest(templateName, patch string) {
+	ginkgo.GinkgoHelper()
+	cmd := exec.Command("kubectl", "patch", "workspacetemplate", templateName,
+		"-n", SharedNamespace, "--type=merge", "-p", patch)
+	_, err := utils.Run(cmd)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+}
+
+// deleteTemplateForTest removes one template from the shared namespace by name.
+func deleteTemplateForTest(templateName string) {
+	ginkgo.GinkgoHelper()
+	ginkgo.By(fmt.Sprintf("cleaning up template %s", templateName))
+	cmd := exec.Command("kubectl", "delete", "workspacetemplate", templateName,
+		"-n", SharedNamespace, "--ignore-not-found", "--wait=true", "--timeout=60s")
+	_, _ = utils.Run(cmd)
 }

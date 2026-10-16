@@ -1,0 +1,15 @@
+# Rejected by the CRD: workspace-shm is the operator's reserved volume name.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-reserved-name-workspace
+spec:
+  displayName: "shm-reserved-name-workspace"
+  templateRef:
+    name: shm-template
+    namespace: jupyter-k8s-shared
+  ownershipType: Public
+  volumes:
+    - name: workspace-shm
+      mountPath: /scratch
+      emptyDir: {}

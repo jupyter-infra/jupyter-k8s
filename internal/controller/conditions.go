@@ -39,8 +39,6 @@ const (
 const (
 	// ConditionTypeAvailable and ConditionTypeProgressing reasons
 	ReasonResourcesNotReady   = "ResourcesNotReady"
-	ReasonComputeNotReady     = "ComputeNotReady"
-	ReasonServiceNotReady     = "ServiceNotReady"
 	ReasonAccessNotReady      = "AccessNotReady"
 	ReasonResourcesReady      = "ResourcesReady"
 	ReasonDesiredStateStopped = "DesiredStateStopped"
@@ -58,6 +56,20 @@ const (
 	ReasonServiceError                 = "ServiceError"
 	ReasonAccessProbeThresholdExceeded = "AccessProbeThresholdExceeded"
 	ReasonNoError                      = "NoError"
+	// ReasonComputeStalled is set on Degraded, Available and Progressing while the workspace Deployment
+	// reports Progressing=False with reason ProgressDeadlineExceeded; it clears when the pod becomes ready.
+	ReasonComputeStalled = "ComputeStalled"
+	// ReasonContainerStartFailed is set as condition.reason on the Workspace's Degraded, Available and Progressing
+	// conditions when the kubelet-provided reason does not fit the Kubernetes API's format restrictions and cannot
+	// be used directly. The kubelet's original reason is then written at the beginning of condition.message, as
+	// "<reason>: <message>".
+	ReasonContainerStartFailed = "ContainerStartFailed"
+
+	// Start steps, set on Progressing=True and Available=False while the workspace pod is not ready, with
+	// the message the scheduler, the autoscaler or the kubelet recorded for that step copied unchanged.
+	ReasonWaitingForNode    = "WaitingForNode"
+	ReasonPullingImage      = "PullingImage"
+	ReasonStartingContainer = "StartingContainer"
 
 	// ConditionTypeAvailable reasons (special cases)
 	ReasonPreempted = "Preempted"
@@ -77,12 +89,19 @@ const (
 	// in the operator logs (reconcileIntegrationFreeze); the status message points there.
 	IntegrationReasonNotResolved = "NotResolved"
 
-	// Kubernetes Event reasons for integration status transitions (recorded on the Workspace via the
-	// EventRecorder, surfaced by `kubectl describe workspace`). These are EDGE-TRIGGERED: an event is
-	// emitted only when an integration's probe verdict changes, never on every report-only probe cadence
-	// (see getIntegrationStatusEvent), so a persistently-degraded integration does not spam the event stream.
+	// Kubernetes Event reasons recorded on the Workspace when an integration turns degraded or recovers; recorded
+	// once per such change, so an integration that stays degraded does not repeat the event on every probe.
 	IntegrationEventDegraded  = "IntegrationDegraded"
 	IntegrationEventRecovered = "IntegrationRecovered"
+
+	// EventWorkspaceComputeStalled is a Warning event recorded on the Workspace when its Deployment reports
+	// ProgressDeadlineExceeded; recorded once per stall, so a workspace that stays stalled does not repeat it.
+	EventWorkspaceComputeStalled = "WorkspaceComputeStalled"
+
+	// EventWorkspaceStartFailed is a Warning event recorded on the Workspace when the kubelet reports a container
+	// it cannot start; recorded once per failed start, so a start that stays failed does not repeat it even when
+	// the kubelet's reason changes.
+	EventWorkspaceStartFailed = "WorkspaceStartFailed"
 )
 
 // NewCondition creates a new condition with the specified status

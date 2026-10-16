@@ -1,0 +1,12 @@
+{
+  "spec": {
+    "deploymentModifications": {
+      "podModifications": {
+        "exposedPorts": [
+          "sidecar-ws",
+          "sidecar-admin"
+        ]
+      }
+    }
+  }
+}

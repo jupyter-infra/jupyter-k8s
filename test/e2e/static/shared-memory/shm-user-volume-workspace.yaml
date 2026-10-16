@@ -1,0 +1,17 @@
+# The workspace's own /dev/shm volume is mounted as declared when the template does not lock shared memory.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-user-volume-workspace
+spec:
+  displayName: "shm-user-volume-workspace"
+  templateRef:
+    name: shm-template-default-off
+    namespace: jupyter-k8s-shared
+  ownershipType: Public
+  volumes:
+    - name: shm
+      mountPath: /dev/shm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 96Mi

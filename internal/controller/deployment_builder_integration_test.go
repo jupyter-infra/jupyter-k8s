@@ -260,7 +260,7 @@ func TestBuildWorkspaceDeployment_EnvPrecedence(t *testing.T) {
 	workspace.Status.ResolvedIntegrations = []workspacev1alpha1.ResolvedIntegration{{
 		Name:                               rayIntegrationName,
 		ParametersHash:                     getIntegrationParametersHash(&workspace.Spec.IntegrationTemplateRefs[0]),
-		ObservedIntegrationTemplateVersion: "uid.1",
+		ObservedIntegrationTemplateVersion: testIntegrationTemplateVersion,
 		Values:                             map[string]string{},
 	}}
 
@@ -353,7 +353,7 @@ func TestApplyIntegrations_NoRollOnSecondReconcile(t *testing.T) {
 	workspace.Status.ResolvedIntegrations = []workspacev1alpha1.ResolvedIntegration{{
 		Name:                               rayIntegrationName,
 		ParametersHash:                     getIntegrationParametersHash(&workspace.Spec.IntegrationTemplateRefs[0]),
-		ObservedIntegrationTemplateVersion: "uid.1",
+		ObservedIntegrationTemplateVersion: testIntegrationTemplateVersion,
 		Values:                             map[string]string{},
 	}}
 

@@ -142,8 +142,9 @@ type IntegrationStatusProbe struct {
 // WorkspaceIntegrationTemplate is the Schema for the workspaceintegrationtemplates API.
 // It defines a declarative, template-driven integration for adding runtime capabilities
 // (sidecars, volumes, env vars) to workspace pods with dynamic resource lookup and
-// template expression resolution. A Workspace may attach several of these via
-// spec.integrationRefs.
+// template expression resolution. A Workspace attaches one of these via
+// spec.integrationTemplateRefs, which is capped at a single entry today; the same template
+// may be attached by many Workspaces, each supplying its own parameters.
 type WorkspaceIntegrationTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

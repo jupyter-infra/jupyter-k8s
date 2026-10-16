@@ -12,9 +12,12 @@ const (
 	testStrategyName             = "test-strategy"
 	accessStrategyNamespaceConst = "strategy-namespace"
 	testServiceName              = "test-service"
+	testUID                      = "test-uid"
+	testImage                    = "test-image"
 	testRouteName                = "test-route"
 	testRouteNameOne             = "test-route-1"
 	testWorkspaceDisplayName     = "Test Workspace"
+	testImageRegistry            = "quay.io"
 	testStrategyDisplayName      = "Test Strategy"
 	testTemplateDisplayName      = "Test Template"
 
@@ -45,6 +48,8 @@ const (
 
 	containerNameMain = "main"
 	literalTest       = "test"
+	literalFirst      = "first"
+	literalSecond     = "second"
 
 	conditionTypeExisting = "Existing"
 	conditionTypeToUpdate = "ToUpdate"
@@ -73,4 +78,9 @@ const (
 	testClusterB            = "cluster-b"
 	testReasonReady         = "Ready"
 	testReadyMessage        = "ready"
+	// testIntegrationTemplateVersion is the frozen integration template version test records carry.
+	testIntegrationTemplateVersion = "uid.1"
+	// testScratchMountPath and testScratchPVC describe a user volume that is not at /dev/shm.
+	testScratchMountPath = "/scratch"
+	testScratchPVC       = "scratch-pvc"
 )

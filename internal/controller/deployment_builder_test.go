@@ -129,7 +129,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			container := deployment.Spec.Template.Spec.Containers[0]
 
 			// Check volume mounts
-			Expect(container.VolumeMounts).To(HaveLen(3)) // workspace-storage + 2 additional
+			Expect(container.VolumeMounts).To(HaveLen(3))
 
 			volumeMountMap := make(map[string]string)
 			for _, vm := range container.VolumeMounts {
@@ -140,7 +140,7 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(volumeMountMap["shared-volume"]).To(Equal("/shared"))
 
 			// Check volumes
-			Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(3)) // workspace-storage + 2 additional
+			Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(3))
 
 			volumeMap := make(map[string]string)
 			for _, v := range deployment.Spec.Template.Spec.Volumes {

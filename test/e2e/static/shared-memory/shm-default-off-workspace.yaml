@@ -1,0 +1,11 @@
+# The template's default off switch is copied onto the workspace: no /dev/shm volume.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-default-off-workspace
+spec:
+  displayName: "shm-default-off-workspace"
+  templateRef:
+    name: shm-template-default-off
+    namespace: jupyter-k8s-shared
+  ownershipType: Public

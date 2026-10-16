@@ -391,6 +391,7 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, workspace
 		}
 		warnings = append(warnings, w...)
 	}
+	warnings = append(warnings, sharedMemoryWarnings(workspace)...)
 
 	// Validate volume ownership (security check - applies to all users)
 	if err := v.volumeValidator.ValidateVolumeOwnership(ctx, workspace); err != nil {
@@ -457,6 +458,7 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldWorksp
 		}
 		warnings = append(warnings, w...)
 	}
+	warnings = append(warnings, sharedMemoryWarnings(newWorkspace)...)
 
 	// Validate no user modifications to reserved prefix labels/annotations
 	if err := validateReservedPrefixOnUpdate(oldWorkspace, newWorkspace); err != nil {

@@ -1,0 +1,15 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-drift
+spec:
+  displayName: "Drift Repair Test"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

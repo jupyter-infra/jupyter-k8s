@@ -3731,6 +3731,18 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              defaultSharedMemory:
+                description: |-
+                  DefaultSharedMemory is the /dev/shm setting for workspaces using this template; set it, {} is
+                  enough, to give every workspace of the template the enlarged /dev/shm. Copied in whole onto a
+                  workspace that sets no sharedMemory.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled mounts the volume. Unset means true; false keeps the container default, which lets a
+                      workspace turn off a template's default.
+                    type: boolean
+                type: object
               defaultTolerations:
                 description: DefaultTolerations specifies default tolerations for
                   scheduling on nodes with taints
@@ -3829,6 +3841,11 @@ spec:
                       || (!has(self.persistentVolumeClaimName) && has(self.emptyDir))
                 maxItems: 10
                 type: array
+                x-kubernetes-validations:
+                - message: volume name 'workspace-storage' is reserved
+                  rule: '!self.exists(v, v.name == ''workspace-storage'')'
+                - message: volume name 'workspace-shm' is reserved
+                  rule: '!self.exists(v, v.name == ''workspace-shm'')'
               description:
                 description: Description provides additional information about this
                   template
@@ -3988,6 +4005,19 @@ spec:
 
                       Custom accelerators follow the pattern: vendor.example/resource-name
                     type: object
+                type: object
+              sharedMemoryOverrides:
+                description: |-
+                  SharedMemoryOverrides controls whether a workspace may deviate from DefaultSharedMemory, including
+                  with a volume it mounts at /dev/shm itself.
+                properties:
+                  allow:
+                    default: true
+                    description: |-
+                      Allow controls whether workspaces may set their own sharedMemory or mount their own volume at
+                      /dev/shm. When false, workspaces get DefaultSharedMemory and nothing else, so a template that
+                      sets it needs a DefaultSharedMemory.
+                    type: boolean
                 type: object
             required:
             - defaultImage

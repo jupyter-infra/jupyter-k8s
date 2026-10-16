@@ -7,11 +7,18 @@ package authmiddleware
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"encoding/base64"
 	"encoding/json"
 	"log/slog"
+	"math/big"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,11 +41,11 @@ func testOIDCClaimsParsingFromGitHub(t *testing.T, subject string) {
 	// Create a sample raw token claims as they would come from Dex with GitHub connector
 	// This simulates the JSON payload inside a JWT token from Dex
 	rawClaims := map[string]interface{}{
-		"iss":                testDexIssuerURL,
-		"sub":                subject, // Subject format passed from the test case
-		"aud":                "authmiddleware-client",
-		"exp":                time.Now().Add(1 * time.Hour).Unix(),
-		"iat":                time.Now().Unix(),
+		claimIss:             testDexIssuerURL,
+		claimSub:             subject, // Subject format passed from the test case
+		claimAud:             "authmiddleware-client",
+		claimExp:             time.Now().Add(1 * time.Hour).Unix(),
+		claimIat:             time.Now().Unix(),
 		"nonce":              "abcdefghijklmnop",
 		"preferred_username": "github-user", // GitHub username
 		"email":              "user@github.com",
@@ -367,4 +374,148 @@ func TestStart_ContextCanceled(t *testing.T) {
 	// Should return an error related to context cancellation
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to initialize OIDC provider")
+}
+
+const (
+	oidcTestClientID = "test-client"
+	oidcTestKeyID    = "test-key-1"
+
+	// Standard JWT claim keys, kept as constants so goconst does not flag the
+	// repeated literals across the token-minting tests.
+	claimIss = "iss"
+	claimSub = "sub"
+	claimAud = "aud"
+	claimExp = "exp"
+	claimIat = "iat"
+)
+
+// mockOIDCProvider spins up an httptest server that serves the minimal OIDC
+// discovery document and JWKS needed by go-oidc, and mints RS256 ID tokens
+// signed with a matching key. It lets us exercise the Start() and VerifyToken()
+// happy paths without a real identity provider.
+type mockOIDCProvider struct {
+	server *httptest.Server
+	key    *rsa.PrivateKey
+}
+
+func newMockOIDCProvider(t *testing.T) *mockOIDCProvider {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	m := &mockOIDCProvider{key: key}
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"issuer":                                m.server.URL,
+			"jwks_uri":                              m.server.URL + "/keys",
+			"authorization_endpoint":                m.server.URL + "/auth",
+			"token_endpoint":                        m.server.URL + "/token",
+			"id_token_signing_alg_values_supported": []string{"RS256"},
+		})
+	})
+
+	mux.HandleFunc("/keys", func(w http.ResponseWriter, _ *http.Request) {
+		pub := key.Public().(*rsa.PublicKey)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"keys": []map[string]any{{
+				"kty": "RSA",
+				"alg": "RS256",
+				"use": "sig",
+				"kid": oidcTestKeyID,
+				"n":   base64.RawURLEncoding.EncodeToString(pub.N.Bytes()),
+				"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(pub.E)).Bytes()),
+			}},
+		})
+	})
+
+	m.server = httptest.NewServer(mux)
+	t.Cleanup(m.server.Close)
+	return m
+}
+
+// signToken mints an RS256 ID token with the given claims, signed by the mock
+// provider's key and stamped with the matching key id.
+func (m *mockOIDCProvider) signToken(t *testing.T, claims jwt.MapClaims) string {
+	t.Helper()
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	token.Header["kid"] = oidcTestKeyID
+	signed, err := token.SignedString(m.key)
+	require.NoError(t, err)
+	return signed
+}
+
+func newVerifierForProvider(t *testing.T, issuerURL string) *OIDCVerifier {
+	t.Helper()
+	cfg := &Config{
+		OIDCIssuerURL:       issuerURL,
+		OIDCClientID:        oidcTestClientID,
+		OIDCInitTimeoutSecs: 10,
+	}
+	verifier, err := NewOIDCVerifier(cfg, slog.Default())
+	require.NoError(t, err)
+	return verifier
+}
+
+func TestStart_Succeeds(t *testing.T) {
+	provider := newMockOIDCProvider(t)
+	verifier := newVerifierForProvider(t, provider.server.URL)
+
+	require.NoError(t, verifier.Start(context.Background()))
+	assert.NotNil(t, verifier.verifier)
+
+	// Second Start() is a no-op because the provider is already set.
+	require.NoError(t, verifier.Start(context.Background()))
+}
+
+func TestVerifyToken_Succeeds(t *testing.T) {
+	provider := newMockOIDCProvider(t)
+	verifier := newVerifierForProvider(t, provider.server.URL)
+	require.NoError(t, verifier.Start(context.Background()))
+
+	token := provider.signToken(t, jwt.MapClaims{
+		claimIss:             provider.server.URL,
+		claimAud:             oidcTestClientID,
+		claimSub:             "user-123",
+		"preferred_username": "octocat",
+		"email":              "octocat@example.com",
+		"groups":             []string{"org:team-a", "org:team-b"},
+		claimExp:             time.Now().Add(time.Hour).Unix(),
+		claimIat:             time.Now().Add(-time.Minute).Unix(),
+	})
+
+	claims, isFault, err := verifier.VerifyToken(context.Background(), token, slog.Default())
+
+	require.NoError(t, err)
+	assert.False(t, isFault)
+	require.NotNil(t, claims)
+	assert.Equal(t, "octocat", claims.Username)
+	assert.Equal(t, "octocat@example.com", claims.Email)
+	assert.Equal(t, "user-123", claims.Subject)
+	assert.ElementsMatch(t, []string{"org:team-a", "org:team-b"}, claims.Groups)
+}
+
+func TestVerifyToken_InvalidToken(t *testing.T) {
+	provider := newMockOIDCProvider(t)
+	verifier := newVerifierForProvider(t, provider.server.URL)
+	require.NoError(t, verifier.Start(context.Background()))
+
+	// Wrong audience → token validation failure (not a provider fault).
+	token := provider.signToken(t, jwt.MapClaims{
+		claimIss: provider.server.URL,
+		claimAud: "some-other-client",
+		claimSub: "user-123",
+		claimExp: time.Now().Add(time.Hour).Unix(),
+		claimIat: time.Now().Add(-time.Minute).Unix(),
+	})
+
+	claims, isFault, err := verifier.VerifyToken(context.Background(), token, slog.Default())
+
+	require.Error(t, err)
+	assert.False(t, isFault, "an audience mismatch is a token error, not a provider fault")
+	assert.Nil(t, claims)
+	assert.Contains(t, err.Error(), "invalid ID token")
 }

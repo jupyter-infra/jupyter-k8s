@@ -1,0 +1,11 @@
+# Created before shm-template-plain gains a default: no volume, then the default at the next change.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: shm-plain-workspace
+spec:
+  displayName: "shm-plain-workspace"
+  templateRef:
+    name: shm-template-plain
+    namespace: jupyter-k8s-shared
+  ownershipType: Public

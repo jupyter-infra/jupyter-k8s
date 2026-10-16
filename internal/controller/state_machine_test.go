@@ -6,14 +6,344 @@ Distributed under the terms of the MIT license
 package controller
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
+
+// apiInternalErr returns a non-NotFound API error, useful for driving the
+// error branches of Get-based helpers.
+func apiInternalErr() error {
+	return apierrors.NewInternalError(errInjected)
+}
+
+// smScheme returns a scheme with the types the state machine tests need.
+func smScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	s := runtime.NewScheme()
+	require.NoError(t, workspacev1alpha1.AddToScheme(s))
+	require.NoError(t, appsv1.AddToScheme(s))
+	require.NoError(t, corev1.AddToScheme(s))
+	return s
+}
+
+// smWorkspace builds a minimal workspace for state machine tests.
+func smWorkspace() *workspacev1alpha1.Workspace {
+	return &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testWorkspaceName,
+			Namespace: testNamespace,
+		},
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			Image:         testImage,
+			DesiredStatus: DesiredStateRunning,
+		},
+	}
+}
+
+// newStateMachineWithClient wires a StateMachine around the given client with real
+// managers. The idle checker is left nil; tests that exercise idle paths use
+// newStateMachineWithIdleChecker instead.
+func newStateMachineWithClient(c client.Client, scheme *runtime.Scheme) *StateMachine {
+	statusManager := NewStatusManager(c)
+	rm := NewResourceManager(
+		c,
+		scheme,
+		NewDeploymentBuilder(scheme, WorkspaceControllerOptions{}),
+		NewServiceBuilder(scheme),
+		NewPVCBuilder(scheme),
+		NewAccessResourcesBuilder(),
+		statusManager,
+	)
+	return &StateMachine{
+		resourceManager:     rm,
+		statusManager:       statusManager,
+		recorder:            record.NewFakeRecorder(10),
+		accessStartupProber: &mockAccessStartupProber{ready: true},
+	}
+}
+
+func TestNewStateMachine(t *testing.T) {
+	scheme := smScheme(t)
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	statusManager := NewStatusManager(c)
+	rm := NewResourceManager(c, scheme, nil, nil, nil, nil, statusManager)
+	idleChecker := NewWorkspaceIdleChecker(c, time.Minute)
+	prober := &mockAccessStartupProber{}
+	integrationProber := &mockIntegrationProber{}
+
+	sm := NewStateMachine(rm, statusManager, record.NewFakeRecorder(1), idleChecker, prober, integrationProber)
+
+	require.NotNil(t, sm)
+	assert.Same(t, rm, sm.resourceManager)
+	assert.Same(t, statusManager, sm.statusManager)
+	assert.Equal(t, idleChecker, sm.idleChecker)
+}
+
+func TestGetAccessStrategyForWorkspace(t *testing.T) {
+	scheme := smScheme(t)
+
+	t.Run("returns nil when the workspace has no access strategy", func(t *testing.T) {
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		sm := newStateMachineWithClient(c, scheme)
+
+		got, err := sm.GetAccessStrategyForWorkspace(context.Background(), smWorkspace())
+
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("returns the referenced access strategy", func(t *testing.T) {
+		strategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      testStrategyName,
+				Namespace: accessStrategyNamespaceConst,
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(strategy).Build()
+		sm := newStateMachineWithClient(c, scheme)
+
+		ws := smWorkspace()
+		ws.Spec.AccessStrategy = &workspacev1alpha1.AccessStrategyRef{
+			Name:      testStrategyName,
+			Namespace: accessStrategyNamespaceConst,
+		}
+
+		got, err := sm.GetAccessStrategyForWorkspace(context.Background(), ws)
+
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		assert.Equal(t, testStrategyName, got.Name)
+	})
+
+	t.Run("returns error when the referenced access strategy is missing", func(t *testing.T) {
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		sm := newStateMachineWithClient(c, scheme)
+
+		ws := smWorkspace()
+		ws.Spec.AccessStrategy = &workspacev1alpha1.AccessStrategyRef{
+			Name:      testStrategyName,
+			Namespace: accessStrategyNamespaceConst,
+		}
+
+		_, err := sm.GetAccessStrategyForWorkspace(context.Background(), ws)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not found")
+	})
+}
+
+func TestReconcileDesiredState_UnknownStatus(t *testing.T) {
+	scheme := smScheme(t)
+	ws := smWorkspace()
+	ws.Spec.DesiredStatus = "Bogus"
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&workspacev1alpha1.Workspace{}).
+		WithObjects(ws).
+		Build()
+	sm := newStateMachineWithClient(c, scheme)
+
+	result, err := sm.ReconcileDesiredState(context.Background(), ws, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown desired status")
+	assert.Equal(t, LongRequeueDelay, result.RequeueAfter)
+}
+
+func TestReconcileDesiredStoppedStatus_DeleteErrors(t *testing.T) {
+	scheme := smScheme(t)
+
+	newStoppedWorkspace := func() *workspacev1alpha1.Workspace {
+		ws := smWorkspace()
+		ws.Spec.DesiredStatus = DesiredStateStopped
+		return ws
+	}
+
+	t.Run("returns error when deployment deletion get fails", func(t *testing.T) {
+		ws := newStoppedWorkspace()
+		base := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithStatusSubresource(&workspacev1alpha1.Workspace{}).
+			WithObjects(ws).
+			Build()
+		mock := &MockClient{
+			Client: base,
+			getFunc: func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, ok := obj.(*appsv1.Deployment); ok {
+					return apiInternalErr()
+				}
+				return base.Get(ctx, key, obj, opts...)
+			},
+		}
+		sm := newStateMachineWithClient(mock, scheme)
+
+		_, err := sm.ReconcileDesiredState(context.Background(), ws, nil)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get deployment")
+	})
+
+	t.Run("returns error when service deletion get fails", func(t *testing.T) {
+		ws := newStoppedWorkspace()
+		base := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithStatusSubresource(&workspacev1alpha1.Workspace{}).
+			WithObjects(ws).
+			Build()
+		mock := &MockClient{
+			Client: base,
+			getFunc: func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, ok := obj.(*corev1.Service); ok {
+					return apiInternalErr()
+				}
+				return base.Get(ctx, key, obj, opts...)
+			},
+		}
+		sm := newStateMachineWithClient(mock, scheme)
+
+		_, err := sm.ReconcileDesiredState(context.Background(), ws, nil)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get service")
+	})
+}
+
+func TestReconcileDeletion_NoFinalizer(t *testing.T) {
+	scheme := smScheme(t)
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	sm := newStateMachineWithClient(c, scheme)
+
+	result, err := sm.ReconcileDeletion(context.Background(), smWorkspace())
+
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{}, result)
+}
+
+func TestReconcileDeletion_RemovesFinalizerWhenCleaned(t *testing.T) {
+	scheme := smScheme(t)
+	ws := smWorkspace()
+	ws.Finalizers = []string{WorkspaceFinalizerName}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&workspacev1alpha1.Workspace{}).
+		WithObjects(ws).
+		Build()
+	sm := newStateMachineWithClient(c, scheme)
+
+	// No deployment/service/PVC exist, so CleanupAllResources reports fully deleted.
+	result, err := sm.ReconcileDeletion(context.Background(), ws)
+
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{}, result)
+
+	// Finalizer should be gone from the persisted object.
+	got := &workspacev1alpha1.Workspace{}
+	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(ws), got))
+	assert.NotContains(t, got.Finalizers, WorkspaceFinalizerName)
+}
+
+func TestReconcileDeletion_CleanupError(t *testing.T) {
+	scheme := smScheme(t)
+	ws := smWorkspace()
+	ws.Finalizers = []string{WorkspaceFinalizerName}
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GenerateDeploymentName(ws.Name),
+			Namespace: ws.Namespace,
+		},
+	}
+	base := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&workspacev1alpha1.Workspace{}).
+		WithObjects(ws, dep).
+		Build()
+	// Delete fails, so CleanupAllResources propagates an error.
+	mock := &MockClient{
+		Client: base,
+		deleteFunc: func(context.Context, client.Object, ...client.DeleteOption) error {
+			return errInjected
+		},
+	}
+	sm := newStateMachineWithClient(mock, scheme)
+
+	_, err := sm.ReconcileDeletion(context.Background(), ws)
+
+	require.Error(t, err)
+}
+
+func TestReconcileDeletion_FinalizerUpdateError(t *testing.T) {
+	scheme := smScheme(t)
+	ws := smWorkspace()
+	ws.Finalizers = []string{WorkspaceFinalizerName}
+	base := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&workspacev1alpha1.Workspace{}).
+		WithObjects(ws).
+		Build()
+	// No resources exist, so cleanup succeeds and we reach the finalizer removal
+	// Update, which we force to fail.
+	mock := &MockClient{
+		Client: base,
+		updateFunc: func(context.Context, client.Object, ...client.UpdateOption) error {
+			return errInjected
+		},
+	}
+	sm := newStateMachineWithClient(mock, scheme)
+
+	_, err := sm.ReconcileDeletion(context.Background(), ws)
+
+	require.Error(t, err)
+}
+
+func TestReconcileDeletion_RequeuesWhenResourcesRemain(t *testing.T) {
+	scheme := smScheme(t)
+	ws := smWorkspace()
+	ws.Finalizers = []string{WorkspaceFinalizerName}
+
+	// A deployment with a finalizer survives the Delete call (it gets a deletion
+	// timestamp instead of being removed), so CleanupAllResources reports
+	// not-all-deleted and the reconcile requeues.
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       GenerateDeploymentName(ws.Name),
+			Namespace:  ws.Namespace,
+			Finalizers: []string{"keep-around/test"},
+		},
+	}
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&workspacev1alpha1.Workspace{}).
+		WithObjects(ws, dep).
+		Build()
+	sm := newStateMachineWithClient(c, scheme)
+
+	result, err := sm.ReconcileDeletion(context.Background(), ws)
+
+	require.NoError(t, err)
+	assert.Equal(t, PollRequeueDelay, result.RequeueAfter)
+
+	// Finalizer must still be present since cleanup is not complete.
+	got := &workspacev1alpha1.Workspace{}
+	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(ws), got))
+	assert.Contains(t, got.Finalizers, WorkspaceFinalizerName)
+}
 
 func TestWorkspaceIdleChecker_CheckInterval_CustomValue(t *testing.T) {
 	checker := NewWorkspaceIdleChecker(nil, 30*time.Second)
@@ -90,4 +420,60 @@ func TestTimeUntilProbeDeadline_InTheFuture(t *testing.T) {
 	ws.Status.EarliestNextProbeTime = &future
 	remaining := timeUntilProbeDeadline(ws)
 	assert.True(t, remaining > 0 && remaining <= 5*time.Second)
+}
+
+func TestStalledStep(t *testing.T) {
+	now := time.Date(2026, 10, 8, 12, 10, 0, 0, time.UTC)
+	deadline := defaultDeploymentProgressDeadline
+	tests := []struct {
+		name     string
+		step     *StartStep
+		expected bool
+	}{
+		{name: "no pod", expected: true},
+		{name: "waiting for a node for the whole deadline",
+			step: &StartStep{Reason: ReasonWaitingForNode, ProgressedAt: now.Add(-deadline)}, expected: true},
+		{name: "a pod that progressed within the deadline",
+			step: &StartStep{Reason: ReasonStartingContainer, ProgressedAt: now.Add(-deadline + time.Minute)}},
+		{name: "a container that has not become ready for the whole deadline",
+			step: &StartStep{Reason: ReasonStartingContainer, ProgressedAt: now.Add(-deadline - time.Minute)}, expected: true},
+		{name: "a pull under way for longer than the deadline",
+			step: &StartStep{Reason: ReasonPullingImage, ProgressedAt: now.Add(-2 * deadline)}},
+		{name: "a pull the kubelet has been retrying for the whole deadline",
+			step: &StartStep{Reason: ReasonPullingImage, Retrying: true, ProgressedAt: now.Add(-deadline)}, expected: true},
+		{name: "a retried create error within the deadline",
+			step: &StartStep{Reason: ReasonStartingContainer, Retrying: true, ProgressedAt: now.Add(-time.Minute)}},
+		{name: "a step read back from the status after a failed pod list",
+			step: &StartStep{Reason: ReasonStartingContainer}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, stalledStep(tt.step, deadline, now))
+		})
+	}
+}
+
+func TestStalledMessage(t *testing.T) {
+	reported := &metav1.Condition{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: ReasonComputeStalled, Message: "0/3 nodes are available"}
+	tests := []struct {
+		name            string
+		step            *StartStep
+		alreadyReported bool
+		degraded        *metav1.Condition
+		expected        string
+	}{
+		{name: "the pod's step message wins", step: &StartStep{Reason: ReasonWaitingForNode, Message: "nominated"},
+			alreadyReported: true, degraded: reported, expected: "nominated"},
+		{name: "a stall on record keeps its verdict when the pod reports nothing", alreadyReported: true, degraded: reported,
+			expected: "0/3 nodes are available"},
+		{name: "a new stall without a pod carries the Deployment's message", degraded: nil, expected: "ProgressDeadlineExceeded"},
+		{name: "a stall on record without a message falls back to the Deployment's", alreadyReported: true,
+			degraded: &metav1.Condition{Type: ConditionTypeDegraded, Status: metav1.ConditionTrue, Reason: ReasonComputeStalled},
+			expected: "ProgressDeadlineExceeded"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, stalledMessage(tt.step, "ProgressDeadlineExceeded", tt.alreadyReported, tt.degraded))
+		})
+	}
 }

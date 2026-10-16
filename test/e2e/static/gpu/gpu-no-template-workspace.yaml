@@ -1,0 +1,8 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: gpu-no-template-workspace
+spec:
+  displayName: "GPU Off Path Test"
+  image: jk8s-application-jupyter-uv:latest
+  desiredStatus: Running
