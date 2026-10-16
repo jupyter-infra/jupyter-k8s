@@ -161,7 +161,3 @@ type WorkspaceIntegrationTemplateList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []WorkspaceIntegrationTemplate `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&WorkspaceIntegrationTemplate{}, &WorkspaceIntegrationTemplateList{})
-}

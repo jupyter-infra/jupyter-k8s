@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -32,7 +31,7 @@ const (
 type WorkspaceTemplateReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	recorder record.EventRecorder
+	recorder EventRecorder
 }
 
 // +kubebuilder:rbac:groups=workspace.jupyter.org,resources=workspacetemplates/status,verbs=get;update;patch
@@ -335,7 +334,7 @@ func SetupWorkspaceTemplateController(mgr ctrl.Manager) error {
 
 	k8sClient := mgr.GetClient()
 	scheme := mgr.GetScheme()
-	eventRecorder := mgr.GetEventRecorderFor("workspacetemplate-controller")
+	eventRecorder := newEventRecorder(mgr.GetEventRecorder("workspacetemplate-controller"))
 
 	reconciler := &WorkspaceTemplateReconciler{
 		Client:   k8sClient,

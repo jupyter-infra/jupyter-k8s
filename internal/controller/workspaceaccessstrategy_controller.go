@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,7 +29,7 @@ import (
 type WorkspaceAccessStrategyReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
-	EventRecorder record.EventRecorder
+	EventRecorder EventRecorder
 }
 
 // +kubebuilder:rbac:groups=workspace.jupyter.org,resources=workspaceaccessstrategies/finalizers,verbs=update
@@ -271,7 +270,7 @@ func (r *WorkspaceAccessStrategyReconciler) findAccessStrategiesForTemplate(ctx 
 func SetupWorkspaceAccessStrategyController(mgr ctrl.Manager) error {
 	k8sClient := mgr.GetClient()
 	scheme := mgr.GetScheme()
-	eventRecorder := mgr.GetEventRecorderFor("workspaceaccessstrategy-controller")
+	eventRecorder := newEventRecorder(mgr.GetEventRecorder("workspaceaccessstrategy-controller"))
 
 	reconciler := &WorkspaceAccessStrategyReconciler{
 		Client:        k8sClient,

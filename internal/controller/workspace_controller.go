@@ -361,7 +361,7 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	}
 
 	// Create state machine
-	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
+	eventRecorder := newEventRecorder(mgr.GetEventRecorder("workspace-controller"))
 	idleChecker := NewWorkspaceIdleChecker(k8sClient, options.IdleCheckInterval)
 	accessStartupProber := NewAccessStartupProber(NewAccessResourcesBuilder())
 
