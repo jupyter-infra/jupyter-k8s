@@ -18,6 +18,7 @@ var (
 	GroupVersion = schema.GroupVersion{Group: "workspace.jupyter.org", Version: "v1alpha1"}
 
 	// SchemeBuilder is used to add go types to the GroupVersionKind scheme.
+	//nolint:staticcheck // Preserve the exported API in this CVE-only patch.
 	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
 
 	// AddToScheme adds the types in this group-version to the given scheme.
