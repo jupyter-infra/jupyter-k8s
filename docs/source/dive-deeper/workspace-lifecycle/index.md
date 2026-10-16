@@ -77,7 +77,7 @@ The operator records one Warning event, `WorkspaceStartFailed`, per failed start
 
 ## Stalled starts
 
-The operator does not time a start itself. The Deployment it creates carries the Kubernetes default `progressDeadlineSeconds` of 600; when no replica is ready by then, the Deployment controller marks the Deployment `Progressing=False` with reason `ProgressDeadlineExceeded`, and the workspace reports:
+When no pod is ready ten minutes after a start, the workspace reports `ComputeStalled`:
 
 ```yaml
 conditions:
@@ -93,11 +93,11 @@ conditions:
     reason: ComputeStalled
 ```
 
-The message is the start step's message, or the Deployment's own message when the workspace has no pod. The operator records one Warning event, `WorkspaceComputeStalled`, when the condition first appears.
+The operator records one Warning event, `WorkspaceComputeStalled`, when the condition first appears.
 
-`ComputeStalled` applies only while the pod itself has made no progress for as long as the deadline, so a node that arrives late or an image still downloading reads its step instead.
+A node that arrives late or an image still downloading at ten minutes keeps its step instead.
 
-`ComputeStalled` is not final: once the pod is scheduled and ready, for example after an autoscaler adds a node, the workspace returns to `Available=True` with `Degraded=False`, and stopping the workspace also clears it. A workspace that keeps stalling needs a spec or template change, applied with a stop and a start, since the operator applies spec changes to the Deployment only while the workspace is `Available`.
+`ComputeStalled` is not final: once the pod is scheduled and ready, for example after an autoscaler adds a node, the workspace returns to `Available=True` with `Degraded=False`, and stopping the workspace also clears it. To fix a workspace that keeps stalling, stop it, change its spec or template, then start it again.
 
 ## Status fields
 
