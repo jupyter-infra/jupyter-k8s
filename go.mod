@@ -1,6 +1,6 @@
 module github.com/jupyter-infra/jupyter-k8s
 
-go 1.26.8
+go 1.27.2
 
 // cel-go moved from github.com/google to github.com/cel-expr.
 replace github.com/google/cel-go => github.com/cel-expr/cel-go v0.29.2
