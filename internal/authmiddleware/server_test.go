@@ -149,8 +149,10 @@ func TestServerStartsAndBindsToTheCorrectPort(t *testing.T) {
 
 		// Wait for server to shut down (with timeout)
 		select {
-		case <-errCh:
-			// Server shut down successfully
+		case err := <-errCh:
+			if err != nil && !strings.Contains(err.Error(), "server closed") {
+				t.Logf("Server did not shut down gracefully: %v", err)
+			}
 		case <-time.After(2 * time.Second):
 			t.Log("Warning: Server did not shut down within expected time")
 		}
@@ -369,8 +371,10 @@ func TestServerStarts_DoesNotCallOIDCProvier_WhenOauthIsDisabled(t *testing.T) {
 
 		// Wait for server to shut down (with timeout)
 		select {
-		case <-errCh:
-			// Server shut down successfully
+		case err := <-errCh:
+			if err != nil && !strings.Contains(err.Error(), "server closed") {
+				t.Logf("Server did not shut down gracefully: %v", err)
+			}
 		case <-time.After(2 * time.Second):
 			t.Log("Warning: Server did not shut down within expected time")
 		}
