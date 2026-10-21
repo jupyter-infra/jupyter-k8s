@@ -20,7 +20,11 @@ jobs:
           go-version-file: go.mod
 
       - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
+        uses: golangci/golangci-lint-action@v9.3.0
+        with:
+          version: v2.15.0
+          install-mode: goinstall
+          install-only: true
 
       - name: Install Helm
         run: |
