@@ -49,10 +49,10 @@ linters:
       # old events API (GetEventRecorderFor). Tracked for a future migration.
       - linters:
           - staticcheck
-        text: "SA1019: scheme.Builder is deprecated"
+        text: "SA1019:.*scheme\\.Builder is deprecated"
       - linters:
           - staticcheck
-        text: "SA1019: mgr.GetEventRecorderFor is deprecated"
+        text: "SA1019:.*GetEventRecorderFor is deprecated"
     paths:
       - third_party$
       - builtin$
