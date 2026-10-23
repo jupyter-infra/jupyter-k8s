@@ -107,7 +107,11 @@ func startTestServer(t *testing.T, server *Server, port int, scheme string) {
 		defer cancel()
 		_ = server.Shutdown(ctx)
 		select {
-		case <-errCh:
+		case err := <-errCh:
+			// Start returns nil after a graceful shutdown
+			if err != nil {
+				t.Errorf("server exited with error: %v", err)
+			}
 		case <-time.After(2 * time.Second):
 			t.Log("Warning: server did not shut down within expected time")
 		}
