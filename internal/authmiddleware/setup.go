@@ -11,6 +11,8 @@ import (
 	"os"
 
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // SetupAuthMiddlewareWithManager sets up the authentication middleware server
@@ -62,6 +64,13 @@ func SetupAuthMiddlewareWithManager(mgr ctrl.Manager, cfg *Config) error {
 	// Create HTTP server
 	server := NewServer(cfg, jwtHandler, cookieManager, slogLogger)
 
+	if cfg.TLSEnabled() {
+		if err := enableTLS(mgr, cfg, server); err != nil {
+			return err
+		}
+		logrLogger.Info("TLS enabled", "certFile", cfg.TLSCertFile, "keyFile", cfg.TLSKeyFile)
+	}
+
 	// Wrap server in HTTPServerRunnable
 	// Pass standardSigner and secret info for initial key loading on start
 	httpServerRunnable := NewHTTPServerRunnable(
@@ -79,5 +88,28 @@ func SetupAuthMiddlewareWithManager(mgr ctrl.Manager, cfg *Config) error {
 	}
 
 	logrLogger.Info("Authentication middleware setup complete")
+	return nil
+}
+
+// runnableAdder is the subset of ctrl.Manager used to register the certificate watcher
+type runnableAdder interface {
+	Add(manager.Runnable) error
+}
+
+// enableTLS loads the keypair from cfg and makes server serve HTTPS with it.
+//
+// certwatcher reads the keypair immediately, failing fast if it is unreadable or mismatched,
+// then re-reads it on file events and on a poll interval once the manager starts it. The poll
+// catches the atomic ..data symlink swap Kubernetes performs when a mounted Secret is updated,
+// so a certificate rotated by cert-manager is served without restarting the pod.
+func enableTLS(mgr runnableAdder, cfg *Config, server *Server) error {
+	certWatcher, err := certwatcher.New(cfg.TLSCertFile, cfg.TLSKeyFile)
+	if err != nil {
+		return fmt.Errorf("failed to load TLS keypair: %w", err)
+	}
+	if err := mgr.Add(certWatcher); err != nil {
+		return fmt.Errorf("failed to add TLS certificate watcher to manager: %w", err)
+	}
+	server.EnableTLS(certWatcher.GetCertificate)
 	return nil
 }
