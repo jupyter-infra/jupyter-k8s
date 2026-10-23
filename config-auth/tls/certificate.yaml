@@ -1,0 +1,19 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: jupyter-k8s-authmiddleware-tls
+spec:
+  secretName: jupyter-k8s-authmiddleware-tls
+  dnsNames:
+  - jupyter-k8s-authmiddleware.jupyter-k8s-router.svc
+  - jupyter-k8s-authmiddleware.jupyter-k8s-router.svc.cluster.local
+  - localhost
+  # Short-lived so local testing exercises rotation; cert-manager reissues every ~5 minutes
+  duration: 1h
+  renewBefore: 55m
+  privateKey:
+    # Issue a new key on each renewal, as the cert-manager default does
+    rotationPolicy: Always
+  issuerRef:
+    kind: Issuer
+    name: jupyter-k8s-authmiddleware-selfsigned

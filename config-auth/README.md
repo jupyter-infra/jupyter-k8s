@@ -21,6 +21,8 @@ make update-auth-kind
 make undeploy-auth-kind
 ```
 
+To serve HTTPS, pass `AUTH_KIND_OVERLAY=tls` to the deploy and undeploy targets (see [TLS](#tls)).
+
 ## Verification
 
 ### 1. Check Authmiddleware Health
@@ -102,6 +104,41 @@ kubectl get secret jupyter-k8s-authmiddleware-secrets -n jupyter-k8s-router -o j
 # 5. Check authmiddleware detected the change
 kubectl logs -n jupyter-k8s-router deployment/jupyter-k8s-authmiddleware | grep "Secret updated event received"
 ```
+
+## TLS
+
+The `tls` overlay serves authmiddleware over HTTPS with a self-signed certificate issued by cert-manager
+(installed by `make setup-kind`). It sets `TLS_CERT_FILE` and `TLS_KEY_FILE`, mounts the certificate
+Secret, and switches the probes to HTTPS.
+
+```bash
+make deploy-auth-kind AUTH_KIND_OVERLAY=tls
+kubectl wait certificate/jupyter-k8s-authmiddleware-tls -n jupyter-k8s-router --for=condition=Ready
+```
+
+Check the health endpoint (the server requires TLS 1.3, so use a curl built against OpenSSL 1.1.1 or later):
+```bash
+kubectl port-forward -n jupyter-k8s-router svc/jupyter-k8s-authmiddleware 8080:8080
+curl -k https://localhost:8080/health
+```
+
+### Verify certificate rotation
+
+The certificate is valid for 1h and renewed 55m before expiry, so cert-manager reissues it about every
+5 minutes. The pod should serve each new certificate without restarting:
+```bash
+# Serial in the Secret
+kubectl get secret jupyter-k8s-authmiddleware-tls -n jupyter-k8s-router -o jsonpath='{.data.tls\.crt}' \
+  | base64 -d | openssl x509 -noout -serial
+# Serial served (with the port-forward above running)
+echo | openssl s_client -connect localhost:8080 2>/dev/null | openssl x509 -noout -serial
+# Reload events, and a restart count that stays at 0
+kubectl logs -n jupyter-k8s-router deployment/jupyter-k8s-authmiddleware | grep "Updated current TLS certificate"
+kubectl get pods -n jupyter-k8s-router -l app=authmiddleware
+```
+
+The kubelet can take up to a minute to project a renewed Secret into the pod, after which the served
+serial matches the Secret within about 10 seconds.
 
 ## Configuration
 
