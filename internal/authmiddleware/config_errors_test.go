@@ -104,3 +104,37 @@ func TestNewConfig_TrustedProxiesOverride(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"}, config.TrustedProxies)
 }
+
+func TestNewConfig_TLSDisabledByDefault(t *testing.T) {
+	config, err := NewConfig()
+
+	require.NoError(t, err)
+	assert.Empty(t, config.TLSCertFile)
+	assert.Empty(t, config.TLSKeyFile)
+	assert.False(t, config.TLSEnabled())
+}
+
+func TestNewConfig_TLSEnabledWhenCertAndKeySet(t *testing.T) {
+	t.Setenv(EnvTLSCertFile, "/etc/tls/tls.crt")
+	t.Setenv(EnvTLSKeyFile, "/etc/tls/tls.key")
+
+	config, err := NewConfig()
+
+	require.NoError(t, err)
+	assert.Equal(t, "/etc/tls/tls.crt", config.TLSCertFile)
+	assert.Equal(t, "/etc/tls/tls.key", config.TLSKeyFile)
+	assert.True(t, config.TLSEnabled())
+}
+
+func TestNewConfig_TLSRequiresBothCertAndKey(t *testing.T) {
+	for _, env := range []string{EnvTLSCertFile, EnvTLSKeyFile} {
+		t.Run(env, func(t *testing.T) {
+			t.Setenv(env, "/etc/tls/file")
+
+			_, err := NewConfig()
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "must be set together")
+		})
+	}
+}

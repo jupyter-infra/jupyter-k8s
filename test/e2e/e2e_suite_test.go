@@ -27,17 +27,25 @@ var (
 	// - CERT_MANAGER_INSTALL_SKIP=true: Skips CertManager installation during test setup.
 	// - E2E_MANAGER_IMAGE: Override manager image (default: jupyter.org/jupyter-k8s:v0.0.1)
 	// - E2E_ROTATOR_IMAGE: Override rotator image (default: docker.io/library/rotator:local)
+	// - E2E_AUTHMIDDLEWARE_IMAGE: Override authmiddleware image (default: docker.io/library/authmiddleware:local)
 	// - E2E_CHART_SOURCE: Override chart source — local path or oci:// URL (default: dist/chart)
 	// - E2E_CHART_VERSION: Chart version for OCI source (required when E2E_CHART_SOURCE is oci://)
 	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == valueTrue
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
 
-	projectImage    = envOrDefault("E2E_MANAGER_IMAGE", "jupyter.org/jupyter-k8s:v0.0.1")
-	rotatorImage    = envOrDefault("E2E_ROTATOR_IMAGE", "docker.io/library/rotator:local")
-	chartSource     = envOrDefault("E2E_CHART_SOURCE", "dist/chart")
-	chartVersion    = os.Getenv("E2E_CHART_VERSION")
-	helmReleaseName = "jupyter-k8s"
+	projectImage        = envOrDefault("E2E_MANAGER_IMAGE", "jupyter.org/jupyter-k8s:v0.0.1")
+	rotatorImage        = envOrDefault("E2E_ROTATOR_IMAGE", localRotatorImage)
+	authmiddlewareImage = envOrDefault("E2E_AUTHMIDDLEWARE_IMAGE", localAuthmiddlewareImage)
+	chartSource         = envOrDefault("E2E_CHART_SOURCE", "dist/chart")
+	chartVersion        = os.Getenv("E2E_CHART_VERSION")
+	helmReleaseName     = "jupyter-k8s"
+)
+
+// Images built by `make load-images-e2e`, also the images config-auth/ deploys
+const (
+	localRotatorImage        = "docker.io/library/rotator:local"
+	localAuthmiddlewareImage = "docker.io/library/authmiddleware:local"
 )
 
 func envOrDefault(key, fallback string) string {
