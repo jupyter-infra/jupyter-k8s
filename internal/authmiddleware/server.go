@@ -119,6 +119,9 @@ func (s *Server) Start() error {
 		ReadTimeout:  s.config.ReadTimeout,
 		WriteTimeout: s.config.WriteTimeout,
 	}
+	// HTTP/1.1 only, matching the operator's default (disableHTTP2 in cmd/main.go)
+	s.httpServer.Protocols = new(http.Protocols)
+	s.httpServer.Protocols.SetHTTP1(true)
 
 	// Start server (blocks until error or shutdown)
 	var err error

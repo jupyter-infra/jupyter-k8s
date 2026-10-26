@@ -191,6 +191,25 @@ func TestServer_RejectsTLSBelowMinimumVersion(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestServer_NegotiatesHTTP1Only_WhenTLSEnabled(t *testing.T) {
+	certPEM, keyPEM := generateTestKeypair(t, "authmiddleware")
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	require.NoError(t, err)
+
+	server, port := newTLSTestServer(t)
+	server.EnableTLS(func(*tls.ClientHelloInfo) (*tls.Certificate, error) { return &cert, nil })
+	startTestServer(t, server, port, "https")
+
+	// Offer h2 first, as an HTTP/2-capable client would
+	conn, err := tls.Dial("tcp", fmt.Sprintf("localhost:%d", port), &tls.Config{
+		InsecureSkipVerify: true, //nolint:gosec // test client
+		NextProtos:         []string{"h2", "http/1.1"},
+	})
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+	assert.Equal(t, "http/1.1", conn.ConnectionState().NegotiatedProtocol)
+}
+
 func TestServer_ServesHTTPOnly_WhenTLSNotEnabled(t *testing.T) {
 	server, port := newTLSTestServer(t)
 	startTestServer(t, server, port, "http")
