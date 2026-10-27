@@ -1,0 +1,31 @@
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: TLS_CERT_FILE
+    value: /etc/authmiddleware/tls/tls.crt
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: TLS_KEY_FILE
+    value: /etc/authmiddleware/tls/tls.key
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: tls
+    mountPath: /etc/authmiddleware/tls
+    readOnly: true
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: tls
+    secret:
+      secretName: jupyter-k8s-authmiddleware-tls
+- op: add
+  path: /spec/template/spec/containers/0/readinessProbe/httpGet/scheme
+  value: HTTPS
+- op: add
+  path: /spec/template/spec/containers/0/livenessProbe/httpGet/scheme
+  value: HTTPS
+- op: replace
+  path: /spec/template/spec/containers/0/ports/0/name
+  value: https

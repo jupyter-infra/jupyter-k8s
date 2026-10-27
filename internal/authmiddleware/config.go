@@ -25,6 +25,8 @@ const (
 	EnvMetricsAddr     = "METRICS_ADDR"
 	EnvProbeAddr       = "PROBE_ADDR"
 	EnvNamespace       = "NAMESPACE"
+	EnvTLSCertFile     = "TLS_CERT_FILE"
+	EnvTLSKeyFile      = "TLS_KEY_FILE"
 
 	// Auth configuration
 	EnvJwtSigningType    = "JWT_SIGNING_TYPE"
@@ -130,6 +132,8 @@ type Config struct {
 	MetricsAddr     string
 	ProbeAddr       string
 	Namespace       string // Namespace to watch for secrets
+	TLSCertFile     string // Path to the PEM certificate; serves HTTPS when set together with TLSKeyFile
+	TLSKeyFile      string // Path to the PEM private key matching TLSCertFile
 
 	// Auth configuration
 	JWTSigningType    string
@@ -303,7 +307,18 @@ func applyServerConfig(config *Config) error {
 		config.Namespace = namespace
 	}
 
+	config.TLSCertFile = os.Getenv(EnvTLSCertFile)
+	config.TLSKeyFile = os.Getenv(EnvTLSKeyFile)
+	if (config.TLSCertFile == "") != (config.TLSKeyFile == "") {
+		return fmt.Errorf("%s and %s must be set together", EnvTLSCertFile, EnvTLSKeyFile)
+	}
+
 	return nil
+}
+
+// TLSEnabled reports whether the server should serve HTTPS
+func (c *Config) TLSEnabled() bool {
+	return c.TLSCertFile != "" && c.TLSKeyFile != ""
 }
 
 // applyJWTConfig applies JWT-related environment variable overrides

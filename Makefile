@@ -431,6 +431,7 @@ test-e2e-staging: setup-test-e2e ## Run e2e tests against staging GHCR images an
 	@echo "Pulling staging images..."
 	$(CONTAINER_TOOL) pull $(STAGING_REGISTRY)/jupyter-k8s-controller:$(STAGING_TAG)
 	$(CONTAINER_TOOL) pull $(STAGING_REGISTRY)/jupyter-k8s-rotator:$(STAGING_TAG)
+	$(CONTAINER_TOOL) pull $(STAGING_REGISTRY)/jupyter-k8s-authmiddleware:$(STAGING_TAG)
 	@echo "Loading staging images into e2e cluster $(KIND_CLUSTER)..."
 	@mkdir -p /tmp/kind-images
 	$(CONTAINER_TOOL) save $(STAGING_REGISTRY)/jupyter-k8s-controller:$(STAGING_TAG) -o /tmp/kind-images/staging-controller.tar
@@ -439,12 +440,16 @@ test-e2e-staging: setup-test-e2e ## Run e2e tests against staging GHCR images an
 	$(CONTAINER_TOOL) save $(STAGING_REGISTRY)/jupyter-k8s-rotator:$(STAGING_TAG) -o /tmp/kind-images/staging-rotator.tar
 	$(KIND) load image-archive /tmp/kind-images/staging-rotator.tar --name $(KIND_CLUSTER)
 	rm -f /tmp/kind-images/staging-rotator.tar
+	$(CONTAINER_TOOL) save $(STAGING_REGISTRY)/jupyter-k8s-authmiddleware:$(STAGING_TAG) -o /tmp/kind-images/staging-authmiddleware.tar
+	$(KIND) load image-archive /tmp/kind-images/staging-authmiddleware.tar --name $(KIND_CLUSTER)
+	rm -f /tmp/kind-images/staging-authmiddleware.tar
 	@echo "Loading application images into e2e cluster $(KIND_CLUSTER)..."
 	$(MAKE) -C images push-all-kind CLUSTER_NAME=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL)
 	@echo "Running e2e tests against staging artifacts..."
 	KIND_CLUSTER=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL) \
 		E2E_MANAGER_IMAGE=$(STAGING_REGISTRY)/jupyter-k8s-controller:$(STAGING_TAG) \
 		E2E_ROTATOR_IMAGE=$(STAGING_REGISTRY)/jupyter-k8s-rotator:$(STAGING_TAG) \
+		E2E_AUTHMIDDLEWARE_IMAGE=$(STAGING_REGISTRY)/jupyter-k8s-authmiddleware:$(STAGING_TAG) \
 		E2E_CHART_SOURCE=oci://$(STAGING_REGISTRY)/charts/jupyter-k8s \
 		E2E_CHART_VERSION=$(STAGING_CHART_VERSION) \
 		go test -tags=e2e ./test/e2e/ -v -timeout 100m -ginkgo.v -ginkgo.timeout 90m
@@ -482,7 +487,7 @@ load-images: docker-build build-rotator ## Build and load images into the Kind c
 	$(MAKE) -C images push-all-kind CLUSTER_NAME=$(DEV_KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: load-images-e2e
-load-images-e2e: build-rotator ## Build and load all images into the e2e test Kind cluster
+load-images-e2e: build-rotator build-authmiddleware ## Build and load all images into the e2e test Kind cluster
 	@echo "Building manager image..."
 	$(CONTAINER_TOOL) build $(BUILD_OPTS) -t $(E2E_MANAGER_IMAGE) .
 	@echo "Loading images into e2e test cluster ${KIND_CLUSTER}..."
@@ -493,6 +498,9 @@ load-images-e2e: build-rotator ## Build and load all images into the e2e test Ki
 	$(CONTAINER_TOOL) save docker.io/library/rotator:local -o /tmp/kind-images/rotator.tar
 	$(KIND) load image-archive /tmp/kind-images/rotator.tar --name $(KIND_CLUSTER)
 	rm -f /tmp/kind-images/rotator.tar
+	$(CONTAINER_TOOL) save docker.io/library/authmiddleware:local -o /tmp/kind-images/authmiddleware.tar
+	$(KIND) load image-archive /tmp/kind-images/authmiddleware.tar --name $(KIND_CLUSTER)
+	rm -f /tmp/kind-images/authmiddleware.tar
 	$(MAKE) -C images push-all-kind CLUSTER_NAME=$(KIND_CLUSTER) CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: kubectl-kind
@@ -545,6 +553,9 @@ delete-samples: ## Delete sample workspaces from the kind cluster
 	$(KUBECTL) delete -k config/samples --ignore-not-found
 
 ##@ Local Auth Middleware & Rotator
+# config-auth overlay to deploy: default (HTTP) or tls (HTTPS with a cert-manager certificate)
+AUTH_KIND_OVERLAY ?= default
+
 .PHONY: build-authmiddleware
 build-authmiddleware: ## Build authmiddleware image for local testing
 	@echo "Building authmiddleware image..."
@@ -568,7 +579,7 @@ load-auth-images: build-authmiddleware build-rotator ## Build and load authmiddl
 .PHONY: deploy-auth-kind
 deploy-auth-kind: kubectl-kind ## Deploy authmiddleware and rotator to Kind cluster
 	@echo "Deploying authmiddleware and rotator to kind cluster..."
-	$(KUSTOMIZE) build config-auth/default | $(KUBECTL) apply -f -
+	$(KUSTOMIZE) build config-auth/$(AUTH_KIND_OVERLAY) | $(KUBECTL) apply -f -
 	@echo "✅ Authmiddleware and rotator deployed to jupyter-k8s-router namespace"
 
 .PHONY: update-auth-kind
@@ -580,7 +591,7 @@ update-auth-kind: kubectl-kind ## Rebuild, reload images, and redeploy authmiddl
 .PHONY: undeploy-auth-kind
 undeploy-auth-kind: kubectl-kind ## Remove authmiddleware and rotator from Kind cluster
 	@echo "Removing authmiddleware and rotator from kind cluster..."
-	$(KUSTOMIZE) build config-auth/default | $(KUBECTL) delete --ignore-not-found=true -f -
+	$(KUSTOMIZE) build config-auth/$(AUTH_KIND_OVERLAY) | $(KUBECTL) delete --ignore-not-found=true -f -
 	@echo "✅ Authmiddleware and rotator removed (namespace preserved)"
 
 ##@ AWS Deployment

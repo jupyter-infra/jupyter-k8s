@@ -1,0 +1,18 @@
+# Serves authmiddleware over HTTPS with a certificate issued by cert-manager.
+# Deploy with: make deploy-auth-kind AUTH_KIND_OVERLAY=tls
+namespace: jupyter-k8s-router
+
+resources:
+- ../default
+- issuer.yaml
+- certificate.yaml
+
+patches:
+- path: deployment_patch.yaml
+  target:
+    kind: Deployment
+    name: jupyter-k8s-authmiddleware
+- path: service_patch.yaml
+  target:
+    kind: Service
+    name: jupyter-k8s-authmiddleware

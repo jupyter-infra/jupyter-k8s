@@ -7,6 +7,7 @@ package authmiddleware
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -25,7 +26,13 @@ type Server struct {
 	httpServer    *http.Server
 	restClient    rest.Interface
 	oidcVerifier  OIDCVerifierInterface
+	// getCertificate, when set, makes the server serve HTTPS with the certificate it returns.
+	// It is called on every handshake, so a rotated certificate is served without a restart.
+	getCertificate func(*tls.ClientHelloInfo) (*tls.Certificate, error)
 }
+
+// MinTLSVersion is the minimum TLS version accepted when serving HTTPS
+const MinTLSVersion = tls.VersionTLS13
 
 // NewServer creates a new server instance
 func NewServer(config *Config, jwtManager jwt.Handler, cookieManager CookieHandler, logger *slog.Logger) *Server {
@@ -71,6 +78,12 @@ func NewServer(config *Config, jwtManager jwt.Handler, cookieManager CookieHandl
 	}
 }
 
+// EnableTLS makes the server serve HTTPS, fetching the certificate on each handshake
+// from getCertificate. Must be called before Start.
+func (s *Server) EnableTLS(getCertificate func(*tls.ClientHelloInfo) (*tls.Certificate, error)) {
+	s.getCertificate = getCertificate
+}
+
 // Start initializes and starts the HTTP server
 // This method blocks until the server exits or encounters an error
 func (s *Server) Start() error {
@@ -106,10 +119,25 @@ func (s *Server) Start() error {
 		ReadTimeout:  s.config.ReadTimeout,
 		WriteTimeout: s.config.WriteTimeout,
 	}
+	// HTTP/1.1 only, matching the operator's default (disableHTTP2 in cmd/main.go)
+	s.httpServer.Protocols = new(http.Protocols)
+	s.httpServer.Protocols.SetHTTP1(true)
 
 	// Start server (blocks until error or shutdown)
-	s.logger.Info("Starting authentication middleware service", "port", s.config.Port)
-	if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
+	var err error
+	if s.getCertificate != nil {
+		s.httpServer.TLSConfig = &tls.Config{
+			MinVersion:     MinTLSVersion,
+			GetCertificate: s.getCertificate,
+		}
+		s.logger.Info("Starting authentication middleware service", "port", s.config.Port, "scheme", "https")
+		// Empty paths: the certificate comes from TLSConfig.GetCertificate
+		err = s.httpServer.ListenAndServeTLS("", "")
+	} else {
+		s.logger.Info("Starting authentication middleware service", "port", s.config.Port, "scheme", "http")
+		err = s.httpServer.ListenAndServe()
+	}
+	if err != http.ErrServerClosed {
 		return fmt.Errorf("server error: %w", err)
 	}
 
