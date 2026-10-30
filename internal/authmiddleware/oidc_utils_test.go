@@ -81,7 +81,7 @@ func TestGetOidcGroups(t *testing.T) {
 			config: &Config{
 				OidcGroupsPrefix: "gitlab-",
 			},
-			groups:   []string{testUsersValue, "team1", "team2"},
+			groups:   []string{testUsersValue, testTeam1, testTeam2},
 			expected: []string{"gitlab-users", "gitlab-team1", "gitlab-team2"},
 		},
 		{
@@ -105,7 +105,7 @@ func TestGetOidcGroups(t *testing.T) {
 			config: &Config{
 				OidcGroupsPrefix: DefaultOidcUsernamePrefix,
 			},
-			groups:   []string{"github:admin", "team1"},
+			groups:   []string{"github:admin", testTeam1},
 			expected: []string{"github:github:admin", "github:team1"},
 		},
 		{
@@ -158,7 +158,7 @@ func TestValidateOIDCIdentities(t *testing.T) {
 			name:      "system:masters group rejected when prefix is empty",
 			config:    emptyPrefixConfig,
 			username:  testJohndoe,
-			groups:    []string{"system:masters"},
+			groups:    []string{testSystemMasters},
 			wantError: true,
 		},
 		{
@@ -179,14 +179,14 @@ func TestValidateOIDCIdentities(t *testing.T) {
 			name:      "system: group allowed when prefix is set",
 			config:    prefixedConfig,
 			username:  testJohndoe,
-			groups:    []string{"system:masters"},
+			groups:    []string{testSystemMasters},
 			wantError: false,
 		},
 		{
 			name:      "normal user and groups pass with empty prefix",
 			config:    emptyPrefixConfig,
 			username:  testJohndoe,
-			groups:    []string{"dev", "team1"},
+			groups:    []string{"dev", testTeam1},
 			wantError: false,
 		},
 	}
