@@ -555,6 +555,67 @@ func TestHandleAuth_Returns5xx_WhenVerifyAccessWorkspaceReturnsError(t *testing.
 	}
 }
 
+func TestHandleAuth_EmptyPrefix_UsernameAndGroupsCarryNoPrefix(t *testing.T) {
+	server := createTestServer(nil)
+	server.config.OidcUsernamePrefix = ""
+	server.config.OidcGroupsPrefix = ""
+	server.config.WorkspaceNamespacePathRegex = DefaultWorkspaceNamespacePathRegex
+	server.config.WorkspaceNamePathRegex = DefaultWorkspaceNamePathRegex
+
+	server.oidcVerifier = &MockOIDCVerifier{
+		VerifyTokenFunc: func(ctx context.Context, tokenString string, logger *slog.Logger) (*OIDCClaims, bool, error) {
+			return &OIDCClaims{
+				Subject:  testUserUID,
+				Username: testJohndoe,
+				Groups:   []string{testOrg1Team1, testOrg1Team2},
+			}, false, nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Auth-Request-User", testUserUID)
+	req.Header.Set("X-Auth-Request-Preferred-Username", testJohndoe)
+	req.Header.Set("X-Auth-Request-Groups", fmt.Sprintf("%s,%s", testOrg1Team1, testOrg1Team2))
+	req.Header.Set("X-Forwarded-Uri", testAppPath)
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
+	req.Header.Set("Authorization", "Bearer mock-token")
+	w := httptest.NewRecorder()
+
+	var capturedUsername string
+	var capturedGroups []string
+	server.jwtManager = &MockJWTHandler{
+		GenerateTokenFunc: func(user string, groups []string, uid string, extra map[string][]string, path, domain, tokenType string) (string, error) {
+			capturedUsername = user
+			capturedGroups = groups
+			return "jwt-token", nil
+		},
+	}
+	server.cookieManager = &MockCookieHandler{}
+
+	mockServer := NewMockK8sServer(t)
+	defer mockServer.Close()
+	mockedResponse := CreateConnectionAccessReviewResponse(
+		"ns1", "app1", testJohndoe, []string{testOrg1Team1, testOrg1Team2}, testUserUID,
+		true, false, "allowed",
+	)
+	mockServer.SetupServer200OK(mockedResponse)
+	restClient, err := mockServer.CreateRESTClient()
+	require.NoError(t, err)
+	server.restClient = restClient
+
+	server.handleAuth(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+	if capturedUsername != testJohndoe {
+		t.Errorf("Expected username %q (no prefix), got %q", testJohndoe, capturedUsername)
+	}
+	if !reflect.DeepEqual(capturedGroups, []string{testOrg1Team1, testOrg1Team2}) {
+		t.Errorf("Expected groups %v (no prefix), got %v", []string{testOrg1Team1, testOrg1Team2}, capturedGroups)
+	}
+}
+
 func TestHandleAuth_Returns403_WhenVerifyAccessWorkspaceReturnsDisallowed(t *testing.T) {
 	// Create a standard server
 	server := createTestServer(nil)
