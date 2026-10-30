@@ -424,52 +424,73 @@ func TestApplyOidcConfig(t *testing.T) {
 	testCases := []struct {
 		name             string
 		envOidcUsername  string
+		setUsername      bool
 		envOidcGroups    string
+		setGroups        bool
 		expectedUsername string
 		expectedGroups   string
 	}{
 		{
 			name:             "Default values when env vars not set",
-			envOidcUsername:  "",
-			envOidcGroups:    "",
 			expectedUsername: DefaultOidcUsernamePrefix,
 			expectedGroups:   DefaultOidcGroupsPrefix,
 		},
 		{
 			name:             "Only username prefix set",
 			envOidcUsername:  "gitlab:",
-			envOidcGroups:    "",
+			setUsername:      true,
 			expectedUsername: "gitlab:",
 			expectedGroups:   DefaultOidcGroupsPrefix,
 		},
 		{
 			name:             "Only groups prefix set",
-			envOidcUsername:  "",
 			envOidcGroups:    "azure-ad:",
+			setGroups:        true,
 			expectedUsername: DefaultOidcUsernamePrefix,
 			expectedGroups:   "azure-ad:",
 		},
 		{
 			name:             "Both prefixes set",
 			envOidcUsername:  "custom-user:",
+			setUsername:      true,
 			envOidcGroups:    "custom-group:",
+			setGroups:        true,
 			expectedUsername: "custom-user:",
 			expectedGroups:   "custom-group:",
+		},
+		{
+			name:             "Username prefix explicitly cleared to empty string",
+			envOidcUsername:  "",
+			setUsername:      true,
+			expectedUsername: "",
+			expectedGroups:   DefaultOidcGroupsPrefix,
+		},
+		{
+			name:            "Groups prefix explicitly cleared to empty string",
+			envOidcGroups:   "",
+			setGroups:       true,
+			expectedUsername: DefaultOidcUsernamePrefix,
+			expectedGroups:  "",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Set environment variables if values are provided
-			if tc.envOidcUsername != "" {
+			if tc.setUsername {
 				if err := os.Setenv(EnvOidcUsernamePrefix, tc.envOidcUsername); err != nil {
 					t.Fatalf("Failed to set environment variable %s: %v", EnvOidcUsernamePrefix, err)
 				}
+				defer os.Unsetenv(EnvOidcUsernamePrefix) //nolint:errcheck
+			} else {
+				os.Unsetenv(EnvOidcUsernamePrefix) //nolint:errcheck
 			}
-			if tc.envOidcGroups != "" {
+			if tc.setGroups {
 				if err := os.Setenv(EnvOidcGroupsPrefix, tc.envOidcGroups); err != nil {
 					t.Fatalf("Failed to set environment variable %s: %v", EnvOidcGroupsPrefix, err)
 				}
+				defer os.Unsetenv(EnvOidcGroupsPrefix) //nolint:errcheck
+			} else {
+				os.Unsetenv(EnvOidcGroupsPrefix) //nolint:errcheck
 			}
 
 			// Create a config with default values
@@ -490,18 +511,6 @@ func TestApplyOidcConfig(t *testing.T) {
 			}
 			if config.OidcGroupsPrefix != tc.expectedGroups {
 				t.Errorf("Expected OidcGroupsPrefix to be %s, got %s", tc.expectedGroups, config.OidcGroupsPrefix)
-			}
-
-			// Clean up environment variables
-			if tc.envOidcUsername != "" {
-				if err := os.Unsetenv(EnvOidcUsernamePrefix); err != nil {
-					t.Logf("Failed to unset environment variable %s: %v", EnvOidcUsernamePrefix, err)
-				}
-			}
-			if tc.envOidcGroups != "" {
-				if err := os.Unsetenv(EnvOidcGroupsPrefix); err != nil {
-					t.Logf("Failed to unset environment variable %s: %v", EnvOidcGroupsPrefix, err)
-				}
 			}
 		})
 	}
