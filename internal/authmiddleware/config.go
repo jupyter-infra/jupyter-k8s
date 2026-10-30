@@ -470,11 +470,11 @@ func applyCookieConfig(config *Config) error {
 
 // applyOidcConfig applies OIDC-related environment variable overrides
 func applyOidcConfig(config *Config) error {
-	if oidcUsernamePrefix := os.Getenv(EnvOidcUsernamePrefix); oidcUsernamePrefix != "" {
+	if oidcUsernamePrefix, ok := os.LookupEnv(EnvOidcUsernamePrefix); ok {
 		config.OidcUsernamePrefix = oidcUsernamePrefix
 	}
 
-	if oidcGroupsPrefix := os.Getenv(EnvOidcGroupsPrefix); oidcGroupsPrefix != "" {
+	if oidcGroupsPrefix, ok := os.LookupEnv(EnvOidcGroupsPrefix); ok {
 		config.OidcGroupsPrefix = oidcGroupsPrefix
 	}
 
