@@ -88,7 +88,7 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	k8sGroups := GetOIDCGroupsFromToken(s.config, oidcClaims)
 
 	// Reject system: identities when no prefix is configured to prevent privilege escalation
-	if err := ValidateOIDCIdentities(s.config, k8sUsername, k8sGroups); err != nil {
+	if err := ValidateOIDCIdentities(k8sUsername, k8sGroups); err != nil {
 		s.logger.Error("Rejected reserved system: identity in OIDC token", "error", err)
 		http.Error(w, "Forbidden: reserved system: identity in token", http.StatusForbidden)
 		return

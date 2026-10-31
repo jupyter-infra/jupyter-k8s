@@ -39,18 +39,16 @@ func GetOidcGroups(serverConfig *Config, groups []string) []string {
 	return result
 }
 
-// ValidateOIDCIdentities rejects system: usernames and groups when the prefix is empty,
-// preventing a token from claiming built-in Kubernetes identities such as system:masters.
-// system:authenticated is always permitted regardless of prefix.
-func ValidateOIDCIdentities(config *Config, username string, groups []string) error {
-	if config.OidcUsernamePrefix == "" && strings.HasPrefix(username, "system:") {
+// ValidateOIDCIdentities rejects post-prefix usernames and groups that start with system:,
+// preventing any prefix+token combination from constructing a reserved Kubernetes identity.
+// system:authenticated is always permitted.
+func ValidateOIDCIdentities(username string, groups []string) error {
+	if strings.HasPrefix(username, "system:") {
 		return fmt.Errorf("username %q is not allowed: system: identities are reserved", username)
 	}
-	if config.OidcGroupsPrefix == "" {
-		for _, group := range groups {
-			if group != SystemAuthenticatedGroup && strings.HasPrefix(group, "system:") {
-				return fmt.Errorf("group %q is not allowed: system: identities are reserved", group)
-			}
+	for _, group := range groups {
+		if group != SystemAuthenticatedGroup && strings.HasPrefix(group, "system:") {
+			return fmt.Errorf("group %q is not allowed: system: identities are reserved", group)
 		}
 	}
 	return nil

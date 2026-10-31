@@ -137,63 +137,53 @@ func TestGetOidcGroups(t *testing.T) {
 }
 
 func TestValidateOIDCIdentities(t *testing.T) {
-	emptyPrefixConfig := &Config{OidcUsernamePrefix: "", OidcGroupsPrefix: ""}
-	prefixedConfig := &Config{OidcUsernamePrefix: "github:", OidcGroupsPrefix: "github:"}
-
 	testCases := []struct {
 		name      string
-		config    *Config
 		username  string
 		groups    []string
 		wantError bool
 	}{
 		{
-			name:      "system: username rejected when prefix is empty",
-			config:    emptyPrefixConfig,
+			name:      "system: username rejected",
 			username:  "system:admin",
 			groups:    []string{},
 			wantError: true,
 		},
 		{
-			name:      "system:masters group rejected when prefix is empty",
-			config:    emptyPrefixConfig,
+			name:      "system:masters group rejected",
 			username:  testJohndoe,
 			groups:    []string{testSystemMasters},
 			wantError: true,
 		},
 		{
-			name:      "system:authenticated passes even with empty prefix",
-			config:    emptyPrefixConfig,
+			name:      "system: username rejected even when a prefix is configured",
+			username:  "system:admin",
+			groups:    []string{},
+			wantError: true,
+		},
+		{
+			name:      "system:masters group rejected even when a prefix is configured",
+			username:  testJohndoe,
+			groups:    []string{testSystemMasters},
+			wantError: true,
+		},
+		{
+			name:      "system:authenticated passes",
 			username:  testJohndoe,
 			groups:    []string{SystemAuthenticatedGroup},
 			wantError: false,
 		},
 		{
-			name:      "system: username allowed when prefix is set (already prefixed by GetOidcUsername)",
-			config:    prefixedConfig,
-			username:  "system:admin",
-			groups:    []string{},
-			wantError: false,
-		},
-		{
-			name:      "system: group allowed when prefix is set",
-			config:    prefixedConfig,
+			name:      "normal user and groups pass",
 			username:  testJohndoe,
-			groups:    []string{testSystemMasters},
-			wantError: false,
-		},
-		{
-			name:      "normal user and groups pass with empty prefix",
-			config:    emptyPrefixConfig,
-			username:  testJohndoe,
-			groups:    []string{"dev", testTeam1},
+			groups:    []string{testDevValue, testTeam1},
 			wantError: false,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := ValidateOIDCIdentities(tc.config, tc.username, tc.groups)
+			err := ValidateOIDCIdentities(tc.username, tc.groups)
 			if tc.wantError && err == nil {
 				t.Error("Expected error but got nil")
 			}
