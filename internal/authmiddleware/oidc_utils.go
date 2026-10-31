@@ -5,7 +5,10 @@ Distributed under the terms of the MIT license
 
 package authmiddleware
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // GetOidcUsername returns the k8s username with OIDC prefix applied
 func GetOidcUsername(serverConfig *Config, preferredUsername string) string {
@@ -34,4 +37,19 @@ func GetOidcGroups(serverConfig *Config, groups []string) []string {
 		}
 	}
 	return result
+}
+
+// ValidateOIDCIdentities rejects post-prefix usernames and groups that start with system:,
+// preventing any prefix+token combination from constructing a reserved Kubernetes identity.
+// system:authenticated is always permitted.
+func ValidateOIDCIdentities(username string, groups []string) error {
+	if strings.HasPrefix(username, "system:") {
+		return fmt.Errorf("username %q is not allowed: system: identities are reserved", username)
+	}
+	for _, group := range groups {
+		if group != SystemAuthenticatedGroup && strings.HasPrefix(group, "system:") {
+			return fmt.Errorf("group %q is not allowed: system: identities are reserved", group)
+		}
+	}
+	return nil
 }

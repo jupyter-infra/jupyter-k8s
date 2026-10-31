@@ -81,7 +81,7 @@ func TestGetOidcGroups(t *testing.T) {
 			config: &Config{
 				OidcGroupsPrefix: "gitlab-",
 			},
-			groups:   []string{testUsersValue, "team1", "team2"},
+			groups:   []string{testUsersValue, testTeam1, testTeam2},
 			expected: []string{"gitlab-users", "gitlab-team1", "gitlab-team2"},
 		},
 		{
@@ -105,7 +105,7 @@ func TestGetOidcGroups(t *testing.T) {
 			config: &Config{
 				OidcGroupsPrefix: DefaultOidcUsernamePrefix,
 			},
-			groups:   []string{"github:admin", "team1"},
+			groups:   []string{"github:admin", testTeam1},
 			expected: []string{"github:github:admin", "github:team1"},
 		},
 		{
@@ -131,6 +131,64 @@ func TestGetOidcGroups(t *testing.T) {
 			result := GetOidcGroups(tc.config, tc.groups)
 			if !reflect.DeepEqual(result, tc.expected) {
 				t.Errorf("Expected %q to equal %q", result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestValidateOIDCIdentities(t *testing.T) {
+	testCases := []struct {
+		name      string
+		username  string
+		groups    []string
+		wantError bool
+	}{
+		{
+			name:      "system: username rejected",
+			username:  "system:admin",
+			groups:    []string{},
+			wantError: true,
+		},
+		{
+			name:      "system:masters group rejected",
+			username:  testJohndoe,
+			groups:    []string{testSystemMasters},
+			wantError: true,
+		},
+		{
+			name:      "system: username rejected even when a prefix is configured",
+			username:  "system:admin",
+			groups:    []string{},
+			wantError: true,
+		},
+		{
+			name:      "system:masters group rejected even when a prefix is configured",
+			username:  testJohndoe,
+			groups:    []string{testSystemMasters},
+			wantError: true,
+		},
+		{
+			name:      "system:authenticated passes",
+			username:  testJohndoe,
+			groups:    []string{SystemAuthenticatedGroup},
+			wantError: false,
+		},
+		{
+			name:      "normal user and groups pass",
+			username:  testJohndoe,
+			groups:    []string{testDevValue, testTeam1},
+			wantError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateOIDCIdentities(tc.username, tc.groups)
+			if tc.wantError && err == nil {
+				t.Error("Expected error but got nil")
+			}
+			if !tc.wantError && err != nil {
+				t.Errorf("Unexpected error: %v", err)
 			}
 		})
 	}
