@@ -616,6 +616,42 @@ func TestHandleAuth_EmptyPrefix_UsernameAndGroupsCarryNoPrefix(t *testing.T) {
 	}
 }
 
+func TestHandleAuth_EmptyPrefix_Returns403_WhenTokenContainsSystemGroup(t *testing.T) {
+	server := createTestServer(nil)
+	server.config.OidcUsernamePrefix = ""
+	server.config.OidcGroupsPrefix = ""
+
+	server.oidcVerifier = &MockOIDCVerifier{
+		VerifyTokenFunc: func(ctx context.Context, tokenString string, logger *slog.Logger) (*OIDCClaims, bool, error) {
+			return &OIDCClaims{
+				Subject:  testUserUID,
+				Username: testJohndoe,
+				Groups:   []string{testSystemMasters},
+			}, false, nil
+		},
+	}
+	server.jwtManager = &MockJWTHandler{}
+	server.cookieManager = &MockCookieHandler{}
+
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Auth-Request-User", testUserUID)
+	req.Header.Set("X-Auth-Request-Preferred-Username", testJohndoe)
+	req.Header.Set("X-Auth-Request-Groups", testSystemMasters)
+	req.Header.Set("X-Forwarded-Uri", testAppPath)
+	req.Header.Set("X-Forwarded-Host", testDomainValue)
+	req.Header.Set("Authorization", "Bearer mock-token")
+	w := httptest.NewRecorder()
+
+	server.handleAuth(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("Expected status %d, got %d: %s", http.StatusForbidden, w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "system:") {
+		t.Errorf("Expected error body to mention system: identity, got: %s", w.Body.String())
+	}
+}
+
 func TestHandleAuth_Returns403_WhenVerifyAccessWorkspaceReturnsDisallowed(t *testing.T) {
 	// Create a standard server
 	server := createTestServer(nil)
