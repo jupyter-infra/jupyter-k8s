@@ -30,7 +30,7 @@ func TestResourceManager_IsDeploymentProgressDeadlineExceeded(t *testing.T) {
 		expectedStalled bool
 		expectedMessage string
 	}{
-		{name: "nil deployment", deployment: nil},
+		{name: caseNilDeployment, deployment: nil},
 		{name: "no conditions", deployment: &appsv1.Deployment{}},
 		{
 			name: "only an Available condition",
@@ -95,7 +95,7 @@ func TestResourceManager_DeploymentFailedCreate(t *testing.T) {
 		expectedFailed  bool
 		expectedMessage string
 	}{
-		{name: "nil deployment"},
+		{name: caseNilDeployment},
 		{name: "a deployment without conditions", deployment: &appsv1.Deployment{}},
 		{name: "progressing without a replica failure", deployment: &appsv1.Deployment{Status: appsv1.DeploymentStatus{
 			Conditions: []appsv1.DeploymentCondition{{Type: appsv1.DeploymentProgressing, Status: corev1.ConditionTrue}}}}},
