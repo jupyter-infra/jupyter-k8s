@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      focus:
+        description: Ginkgo focus regex, e.g. "Authmiddleware TLS" (empty runs the full suite)
+        required: false
+        default: ""
 
 jobs:
   test-e2e:
@@ -38,7 +43,13 @@ jobs:
           sudo mv kubebuilder /usr/local/bin/
 
       - name: Running Test e2e
+        env:
+          FOCUS: ${{ inputs.focus }}
         run: |
           go mod tidy
           # Use Docker instead of Finch in GitHub Actions
-          make test-e2e CONTAINER_TOOL=docker
+          if [ -n "$FOCUS" ]; then
+            make test-e2e-focus FOCUS="$FOCUS" CONTAINER_TOOL=docker
+          else
+            make test-e2e CONTAINER_TOOL=docker
+          fi
