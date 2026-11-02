@@ -9,7 +9,7 @@
 | `coverage.yml` | `workflow_run` (after Tests) | Posts sticky coverage comment on the PR; runs in trusted base context with `pull-requests: write`, so it works for fork PRs without granting write to the job that runs PR code |
 | `verify-generated.yml` | push/PR | Regenerate manifests, chart, install.yaml, reference docs; fail on drift (`make verify-generated`) |
 | `test-chart.yml` | push/PR | Helm install on Kind (operator-only chart) |
-| `test-e2e.yml` | push/PR/dispatch | Full E2E on Kind |
+| `test-e2e.yml` | push/PR/dispatch | Full E2E on Kind; dispatch takes an optional `focus` (Ginkgo regex), e.g. `gh workflow run test-e2e.yml --ref <branch> -f focus="Authmiddleware TLS"` |
 | `release.yml` | `workflow_dispatch` | Orchestrator: stage → e2e → promote → release |
 | `release-stage-images.yml` | `workflow_call` / `workflow_dispatch` | Build multi-arch images, push to staging GHCR |
 | `release-stage-chart.yml` | `workflow_call` / `workflow_dispatch` | Generate, package, push chart to staging GHCR |
