@@ -22,6 +22,8 @@ const (
 
 	// Special groups
 	SystemAuthenticatedGroup = "system:authenticated"
+	// SystemReservedPrefix is the prefix of Kubernetes reserved identities; OIDC usernames and groups must not resolve to it.
+	SystemReservedPrefix = "system:"
 
 	// Routing modes
 	RoutingModeSubdomain = "subdomain"

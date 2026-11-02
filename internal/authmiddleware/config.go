@@ -472,15 +472,15 @@ func applyCookieConfig(config *Config) error {
 // applyOidcConfig applies OIDC-related environment variable overrides
 func applyOidcConfig(config *Config) error {
 	if oidcUsernamePrefix, ok := os.LookupEnv(EnvOidcUsernamePrefix); ok {
-		if strings.HasPrefix(oidcUsernamePrefix, "system:") {
-			return fmt.Errorf("%s must not start with system:, got %q", EnvOidcUsernamePrefix, oidcUsernamePrefix)
+		if strings.HasPrefix(oidcUsernamePrefix, SystemReservedPrefix) {
+			return fmt.Errorf("%s must not start with %s, got %q", EnvOidcUsernamePrefix, SystemReservedPrefix, oidcUsernamePrefix)
 		}
 		config.OidcUsernamePrefix = oidcUsernamePrefix
 	}
 
 	if oidcGroupsPrefix, ok := os.LookupEnv(EnvOidcGroupsPrefix); ok {
-		if strings.HasPrefix(oidcGroupsPrefix, "system:") {
-			return fmt.Errorf("%s must not start with system:, got %q", EnvOidcGroupsPrefix, oidcGroupsPrefix)
+		if strings.HasPrefix(oidcGroupsPrefix, SystemReservedPrefix) {
+			return fmt.Errorf("%s must not start with %s, got %q", EnvOidcGroupsPrefix, SystemReservedPrefix, oidcGroupsPrefix)
 		}
 		config.OidcGroupsPrefix = oidcGroupsPrefix
 	}
