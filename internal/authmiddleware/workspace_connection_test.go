@@ -55,6 +55,8 @@ const (
 	testDexIssuerURL                = "https://example.com/dex"
 	testOrg1Team1                   = "org1:team1"
 	testOrg1Team2                   = "org1:team2"
+	testTeam1                       = "team1"
+	testTeam2                       = "team2"
 	testGithubOrgTeam               = "github:org:team"
 	testGithubOrg1Team1             = "github:org1:team1"
 	testIssuerURL                   = "https://test-issuer.example.com"
@@ -70,6 +72,7 @@ const (
 	testDevValue                    = "dev"
 	testGithubOrg1Team2             = "github:org1:team2"
 	testGroup2                      = "group2"
+	testSystemMasters               = "system:masters"
 )
 
 // createTestRequest creates a test HTTP request with the given path in X-Forwarded-URI header
