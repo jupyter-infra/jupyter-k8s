@@ -87,6 +87,13 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	k8sUsername := GetOIDCUsernameFromToken(s.config, oidcClaims)
 	k8sGroups := GetOIDCGroupsFromToken(s.config, oidcClaims)
 
+	// Reject any post-prefix system: identity to prevent privilege escalation regardless of prefix
+	if err := ValidateOIDCIdentities(k8sUsername, k8sGroups); err != nil {
+		s.logger.Error("Rejected reserved system: identity in OIDC token", "error", err)
+		http.Error(w, "Forbidden: reserved system: identity in token", http.StatusForbidden)
+		return
+	}
+
 	// Verify preferred username in header if available
 	if headerPreferredUsername != "" && k8sUsername != headerPreferredUsername {
 		s.logger.Error("Preferred username mismatch between token and headers",
