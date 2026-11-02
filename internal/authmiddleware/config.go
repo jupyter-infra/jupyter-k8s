@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -471,10 +472,16 @@ func applyCookieConfig(config *Config) error {
 // applyOidcConfig applies OIDC-related environment variable overrides
 func applyOidcConfig(config *Config) error {
 	if oidcUsernamePrefix, ok := os.LookupEnv(EnvOidcUsernamePrefix); ok {
+		if strings.HasPrefix(oidcUsernamePrefix, "system:") {
+			return fmt.Errorf("%s must not start with system:, got %q", EnvOidcUsernamePrefix, oidcUsernamePrefix)
+		}
 		config.OidcUsernamePrefix = oidcUsernamePrefix
 	}
 
 	if oidcGroupsPrefix, ok := os.LookupEnv(EnvOidcGroupsPrefix); ok {
+		if strings.HasPrefix(oidcGroupsPrefix, "system:") {
+			return fmt.Errorf("%s must not start with system:, got %q", EnvOidcGroupsPrefix, oidcGroupsPrefix)
+		}
 		config.OidcGroupsPrefix = oidcGroupsPrefix
 	}
 
