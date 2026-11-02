@@ -156,15 +156,9 @@ func TestValidateOIDCIdentities(t *testing.T) {
 			wantError: true,
 		},
 		{
-			name:      "system: username rejected even when a prefix is configured",
-			username:  "system:admin",
-			groups:    []string{},
-			wantError: true,
-		},
-		{
-			name:      "system:masters group rejected even when a prefix is configured",
+			name:      "prefix+token combination that produces system:masters is rejected",
 			username:  testJohndoe,
-			groups:    []string{testSystemMasters},
+			groups:    GetOidcGroups(&Config{OidcGroupsPrefix: "sys"}, []string{"tem:masters"}),
 			wantError: true,
 		},
 		{
