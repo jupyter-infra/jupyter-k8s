@@ -87,3 +87,70 @@ func newResourceManagerBrokenBuilders(c client.Client) *ResourceManager {
 		NewStatusManager(c),
 	)
 }
+
+// TestIsDeploymentRolloutComplete covers the probe gate's readiness test. The ObservedGeneration case is
+// the one that matters in practice: attaching an integration rewrites the pod template, which bumps the
+// generation while every replica count still describes the outgoing revision.
+func TestIsDeploymentRolloutComplete(t *testing.T) {
+	one := int32(1)
+	deployment := func(mutate func(*appsv1.Deployment)) *appsv1.Deployment {
+		d := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Generation: 4},
+			Spec:       appsv1.DeploymentSpec{Replicas: &one},
+			Status: appsv1.DeploymentStatus{
+				ObservedGeneration: 4, Replicas: 1, UpdatedReplicas: 1, ReadyReplicas: 1,
+				Conditions: []appsv1.DeploymentCondition{
+					{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue},
+				},
+			},
+		}
+		if mutate != nil {
+			mutate(d)
+		}
+		return d
+	}
+
+	cases := []struct {
+		name   string
+		deploy *appsv1.Deployment
+		want   bool
+	}{
+		{name: "settled rollout", deploy: deployment(nil), want: true},
+		{
+			name: "template just changed, generation not yet observed",
+			// Available=True still describes the previous revision here, which is why the gate cannot
+			// use IsDeploymentAvailable.
+			deploy: deployment(func(d *appsv1.Deployment) { d.Generation = 5 }),
+			want:   false,
+		},
+		{
+			name:   "new replica not yet created",
+			deploy: deployment(func(d *appsv1.Deployment) { d.Status.UpdatedReplicas = 0 }),
+			want:   false,
+		},
+		{
+			name:   "new replica created but not ready",
+			deploy: deployment(func(d *appsv1.Deployment) { d.Status.ReadyReplicas = 0 }),
+			want:   false,
+		},
+		{
+			name: "old replica still terminating alongside the new one",
+			// Recreate scales down before up, so Replicas above the spec means the swap is still underway.
+			deploy: deployment(func(d *appsv1.Deployment) { d.Status.Replicas = 2 }),
+			want:   false,
+		},
+		{name: caseNilDeployment, deploy: nil, want: false},
+		{
+			name:   "nil replica count",
+			deploy: deployment(func(d *appsv1.Deployment) { d.Spec.Replicas = nil }),
+			want:   false,
+		},
+	}
+
+	rm := &ResourceManager{}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, rm.IsDeploymentRolloutComplete(tc.deploy))
+		})
+	}
+}

@@ -54,6 +54,10 @@ const (
 	conditionTypeExisting = "Existing"
 	conditionTypeToUpdate = "ToUpdate"
 
+	// caseNilDeployment names the table case every Deployment helper shares: the
+	// helper is handed no Deployment at all.
+	caseNilDeployment = "nil deployment"
+
 	pathAPIStatus               = "/api/status"
 	pathAPIIdle                 = "/api/idle"
 	pathAPIStatusNoLeadingSlash = "api/status"

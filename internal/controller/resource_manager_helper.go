@@ -79,6 +79,24 @@ func (rm *ResourceManager) IsDeploymentAvailable(deployment *appsv1.Deployment) 
 		deployment.Status.ReadyReplicas >= *deployment.Spec.Replicas
 }
 
+// IsDeploymentRolloutComplete reports whether every replica is running the Deployment's current pod
+// template and is ready. Unlike IsDeploymentAvailable it never reads the Available condition, which the
+// Deployment controller has not yet recomputed in the reconcile that rewrites the template and so can
+// still describe the outgoing revision. ObservedGeneration is what separates the two: the generation
+// bumps the moment the template changes, before any replica status has caught up.
+func (rm *ResourceManager) IsDeploymentRolloutComplete(deployment *appsv1.Deployment) bool {
+	if deployment == nil || deployment.Spec.Replicas == nil {
+		return false
+	}
+	if deployment.Status.ObservedGeneration < deployment.Generation {
+		return false
+	}
+	want := *deployment.Spec.Replicas
+	return deployment.Status.UpdatedReplicas == want &&
+		deployment.Status.ReadyReplicas == want &&
+		deployment.Status.Replicas == want
+}
+
 // IsDeploymentProgressDeadlineExceeded reports whether the Deployment controller has declared the
 // rollout stalled (Progressing=False with reason ProgressDeadlineExceeded) and returns that
 // condition's message.
