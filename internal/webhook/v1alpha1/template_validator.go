@@ -127,6 +127,10 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		violations = append(violations, volumeViolations...)
 	}
 
+	// Validate access type, ownership type and security contexts against the template's pins
+	violations = append(violations, validatePinnedSharingTypes(workspace, template)...)
+	violations = append(violations, validatePinnedSecurityContexts(workspace, template)...)
+
 	// Validate init containers
 	if violation := validateInitContainers(workspace.Spec.InitContainers, template); violation != nil {
 		violations = append(violations, *violation)
