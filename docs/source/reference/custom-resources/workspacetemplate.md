@@ -103,6 +103,22 @@ _Appears in:_
 
 
 
+## SecurityContextOverridePolicy
+
+
+
+SecurityContextOverridePolicy controls whether a workspace may deviate from the template's default
+pod or container security context.
+
+_Appears in:_
+- [WorkspaceTemplateSpec](#workspacetemplatespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `allow` _boolean_ | Allow controls whether workspaces may set their own security context. When false, a workspace's<br />security context must equal the template's default, which the defaulter copies onto it. | true | Optional: \{\} <br /> |
+
+
+
 ## SharedMemoryOverridePolicy
 
 
@@ -186,16 +202,20 @@ _Appears in:_
 | `defaultAffinity` _[Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#affinity-v1-core)_ | DefaultAffinity specifies default node affinity and anti-affinity rules |  | Optional: \{\} <br /> |
 | `defaultTolerations` _[Toleration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#toleration-v1-core) array_ | DefaultTolerations specifies default tolerations for scheduling on nodes with taints |  | Optional: \{\} <br /> |
 | `defaultOwnershipType` _string_ | DefaultOwnershipType specifies default ownershipType for workspaces using this template<br />OwnershipType controls which users may edit/delete the workspace | Public | Enum: [Public OwnerOnly] <br />Optional: \{\} <br /> |
+| `allowCustomOwnershipType` _boolean_ | AllowCustomOwnershipType controls whether workspaces using this template may set an ownershipType<br />other than DefaultOwnershipType. When false, a workspace's ownershipType must equal<br />DefaultOwnershipType. | true | Optional: \{\} <br /> |
 | `baseLabels` _[TemplateLabel](#templatelabel) array_ | BaseLabels specifies labels to add to workspaces using this template<br />Labels are added during defaulting if not already present on the workspace |  | MaxItems: 50 <br />Optional: \{\} <br /> |
 | `labelRequirements` _[LabelRequirement](#labelrequirement) array_ | LabelRequirements specifies validation rules for workspace labels |  | MaxItems: 50 <br />Optional: \{\} <br /> |
 | `defaultIdleShutdown` _[IdleShutdownSpec](#idleshutdownspec)_ | DefaultIdleShutdown provides default idle shutdown configuration<br />Includes timeout, detection endpoint, and enable/disable |  | Optional: \{\} <br /> |
 | `idleShutdownOverrides` _[IdleShutdownOverridePolicy](#idleshutdownoverridepolicy)_ | IdleShutdownOverrides controls override behavior and bounds |  | Optional: \{\} <br /> |
 | `defaultAccessType` _string_ | DefaultAccessType specifies the default accessType for workspaces using this template<br />AccessType controls which users may create connections to the workspace. | Public | Enum: [Public OwnerOnly] <br />Optional: \{\} <br /> |
+| `allowCustomAccessType` _boolean_ | AllowCustomAccessType controls whether workspaces using this template may set an accessType other<br />than DefaultAccessType. When false, a workspace's accessType must equal DefaultAccessType. | true | Optional: \{\} <br /> |
 | `defaultAccessStrategy` _[AccessStrategyRef](#accessstrategyref)_ | DefaultAccessStrategy specifies the default access strategy for workspaces using this template |  | Optional: \{\} <br /> |
 | `defaultLifecycle` _[Lifecycle](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#lifecycle-v1-core)_ | DefaultLifecycle specifies default lifecycle hooks for workspaces using this template |  | Optional: \{\} <br /> |
 | `defaultReadinessProbe` _[Probe](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#probe-v1-core)_ | DefaultReadinessProbe specifies the default readiness probe for the main workspace<br />container for workspaces using this template.<br />Applied only if the workspace does not specify its own readiness probe. |  | Optional: \{\} <br /> |
 | `defaultPodSecurityContext` _[PodSecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#podsecuritycontext-v1-core)_ | DefaultPodSecurityContext specifies default pod-level security context |  | Optional: \{\} <br /> |
 | `defaultContainerSecurityContext` _[SecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#securitycontext-v1-core)_ | DefaultContainerSecurityContext specifies default container-level security context for the main workspace container |  | Optional: \{\} <br /> |
+| `podSecurityContextOverrides` _[SecurityContextOverridePolicy](#securitycontextoverridepolicy)_ | PodSecurityContextOverrides controls whether a workspace may set its own podSecurityContext.<br />When locked, workspaces get DefaultPodSecurityContext, or no pod security context if unset. |  | Optional: \{\} <br /> |
+| `containerSecurityContextOverrides` _[SecurityContextOverridePolicy](#securitycontextoverridepolicy)_ | ContainerSecurityContextOverrides controls whether a workspace may set its own<br />containerSecurityContext. When locked, workspaces get DefaultContainerSecurityContext, or no<br />container security context if unset. |  | Optional: \{\} <br /> |
 | `defaultInitContainers` _[Container](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#container-v1-core) array_ | DefaultInitContainers specifies default init containers for workspaces using this template<br />Applied during defaulting if the workspace does not specify any init containers |  | MaxItems: 10 <br />Optional: \{\} <br /> |
 | `allowCustomInitContainers` _boolean_ | AllowCustomInitContainers controls whether workspaces using this template<br />can specify custom init containers beyond the template defaults | false | Optional: \{\} <br /> |
 | `appType` _string_ | AppType specifies the application type for workspaces using this template |  | Optional: \{\} <br /> |
