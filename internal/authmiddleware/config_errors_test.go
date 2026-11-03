@@ -71,15 +71,6 @@ func TestNewConfig_OIDCInitTimeoutMustBePositive(t *testing.T) {
 	assert.Contains(t, err.Error(), "must be a positive integer")
 }
 
-func TestNewConfig_OIDCUsernamePrefixMustNotBeSystemReserved(t *testing.T) {
-	t.Setenv(EnvOidcUsernamePrefix, "system:")
-
-	_, err := NewConfig()
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), EnvOidcUsernamePrefix)
-}
-
 func TestNewConfig_OIDCPrefixSystemReservedRule(t *testing.T) {
 	tests := []struct {
 		name    string
