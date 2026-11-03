@@ -155,8 +155,8 @@ var _ = Describe("Workspace Template Defaults", Ordered, func() {
 				[]valueTestCaseForTemplateTest{
 					{
 						description: "verifying workspace inherited access type",
-						jsonPath:    "{.spec.accessType}",
-						expected:    "OwnerOnly",
+						jsonPath:    jsonPathAccessType,
+						expected:    sharingTypeOwnerOnly,
 					},
 					{
 						description: "verifying workspace inherited app type",

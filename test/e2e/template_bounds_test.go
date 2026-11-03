@@ -378,4 +378,105 @@ var _ = Describe("Workspace Template Bounds", Ordered, func() {
 			Expect(output).To(BeEmpty(), "template should not exist after webhook rejection")
 		})
 	})
+
+	Context("Pinned access type, ownership type and security contexts", func() {
+		const (
+			pinnedPrivateTemplate   = "pinned-private-template"
+			pinnedDefaultWorkspace  = "pinned-default-workspace"
+			tightenedTemplate       = "tightened-template"
+			tightenedWorkspace      = "tightened-workspace"
+			pinnedAccessTypeMessage = `spec.accessType: pinned to OwnerOnly by template "pinned-private-template"`
+		)
+
+		It("should reject a create that turns a private template's workspace Public", func() {
+			createTemplateForTest(pinnedPrivateTemplate, groupDir, subgroupBounds)
+
+			path := BuildTestResourcePath("pinned-public-workspace", groupDir, subgroupBounds)
+			cmd := exec.Command("kubectl", "apply", "-f", path)
+			output, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "webhook should reject a workspace breaking the access type pin")
+			Expect(output).To(ContainSubstring(pinnedAccessTypeMessage))
+		})
+
+		It("should reject a create that requests a privileged container under a locked template", func() {
+			createTemplateForTest(pinnedPrivateTemplate, groupDir, subgroupBounds)
+
+			path := BuildTestResourcePath("pinned-privileged-workspace", groupDir, subgroupBounds)
+			cmd := exec.Command("kubectl", "apply", "-f", path)
+			output, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "webhook should reject a workspace breaking the security context lock")
+			Expect(output).To(ContainSubstring("spec.containerSecurityContext: pinned"))
+		})
+
+		It("should apply the pinned values and reject an update that breaks them", func() {
+			createTemplateForTest(pinnedPrivateTemplate, groupDir, subgroupBounds)
+
+			By("creating a workspace that sets nothing")
+			createWorkspaceForTest(pinnedDefaultWorkspace, groupDir, subgroupBounds)
+
+			WaitForWorkspaceToReachCondition(pinnedDefaultWorkspace, workspaceNamespace,
+				controller.ConditionTypeAvailable, ConditionTrue)
+
+			testTemplateFeaturesInheritance(pinnedDefaultWorkspace, workspaceNamespace, []valueTestCaseForTemplateTest{
+				{description: "verifying the pinned access type",
+					jsonPath: jsonPathAccessType, expected: sharingTypeOwnerOnly},
+				{description: "verifying the pinned ownership type",
+					jsonPath: jsonPathOwnershipType, expected: sharingTypeOwnerOnly},
+				{description: "verifying the locked pod security context",
+					jsonPath: "{.spec.podSecurityContext.fsGroup}", expected: "1000"},
+				{description: "verifying the locked container security context",
+					jsonPath: "{.spec.containerSecurityContext.allowPrivilegeEscalation}", expected: "false"},
+			})
+
+			By("verifying the Deployment runs with the template's container security context")
+			deploymentName := GetWorkspaceDeploymentName(pinnedDefaultWorkspace, workspaceNamespace)
+			output, err := kubectlGet("deployment", deploymentName, workspaceNamespace,
+				"{.spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal("false"))
+
+			By("turning the workspace Public")
+			output, err = patchWorkspaceForTest(pinnedDefaultWorkspace, workspaceNamespace, `{"spec":{"accessType":"Public"}}`)
+			Expect(err).To(HaveOccurred(), "webhook should reject an update breaking the access type pin")
+			Expect(output).To(ContainSubstring(pinnedAccessTypeMessage))
+
+			By("requesting a privileged container")
+			output, err = patchWorkspaceForTest(pinnedDefaultWorkspace, workspaceNamespace,
+				`{"spec":{"containerSecurityContext":{"privileged":true}}}`)
+			Expect(err).To(HaveOccurred(), "webhook should reject an update breaking the security context lock")
+			Expect(output).To(ContainSubstring("spec.containerSecurityContext: pinned"))
+		})
+
+		It("should keep a workspace that a template pin leaves non-compliant running until its next update", func() {
+			createTemplateForTest(tightenedTemplate, groupDir, subgroupBounds)
+
+			By("creating a Public workspace while the access type is not pinned")
+			createWorkspaceForTest(tightenedWorkspace, groupDir, subgroupBounds)
+			WaitForWorkspaceToReachCondition(tightenedWorkspace, workspaceNamespace,
+				controller.ConditionTypeAvailable, ConditionTrue)
+
+			By("pinning the access type on the template")
+			cmd := exec.Command("kubectl", "patch", "workspacetemplate", tightenedTemplate,
+				"-n", SharedNamespace, "--type=merge", "-p", `{"spec":{"allowCustomAccessType":false}}`)
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(ContainSubstring("Template constraints changed"),
+				"template webhook should warn that the pin may break workspaces")
+
+			By("verifying the workspace keeps running")
+			VerifyConsistentWorkspaceConditions(tightenedWorkspace, workspaceNamespace, map[string]string{
+				controller.ConditionTypeAvailable: ConditionTrue,
+			}, "10s", "2s")
+
+			By("rejecting a spec update")
+			output, err = patchWorkspaceForTest(tightenedWorkspace, workspaceNamespace, `{"spec":{"displayName":"renamed"}}`)
+			Expect(err).To(HaveOccurred(), "the next spec update must comply with the pin")
+			Expect(output).To(ContainSubstring(`spec.accessType: pinned to OwnerOnly by template "tightened-template"`))
+
+			By("letting the user stop the workspace anyway")
+			_, err = patchWorkspaceForTest(tightenedWorkspace, workspaceNamespace,
+				fmt.Sprintf(`{"spec":{"desiredStatus":%q}}`, controller.DesiredStateStopped))
+			Expect(err).NotTo(HaveOccurred(), "stopping a workspace is always allowed")
+		})
+	})
 })

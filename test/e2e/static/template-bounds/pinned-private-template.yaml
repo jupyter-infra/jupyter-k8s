@@ -1,0 +1,31 @@
+# Private template: pins access and ownership types to OwnerOnly and locks both security contexts
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: pinned-private-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Pinned Private Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultAccessType: OwnerOnly
+  defaultOwnershipType: OwnerOnly
+  allowCustomAccessType: false
+  allowCustomOwnershipType: false
+  defaultPodSecurityContext:
+    fsGroup: 1000
+  defaultContainerSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+  podSecurityContextOverrides:
+    allow: false
+  containerSecurityContextOverrides:
+    allow: false
+  resourceBounds:
+    resources:
+      cpu:
+        min: 100m
+        max: "2"
+      memory:
+        min: 128Mi
+        max: 4Gi

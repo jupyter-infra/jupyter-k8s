@@ -1,0 +1,11 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: tightened-workspace
+spec:
+  displayName: "Workspace Turned Public Before The Pin"
+  accessType: Public
+  ownershipType: Public
+  templateRef:
+    name: tightened-template
+    namespace: jupyter-k8s-shared

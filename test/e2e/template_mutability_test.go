@@ -9,6 +9,7 @@ Distributed under the terms of the MIT license
 package e2e
 
 import (
+	"fmt"
 	"os/exec"
 	"time"
 
@@ -25,6 +26,7 @@ var _ = Describe("Workspace Template Mutability", Ordered, func() {
 		groupDir             = "template"
 		subgroupBase         = "base"
 		subgroupMutability   = "mutability"
+		subgroupBounds       = "bounds"
 		baseTemplateName     = "base-template"
 		baseTemplateFilename = "base-template"
 	)
@@ -164,6 +166,94 @@ var _ = Describe("Workspace Template Mutability", Ordered, func() {
 				templateName, SharedNamespace, "{.spec.description}")
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(output).To(Equal("Modified description"))
+		})
+	})
+
+	Context("Pinned access and ownership types", func() {
+		const (
+			pinnedPrivateTemplate = "pinned-private-template"
+			pinnedSharedTemplate  = "pinned-shared-template"
+			pinnedSwitchWorkspace = "pinned-switch-workspace"
+		)
+
+		// createSwitchWorkspace creates the templates and a workspace on the private template
+		createSwitchWorkspace := func() {
+			createTemplateForTest(pinnedPrivateTemplate, groupDir, subgroupBounds)
+			createTemplateForTest(pinnedSharedTemplate, groupDir, subgroupMutability)
+			createWorkspaceForTest(pinnedSwitchWorkspace, groupDir, subgroupMutability)
+			WaitForWorkspaceToReachCondition(pinnedSwitchWorkspace, workspaceNamespace,
+				controller.ConditionTypeAvailable, ConditionTrue)
+		}
+
+		expectSharingTypes := func(expected string) {
+			testTemplateFeaturesInheritance(pinnedSwitchWorkspace, workspaceNamespace, []valueTestCaseForTemplateTest{
+				{description: "verifying the access type", jsonPath: jsonPathAccessType, expected: expected},
+				{description: "verifying the ownership type", jsonPath: jsonPathOwnershipType, expected: expected},
+			})
+		}
+
+		It("should require a templateRef switch to set the new template's pinned values", func() {
+			createSwitchWorkspace()
+			expectSharingTypes(sharingTypeOwnerOnly)
+
+			By("switching only templateRef to the shared template")
+			output, err := patchWorkspaceForTest(pinnedSwitchWorkspace, workspaceNamespace,
+				fmt.Sprintf(`{"spec":{"templateRef":{"name":%q}}}`, pinnedSharedTemplate))
+			Expect(err).To(HaveOccurred(), "the switch must set the values the shared template pins")
+			Expect(output).To(ContainSubstring(`spec.accessType: pinned to Public by template "pinned-shared-template"`))
+			Expect(output).To(ContainSubstring(`spec.ownershipType: pinned to Public by template "pinned-shared-template"`))
+			expectSharingTypes(sharingTypeOwnerOnly)
+
+			By("switching to the shared template with its pinned values")
+			_, err = patchWorkspaceForTest(pinnedSwitchWorkspace, workspaceNamespace, fmt.Sprintf(
+				`{"spec":{"templateRef":{"name":%q},"accessType":%q,"ownershipType":%q}}`,
+				pinnedSharedTemplate, sharingTypePublic, sharingTypePublic))
+			Expect(err).NotTo(HaveOccurred())
+			expectSharingTypes(sharingTypePublic)
+
+			By("switching back to the private template with its pinned values")
+			_, err = patchWorkspaceForTest(pinnedSwitchWorkspace, workspaceNamespace, fmt.Sprintf(
+				`{"spec":{"templateRef":{"name":%q},"accessType":%q,"ownershipType":%q}}`,
+				pinnedPrivateTemplate, sharingTypeOwnerOnly, sharingTypeOwnerOnly))
+			Expect(err).NotTo(HaveOccurred())
+			expectSharingTypes(sharingTypeOwnerOnly)
+
+			WaitForWorkspaceToReachCondition(pinnedSwitchWorkspace, workspaceNamespace,
+				controller.ConditionTypeAvailable, ConditionTrue)
+		})
+
+		// Removing templateRef does not make the workspace standalone when the namespace has a default
+		// template: the mutating webhook assigns the default template to any workspace without a
+		// templateRef, on update as on create. Removing it is then a switch to the default template, and
+		// the usual switch rule applies: the workspace keeps its accessType and ownershipType, so the
+		// update must set the default template's pinned values or the validating webhook rejects it.
+		// The shared template is made the default here so that its pins (Public) conflict with the
+		// workspace's values (OwnerOnly, from the private template). This also checks that removing
+		// templateRef is no way around a template's pins.
+		It("should hold a workspace that removes its templateRef to the default template's pins", func() {
+			createSwitchWorkspace()
+
+			By("labelling the shared template as the default template")
+			cmd := exec.Command("kubectl", "label", "workspacetemplate", pinnedSharedTemplate,
+				"-n", SharedNamespace, "workspace.jupyter.org/default-template=true")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("removing only the templateRef: the webhook assigns the shared default template, " +
+				"whose pins the workspace's OwnerOnly values break")
+			output, err := patchWorkspaceForTest(pinnedSwitchWorkspace, workspaceNamespace, `{"spec":{"templateRef":null}}`)
+			Expect(err).To(HaveOccurred(), "the default template's pins apply to the workspace")
+			Expect(output).To(ContainSubstring(`spec.accessType: pinned to Public by template "pinned-shared-template"`))
+
+			By("removing the templateRef and setting the default template's pinned values")
+			_, err = patchWorkspaceForTest(pinnedSwitchWorkspace, workspaceNamespace, fmt.Sprintf(
+				`{"spec":{"templateRef":null,"accessType":%q,"ownershipType":%q}}`, sharingTypePublic, sharingTypePublic))
+			Expect(err).NotTo(HaveOccurred())
+
+			output, err = kubectlGet("workspace", pinnedSwitchWorkspace, workspaceNamespace, "{.spec.templateRef.name}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(Equal(pinnedSharedTemplate))
+			expectSharingTypes(sharingTypePublic)
 		})
 	})
 })

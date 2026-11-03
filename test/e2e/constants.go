@@ -81,6 +81,14 @@ const (
 	jsonPathStatusPhase   = "{.status.phase}"
 	jsonPathVolumeName    = "{.spec.volumes[0].name}"
 	jsonPathVolumePVCName = "{.spec.volumes[0].persistentVolumeClaimName}"
+	jsonPathAccessType    = "{.spec.accessType}"
+	jsonPathOwnershipType = "{.spec.ownershipType}"
+)
+
+// Values of a workspace's spec.accessType and spec.ownershipType.
+const (
+	sharingTypeOwnerOnly = "OwnerOnly"
+	sharingTypePublic    = "Public"
 )
 
 // Description strings used in table-driven storage/template verification tests.

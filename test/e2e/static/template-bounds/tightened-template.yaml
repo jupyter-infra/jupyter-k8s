@@ -1,0 +1,19 @@
+# Defaults accessType to OwnerOnly without pinning it; the test pins it after a workspace turned Public
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: tightened-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Template Tightened After Use"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultAccessType: OwnerOnly
+  defaultOwnershipType: Public
+  resourceBounds:
+    resources:
+      cpu:
+        min: 100m
+        max: "2"
+      memory:
+        min: 128Mi
+        max: 4Gi
