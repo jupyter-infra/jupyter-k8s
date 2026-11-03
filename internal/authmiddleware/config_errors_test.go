@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const sysPrefix = "sys"
+
 // notBoolValue is an invalid boolean literal reused across the malformed-env cases.
 const notBoolValue = "notbool"
 
@@ -87,8 +89,8 @@ func TestNewConfig_OIDCPrefixSystemReservedRule(t *testing.T) {
 	}{
 		{name: "username prefix system is refused", env: EnvOidcUsernamePrefix, value: "system:", wantErr: true},
 		{name: "groups prefix system is refused", env: EnvOidcGroupsPrefix, value: "system:", wantErr: true},
-		{name: "username prefix overlapping system is accepted", env: EnvOidcUsernamePrefix, value: "sys", wantErr: false},
-		{name: "groups prefix overlapping system is accepted", env: EnvOidcGroupsPrefix, value: "sys", wantErr: false},
+		{name: "username prefix overlapping system is accepted", env: EnvOidcUsernamePrefix, value: sysPrefix, wantErr: false},
+		{name: "groups prefix overlapping system is accepted", env: EnvOidcGroupsPrefix, value: sysPrefix, wantErr: false},
 	}
 
 	for _, tt := range tests {
