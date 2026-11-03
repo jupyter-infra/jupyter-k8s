@@ -72,6 +72,17 @@ var _ = Describe("PinnedFieldsValidator", func() {
 			Expect(validatePinnedSharingTypes(newWorkspace(testOwnershipPublic, ""), template)).To(BeEmpty())
 		})
 
+		It("falls back to the ownership type for an empty access type, as the defaulter does", func() {
+			template := pinnedTemplate(testPinPrivateTemplate, testOwnershipOwnerOnly)
+			template.Spec.DefaultAccessType = ""
+			Expect(validatePinnedSharingTypes(newWorkspace(testOwnershipOwnerOnly, testOwnershipOwnerOnly), template)).To(BeEmpty())
+			Expect(validatePinnedSharingTypes(newWorkspace("", testOwnershipOwnerOnly), template)).To(BeEmpty())
+
+			violations := validatePinnedSharingTypes(newWorkspace(testOwnershipPublic, testOwnershipOwnerOnly), template)
+			Expect(violations).To(HaveLen(1))
+			Expect(violations[0].Message).To(ContainSubstring("spec.accessType: pinned to OwnerOnly"))
+		})
+
 		It("rejects another value, naming the field and the pin", func() {
 			template := pinnedTemplate(testPinPrivateTemplate, testOwnershipOwnerOnly)
 			violations := validatePinnedSharingTypes(newWorkspace(testOwnershipPublic, testOwnershipPublic), template)

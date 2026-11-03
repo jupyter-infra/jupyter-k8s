@@ -14,13 +14,22 @@ import (
 	webhookconst "github.com/jupyter-infra/jupyter-k8s/internal/webhook"
 )
 
-// effectiveSharingType treats an empty access or ownership type as Public, the value the sharing
-// defaulter and the CRD default both give it.
-func effectiveSharingType(value string) string {
-	if value == "" {
+// effectiveOwnershipType treats an empty ownership type as Public, the value the sharing defaulter
+// gives it.
+func effectiveOwnershipType(ownershipType string) string {
+	if ownershipType == "" {
 		return webhookconst.OwnershipTypePublic
 	}
-	return value
+	return ownershipType
+}
+
+// effectiveAccessType treats an empty access type as the effective ownership type, the value the
+// sharing defaulter gives it.
+func effectiveAccessType(accessType, ownershipType string) string {
+	if accessType == "" {
+		return effectiveOwnershipType(ownershipType)
+	}
+	return accessType
 }
 
 // validatePinnedSharingTypes holds a workspace's accessType and ownershipType to the template's defaults
@@ -29,21 +38,24 @@ func validatePinnedSharingTypes(workspace *workspacev1alpha1.Workspace, template
 	var violations []TemplateViolation
 	if template.Spec.AccessTypeLocked() {
 		if v := pinnedSharingTypeViolation(ViolationTypeAccessTypeNotAllowed, "spec.accessType",
-			workspace.Spec.AccessType, template.Spec.DefaultAccessType, template.Name); v != nil {
+			effectiveAccessType(workspace.Spec.AccessType, workspace.Spec.OwnershipType),
+			effectiveAccessType(template.Spec.DefaultAccessType, template.Spec.DefaultOwnershipType),
+			template.Name); v != nil {
 			violations = append(violations, *v)
 		}
 	}
 	if template.Spec.OwnershipTypeLocked() {
 		if v := pinnedSharingTypeViolation(ViolationTypeOwnershipTypeNotAllowed, "spec.ownershipType",
-			workspace.Spec.OwnershipType, template.Spec.DefaultOwnershipType, template.Name); v != nil {
+			effectiveOwnershipType(workspace.Spec.OwnershipType), effectiveOwnershipType(template.Spec.DefaultOwnershipType),
+			template.Name); v != nil {
 			violations = append(violations, *v)
 		}
 	}
 	return violations
 }
 
+// pinnedSharingTypeViolation compares effective values, so an empty one means what the defaulter makes of it.
 func pinnedSharingTypeViolation(violationType, field, actual, pinned, templateName string) *TemplateViolation {
-	actual, pinned = effectiveSharingType(actual), effectiveSharingType(pinned)
 	if actual == pinned {
 		return nil
 	}
