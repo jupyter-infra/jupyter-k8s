@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -49,6 +50,28 @@ func runningWSPod(ns, wsName string) *corev1.Pod {
 
 func execProbe() *workspacev1alpha1.IntegrationStatusProbe {
 	return &workspacev1alpha1.IntegrationStatusProbe{Exec: &corev1.ExecAction{Command: []string{"ray", "status"}}}
+}
+
+// rolledOutDeployment is the settled Deployment the probe driver requires: observed generation caught
+// up and the single replica updated and ready. Specs about probe verdicts pass this so the rollout gate
+// is open and the verdict under test is the thing being exercised.
+func rolledOutDeployment() *appsv1.Deployment {
+	one := int32(1)
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "ws-deploy", Namespace: testNamespace, Generation: 2},
+		Spec:       appsv1.DeploymentSpec{Replicas: &one},
+		Status: appsv1.DeploymentStatus{
+			ObservedGeneration: 2, Replicas: 1, UpdatedReplicas: 1, ReadyReplicas: 1, AvailableReplicas: 1,
+		},
+	}
+}
+
+// rollingDeployment is the mid-rollout Deployment: the pod template has just changed, so the generation
+// has bumped but the Deployment controller has not observed it and the old replica is still the ready one.
+func rollingDeployment() *appsv1.Deployment {
+	d := rolledOutDeployment()
+	d.Generation = 3
+	return d
 }
 
 func TestIntegrationProber_Verdicts(t *testing.T) {
@@ -267,7 +290,7 @@ func TestProbeIntegrationStatus_Driver(t *testing.T) {
 	sm := &StateMachine{resourceManager: rm, integrationProber: mock}
 
 	ws := newWorkspace()
-	sm.probeIntegrationStatus(context.Background(), ws)
+	sm.probeIntegrationStatus(context.Background(), ws, rolledOutDeployment())
 	got := ws.Status.IntegrationStatuses
 
 	// int-noprobe resolves but declares no probe -> no entry. The other three each produce one entry.
@@ -315,7 +338,7 @@ func TestProbeIntegrationStatus_Driver(t *testing.T) {
 		}
 		ws.Status.ResolvedIntegrations = []workspacev1alpha1.ResolvedIntegration{{Name: intReadyName}}
 
-		sm.probeIntegrationStatus(context.Background(), ws)
+		sm.probeIntegrationStatus(context.Background(), ws, rolledOutDeployment())
 
 		s := integrationStatusByName(ws.Status.IntegrationStatuses, intReadyName)
 		if s == nil || s.State != IntegrationStateDegraded {
@@ -335,7 +358,7 @@ func TestProbeIntegrationStatus_Driver(t *testing.T) {
 		ws := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: wsName, Namespace: ns}}
 		ws.Status.IntegrationStatuses = []workspacev1alpha1.IntegrationStatus{{Name: "stale"}}
 
-		if d := sm.probeIntegrationStatus(context.Background(), ws); d != 0 {
+		if d := sm.probeIntegrationStatus(context.Background(), ws, rolledOutDeployment()); d != 0 {
 			t.Errorf("no integrations: want 0 requeue, got %v", d)
 		}
 		if ws.Status.IntegrationStatuses != nil {
@@ -362,7 +385,7 @@ func TestProbeIntegrationStatus_Driver(t *testing.T) {
 			}},
 		}}
 
-		sm.probeIntegrationStatus(context.Background(), ws)
+		sm.probeIntegrationStatus(context.Background(), ws, rolledOutDeployment())
 
 		s := integrationStatusByName(ws.Status.IntegrationStatuses, intReadyName)
 		cond := findReadyCond(s.Conditions)
@@ -639,28 +662,28 @@ func TestProbeIntegrationStatus_EmitsEdgeTriggeredEvents(t *testing.T) {
 	ws := newWS()
 
 	// Cycle 1: first probe returns ProbeFailed -> exactly one Warning IntegrationDegraded.
-	sm.probeIntegrationStatus(context.Background(), ws)
+	sm.probeIntegrationStatus(context.Background(), ws, rolledOutDeployment())
 	events := drainRecorder(recorder)
 	if len(events) != 1 || !strings.Contains(events[0], IntegrationEventDegraded) || !strings.Contains(events[0], "Warning") {
 		t.Fatalf("cycle 1: want one Warning %s event, got %v", IntegrationEventDegraded, events)
 	}
 
 	// Cycle 2: still ProbeFailed (unchanged verdict) -> NO new event (edge-triggered, not per-cadence).
-	sm.probeIntegrationStatus(context.Background(), ws)
+	sm.probeIntegrationStatus(context.Background(), ws, rolledOutDeployment())
 	if events := drainRecorder(recorder); len(events) != 0 {
 		t.Fatalf("cycle 2: unchanged degraded verdict must emit no event, got %v", events)
 	}
 
 	// Cycle 3: probe now returns Ready -> exactly one Normal IntegrationRecovered.
 	mock.probeByName[intReadyName] = buildIntegrationStatus(intReadyName, true, IntegrationReasonReady, "")
-	sm.probeIntegrationStatus(context.Background(), ws)
+	sm.probeIntegrationStatus(context.Background(), ws, rolledOutDeployment())
 	events = drainRecorder(recorder)
 	if len(events) != 1 || !strings.Contains(events[0], IntegrationEventRecovered) || !strings.Contains(events[0], "Normal") {
 		t.Fatalf("cycle 3: want one Normal %s event, got %v", IntegrationEventRecovered, events)
 	}
 
 	// Cycle 4: steady-state Ready re-probe -> silent.
-	sm.probeIntegrationStatus(context.Background(), ws)
+	sm.probeIntegrationStatus(context.Background(), ws, rolledOutDeployment())
 	if events := drainRecorder(recorder); len(events) != 0 {
 		t.Fatalf("cycle 4: steady-state Ready re-probe must emit no event, got %v", events)
 	}
@@ -681,8 +704,114 @@ func TestProbeIntegrationStatus_HealthyFirstAttachIsSilent(t *testing.T) {
 	}
 	ws.Status.ResolvedIntegrations = []workspacev1alpha1.ResolvedIntegration{{Name: intReadyName}}
 
-	sm.probeIntegrationStatus(context.Background(), ws)
+	sm.probeIntegrationStatus(context.Background(), ws, rolledOutDeployment())
 	if events := drainRecorder(recorder); len(events) != 0 {
 		t.Fatalf("healthy first attach must be silent, got %v", events)
 	}
+}
+
+// TestProbeIntegrationStatus_WaitsForRollout covers the rollout gate. Attaching an integration rewrites
+// the pod template, and in that reconcile the Deployment still reports the outgoing revision as
+// available: probing then execs into the old pod, which has no integration sidecar, and reports a
+// failure the user reads as "the integration is broken" while it is in fact still starting.
+func TestProbeIntegrationStatus_WaitsForRollout(t *testing.T) {
+	ns, wsName := testNamespace, "rollout-ws"
+
+	newWorkspace := func() *workspacev1alpha1.Workspace {
+		ws := &workspacev1alpha1.Workspace{
+			ObjectMeta: metav1.ObjectMeta{Name: wsName, Namespace: ns},
+			Spec: workspacev1alpha1.WorkspaceSpec{
+				IntegrationTemplateRefs: []workspacev1alpha1.IntegrationTemplateRef{ref(intReadyName)},
+			},
+		}
+		ws.Status.ResolvedIntegrations = []workspacev1alpha1.ResolvedIntegration{{Name: intReadyName}}
+		return ws
+	}
+
+	newStateMachine := func(mock *mockIntegrationProber, recorder *record.FakeRecorder) *StateMachine {
+		return &StateMachine{
+			resourceManager:   proberResourceManager(probeTemplate(intReadyName, ns, true)),
+			integrationProber: mock,
+			recorder:          recorder,
+		}
+	}
+
+	t.Run("mid-rollout writes no verdict and probes nothing", func(t *testing.T) {
+		mock := &mockIntegrationProber{
+			pod: runningWSPod(ns, wsName),
+			probeByName: map[string]workspacev1alpha1.IntegrationStatus{
+				intReadyName: buildIntegrationStatus(intReadyName, false, IntegrationReasonProbeFailed, probeFailMsg),
+			},
+		}
+		recorder := record.NewFakeRecorder(10)
+		ws := newWorkspace()
+
+		got := newStateMachine(mock, recorder).probeIntegrationStatus(context.Background(), ws, rollingDeployment())
+
+		if len(ws.Status.IntegrationStatuses) != 0 {
+			t.Errorf("want no status entries during a rollout, got %+v", ws.Status.IntegrationStatuses)
+		}
+		if mock.findCalls != 0 || len(mock.probedNames) != 0 {
+			t.Errorf("want no pod lookup and no probe during a rollout, got findCalls=%d probed=%v",
+				mock.findCalls, mock.probedNames)
+		}
+		// A warning here is the reported bug: the integration has not had a chance to start.
+		select {
+		case ev := <-recorder.Events:
+			t.Errorf("want no event during a rollout, got %q", ev)
+		default:
+		}
+		// Re-probe on the normal cadence; the caller requeues on this rather than relying only on the
+		// Deployment watch.
+		if want := mock.ProbePeriod(); got != want {
+			t.Errorf("want requeue after %v, got %v", want, got)
+		}
+	})
+
+	t.Run("mid-rollout leaves an earlier verdict alone", func(t *testing.T) {
+		mock := &mockIntegrationProber{pod: runningWSPod(ns, wsName)}
+		ws := newWorkspace()
+		ws.Status.IntegrationStatuses = []workspacev1alpha1.IntegrationStatus{
+			buildIntegrationStatus(intReadyName, true, IntegrationReasonReady, ""),
+		}
+
+		newStateMachine(mock, record.NewFakeRecorder(10)).
+			probeIntegrationStatus(context.Background(), ws, rollingDeployment())
+
+		s := integrationStatusByName(ws.Status.IntegrationStatuses, intReadyName)
+		if s == nil || s.State != IntegrationStateReady {
+			t.Fatalf("want the prior Ready verdict preserved, got %+v", ws.Status.IntegrationStatuses)
+		}
+	})
+
+	t.Run("missing deployment is not a settled rollout", func(t *testing.T) {
+		mock := &mockIntegrationProber{pod: runningWSPod(ns, wsName)}
+		ws := newWorkspace()
+
+		newStateMachine(mock, record.NewFakeRecorder(10)).
+			probeIntegrationStatus(context.Background(), ws, nil)
+
+		if len(mock.probedNames) != 0 {
+			t.Errorf("want no probe without a deployment, got %v", mock.probedNames)
+		}
+	})
+
+	t.Run("settled rollout probes and reports the verdict", func(t *testing.T) {
+		mock := &mockIntegrationProber{
+			pod: runningWSPod(ns, wsName),
+			probeByName: map[string]workspacev1alpha1.IntegrationStatus{
+				intReadyName: buildIntegrationStatus(intReadyName, false, IntegrationReasonProbeFailed, probeFailMsg),
+			},
+		}
+		ws := newWorkspace()
+
+		newStateMachine(mock, record.NewFakeRecorder(10)).
+			probeIntegrationStatus(context.Background(), ws, rolledOutDeployment())
+
+		s := integrationStatusByName(ws.Status.IntegrationStatuses, intReadyName)
+		if s == nil || s.State != IntegrationStateDegraded {
+			t.Fatalf("want the Degraded verdict reported once the rollout settles, got %+v",
+				ws.Status.IntegrationStatuses)
+		}
+	})
 }

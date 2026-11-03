@@ -328,7 +328,7 @@ func (sm *StateMachine) reconcileDesiredRunningStatus(
 		// Run report-only integration status probes and stage their verdicts into status.integrationStatuses[]
 		// BEFORE the status write, so they persist in the same Status().Update as the Running conditions.
 		// Non-gating: probe verdicts never change whether the workspace is Available.
-		integrationProbeInterval := sm.probeIntegrationStatus(ctx, workspace)
+		integrationProbeInterval := sm.probeIntegrationStatus(ctx, workspace, deployment)
 		// The start is over: drop the pod events cached for the start step, so the cache holds only
 		// starting workspaces.
 		sm.resourceManager.ForgetStartEvents(workspace)
@@ -556,12 +556,23 @@ func (sm *StateMachine) reconcileFailedStart(
 func (sm *StateMachine) probeIntegrationStatus(
 	ctx context.Context,
 	workspace *workspacev1alpha1.Workspace,
+	deployment *appsv1.Deployment,
 ) time.Duration {
 	if sm.integrationProber == nil || !sm.resourceManager.hasIntegrationTemplateRefs(workspace) {
 		workspace.Status.IntegrationStatuses = nil
 		return 0
 	}
 	logger := logf.FromContext(ctx)
+
+	// Attaching an integration rewrites the pod template, and in that reconcile the Deployment still
+	// reports the outgoing revision as available, so probing now would exec into the old pod -- which does
+	// not have the integration's sidecar and fails the probe. Wait for the rollout, so the first verdict
+	// comes from a pod that actually carries the integration. Requeue rather than relying only on the
+	// Deployment watch, since a probe is already due on this cadence.
+	if !sm.resourceManager.IsDeploymentRolloutComplete(deployment) {
+		logger.V(1).Info("Skipping integration status probes until the Deployment rollout completes")
+		return sm.integrationProber.ProbePeriod()
+	}
 
 	// Index the prior verdicts by name so an unchanged re-probe can preserve its LastTransitionTime
 	// (avoids churning the status subresource on every probe cadence).
