@@ -8,7 +8,7 @@ A template optionally can add labels to the `workspace.metadata.labels`.
 
 The general rule is that a template default applies **only** when the `workspace.spec` omits this particular attribute.
 
-For example, if a `workspace.spec` specifies a `containerSecurityContext`, the template's `defaultContainerSecurityContext` won't be applied at all.
+For example, if a `workspace.spec` specifies a `containerSecurityContext`, the template's `defaultContainerSecurityContext` won't be applied at all. To stop workspaces from overriding a default, a template can pin it; see [Bounds](bounds.md).
 
 | Template field | Workspace field it fills |
 |---------------|------------------------|

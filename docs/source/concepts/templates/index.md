@@ -64,5 +64,6 @@ In this case, any workspace that references this template will inherit the acces
 
 defaults
 bounds
+private-and-shared
 shared-namespace
 ```

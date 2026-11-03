@@ -7,7 +7,7 @@ The mutating webhook applies defaults and adds metadata to workspaces before the
 | Step | What it does |
 |------|--------------|
 | Ownership annotations | Sets `created-by` (on CREATE) and `last-updated-by` from the request user |
-| Template resolution | Resolves the template reference and applies its defaults (resources, storage, env, scheduling, lifecycle, access strategy) |
+| Template resolution | Resolves the template reference, assigning the namespace's default template when there is none, and applies its defaults (resources, storage, env, scheduling, lifecycle, access strategy) |
 | Service account | Applies the default service account from the template if the workspace doesn't specify one |
 | Sharing defaults | Sets `ownershipType` and `accessType` to their default values if unset |
 | Template finalizer | Adds a finalizer to the referenced template (lazy pattern — only when active workspaces use it) |
