@@ -343,17 +343,17 @@ var _ = Describe("WorkspaceTemplate Validator pin warnings", func() {
 		oldTpl.Spec.AllowCustomOwnershipType = nil
 	})
 
-	It("flags that a pin change may break workspaces on their next update", func() {
+	It("warns that constraints changed when a pin changes", func() {
 		warnings, err := validator.ValidateUpdate(ctx, oldTpl, pinnedTemplate(testPinPrivateTemplate, testOwnershipOwnerOnly))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(warnings).To(ContainElement(pinsChangedWarning))
+		Expect(warnings).To(ConsistOf(ContainSubstring("Template constraints changed")))
 	})
 
-	It("does not flag pins when no pin changes", func() {
+	It("does not warn when nothing that constrains workspaces changes", func() {
 		newTpl := oldTpl.DeepCopy()
-		newTpl.Spec.AllowedImages = []string{testValidBaseNotebook}
+		newTpl.Spec.Description = "new description"
 		warnings, err := validator.ValidateUpdate(ctx, oldTpl, newTpl)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(warnings).NotTo(ContainElement(pinsChangedWarning))
+		Expect(warnings).To(BeEmpty())
 	})
 })

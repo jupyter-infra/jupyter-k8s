@@ -205,6 +205,26 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 		return true
 	}
 
+	// Check allowCustomAccessType changes
+	if !equality.Semantic.DeepEqual(oldSpec.AllowCustomAccessType, newSpec.AllowCustomAccessType) {
+		return true
+	}
+
+	// Check allowCustomOwnershipType changes
+	if !equality.Semantic.DeepEqual(oldSpec.AllowCustomOwnershipType, newSpec.AllowCustomOwnershipType) {
+		return true
+	}
+
+	// Check podSecurityContextOverrides changes
+	if !equality.Semantic.DeepEqual(oldSpec.PodSecurityContextOverrides, newSpec.PodSecurityContextOverrides) {
+		return true
+	}
+
+	// Check containerSecurityContextOverrides changes
+	if !equality.Semantic.DeepEqual(oldSpec.ContainerSecurityContextOverrides, newSpec.ContainerSecurityContextOverrides) {
+		return true
+	}
+
 	return false
 }
 
