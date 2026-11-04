@@ -29,8 +29,10 @@ Changes to any of the following fields trigger the warning:
 - `resourceBounds`
 - `primaryStorage` (min/max size)
 - `idleShutdownOverrides` (allow, min/max timeout)
+- `defaultIdleShutdown`, when `idleShutdownOverrides.allow` is false
 - `envRequirements`
 - `sharedMemoryOverrides` (allow)
+- `defaultSharedMemory`, when `sharedMemoryOverrides.allow` is false
 - `volumeOverrides` (allow), and `defaultVolumes` while `volumeOverrides.allow` is false
 - `allowCustomAccessType` and `allowCustomOwnershipType`
 - `podSecurityContextOverrides` and `containerSecurityContextOverrides` (allow)
