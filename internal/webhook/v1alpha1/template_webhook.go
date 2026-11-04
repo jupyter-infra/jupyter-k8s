@@ -195,6 +195,12 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 		return true
 	}
 
+	// Check defaultIdleShutdown changes while idleShutdownOverrides lock workspaces to it
+	if newSpec.IdleShutdownOverrides.Locked() &&
+		!equality.Semantic.DeepEqual(oldSpec.DefaultIdleShutdown, newSpec.DefaultIdleShutdown) {
+		return true
+	}
+
 	// Check EnvRequirements changes
 	if !equality.Semantic.DeepEqual(oldSpec.EnvRequirements, newSpec.EnvRequirements) {
 		return true
@@ -202,6 +208,12 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 
 	// Check sharedMemoryOverrides changes
 	if !equality.Semantic.DeepEqual(oldSpec.SharedMemoryOverrides, newSpec.SharedMemoryOverrides) {
+		return true
+	}
+
+	// Check defaultSharedMemory changes while sharedMemoryOverrides lock workspaces to it
+	if newSpec.SharedMemoryOverrides.Locked() &&
+		!equality.Semantic.DeepEqual(normalizedSharedMemory(oldSpec.DefaultSharedMemory), normalizedSharedMemory(newSpec.DefaultSharedMemory)) {
 		return true
 	}
 

@@ -376,6 +376,12 @@ type IdleShutdownOverridePolicy struct {
 	MaxIdleTimeoutInMinutes *int `json:"maxIdleTimeoutInMinutes,omitempty"`
 }
 
+// Locked reports whether the policy holds workspaces to the template's DefaultIdleShutdown: only when
+// it is present and allow is false.
+func (p *IdleShutdownOverridePolicy) Locked() bool {
+	return p != nil && p.Allow != nil && !*p.Allow
+}
+
 // WorkspaceTemplateStatus defines the observed state of WorkspaceTemplate
 // Follows Kubernetes API conventions for status reporting
 type WorkspaceTemplateStatus struct {
