@@ -43,11 +43,11 @@ func GetOidcGroups(serverConfig *Config, groups []string) []string {
 // preventing any prefix+token combination from constructing a reserved Kubernetes identity.
 // system:authenticated is always permitted.
 func ValidateOIDCIdentities(username string, groups []string) error {
-	if strings.HasPrefix(username, "system:") {
+	if strings.HasPrefix(username, SystemReservedPrefix) {
 		return fmt.Errorf("username %q is not allowed: system: identities are reserved", username)
 	}
 	for _, group := range groups {
-		if group != SystemAuthenticatedGroup && strings.HasPrefix(group, "system:") {
+		if group != SystemAuthenticatedGroup && strings.HasPrefix(group, SystemReservedPrefix) {
 			return fmt.Errorf("group %q is not allowed: system: identities are reserved", group)
 		}
 	}
