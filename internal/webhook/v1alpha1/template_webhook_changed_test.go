@@ -105,6 +105,53 @@ func TestConstraintsChanged(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "default idle shutdown changed while locked",
+			old: workspacev1alpha1.WorkspaceTemplateSpec{
+				IdleShutdownOverrides: &workspacev1alpha1.IdleShutdownOverridePolicy{Allow: boolPtr(false)},
+				DefaultIdleShutdown:   &workspacev1alpha1.IdleShutdownSpec{Enabled: true, IdleTimeoutInMinutes: 30},
+			},
+			new: workspacev1alpha1.WorkspaceTemplateSpec{
+				IdleShutdownOverrides: &workspacev1alpha1.IdleShutdownOverridePolicy{Allow: boolPtr(false)},
+				DefaultIdleShutdown:   &workspacev1alpha1.IdleShutdownSpec{Enabled: true, IdleTimeoutInMinutes: 60},
+			},
+			want: true,
+		},
+		{
+			name: "default idle shutdown added while locked",
+			old: workspacev1alpha1.WorkspaceTemplateSpec{
+				IdleShutdownOverrides: &workspacev1alpha1.IdleShutdownOverridePolicy{Allow: boolPtr(false)},
+			},
+			new: workspacev1alpha1.WorkspaceTemplateSpec{
+				IdleShutdownOverrides: &workspacev1alpha1.IdleShutdownOverridePolicy{Allow: boolPtr(false)},
+				DefaultIdleShutdown:   &workspacev1alpha1.IdleShutdownSpec{Enabled: true, IdleTimeoutInMinutes: 30},
+			},
+			want: true,
+		},
+		{
+			name: "default idle shutdown unchanged while locked",
+			old: workspacev1alpha1.WorkspaceTemplateSpec{
+				IdleShutdownOverrides: &workspacev1alpha1.IdleShutdownOverridePolicy{Allow: boolPtr(false)},
+				DefaultIdleShutdown:   &workspacev1alpha1.IdleShutdownSpec{Enabled: true, IdleTimeoutInMinutes: 30},
+			},
+			new: workspacev1alpha1.WorkspaceTemplateSpec{
+				IdleShutdownOverrides: &workspacev1alpha1.IdleShutdownOverridePolicy{Allow: boolPtr(false)},
+				DefaultIdleShutdown:   &workspacev1alpha1.IdleShutdownSpec{Enabled: true, IdleTimeoutInMinutes: 30},
+			},
+			want: false,
+		},
+		{
+			name: "default idle shutdown changed while allowed",
+			old: workspacev1alpha1.WorkspaceTemplateSpec{
+				IdleShutdownOverrides: &workspacev1alpha1.IdleShutdownOverridePolicy{Allow: boolPtr(true)},
+				DefaultIdleShutdown:   &workspacev1alpha1.IdleShutdownSpec{Enabled: true, IdleTimeoutInMinutes: 30},
+			},
+			new: workspacev1alpha1.WorkspaceTemplateSpec{
+				IdleShutdownOverrides: &workspacev1alpha1.IdleShutdownOverridePolicy{Allow: boolPtr(true)},
+				DefaultIdleShutdown:   &workspacev1alpha1.IdleShutdownSpec{Enabled: true, IdleTimeoutInMinutes: 60},
+			},
+			want: false,
+		},
+		{
 			name: "shared memory overrides changed",
 			old:  workspacev1alpha1.WorkspaceTemplateSpec{},
 			new:  workspacev1alpha1.WorkspaceTemplateSpec{SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{Allow: boolPtr(false)}},
@@ -120,6 +167,53 @@ func TestConstraintsChanged(t *testing.T) {
 			name: "default shared memory changed",
 			old:  workspacev1alpha1.WorkspaceTemplateSpec{},
 			new:  workspacev1alpha1.WorkspaceTemplateSpec{DefaultSharedMemory: &workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)}},
+			want: false,
+		},
+		{
+			name: "default shared memory changed while locked",
+			old: workspacev1alpha1.WorkspaceTemplateSpec{
+				SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{Allow: boolPtr(false)},
+				DefaultSharedMemory:   &workspacev1alpha1.SharedMemorySpec{},
+			},
+			new: workspacev1alpha1.WorkspaceTemplateSpec{
+				SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{Allow: boolPtr(false)},
+				DefaultSharedMemory:   &workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)},
+			},
+			want: true,
+		},
+		{
+			name: "default shared memory added while locked",
+			old: workspacev1alpha1.WorkspaceTemplateSpec{
+				SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{Allow: boolPtr(false)},
+			},
+			new: workspacev1alpha1.WorkspaceTemplateSpec{
+				SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{Allow: boolPtr(false)},
+				DefaultSharedMemory:   &workspacev1alpha1.SharedMemorySpec{},
+			},
+			want: true,
+		},
+		{
+			name: "default shared memory spelled out while locked",
+			old: workspacev1alpha1.WorkspaceTemplateSpec{
+				SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{Allow: boolPtr(false)},
+				DefaultSharedMemory:   &workspacev1alpha1.SharedMemorySpec{},
+			},
+			new: workspacev1alpha1.WorkspaceTemplateSpec{
+				SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{Allow: boolPtr(false)},
+				DefaultSharedMemory:   &workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(true)},
+			},
+			want: false,
+		},
+		{
+			name: "default shared memory changed while allowed",
+			old: workspacev1alpha1.WorkspaceTemplateSpec{
+				SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{Allow: boolPtr(true)},
+				DefaultSharedMemory:   &workspacev1alpha1.SharedMemorySpec{},
+			},
+			new: workspacev1alpha1.WorkspaceTemplateSpec{
+				SharedMemoryOverrides: &workspacev1alpha1.SharedMemoryOverridePolicy{Allow: boolPtr(true)},
+				DefaultSharedMemory:   &workspacev1alpha1.SharedMemorySpec{Enabled: boolPtr(false)},
+			},
 			want: false,
 		},
 		{
