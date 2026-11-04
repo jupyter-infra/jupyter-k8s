@@ -26,20 +26,23 @@ type TemplateViolation struct {
 
 // Common violation types
 const (
-	ViolationTypeImageNotAllowed                = "ImageNotAllowed"
-	ViolationTypeResourceExceeded               = "ResourceExceeded"
-	ViolationTypeStorageExceeded                = "StorageExceeded"
-	ViolationTypeSecondaryStorageNotAllowed     = "SecondaryStorageNotAllowed"
-	ViolationTypeVolumeOwnedByAnotherWorkspace  = "VolumeOwnedByAnotherWorkspace"
-	ViolationTypeInvalidTemplate                = "InvalidTemplate"
-	ViolationTypeIdleShutdownOverrideNotAllowed = "IdleShutdownOverrideNotAllowed"
-	ViolationTypeIdleShutdownTimeoutOutOfBounds = "IdleShutdownTimeoutOutOfBounds"
-	ViolationTypeLabelRequired                  = "LabelRequired"
-	ViolationTypeLabelRegexMismatch             = "LabelRegexMismatch"
-	ViolationTypeEnvRequired                    = "EnvRequired"
-	ViolationTypeEnvRegexMismatch               = "EnvRegexMismatch"
-	ViolationTypeInitContainersNotAllowed       = "InitContainersNotAllowed"
-	ViolationTypeSharedMemoryOverrideNotAllowed = "SharedMemoryOverrideNotAllowed"
+	ViolationTypeImageNotAllowed                   = "ImageNotAllowed"
+	ViolationTypeResourceExceeded                  = "ResourceExceeded"
+	ViolationTypeStorageExceeded                   = "StorageExceeded"
+	ViolationTypeSecondaryStorageNotAllowed        = "SecondaryStorageNotAllowed"
+	ViolationTypeVolumeOwnedByAnotherWorkspace     = "VolumeOwnedByAnotherWorkspace"
+	ViolationTypeInvalidTemplate                   = "InvalidTemplate"
+	ViolationTypeIdleShutdownOverrideNotAllowed    = "IdleShutdownOverrideNotAllowed"
+	ViolationTypeIdleShutdownTimeoutOutOfBounds    = "IdleShutdownTimeoutOutOfBounds"
+	ViolationTypeLabelRequired                     = "LabelRequired"
+	ViolationTypeLabelRegexMismatch                = "LabelRegexMismatch"
+	ViolationTypeEnvRequired                       = "EnvRequired"
+	ViolationTypeEnvRegexMismatch                  = "EnvRegexMismatch"
+	ViolationTypeInitContainersNotAllowed          = "InitContainersNotAllowed"
+	ViolationTypeSharedMemoryOverrideNotAllowed    = "SharedMemoryOverrideNotAllowed"
+	ViolationTypeAccessTypeNotAllowed              = "AccessTypeNotAllowed"
+	ViolationTypeOwnershipTypeNotAllowed           = "OwnershipTypeNotAllowed"
+	ViolationTypeSecurityContextOverrideNotAllowed = "SecurityContextOverrideNotAllowed"
 )
 
 // labelValueTrue is the string value used for boolean-style Kubernetes labels.

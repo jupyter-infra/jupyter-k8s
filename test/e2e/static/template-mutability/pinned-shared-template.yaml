@@ -1,0 +1,21 @@
+# Shared counterpart of template-bounds/pinned-private-template: pins both types to Public
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: pinned-shared-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Pinned Shared Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultAccessType: Public
+  defaultOwnershipType: Public
+  allowCustomAccessType: false
+  allowCustomOwnershipType: false
+  resourceBounds:
+    resources:
+      cpu:
+        min: 100m
+        max: "2"
+      memory:
+        min: 128Mi
+        max: 4Gi

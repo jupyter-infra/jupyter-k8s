@@ -1,0 +1,11 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: pinned-privileged-workspace
+spec:
+  displayName: "Privileged Workspace On A Locked Template"
+  containerSecurityContext:
+    privileged: true
+  templateRef:
+    name: pinned-private-template
+    namespace: jupyter-k8s-shared

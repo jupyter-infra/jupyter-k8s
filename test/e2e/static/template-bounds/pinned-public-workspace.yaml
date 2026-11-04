@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: pinned-public-workspace
+spec:
+  displayName: "Public Workspace On A Private Template"
+  accessType: Public
+  templateRef:
+    name: pinned-private-template
+    namespace: jupyter-k8s-shared

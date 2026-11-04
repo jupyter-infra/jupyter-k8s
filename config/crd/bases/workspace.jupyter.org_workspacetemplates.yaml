@@ -52,6 +52,12 @@ spec:
           spec:
             description: WorkspaceTemplateSpec defines the desired state of WorkspaceTemplate
             properties:
+              allowCustomAccessType:
+                default: true
+                description: |-
+                  AllowCustomAccessType controls whether workspaces using this template may set an accessType other
+                  than DefaultAccessType. When false, a workspace's accessType must equal DefaultAccessType.
+                type: boolean
               allowCustomImages:
                 default: false
                 description: |-
@@ -63,6 +69,13 @@ spec:
                 description: |-
                   AllowCustomInitContainers controls whether workspaces using this template
                   can specify custom init containers beyond the template defaults
+                type: boolean
+              allowCustomOwnershipType:
+                default: true
+                description: |-
+                  AllowCustomOwnershipType controls whether workspaces using this template may set an ownershipType
+                  other than DefaultOwnershipType. When false, a workspace's ownershipType must equal
+                  DefaultOwnershipType.
                 type: boolean
               allowSecondaryStorages:
                 default: true
@@ -267,6 +280,19 @@ spec:
                 x-kubernetes-validations:
                 - message: baseLabels cannot use reserved prefix workspace.jupyter.org/
                   rule: self.all(l, !l.key.startsWith('workspace.jupyter.org/'))
+              containerSecurityContextOverrides:
+                description: |-
+                  ContainerSecurityContextOverrides controls whether a workspace may set its own
+                  containerSecurityContext. When locked, workspaces get DefaultContainerSecurityContext, or no
+                  container security context if unset.
+                properties:
+                  allow:
+                    default: true
+                    description: |-
+                      Allow controls whether workspaces may set their own security context. When false, a workspace's
+                      security context must equal the template's default, which the defaulter copies onto it.
+                    type: boolean
+                type: object
               defaultAccessStrategy:
                 description: DefaultAccessStrategy specifies the default access strategy
                   for workspaces using this template
@@ -3921,6 +3947,18 @@ spec:
                   type: object
                 maxItems: 50
                 type: array
+              podSecurityContextOverrides:
+                description: |-
+                  PodSecurityContextOverrides controls whether a workspace may set its own podSecurityContext.
+                  When locked, workspaces get DefaultPodSecurityContext, or no pod security context if unset.
+                properties:
+                  allow:
+                    default: true
+                    description: |-
+                      Allow controls whether workspaces may set their own security context. When false, a workspace's
+                      security context must equal the template's default, which the defaulter copies onto it.
+                    type: boolean
+                type: object
               primaryStorage:
                 description: PrimaryStorage defines storage configuration
                 properties:

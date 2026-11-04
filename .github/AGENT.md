@@ -9,7 +9,7 @@
 | `coverage.yml` | `workflow_run` (after Tests) | Posts sticky coverage comment on the PR; runs in trusted base context with `pull-requests: write`, so it works for fork PRs without granting write to the job that runs PR code |
 | `verify-generated.yml` | push/PR | Regenerate manifests, chart, install.yaml, reference docs; fail on drift (`make verify-generated`) |
 | `test-chart.yml` | push/PR | Helm install on Kind (operator-only chart) |
-| `test-e2e.yml` | push/PR/dispatch | Full E2E on Kind; dispatch takes an optional `focus` (Ginkgo regex), e.g. `gh workflow run test-e2e.yml --ref <branch> -f focus="Authmiddleware TLS"` |
+| `test-e2e.yml` | push/PR/dispatch | Full E2E on Kind; dispatch takes an optional `focus` (Ginkgo regex) and `ref` (the code to test, e.g. a fork PR), e.g. `gh workflow run test-e2e.yml --ref main -f ref=refs/pull/<n>/merge -f focus="Authmiddleware TLS"` |
 | `release.yml` | `workflow_dispatch` | Orchestrator: stage → e2e → promote → release |
 | `release-stage-images.yml` | `workflow_call` / `workflow_dispatch` | Build multi-arch images, push to staging GHCR |
 | `release-stage-chart.yml` | `workflow_call` / `workflow_dispatch` | Generate, package, push chart to staging GHCR |
@@ -42,7 +42,7 @@ jobs:
       packages: write
 ```
 
-- `workflow_dispatch` only fires on the default branch — use push triggers for feature branches.
+- `workflow_dispatch` only lists workflows that exist on the default branch, and runs the workflow file from the dispatched ref — use push triggers to iterate on a new workflow from a feature branch.
 - Each release sub-workflow supports both `workflow_call` and `workflow_dispatch`, so after
   merging you can trigger each step individually from the Actions UI.
 - Use pre-release versions (e.g. `v0.1.0-rc.1`) to avoid colliding with real releases.

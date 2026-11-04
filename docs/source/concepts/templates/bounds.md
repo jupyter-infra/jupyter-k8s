@@ -41,6 +41,31 @@ If a workspace requests resources outside these ranges, the **[workspace validat
 | `allowCustomImages: true` | Any image is accepted (overrides the list) |
 | Neither set | Only `defaultImage` is allowed |
 
+## Security restrictions
+
+| Field | Effect when `false` |
+|-------|--------|
+| `allowCustomAccessType` | `spec.accessType` must equal `defaultAccessType` |
+| `allowCustomOwnershipType` | `spec.ownershipType` must equal `defaultOwnershipType` |
+| `podSecurityContextOverrides.allow` | `spec.podSecurityContext` must equal `defaultPodSecurityContext`, or be unset if the template has none |
+| `containerSecurityContextOverrides.allow` | `spec.containerSecurityContext` must equal `defaultContainerSecurityContext`, or be unset if the template has none |
+
+```{note}
+`defaultAccessType` and `defaultOwnershipType` both default to `Public`. To keep workspaces private, set both defaults to `OwnerOnly` and pin them.
+```
+
+```yaml
+spec:
+  defaultAccessType: OwnerOnly
+  defaultOwnershipType: OwnerOnly
+  allowCustomAccessType: false
+  allowCustomOwnershipType: false
+```
+
+```{note}
+The security context pins apply to the main container only. Init containers carry their own `securityContext`, so templates relying on these pins should keep `allowCustomInitContainers: false`.
+```
+
 ## Storage bounds
 
 ```yaml

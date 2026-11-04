@@ -10,6 +10,10 @@ on:
         description: Ginkgo focus regex, e.g. "Authmiddleware TLS" (empty runs the full suite)
         required: false
         default: ""
+      ref:
+        description: Git ref to test, e.g. refs/pull/508/merge for a fork PR (empty tests the dispatched ref)
+        required: false
+        default: ""
 
 jobs:
   test-e2e:
@@ -21,6 +25,8 @@ jobs:
     steps:
       - name: Clone the code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Setup Go
         uses: actions/setup-go@v5

@@ -115,6 +115,13 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultOwnershipType string `json:"defaultOwnershipType,omitempty"`
 
+	// AllowCustomOwnershipType controls whether workspaces using this template may set an ownershipType
+	// other than DefaultOwnershipType. When false, a workspace's ownershipType must equal
+	// DefaultOwnershipType.
+	// +kubebuilder:default=true
+	// +optional
+	AllowCustomOwnershipType *bool `json:"allowCustomOwnershipType,omitempty"`
+
 	// BaseLabels specifies labels to add to workspaces using this template
 	// Labels are added during defaulting if not already present on the workspace
 	// +kubebuilder:validation:MaxItems=50
@@ -135,12 +142,19 @@ type WorkspaceTemplateSpec struct {
 	// IdleShutdownOverrides controls override behavior and bounds
 	// +optional
 	IdleShutdownOverrides *IdleShutdownOverridePolicy `json:"idleShutdownOverrides,omitempty"`
+
 	// DefaultAccessType specifies the default accessType for workspaces using this template
 	// AccessType controls which users may create connections to the workspace.
 	// +kubebuilder:validation:Enum=Public;OwnerOnly
 	// +kubebuilder:default="Public"
 	// +optional
 	DefaultAccessType string `json:"defaultAccessType,omitempty"`
+
+	// AllowCustomAccessType controls whether workspaces using this template may set an accessType other
+	// than DefaultAccessType. When false, a workspace's accessType must equal DefaultAccessType.
+	// +kubebuilder:default=true
+	// +optional
+	AllowCustomAccessType *bool `json:"allowCustomAccessType,omitempty"`
 
 	// DefaultAccessStrategy specifies the default access strategy for workspaces using this template
 	// +optional
@@ -163,6 +177,17 @@ type WorkspaceTemplateSpec struct {
 	// DefaultContainerSecurityContext specifies default container-level security context for the main workspace container
 	// +optional
 	DefaultContainerSecurityContext *corev1.SecurityContext `json:"defaultContainerSecurityContext,omitempty"`
+
+	// PodSecurityContextOverrides controls whether a workspace may set its own podSecurityContext.
+	// When locked, workspaces get DefaultPodSecurityContext, or no pod security context if unset.
+	// +optional
+	PodSecurityContextOverrides *SecurityContextOverridePolicy `json:"podSecurityContextOverrides,omitempty"`
+
+	// ContainerSecurityContextOverrides controls whether a workspace may set its own
+	// containerSecurityContext. When locked, workspaces get DefaultContainerSecurityContext, or no
+	// container security context if unset.
+	// +optional
+	ContainerSecurityContextOverrides *SecurityContextOverridePolicy `json:"containerSecurityContextOverrides,omitempty"`
 
 	// DefaultInitContainers specifies default init containers for workspaces using this template
 	// Applied during defaulting if the workspace does not specify any init containers
@@ -306,6 +331,33 @@ type SharedMemoryOverridePolicy struct {
 // it is present and allow is false.
 func (p *SharedMemoryOverridePolicy) Locked() bool {
 	return p != nil && p.Allow != nil && !*p.Allow
+}
+
+// SecurityContextOverridePolicy controls whether a workspace may deviate from the template's default
+// pod or container security context.
+type SecurityContextOverridePolicy struct {
+	// Allow controls whether workspaces may set their own security context. When false, a workspace's
+	// security context must equal the template's default, which the defaulter copies onto it.
+	// +kubebuilder:default=true
+	// +optional
+	Allow *bool `json:"allow,omitempty"`
+}
+
+// Locked reports whether the policy holds workspaces to the template's default security context: only
+// when it is present and allow is false.
+func (p *SecurityContextOverridePolicy) Locked() bool {
+	return p != nil && p.Allow != nil && !*p.Allow
+}
+
+// AccessTypeLocked reports whether the template pins a workspace's accessType to DefaultAccessType.
+func (s *WorkspaceTemplateSpec) AccessTypeLocked() bool {
+	return s.AllowCustomAccessType != nil && !*s.AllowCustomAccessType
+}
+
+// OwnershipTypeLocked reports whether the template pins a workspace's ownershipType to
+// DefaultOwnershipType.
+func (s *WorkspaceTemplateSpec) OwnershipTypeLocked() bool {
+	return s.AllowCustomOwnershipType != nil && !*s.AllowCustomOwnershipType
 }
 
 // IdleShutdownOverridePolicy defines idle shutdown override constraints

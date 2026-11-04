@@ -30,6 +30,8 @@ Changes to any of the following fields trigger the warning:
 - `idleShutdownOverrides` (allow, min/max timeout)
 - `envRequirements`
 - `sharedMemoryOverrides` (allow)
+- `allowCustomAccessType` and `allowCustomOwnershipType`
+- `podSecurityContextOverrides` and `containerSecurityContextOverrides` (allow)
 
 ## Deletion
 

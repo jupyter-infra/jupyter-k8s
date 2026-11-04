@@ -103,6 +103,48 @@ func TestConstraintsChanged(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "access type pinned",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{DefaultAccessType: testOwnershipOwnerOnly},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{DefaultAccessType: testOwnershipOwnerOnly, AllowCustomAccessType: boolPtr(false)},
+			want: true,
+		},
+		{
+			name: "access type pin unchanged",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{AllowCustomAccessType: boolPtr(false)},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{AllowCustomAccessType: boolPtr(false)},
+			want: false,
+		},
+		{
+			name: "ownership type unpinned",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{AllowCustomOwnershipType: boolPtr(false)},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{AllowCustomOwnershipType: boolPtr(true)},
+			want: true,
+		},
+		{
+			name: "default ownership type changed",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{DefaultOwnershipType: testOwnershipOwnerOnly},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{DefaultOwnershipType: testOwnershipPublic},
+			want: false,
+		},
+		{
+			name: "pod security context locked",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{},
+			new: workspacev1alpha1.WorkspaceTemplateSpec{PodSecurityContextOverrides: &workspacev1alpha1.SecurityContextOverridePolicy{
+				Allow: boolPtr(false)}},
+			want: true,
+		},
+		{
+			name: "default container security context changed",
+			old: workspacev1alpha1.WorkspaceTemplateSpec{
+				ContainerSecurityContextOverrides: &workspacev1alpha1.SecurityContextOverridePolicy{Allow: boolPtr(false)},
+			},
+			new: workspacev1alpha1.WorkspaceTemplateSpec{
+				ContainerSecurityContextOverrides: &workspacev1alpha1.SecurityContextOverridePolicy{Allow: boolPtr(false)},
+				DefaultContainerSecurityContext:   &corev1.SecurityContext{Privileged: boolPtr(false)},
+			},
+			want: false,
+		},
+		{
 			name: "env requirements changed",
 			old:  workspacev1alpha1.WorkspaceTemplateSpec{EnvRequirements: []workspacev1alpha1.EnvRequirement{{Name: "FOO"}}},
 			new:  workspacev1alpha1.WorkspaceTemplateSpec{EnvRequirements: []workspacev1alpha1.EnvRequirement{{Name: "BAR"}}},
