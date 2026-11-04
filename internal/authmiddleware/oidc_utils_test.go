@@ -10,6 +10,8 @@ import (
 	"testing"
 )
 
+const sysPrefix = "sys"
+
 func TestGetOidcUsername(t *testing.T) {
 	testCases := []struct {
 		name              string

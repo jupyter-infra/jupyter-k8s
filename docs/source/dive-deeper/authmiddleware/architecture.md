@@ -52,7 +52,7 @@ An **Auth middleware** container reads configuration from environment variables.
 | `OIDC_ISSUER_URL` | — | OIDC provider discovery URL |
 | `OIDC_CLIENT_ID` | — | OIDC client ID for token validation |
 | `OIDC_USERNAME_PREFIX` | `github:` | Prefix prepended to usernames from the OIDC token; set to `""` to disable. Must not start with `system:` (startup error). Tokens whose names resolve to `system:` identities are rejected. |
-| `OIDC_GROUPS_PREFIX` | `github:` | Prefix prepended to groups from the OIDC token; set to `""` to disable. Must not start with `system:` (startup error). Tokens whose names resolve to `system:` identities are rejected. |
+| `OIDC_GROUPS_PREFIX` | `github:` | Prefix prepended to groups from the OIDC token; set to `""` to disable. Must not start with `system:` (startup error). Tokens whose groups resolve to `system:` identities are rejected, except `system:authenticated`. |
 
 ### Routing
 

@@ -12,8 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const sysPrefix = "sys"
-
 // notBoolValue is an invalid boolean literal reused across the malformed-env cases.
 const notBoolValue = "notbool"
 
