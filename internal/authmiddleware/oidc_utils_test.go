@@ -10,6 +10,8 @@ import (
 	"testing"
 )
 
+const sysPrefix = "sys"
+
 func TestGetOidcUsername(t *testing.T) {
 	testCases := []struct {
 		name              string
@@ -158,7 +160,7 @@ func TestValidateOIDCIdentities(t *testing.T) {
 		{
 			name:      "prefix+token combination that produces system:masters is rejected",
 			username:  testJohndoe,
-			groups:    GetOidcGroups(&Config{OidcGroupsPrefix: "sys"}, []string{"tem:masters"}),
+			groups:    GetOidcGroups(&Config{OidcGroupsPrefix: sysPrefix}, []string{"tem:masters"}),
 			wantError: true,
 		},
 		{

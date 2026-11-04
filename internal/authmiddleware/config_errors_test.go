@@ -69,6 +69,35 @@ func TestNewConfig_OIDCInitTimeoutMustBePositive(t *testing.T) {
 	assert.Contains(t, err.Error(), "must be a positive integer")
 }
 
+func TestNewConfig_OIDCPrefixSystemReservedRule(t *testing.T) {
+	tests := []struct {
+		name    string
+		env     string
+		value   string
+		wantErr bool
+	}{
+		{name: "username prefix system is refused", env: EnvOidcUsernamePrefix, value: "system:", wantErr: true},
+		{name: "groups prefix system is refused", env: EnvOidcGroupsPrefix, value: "system:", wantErr: true},
+		{name: "username prefix overlapping system is accepted", env: EnvOidcUsernamePrefix, value: sysPrefix, wantErr: false},
+		{name: "groups prefix overlapping system is accepted", env: EnvOidcGroupsPrefix, value: sysPrefix, wantErr: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(tt.env, tt.value)
+
+			_, err := NewConfig()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.env)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestNewConfig_RefreshWindowExceedsExpiration(t *testing.T) {
 	// Refresh window larger than expiration is rejected.
 	t.Setenv(EnvJwtExpiration, "10m")
