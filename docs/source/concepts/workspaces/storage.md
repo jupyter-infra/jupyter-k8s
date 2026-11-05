@@ -54,9 +54,55 @@ spec:
       mountPath: /data
 ```
 
-The volume name `workspace-storage` is reserved for the primary volume.
+The volume name `workspace-storage` is reserved for the primary volume. No two volumes may share a mount path: the admission webhook rejects a volume at the path of the primary storage or of another volume, and names both.
 
-Templates can disallow secondary volumes with `allowSecondaryStorages: false`, or provide default volumes via `defaultVolumes`.
+### Subdirectories and read-only mounts
+
+A volume can mount a subdirectory of its claim with `subPath`, and mount the claim read-only with `readOnly`:
+
+```yaml
+spec:
+  volumes:
+    - name: scratch
+      persistentVolumeClaimName: scratch
+      mountPath: /home/jovyan/scratch
+      subPath: namespaces/ml
+    - name: datasets
+      persistentVolumeClaimName: datasets
+      mountPath: /home/jovyan/datasets
+      readOnly: true
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `subPath` | Claim root | Directory inside the claim to mount; only that directory is visible in the workspace |
+| `readOnly` | `false` | Mounts the volume read-only; writes fail with `EROFS` |
+
+`subPath` must be relative, with no empty or `..` segments, and applies to claims only, not to `emptyDir` volumes. The directory must already exist on the volume, owned by the user the workspace runs as. If it is missing, the kubelet creates it as root, which fails or yields a directory the workspace cannot write to on file systems that squash root, such as NFS or Lustre. Create the directories beforehand, for example with a Job that mounts the claim's root when you onboard a team or namespace. `readOnly` also sets the pod volume's `persistentVolumeClaim.readOnly`, so no other container of the pod can mount the claim read-write.
+
+### Template default volumes
+
+Templates can disallow secondary volumes with `allowSecondaryStorages: false`, or provide default volumes via `defaultVolumes`. The admission webhook copies `defaultVolumes` onto a workspace that declares no volumes of its own, `subPath` and `readOnly` included; `allowSecondaryStorages: false` only counts the volumes a workspace adds beyond them.
+
+A template locks its default volumes with `volumeOverrides`, which deployers use to offer shared storage that users cannot remove, alter, or bypass:
+
+```yaml
+spec:
+  defaultVolumes:
+    - name: team
+      persistentVolumeClaimName: team
+      mountPath: /home/jovyan/shared
+      subPath: namespaces/ml
+  volumeOverrides:
+    allow: false
+```
+
+With `allow: false`:
+
+- every workspace of the template must keep each default volume unchanged (name, mount path, claim, `subPath`, `readOnly`). A workspace that declares no volumes gets them from the webhook; one that declares its own volumes must list the default volumes alongside them, and the webhook rejects it otherwise, naming the missing or changed volume.
+- `allowSecondaryStorages` still governs the volumes a workspace adds. Set it to `false` to hold workspaces to the default volumes alone.
+
+The webhook enforces these rules lazily, on workspace create and update. A template edit to its default volumes does not change existing workspaces: their next update other than a stop, starting the workspace included, is rejected until it lists the template's current volumes. Changing `templateRef` evaluates the rules against the new template, so a workspace leaving a locked template drops that template's volumes in the same update.
 
 ## Shared memory
 
