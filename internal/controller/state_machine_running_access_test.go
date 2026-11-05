@@ -84,10 +84,10 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 		return svc
 	}
 
-	buildStateMachine := func() *StateMachine {
-		statusManager := NewStatusManager(k8sClient)
+	buildStateMachineWith := func(c client.Client) *StateMachine {
+		statusManager := NewStatusManager(c)
 		rm := NewResourceManager(
-			k8sClient,
+			c,
 			scheme.Scheme,
 			NewDeploymentBuilder(scheme.Scheme, WorkspaceControllerOptions{}),
 			NewServiceBuilder(scheme.Scheme),
@@ -102,6 +102,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			recorder:            record.NewFakeRecorder(10),
 		}
 	}
+	buildStateMachine := func() *StateMachine { return buildStateMachineWith(k8sClient) }
 
 	getCondition := func(ws *workspacev1alpha1.Workspace, condType string) *metav1.Condition {
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(ws), ws)).To(Succeed())
@@ -647,19 +648,45 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			Expect(connectionTypesOf(workspace)).To(Equal([]string{connTypeWebUI, connTypeSSHWebSocket}))
 		})
 
-		It("does not write the status again while the connection types are unchanged", func() {
+		It("does not call Status().Update again while the connection types are unchanged", func() {
 			workspace := newRunningWorkspace("sm-conntypes", true)
 			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
-			sm := buildStateMachine()
+			counting := &countingStatusClient{
+				Client: k8sClient,
+				status: &countingStatusWriter{SubResourceWriter: k8sClient.Status()},
+			}
+			sm := buildStateMachineWith(counting)
 			bringToRunning(sm, workspace)
 			Expect(connectionTypesOf(workspace)).To(Equal([]string{connTypeWebUI}))
-			resourceVersionBefore := workspace.ResourceVersion
+			updatesBefore := counting.status.updates
 
 			_, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
-			Expect(workspace.ResourceVersion).To(Equal(resourceVersionBefore))
+			Expect(counting.status.updates).To(Equal(updatesBefore))
+		})
+
+		It("writes connectionTypes while the access startup probe has not passed", func() {
+			accessStrategy.Spec.AccessStartupProbe = &workspacev1alpha1.AccessStartupProbe{
+				HTTPGet:          &workspacev1alpha1.AccessHTTPGetProbe{URLTemplate: exampleURLTemplate},
+				PeriodSeconds:    1,
+				FailureThreshold: 3,
+			}
+			mockProber.ready = false
+			workspace := newRunningWorkspace("sm-conntypes", true)
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+			sm := buildStateMachine()
+			_, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			Expect(err).NotTo(HaveOccurred())
+			markOperatorDeploymentReady(workspace)
+
+			_, err = sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			Expect(err).NotTo(HaveOccurred())
+
+			available := getCondition(workspace, ConditionTypeAvailable)
+			Expect(available.Status).To(Equal(metav1.ConditionFalse))
+			Expect(available.Reason).To(Equal(ReasonAccessNotReady))
+			Expect(workspace.Status.ConnectionTypes).To(Equal([]string{connTypeWebUI}))
 		})
 
 		It("clears connectionTypes when the access strategy is removed", func() {

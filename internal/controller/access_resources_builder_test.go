@@ -418,6 +418,15 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			}))
 		})
 
+		It("Should not enumerate the open set the default handler serves", func() {
+			strategy := testAccessStrategy.DeepCopy()
+			strategy.Spec.WebSocketURLTemplate = webSocketURLTemplate
+			strategy.Spec.CreateConnectionHandler = "k8s-native"
+			strategy.Spec.CreateConnectionHandlerMap = nil
+
+			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeSSHWebSocket}))
+		})
+
 		It("Should list a handler map key the operator does not know as is", func() {
 			strategy := testAccessStrategy.DeepCopy()
 			strategy.Spec.CreateConnectionHandlerMap = map[string]string{"banana": awsCreateSession}
