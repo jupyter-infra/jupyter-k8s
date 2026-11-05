@@ -1,0 +1,8 @@
+{
+  "spec": {
+    "webSocketURLTemplate": "wss://example.com/workspaces/{{ .Workspace.Namespace }}/{{ .Workspace.Name }}/ssh-ws",
+    "createConnectionHandlerMap": {
+      "vscode-remote": "k8s-native"
+    }
+  }
+}
