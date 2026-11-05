@@ -14823,6 +14823,17 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              connectionTypes:
+                description: |-
+                  ConnectionTypes lists the connection types the bound access strategy provides, as the Extension
+                  API accepts them in a WorkspaceConnection: "web-ui" when the strategy sets bearerAuthURLTemplate,
+                  "ssh-over-websocket" when it sets webSocketURLTemplate, then the keys of createConnectionHandlerMap
+                  in lexical order. Derived from the strategy each time the running workspace's access resources are
+                  reconciled; absent while the workspace is stopped or has no access strategy. Readiness is reported
+                  by the Available condition, not by this field.
+                items:
+                  type: string
+                type: array
               deploymentName:
                 description: DeploymentName is the name of the deployment managing
                   the Workspace pods

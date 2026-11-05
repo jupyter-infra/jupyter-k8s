@@ -376,6 +376,15 @@ type WorkspaceStatus struct {
 	// +optional
 	AccessURL string `json:"accessURL,omitempty"`
 
+	// ConnectionTypes lists the connection types the bound access strategy provides, as the Extension
+	// API accepts them in a WorkspaceConnection: "web-ui" when the strategy sets bearerAuthURLTemplate,
+	// "ssh-over-websocket" when it sets webSocketURLTemplate, then the keys of createConnectionHandlerMap
+	// in lexical order. Derived from the strategy each time the running workspace's access resources are
+	// reconciled; absent while the workspace is stopped or has no access strategy. Readiness is reported
+	// by the Available condition, not by this field.
+	// +optional
+	ConnectionTypes []string `json:"connectionTypes,omitempty"`
+
 	// ApplicationBasePath is the resolved routing prefix for the workspace application.
 	// Set during access-resources reconciliation; used by idle detection to construct
 	// the full endpoint path.
