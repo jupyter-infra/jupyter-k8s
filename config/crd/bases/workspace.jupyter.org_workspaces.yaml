@@ -3891,6 +3891,21 @@ spec:
                         PVC to mount
                       minLength: 1
                       type: string
+                    readOnly:
+                      description: |-
+                        ReadOnly mounts the volume read-only. For a claim, the operator also sets readOnly on the pod
+                        volume's persistentVolumeClaim, so no other container of the pod can mount the claim read-write.
+                      type: boolean
+                    subPath:
+                      description: |-
+                        SubPath is a directory inside the claim that the operator mounts instead of the claim's root,
+                        through the container's volumeMount.subPath. It must be relative, without empty or '..' segments,
+                        and must already exist on the volume: otherwise the kubelet creates it as root, which fails or
+                        yields a root-owned directory on NFS or Lustre file systems that squash root.
+                      maxLength: 4096
+                      minLength: 1
+                      pattern: ^(\.|\.\.[^/]+|\.[^/.][^/]*|[^/.][^/]*)(/(\.|\.\.[^/]+|\.[^/.][^/]*|[^/.][^/]*))*$
+                      type: string
                   required:
                   - mountPath
                   - name
@@ -3900,6 +3915,9 @@ spec:
                       must be specified
                     rule: (has(self.persistentVolumeClaimName) && !has(self.emptyDir))
                       || (!has(self.persistentVolumeClaimName) && has(self.emptyDir))
+                  - message: subPath applies to persistentVolumeClaimName volumes
+                      only, not to emptyDir
+                    rule: '!has(self.subPath) || !has(self.emptyDir)'
                 type: array
                 x-kubernetes-validations:
                 - message: volume name 'workspace-storage' is reserved
