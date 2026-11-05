@@ -12,7 +12,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
-	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
@@ -118,6 +117,9 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 		violations = append(violations, *violation)
 	}
 
+	// Validate volumes against the template's default volumes when the template locks them
+	violations = append(violations, validateLockedVolumes(workspace, template)...)
+
 	// Validate shared memory against the template's override policy, for the operator's volume and for
 	// any volume the workspace mounts at /dev/shm itself
 	if sharedMemoryViolations := validateSharedMemory(workspace, template); len(sharedMemoryViolations) > 0 {
@@ -210,9 +212,7 @@ func (tv *TemplateValidator) ValidateUpdateWorkspace(ctx context.Context, oldWor
 	// Special case: If ONLY DesiredStatus changed to Stopped, allow without validation
 	// This enables users to stop workspaces without validation (emergency shutdown, cost savings)
 	// However, if other spec fields also changed, those changes must be validated
-	if newWorkspace.Spec.DesiredStatus == controller.DesiredStateStopped &&
-		oldWorkspace.Spec.DesiredStatus != controller.DesiredStateStopped &&
-		onlyDesiredStatusChanged(&oldWorkspace.Spec, &newWorkspace.Spec) {
+	if isStopOnly(oldWorkspace, newWorkspace) {
 		workspacelog.Info("Allowing workspace stop without template validation (status-only change)", "workspace", newWorkspace.Name)
 		return nil
 	}
