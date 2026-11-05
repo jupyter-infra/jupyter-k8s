@@ -1,0 +1,16 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: duplicate-mount-workspace
+  namespace: default
+spec:
+  displayName: "Workspace mounting two volumes at one path"
+  desiredStatus: Stopped
+  image: jk8s-application-jupyter-uv:latest
+  volumes:
+    - name: first
+      emptyDir: {}
+      mountPath: /home/jovyan/data
+    - name: second
+      emptyDir: {}
+      mountPath: /home/jovyan/data/
