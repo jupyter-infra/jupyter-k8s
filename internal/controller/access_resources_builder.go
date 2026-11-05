@@ -183,12 +183,14 @@ func (b *AccessResourcesBuilder) ResolveApplicationBasePath(
 	return resolved, nil
 }
 
-// ResolveConnectionTypes lists the connection types an access strategy provides, in the order the
-// Extension API resolves a WorkspaceConnection: web-ui when bearerAuthURLTemplate is set,
-// ssh-over-websocket when webSocketURLTemplate is set, then the keys of createConnectionHandlerMap
-// sorted. The two built-in names are decided by their templates alone, the Extension API never
-// consults the map for them. Returns nil, the decoded form of an absent status field, when the
-// strategy provides none.
+// ResolveConnectionTypes lists the connection types an access strategy configures explicitly, in the
+// order the Extension API resolves a WorkspaceConnection: web-ui when bearerAuthURLTemplate is set,
+// ssh-over-websocket when webSocketURLTemplate is set, then the other keys of createConnectionHandlerMap
+// sorted. The two built-in names are decided by their templates alone, the Extension API never consults
+// the map for them. Types served only by the default createConnectionHandler are not enumerated: the
+// Extension API accepts any {ide}-remote name through it. Map keys are listed as configured; whether a
+// request for one succeeds is the Extension API's decision, not re-checked here. Returns nil, the decoded
+// form of an absent status field, when the strategy configures none.
 func (b *AccessResourcesBuilder) ResolveConnectionTypes(
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 ) []string {

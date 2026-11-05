@@ -376,12 +376,15 @@ type WorkspaceStatus struct {
 	// +optional
 	AccessURL string `json:"accessURL,omitempty"`
 
-	// ConnectionTypes lists the connection types the bound access strategy provides, as the Extension
-	// API accepts them in a WorkspaceConnection: "web-ui" when the strategy sets bearerAuthURLTemplate,
+	// ConnectionTypes lists the connection types the bound access strategy configures explicitly, by the
+	// names a WorkspaceConnection uses: "web-ui" when the strategy sets bearerAuthURLTemplate,
 	// "ssh-over-websocket" when it sets webSocketURLTemplate, then the keys of createConnectionHandlerMap
-	// in lexical order. Derived from the strategy each time the running workspace's access resources are
-	// reconciled; absent while the workspace is stopped or has no access strategy. Readiness is reported
-	// by the Available condition, not by this field.
+	// other than those two names, in lexical order. A "{ide}-remote" type that the Extension API serves
+	// through the strategy's default createConnectionHandler is not enumerated, and whether a request for
+	// a listed type succeeds is decided by the Extension API from the same strategy. Derived from the
+	// strategy each time the running workspace's access resources are reconciled; absent while the
+	// workspace is stopped or has no access strategy. Readiness is reported by the Available condition,
+	// not by this field.
 	// +optional
 	ConnectionTypes []string `json:"connectionTypes,omitempty"`
 
