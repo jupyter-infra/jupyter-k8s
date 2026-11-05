@@ -18988,8 +18988,6 @@ spec:
                       Allow controls whether workspaces may drop or change the template's DefaultVolumes. When false, a
                       workspace must list every DefaultVolumes entry unchanged; a workspace that declares no volumes
                       receives them from the defaulter, and one that declares its own must include them alongside.
-                      A workspace may not mount another volume at a DefaultVolumes mount path, and no workspace that
-                      can see the template may mount one of its claims through a volume of its own.
                     type: boolean
                 type: object
             required:
