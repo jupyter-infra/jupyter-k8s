@@ -113,6 +113,47 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 		return nil
 	}
 
+	// newRunningWorkspace creates a Workspace with desiredStatus Running, referencing the test
+	// access strategy when withStrategyRef is set.
+	newRunningWorkspace := func(namePrefix string, withStrategyRef bool) *workspacev1alpha1.Workspace {
+		ws := &workspacev1alpha1.Workspace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%d", namePrefix, time.Now().UnixNano()),
+				Namespace: testNamespace,
+			},
+			Spec: workspacev1alpha1.WorkspaceSpec{
+				Image:         imageBaseNotebook,
+				DesiredStatus: DesiredStateRunning,
+			},
+		}
+		if withStrategyRef {
+			ws.Spec.AccessStrategy = &workspacev1alpha1.AccessStrategyRef{Name: testStrategyName}
+		}
+		Expect(k8sClient.Create(ctx, ws)).To(Succeed())
+		return ws
+	}
+
+	// markOperatorDeploymentReady flips the Deployment the operator itself created to Available.
+	// The update path needs the workspace Available, and reconciling twice over a
+	// hand-built Deployment would fail on its immutable selector, so the operator must own it.
+	markOperatorDeploymentReady := func(ws *workspacev1alpha1.Workspace) *appsv1.Deployment {
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(ctx, client.ObjectKey{
+			Name:      GenerateDeploymentName(ws.Name),
+			Namespace: ws.Namespace,
+		}, dep)).To(Succeed())
+
+		dep.Status.AvailableReplicas = 1
+		dep.Status.ReadyReplicas = 1
+		dep.Status.Replicas = 1
+		dep.Status.Conditions = []appsv1.DeploymentCondition{{
+			Type:   appsv1.DeploymentAvailable,
+			Status: corev1.ConditionTrue,
+		}}
+		Expect(k8sClient.Status().Update(ctx, dep)).To(Succeed())
+		return dep
+	}
+
 	BeforeEach(func() {
 		ctx = context.Background()
 		mockProber = &mockAccessStartupProber{}
@@ -153,21 +194,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 		var accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
 
 		newWorkspaceWithAccessStrategy := func() *workspacev1alpha1.Workspace {
-			ws := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      fmt.Sprintf("sm-test-%d", time.Now().UnixNano()),
-					Namespace: testNamespace,
-				},
-				Spec: workspacev1alpha1.WorkspaceSpec{
-					Image:         imageBaseNotebook,
-					DesiredStatus: DesiredStateRunning,
-					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name: testStrategyName,
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, ws)).To(Succeed())
-			return ws
+			return newRunningWorkspace("sm-test", true)
 		}
 
 		BeforeEach(func() {
@@ -454,21 +481,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 		var accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
 
 		newWorkspaceWithAccessStrategy := func() *workspacev1alpha1.Workspace {
-			ws := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      fmt.Sprintf("sm-basepath-%d", time.Now().UnixNano()),
-					Namespace: testNamespace,
-				},
-				Spec: workspacev1alpha1.WorkspaceSpec{
-					Image:         imageBaseNotebook,
-					DesiredStatus: DesiredStateRunning,
-					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{
-						Name: testStrategyName,
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, ws)).To(Succeed())
-			return ws
+			return newRunningWorkspace("sm-basepath", true)
 		}
 
 		BeforeEach(func() {
@@ -558,27 +571,121 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 		})
 	})
 
+	Context("connectionTypes materialization", func() {
+		const (
+			bearerAuthURLTemplate = "https://example.com/{{ .Workspace.Name }}/bearer-auth"
+			webSocketURLTemplate  = "wss://example.com/{{ .Workspace.Name }}/ssh-ws"
+		)
+		var accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
+
+		connectionTypesOf := func(ws *workspacev1alpha1.Workspace) []string {
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(ws), ws)).To(Succeed())
+			return ws.Status.ConnectionTypes
+		}
+
+		// bringToRunning lets the operator create the Deployment and Service, marks the Deployment
+		// ready and reconciles again, so later reconciles can run over operator-owned resources.
+		bringToRunning := func(sm *StateMachine, ws *workspacev1alpha1.Workspace) {
+			_, err := sm.ReconcileDesiredState(ctx, ws, accessStrategy)
+			Expect(err).NotTo(HaveOccurred())
+			markOperatorDeploymentReady(ws)
+			_, err = sm.ReconcileDesiredState(ctx, ws, accessStrategy)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(getCondition(ws, ConditionTypeAvailable).Status).To(Equal(metav1.ConditionTrue))
+		}
+
+		BeforeEach(func() {
+			mockProber.ready = true
+			accessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       testStrategyName,
+					Namespace:  testNamespace,
+					UID:        types.UID(testUID),
+					Generation: 1,
+				},
+				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
+					DisplayName:             testStrategyDisplayName,
+					AccessResourceTemplates: []workspacev1alpha1.AccessResourceTemplate{},
+					BearerAuthURLTemplate:   bearerAuthURLTemplate,
+				},
+			}
+		})
+
+		It("writes the connection types the strategy provides when the workspace becomes available", func() {
+			accessStrategy.Spec.WebSocketURLTemplate = webSocketURLTemplate
+			accessStrategy.Spec.CreateConnectionHandlerMap = map[string]string{connTypeVSCodeRemote: "aws:createSession"}
+			workspace := newRunningWorkspace("sm-conntypes", true)
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			bringToRunning(buildStateMachine(), workspace)
+
+			Expect(connectionTypesOf(workspace)).To(Equal([]string{connTypeWebUI, connTypeSSHWebSocket, connTypeVSCodeRemote}))
+		})
+
+		It("leaves connectionTypes absent for a strategy that provides no connection type", func() {
+			accessStrategy.Spec.BearerAuthURLTemplate = ""
+			workspace := newRunningWorkspace("sm-conntypes", true)
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			bringToRunning(buildStateMachine(), workspace)
+
+			Expect(connectionTypesOf(workspace)).To(BeNil())
+		})
+
+		It("rewrites connectionTypes when the strategy changes under a running workspace", func() {
+			workspace := newRunningWorkspace("sm-conntypes", true)
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+			sm := buildStateMachine()
+			bringToRunning(sm, workspace)
+			Expect(connectionTypesOf(workspace)).To(Equal([]string{connTypeWebUI}))
+
+			accessStrategy.Spec.WebSocketURLTemplate = webSocketURLTemplate
+			accessStrategy.Generation = 2
+			_, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(connectionTypesOf(workspace)).To(Equal([]string{connTypeWebUI, connTypeSSHWebSocket}))
+		})
+
+		It("does not write the status again while the connection types are unchanged", func() {
+			workspace := newRunningWorkspace("sm-conntypes", true)
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+			sm := buildStateMachine()
+			bringToRunning(sm, workspace)
+			Expect(connectionTypesOf(workspace)).To(Equal([]string{connTypeWebUI}))
+			resourceVersionBefore := workspace.ResourceVersion
+
+			_, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+			Expect(workspace.ResourceVersion).To(Equal(resourceVersionBefore))
+		})
+
+		It("clears connectionTypes when the access strategy is removed", func() {
+			workspace := newRunningWorkspace("sm-conntypes-clear", false)
+			dep := createReadyDeployment(workspace)
+			svc := createService(workspace)
+			defer func() { _ = k8sClient.Delete(ctx, dep) }()
+			defer func() { _ = k8sClient.Delete(ctx, svc) }()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+			workspace.Status.ConnectionTypes = []string{connTypeWebUI, connTypeSSHWebSocket}
+			Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
+
+			_, err := buildStateMachine().ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(connectionTypesOf(workspace)).To(BeNil())
+		})
+	})
+
 	// The access strategy has to reach EnsureServiceExists for sidecar ports to land on the
 	// Service. Dropping that argument leaves every service_builder_test spec green while the
 	// feature is dead, so these assert on the Service the reconcile actually produced. They
 	// deliberately do not pre-create it.
 	Context("sidecar service ports", func() {
 		newWorkspaceForPorts := func(withStrategyRef bool) *workspacev1alpha1.Workspace {
-			ws := &workspacev1alpha1.Workspace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      fmt.Sprintf("sm-ports-%d", time.Now().UnixNano()),
-					Namespace: testNamespace,
-				},
-				Spec: workspacev1alpha1.WorkspaceSpec{
-					Image:         imageBaseNotebook,
-					DesiredStatus: DesiredStateRunning,
-				},
-			}
-			if withStrategyRef {
-				ws.Spec.AccessStrategy = &workspacev1alpha1.AccessStrategyRef{Name: testStrategyName}
-			}
-			Expect(k8sClient.Create(ctx, ws)).To(Succeed())
-			return ws
+			return newRunningWorkspace("sm-ports", withStrategyRef)
 		}
 
 		// sidecarStrategy injects one sidecar declaring the given ports and opts every named
@@ -629,27 +736,6 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 				numbers = append(numbers, port.Port)
 			}
 			return numbers
-		}
-
-		// markOperatorDeploymentReady flips the Deployment the operator itself created to Available.
-		// The update path needs the workspace Available, and reconciling twice over a
-		// hand-built Deployment would fail on its immutable selector, so the operator must own it.
-		markOperatorDeploymentReady := func(ws *workspacev1alpha1.Workspace) *appsv1.Deployment {
-			dep := &appsv1.Deployment{}
-			Expect(k8sClient.Get(ctx, client.ObjectKey{
-				Name:      GenerateDeploymentName(ws.Name),
-				Namespace: ws.Namespace,
-			}, dep)).To(Succeed())
-
-			dep.Status.AvailableReplicas = 1
-			dep.Status.ReadyReplicas = 1
-			dep.Status.Replicas = 1
-			dep.Status.Conditions = []appsv1.DeploymentCondition{{
-				Type:   appsv1.DeploymentAvailable,
-				Status: corev1.ConditionTrue,
-			}}
-			Expect(k8sClient.Status().Update(ctx, dep)).To(Succeed())
-			return dep
 		}
 
 		BeforeEach(func() {

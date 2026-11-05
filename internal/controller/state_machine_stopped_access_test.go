@@ -140,6 +140,24 @@ var _ = Describe("reconcileDesiredStoppedStatus access resources", func() {
 		})
 	})
 
+	Context("connectionTypes cleared on stop", func() {
+		It("should clear connectionTypes when workspace is stopped", func() {
+			workspace := newStoppedWorkspace()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			workspace.Status.ConnectionTypes = []string{connTypeWebUI, connTypeSSHWebSocket}
+			Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+
+			sm := buildStateMachine()
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+			Expect(workspace.Status.ConnectionTypes).To(BeNil())
+		})
+	})
+
 	Context("access resource deletion error", func() {
 		It("should propagate access error when deployment and service are gone", func() {
 			workspace := newStoppedWorkspace()

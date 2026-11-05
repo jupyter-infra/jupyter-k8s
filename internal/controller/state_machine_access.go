@@ -41,6 +41,7 @@ func (sm *StateMachine) ReconcileAccessForDesiredRunningStatus(
 			return accessUrlErr
 		}
 		workspace.Status.AccessURL = accessUrl
+		workspace.Status.ConnectionTypes = sm.resourceManager.accessResourcesBuilder.ResolveConnectionTypes(accessStrategy)
 		workspace.Status.AccessResourceSelector = sm.resourceManager.accessResourcesBuilder.ResolveAccessResourceSelector(
 			workspace, accessStrategy)
 
@@ -55,6 +56,7 @@ func (sm *StateMachine) ReconcileAccessForDesiredRunningStatus(
 
 	// CASE 2: there is no AccessStrategy (it may have been removed by an update)
 	workspace.Status.AccessURL = ""
+	workspace.Status.ConnectionTypes = nil
 	workspace.Status.ApplicationBasePath = ""
 	workspace.Status.AccessResourceSelector = ""
 	workspace.Status.AccessStartupProbeSucceeded = false
@@ -74,6 +76,7 @@ func (sm *StateMachine) ReconcileAccessForDesiredStoppedStatus(ctx context.Conte
 	logger := logf.FromContext(ctx)
 
 	workspace.Status.AccessURL = ""
+	workspace.Status.ConnectionTypes = nil
 	workspace.Status.ApplicationBasePath = ""
 	workspace.Status.AccessResourceSelector = ""
 	workspace.Status.AccessStartupProbeSucceeded = false

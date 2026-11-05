@@ -8,9 +8,11 @@ package controller
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 	"text/template"
 
+	connectionv1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/connection/v1alpha1"
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 	corev1 "k8s.io/api/core/v1"
@@ -179,6 +181,34 @@ func (b *AccessResourcesBuilder) ResolveApplicationBasePath(
 		return "", err
 	}
 	return resolved, nil
+}
+
+// ResolveConnectionTypes lists the connection types an access strategy provides, in the order the
+// Extension API resolves a WorkspaceConnection: web-ui when bearerAuthURLTemplate is set,
+// ssh-over-websocket when webSocketURLTemplate is set, then the keys of createConnectionHandlerMap
+// sorted. The two built-in names are decided by their templates alone, the Extension API never
+// consults the map for them. Returns nil, the decoded form of an absent status field, when the
+// strategy provides none.
+func (b *AccessResourcesBuilder) ResolveConnectionTypes(
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
+) []string {
+	var connectionTypes []string
+	if accessStrategy.Spec.BearerAuthURLTemplate != "" {
+		connectionTypes = append(connectionTypes, connectionv1alpha1.ConnectionTypeWebUI)
+	}
+	if accessStrategy.Spec.WebSocketURLTemplate != "" {
+		connectionTypes = append(connectionTypes, connectionv1alpha1.ConnectionTypeWebSocket)
+	}
+	mapped := make([]string, 0, len(accessStrategy.Spec.CreateConnectionHandlerMap))
+	for connectionType := range accessStrategy.Spec.CreateConnectionHandlerMap {
+		if connectionType == connectionv1alpha1.ConnectionTypeWebUI ||
+			connectionType == connectionv1alpha1.ConnectionTypeWebSocket {
+			continue
+		}
+		mapped = append(mapped, connectionType)
+	}
+	sort.Strings(mapped)
+	return append(connectionTypes, mapped...)
 }
 
 // ResolveAccessResourceSelector creates a label selector string for finding access resources
