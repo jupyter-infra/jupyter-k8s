@@ -16,6 +16,7 @@ import (
 
 // VolumeSpec defines a volume to mount from an existing PVC or emptyDir source.
 // +kubebuilder:validation:XValidation:rule="(has(self.persistentVolumeClaimName) && !has(self.emptyDir)) || (!has(self.persistentVolumeClaimName) && has(self.emptyDir))",message="exactly one of persistentVolumeClaimName or emptyDir must be specified"
+// +kubebuilder:validation:XValidation:rule="!has(self.subPath) || !has(self.emptyDir)",message="subPath applies to persistentVolumeClaimName volumes only, not to emptyDir"
 type VolumeSpec struct {
 	// Name is a unique identifier for this volume within the pod (maps to pod.spec.volumes[].name)
 	Name string `json:"name"`
@@ -31,6 +32,21 @@ type VolumeSpec struct {
 	// EmptyDir configures a pod-scoped ephemeral volume
 	// +optional
 	EmptyDir *corev1.EmptyDirVolumeSource `json:"emptyDir,omitempty"`
+
+	// SubPath is a directory inside the claim that the operator mounts instead of the claim's root,
+	// through the container's volumeMount.subPath. It must be relative, without empty or '..' segments,
+	// and must already exist on the volume: otherwise the kubelet creates it as root, which fails or
+	// yields a root-owned directory on NFS or Lustre file systems that squash root.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=4096
+	// +kubebuilder:validation:Pattern=`^(\.|\.\.[^/]+|\.[^/.][^/]*|[^/.][^/]*)(/(\.|\.\.[^/]+|\.[^/.][^/]*|[^/.][^/]*))*$`
+	// +optional
+	SubPath string `json:"subPath,omitempty"`
+
+	// ReadOnly mounts the volume read-only. For a claim, the operator also sets readOnly on the pod
+	// volume's persistentVolumeClaim, so no other container of the pod can mount the claim read-write.
+	// +optional
+	ReadOnly bool `json:"readOnly,omitempty"`
 }
 
 // SharedMemorySpec asks for the memory-backed /dev/shm volume the operator mounts into the
