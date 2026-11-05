@@ -8,6 +8,7 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
+	"path"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -225,6 +226,14 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 		return true
 	}
 
+	// Check volumeOverrides changes, and default volumes changes while they are locked
+	if !equality.Semantic.DeepEqual(oldSpec.VolumeOverrides, newSpec.VolumeOverrides) {
+		return true
+	}
+	if newSpec.VolumeOverrides.Locked() && !equality.Semantic.DeepEqual(oldSpec.DefaultVolumes, newSpec.DefaultVolumes) {
+		return true
+	}
+
 	return false
 }
 
@@ -304,8 +313,42 @@ func validateTemplateConsistency(template *workspacev1alpha1.WorkspaceTemplate) 
 		return err
 	}
 
+	// Default volumes need distinct names and mount paths.
+	if err := validateTemplateVolumesConsistency(template); err != nil {
+		return err
+	}
+
 	// A locked shared memory policy needs a defaultSharedMemory to hold workspaces to.
 	return validateTemplateSharedMemoryConsistency(template)
+}
+
+// validateTemplateVolumesConsistency rejects default volumes that share a name or a mount path, which
+// every workspace inheriting them would fail on, and a locked default volume at the primary storage's
+// default mount path, which would reject every workspace that keeps that default.
+func validateTemplateVolumesConsistency(template *workspacev1alpha1.WorkspaceTemplate) error {
+	names := map[string]bool{}
+	mountPaths := map[string]string{}
+	for _, vol := range template.Spec.DefaultVolumes {
+		if names[vol.Name] {
+			return fmt.Errorf("defaultVolumes[%s] is declared more than once (template %q)", vol.Name, template.GetName())
+		}
+		names[vol.Name] = true
+		cleaned := path.Clean(vol.MountPath)
+		if other, duplicate := mountPaths[cleaned]; duplicate {
+			return fmt.Errorf("defaultVolumes[%s] and defaultVolumes[%s] both mount %s (template %q)",
+				other, vol.Name, cleaned, template.GetName())
+		}
+		mountPaths[cleaned] = vol.Name
+	}
+	if !template.Spec.VolumeOverrides.Locked() || template.Spec.PrimaryStorage == nil || template.Spec.PrimaryStorage.DefaultMountPath == "" {
+		return nil
+	}
+	if name, conflict := mountPaths[path.Clean(template.Spec.PrimaryStorage.DefaultMountPath)]; conflict {
+		return fmt.Errorf("volumeOverrides.allow is false but defaultVolumes[%s] mounts primaryStorage.defaultMountPath %s: "+
+			"every workspace keeping the default mount path would be rejected (template %q)",
+			name, template.Spec.PrimaryStorage.DefaultMountPath, template.GetName())
+	}
+	return nil
 }
 
 // validateTemplateSharedMemoryConsistency rejects a template whose shared memory lock cannot be
