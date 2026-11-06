@@ -183,7 +183,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `allow` _boolean_ | Allow controls whether workspaces may drop or change the template's DefaultVolumes. When false, a<br />workspace must list every DefaultVolumes entry unchanged; a workspace that declares no volumes<br />receives them from the defaulter, and one that declares its own must include them alongside. | true | Optional: \{\} <br /> |
+| `allow` _boolean_ | Allow controls whether workspaces may drop or change the template's DefaultVolumes. When false, a<br />workspace must list every DefaultVolumes entry unchanged; a workspace that declares no volumes<br />receives them from the defaulter, and one that declares its own must include them alongside.<br />Set AllowSecondaryStorages to false as well to restrict workspaces to DefaultVolumes exactly as<br />defined; otherwise a workspace can add its own volume on a default volume's claim. | true | Optional: \{\} <br /> |
 
 
 

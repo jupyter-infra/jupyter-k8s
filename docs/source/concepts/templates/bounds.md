@@ -118,7 +118,7 @@ A template's `sharedMemoryOverrides` controls whether workspaces may change the 
 
 ## Volumes
 
-A template's `volumeOverrides` controls whether workspaces may drop or change the volumes that `defaultVolumes` gives them (`allow`). With `allow: false` a workspace must keep every default volume unchanged, alongside any volumes of its own that `allowSecondaryStorages` permits. See [Storage](../workspaces/storage.md#template-default-volumes).
+A template's `volumeOverrides` controls whether workspaces may drop or change the volumes that `defaultVolumes` gives them (`allow`). With `allow: false` a workspace must keep every default volume unchanged, alongside any volumes of its own that `allowSecondaryStorages` permits; set `allowSecondaryStorages: false` too to restrict workspaces to the default volumes exactly as defined. See [Storage](../workspaces/storage.md#template-default-volumes).
 
 ## Enforcement model
 

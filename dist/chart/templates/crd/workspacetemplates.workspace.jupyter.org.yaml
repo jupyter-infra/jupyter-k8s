@@ -4088,6 +4088,8 @@ spec:
                       Allow controls whether workspaces may drop or change the template's DefaultVolumes. When false, a
                       workspace must list every DefaultVolumes entry unchanged; a workspace that declares no volumes
                       receives them from the defaulter, and one that declares its own must include them alongside.
+                      Set AllowSecondaryStorages to false as well to restrict workspaces to DefaultVolumes exactly as
+                      defined; otherwise a workspace can add its own volume on a default volume's claim.
                     type: boolean
                 type: object
             required:
