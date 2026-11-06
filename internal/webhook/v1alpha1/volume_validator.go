@@ -127,17 +127,31 @@ func validateLockedVolumes(workspace *workspacev1alpha1.Workspace, template *wor
 	return violations
 }
 
-// validateUniqueMountPaths rejects two mounts of the primary container at the same path: the primary
-// storage and the workspace's volumes. The operator's /dev/shm volume is left out, since a volume at
-// /dev/shm replaces it.
+// validateUniqueVolumes rejects two volumes with the same name, and two mounts of the primary container
+// at the same path: the primary storage and the workspace's volumes. The operator's /dev/shm volume is
+// left out, since a volume at /dev/shm replaces it.
 //
-// The CRD does not catch this. Without the check, the workspace passes admission and the API server
+// The CRD does not catch either. Without the check, the workspace passes admission and the API server
 // rejects its Deployment at reconcile time, so the workspace fails to start instead of failing
 // kubectl apply. A CEL rule cannot replace it: a pairwise rule over the unbounded volumes list exceeds
 // the CEL cost budget unless volumes gets a maxItems, which could reject existing workspaces; the
 // primary storage mount path is often unset in the spec, and only the controller resolves it to its
 // default; and CEL cannot clean paths, so /data and /data/ would both pass.
-func validateUniqueMountPaths(workspace *workspacev1alpha1.Workspace) *TemplateViolation {
+func validateUniqueVolumes(workspace *workspacev1alpha1.Workspace) *TemplateViolation {
+	names := map[string]bool{}
+	for _, volume := range workspace.Spec.Volumes {
+		if names[volume.Name] {
+			return &TemplateViolation{
+				Type:    ViolationTypeDuplicateVolumeName,
+				Field:   fmt.Sprintf("spec.volumes[%s]", volume.Name),
+				Message: fmt.Sprintf("volume name '%s' is used more than once", volume.Name),
+				Allowed: "one volume per name",
+				Actual:  volume.Name,
+			}
+		}
+		names[volume.Name] = true
+	}
+
 	type mountSource struct {
 		mountPath   string
 		description string

@@ -154,26 +154,35 @@ var _ = Describe("VolumeValidator", func() {
 		})
 	})
 
-	Context("validateUniqueMountPaths", func() {
+	Context("validateUniqueVolumes", func() {
 		It("accepts distinct mount paths", func() {
 			ws := volumeWorkspace("", teamVolume(), userVolume())
 			ws.Spec.Storage = &workspacev1alpha1.StorageSpec{MountPath: testVolPrimaryMount}
-			Expect(validateUniqueMountPaths(ws)).To(BeNil())
+			Expect(validateUniqueVolumes(ws)).To(BeNil())
 		})
 
 		It("rejects two workspace volumes at one path", func() {
 			other := userVolume()
 			other.MountPath = testVolTeamMount + "/"
-			violation := validateUniqueMountPaths(volumeWorkspace("", teamVolume(), other))
+			violation := validateUniqueVolumes(volumeWorkspace("", teamVolume(), other))
 			Expect(violation).NotTo(BeNil())
 			Expect(violation.Type).To(Equal(ViolationTypeDuplicateMountPath))
 			Expect(violation.Message).To(Equal("mount path " + testVolTeamMount + " is used by both volume 'team' and volume 'mine'"))
 		})
 
+		It("rejects two volumes with one name", func() {
+			other := userVolume()
+			other.Name = testVolTeamName
+			violation := validateUniqueVolumes(volumeWorkspace("", teamVolume(), other))
+			Expect(violation).NotTo(BeNil())
+			Expect(violation.Type).To(Equal(ViolationTypeDuplicateVolumeName))
+			Expect(violation.Message).To(Equal("volume name 'team' is used more than once"))
+		})
+
 		It("rejects a volume at the primary storage mount path", func() {
 			ws := volumeWorkspace("", workspacev1alpha1.VolumeSpec{Name: testVolUserVolume, MountPath: testVolPrimaryMount, PersistentVolumeClaimName: testVolUserClaim})
 			ws.Spec.Storage = &workspacev1alpha1.StorageSpec{MountPath: testVolPrimaryMount}
-			violation := validateUniqueMountPaths(ws)
+			violation := validateUniqueVolumes(ws)
 			Expect(violation).NotTo(BeNil())
 			Expect(violation.Message).To(ContainSubstring("primary storage and volume 'mine'"))
 		})

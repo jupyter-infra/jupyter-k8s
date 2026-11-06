@@ -398,8 +398,8 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, workspace
 		return nil, err
 	}
 
-	// Validate mount path uniqueness (applies to all users)
-	if violation := validateUniqueMountPaths(workspace); violation != nil {
+	// Validate volume name and mount path uniqueness (applies to all users)
+	if violation := validateUniqueVolumes(workspace); violation != nil {
 		return nil, fmt.Errorf("workspace violates volume constraints: %s", violation.Message)
 	}
 
@@ -514,10 +514,10 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldWorksp
 		return nil, err
 	}
 
-	// Validate mount path uniqueness. Like template constraints, only on a spec change other than a stop,
+	// Validate volume name and mount path uniqueness. Like template constraints, only on a spec change other than a stop,
 	// so it never blocks a metadata edit or stopping an existing workspace.
 	if specChanged(&oldWorkspace.Spec, &newWorkspace.Spec) && !isStopOnly(oldWorkspace, newWorkspace) {
-		if violation := validateUniqueMountPaths(newWorkspace); violation != nil {
+		if violation := validateUniqueVolumes(newWorkspace); violation != nil {
 			return nil, fmt.Errorf("workspace violates volume constraints: %s", violation.Message)
 		}
 	}

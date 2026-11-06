@@ -45,6 +45,7 @@ const (
 	ViolationTypeSecurityContextOverrideNotAllowed = "SecurityContextOverrideNotAllowed"
 	ViolationTypeVolumeOverrideNotAllowed          = "VolumeOverrideNotAllowed"
 	ViolationTypeDuplicateMountPath                = "DuplicateMountPath"
+	ViolationTypeDuplicateVolumeName               = "DuplicateVolumeName"
 )
 
 // labelValueTrue is the string value used for boolean-style Kubernetes labels.
