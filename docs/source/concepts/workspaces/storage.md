@@ -102,7 +102,7 @@ With `allow: false`:
 - every workspace of the template must keep each default volume unchanged (name, mount path, claim, `subPath`, `readOnly`). A workspace that declares no volumes gets them from the webhook; one that declares its own volumes must list the default volumes alongside them, and the webhook rejects it otherwise, naming the missing or changed volume.
 - `allowSecondaryStorages` still governs the volumes a workspace adds. Set it to `false` to hold workspaces to the default volumes alone.
 
-The webhook enforces these rules lazily, on workspace create and update. A template edit to its default volumes does not change existing workspaces: their next update other than a stop, starting the workspace included, is rejected until it lists the template's current volumes. Changing `templateRef` evaluates the rules against the new template, so a workspace leaving a locked template drops that template's volumes in the same update.
+The webhook enforces these rules lazily, on workspace create and update. A template edit to its default volumes does not change existing workspaces: their next update other than a stop, starting the workspace included, is rejected until it lists the template's current volumes. Changing `templateRef` evaluates these rules against the new template; the workspace keeps the old template's volumes unless the update removes them.
 
 ## Shared memory
 
