@@ -1,0 +1,15 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: locked-volumes-template
+  namespace: jupyter-k8s-shared
+spec:
+  displayName: "Locked Volumes Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultVolumes:
+    - name: team
+      persistentVolumeClaimName: policy-shared-fs
+      mountPath: /home/jovyan/team
+      subPath: namespaces/ml
+  volumeOverrides:
+    allow: false

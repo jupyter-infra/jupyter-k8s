@@ -358,6 +358,66 @@ var _ = Describe("Workspace Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
+		Context("volume uniqueness", func() {
+			sameMountVolumes := func() []workspacev1alpha1.VolumeSpec {
+				return []workspacev1alpha1.VolumeSpec{
+					{Name: "first", MountPath: "/data", EmptyDir: &corev1.EmptyDirVolumeSource{}},
+					{Name: "second", MountPath: "/data/", EmptyDir: &corev1.EmptyDirVolumeSource{}},
+				}
+			}
+
+			It("rejects a create with two volumes at one mount path", func() {
+				workspace.Spec.Volumes = sameMountVolumes()
+				_, err := validator.ValidateCreate(ctx, workspace)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("mount path /data is used by both volume 'first' and volume 'second'"))
+			})
+
+			It("rejects an update that adds a volume at a mount path already in use", func() {
+				oldWorkspace := workspace.DeepCopy()
+				workspace.Spec.Volumes = sameMountVolumes()
+				_, err := validator.ValidateUpdate(createUserContext(ctx, "UPDATE", "test-user"), oldWorkspace, workspace)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("is used by both"))
+			})
+
+			It("rejects an update that adds a second volume with the same name", func() {
+				oldWorkspace := workspace.DeepCopy()
+				workspace.Spec.Volumes = sameMountVolumes()
+				workspace.Spec.Volumes[1].Name = "first"
+				workspace.Spec.Volumes[1].MountPath = "/other"
+				_, err := validator.ValidateUpdate(createUserContext(ctx, "UPDATE", "test-user"), oldWorkspace, workspace)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("volume name 'first' is used more than once"))
+			})
+
+			It("allows stopping a workspace that already has two volumes at one mount path", func() {
+				workspace.Spec.Volumes = sameMountVolumes()
+				oldWorkspace := workspace.DeepCopy()
+				workspace.Spec.DesiredStatus = controller.DesiredStateStopped
+				_, err := validator.ValidateUpdate(createUserContext(ctx, "UPDATE", "test-user"), oldWorkspace, workspace)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("allows a metadata-only update of a workspace that already has two volumes at one mount path", func() {
+				workspace.Spec.Volumes = sameMountVolumes()
+				oldWorkspace := workspace.DeepCopy()
+				workspace.Labels = map[string]string{"team": "ml"}
+				_, err := validator.ValidateUpdate(createUserContext(ctx, "UPDATE", "test-user"), oldWorkspace, workspace)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("rejects starting a workspace that has two volumes at one mount path", func() {
+				workspace.Spec.Volumes = sameMountVolumes()
+				workspace.Spec.DesiredStatus = controller.DesiredStateStopped
+				oldWorkspace := workspace.DeepCopy()
+				workspace.Spec.DesiredStatus = testStatusRunning
+				_, err := validator.ValidateUpdate(createUserContext(ctx, "UPDATE", "test-user"), oldWorkspace, workspace)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("is used by both"))
+			})
+		})
+
 		It("warns on create and update when the workspace asks for shared memory without a memory limit or request", func() {
 			workspace.Spec.SharedMemory = &workspacev1alpha1.SharedMemorySpec{}
 			workspace.Spec.Resources = &corev1.ResourceRequirements{

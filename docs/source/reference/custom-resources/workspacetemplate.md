@@ -172,6 +172,21 @@ _Appears in:_
 
 
 
+## VolumeOverridePolicy
+
+
+
+VolumeOverridePolicy controls whether a workspace may deviate from the template's DefaultVolumes.
+
+_Appears in:_
+- [WorkspaceTemplateSpec](#workspacetemplatespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `allow` _boolean_ | Allow controls whether workspaces may drop or change the template's DefaultVolumes. When false, a<br />workspace must list every DefaultVolumes entry unchanged; a workspace that declares no volumes<br />receives them from the defaulter, and one that declares its own must include them alongside.<br />Set AllowSecondaryStorages to false as well to restrict workspaces to DefaultVolumes exactly as<br />defined; otherwise a workspace can add its own volume on a default volume's claim. | true | Optional: \{\} <br /> |
+
+
+
 ## WorkspaceTemplateSpec
 
 
@@ -195,7 +210,8 @@ _Appears in:_
 | `baseEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#envvar-v1-core) array_ | BaseEnv specifies environment variables to add to workspaces using this template<br />Variables are added during defaulting if no variable with the same name exists on the workspace |  | MaxItems: 50 <br />Optional: \{\} <br /> |
 | `envRequirements` _[EnvRequirement](#envrequirement) array_ | EnvRequirements specifies validation rules for workspace environment variables |  | MaxItems: 50 <br />Optional: \{\} <br /> |
 | `allowSecondaryStorages` _boolean_ | AllowSecondaryStorages controls whether workspaces using this template<br />can mount additional storage volumes beyond the primary storage | true | Optional: \{\} <br /> |
-| `defaultVolumes` _[VolumeSpec](#volumespec) array_ | DefaultVolumes specifies default additional volumes for workspaces using this template<br />Volumes are applied during defaulting only if the workspace does not specify any volumes<br />Each volume references either a pre-existing PVC in the workspace namespace or an emptyDir source |  | MaxItems: 10 <br />Optional: \{\} <br /> |
+| `defaultVolumes` _[VolumeSpec](#volumespec) array_ | DefaultVolumes specifies default additional volumes for workspaces using this template.<br />Each volume references either a pre-existing PVC in the workspace namespace or an emptyDir source.<br />The admission webhook copies them onto a workspace that declares no volumes of its own;<br />VolumeOverrides controls whether a workspace may drop or change them. |  | MaxItems: 10 <br />Optional: \{\} <br /> |
+| `volumeOverrides` _[VolumeOverridePolicy](#volumeoverridepolicy)_ | VolumeOverrides controls whether a workspace may drop or change DefaultVolumes. When locked, the<br />volumes of any workspace referencing the template must include the template's defaults, exactly<br />as defined. |  | Optional: \{\} <br /> |
 | `defaultSharedMemory` _[SharedMemorySpec](#sharedmemoryspec)_ | DefaultSharedMemory is the /dev/shm setting for workspaces using this template; set it, \{\} is<br />enough, to give every workspace of the template the enlarged /dev/shm. Copied in whole onto a<br />workspace that sets no sharedMemory. |  | Optional: \{\} <br /> |
 | `sharedMemoryOverrides` _[SharedMemoryOverridePolicy](#sharedmemoryoverridepolicy)_ | SharedMemoryOverrides controls whether a workspace may deviate from DefaultSharedMemory, including<br />with a volume it mounts at /dev/shm itself. |  | Optional: \{\} <br /> |
 | `defaultNodeSelector` _object (keys:string, values:string)_ | DefaultNodeSelector specifies default node selection constraints |  | Optional: \{\} <br /> |

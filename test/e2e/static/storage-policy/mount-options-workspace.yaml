@@ -1,0 +1,18 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: mount-options-workspace
+  namespace: default
+spec:
+  displayName: "Workspace with subPath and readOnly volumes"
+  desiredStatus: Running
+  image: jk8s-application-jupyter-uv:latest
+  volumes:
+    - name: scratch
+      persistentVolumeClaimName: policy-shared-fs
+      mountPath: /home/jovyan/scratch
+      subPath: namespaces/ml
+    - name: datasets
+      persistentVolumeClaimName: policy-datasets
+      mountPath: /home/jovyan/datasets
+      readOnly: true

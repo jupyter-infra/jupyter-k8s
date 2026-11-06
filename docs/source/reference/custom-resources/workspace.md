@@ -280,6 +280,8 @@ _Appears in:_
 | `mountPath` _string_ | MountPath is the path where the volume should be mounted (Unix-style path, e.g. /data) |  |  |
 | `persistentVolumeClaimName` _string_ | PersistentVolumeClaimName is the name of the existing PVC to mount |  | MinLength: 1 <br />Optional: \{\} <br /> |
 | `emptyDir` _[EmptyDirVolumeSource](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#emptydirvolumesource-v1-core)_ | EmptyDir configures a pod-scoped ephemeral volume |  | Optional: \{\} <br /> |
+| `subPath` _string_ | SubPath is a directory inside the claim that the operator mounts instead of the claim's root,<br />through the container's volumeMount.subPath. It must be relative, without empty or '..' segments,<br />and must already exist on the volume: otherwise the kubelet creates it as root, which fails or<br />yields a root-owned directory on NFS or Lustre file systems that squash root. |  | MaxLength: 4096 <br />MinLength: 1 <br />Pattern: `^(\.\|\.\.[^/]+\|\.[^/.][^/]*\|[^/.][^/]*)(/(\.\|\.\.[^/]+\|\.[^/.][^/]*\|[^/.][^/]*))*$` <br />Optional: \{\} <br /> |
+| `readOnly` _boolean_ | ReadOnly mounts the volume read-only. For a claim, the operator also sets readOnly on the pod<br />volume's persistentVolumeClaim, so no other container of the pod can mount the claim read-write. |  | Optional: \{\} <br /> |
 
 
 

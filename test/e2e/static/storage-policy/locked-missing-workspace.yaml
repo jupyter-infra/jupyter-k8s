@@ -1,0 +1,15 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: locked-missing-workspace
+  namespace: default
+spec:
+  displayName: "Workspace dropping the locked volumes"
+  desiredStatus: Stopped
+  templateRef:
+    name: locked-volumes-template
+    namespace: jupyter-k8s-shared
+  volumes:
+    - name: mine
+      persistentVolumeClaimName: policy-datasets
+      mountPath: /home/jovyan/mine

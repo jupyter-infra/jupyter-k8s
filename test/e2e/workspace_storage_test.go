@@ -11,6 +11,7 @@ package e2e
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -522,6 +523,123 @@ var _ = Describe("Workspace Storage", Ordered, func() {
 		})
 	})
 
+	Context("Mount options", func() {
+		const (
+			policySubgroup     = "policy"
+			mountOptionsName   = "mount-options-workspace"
+			scratchVolumeName  = "scratch"
+			scratchMountPath   = "/home/jovyan/scratch"
+			datasetsVolumeName = "datasets"
+			datasetsMountPath  = "/home/jovyan/datasets"
+		)
+
+		It("should mount a claim's subPath only, and a readOnly claim read-only", func() {
+			seedPolicyClaims(policySubgroup)
+
+			By("creating a workspace with a subPath volume and a readOnly volume")
+			createWorkspaceForTest(mountOptionsName, group, policySubgroup)
+			WaitForWorkspaceToReachCondition(mountOptionsName, workspaceNamespace, ConditionTypeAvailable, ConditionTrue)
+
+			// Retried as in VerifyWorkspaceVolumeMount: the API server can return transient errors
+			// shortly after the workspace becomes available.
+			By("verifying the deployment carries subPath and readOnly")
+			deploymentName := GetWorkspaceDeploymentName(mountOptionsName, workspaceNamespace)
+			Eventually(func(g Gomega) {
+				subPath, err := kubectlGet("deployment", deploymentName, workspaceNamespace, fmt.Sprintf(
+					"{.spec.template.spec.containers[0].volumeMounts[?(@.name=='%s')].subPath}", scratchVolumeName))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(subPath).To(Equal("namespaces/ml"))
+				mountReadOnly, err := kubectlGet("deployment", deploymentName, workspaceNamespace, fmt.Sprintf(
+					"{.spec.template.spec.containers[0].volumeMounts[?(@.name=='%s')].readOnly}", datasetsVolumeName))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(mountReadOnly).To(Equal(valueTrue))
+				claimReadOnly, err := kubectlGet("deployment", deploymentName, workspaceNamespace, fmt.Sprintf(
+					"{.spec.template.spec.volumes[?(@.name=='%s')].persistentVolumeClaim.readOnly}", datasetsVolumeName))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(claimReadOnly).To(Equal(valueTrue))
+			}, 30*time.Second, 2*time.Second).Should(Succeed())
+
+			if isUsingFinch() {
+				By("skipping exec-based mount checks (Finch has known cgroup access issues)")
+				return
+			}
+
+			podName := readyWorkspacePod(mountOptionsName, workspaceNamespace, policySharedClaim, policyDatasetsClaim)
+
+			By("verifying the subPath mount shows only that directory")
+			expectExecOutput(podName, workspaceNamespace, true, "inside", "cat", scratchMountPath+"/inside.txt")
+			expectExecOutput(podName, workspaceNamespace, false, "No such file or directory",
+				"ls", scratchMountPath+"/outside.txt")
+
+			By("verifying the readOnly mount is readable and rejects writes")
+			expectExecOutput(podName, workspaceNamespace, true, "dataset", "cat", datasetsMountPath+"/dataset.txt")
+			expectExecOutput(podName, workspaceNamespace, false, "Read-only file system",
+				"touch", datasetsMountPath+"/new.txt")
+		})
+
+		It("should reject two volumes at one mount path", func() {
+			VerifyCreateWorkspaceRejectedByWebhook(
+				"duplicate-mount-workspace", group, policySubgroup, "duplicate-mount-workspace", workspaceNamespace)
+		})
+	})
+
+	Context("Locked template volumes", func() {
+		const (
+			policySubgroup         = "policy"
+			lockedTemplateName     = "locked-volumes-template"
+			lockedDefaultWorkspace = "locked-default-workspace"
+			alongsideWorkspace     = "locked-alongside-workspace"
+
+			teamVolume = `{"name":"team","persistentVolumeClaimName":"policy-shared-fs",` +
+				`"mountPath":"/home/jovyan/team","subPath":"namespaces/ml"}`
+			teamRootVolume   = `{"name":"team","persistentVolumeClaimName":"policy-shared-fs","mountPath":"/home/jovyan/team"}`
+			mineVolume       = `{"name":"mine","persistentVolumeClaimName":"policy-datasets","mountPath":"/home/jovyan/mine"}`
+			mineAtTeamVolume = `{"name":"mine","persistentVolumeClaimName":"policy-datasets","mountPath":"/home/jovyan/team"}`
+		)
+
+		// The outer AfterEach deletes the workspaces, then the templates of the shared namespace.
+		BeforeEach(func() {
+			createTemplateForTest(lockedTemplateName, group, policySubgroup)
+		})
+
+		It("should give the locked volumes to a workspace that declares none", func() {
+			createWorkspaceForTest(lockedDefaultWorkspace, group, policySubgroup)
+			subPath, err := kubectlGet("workspace", lockedDefaultWorkspace, workspaceNamespace,
+				"{.spec.volumes[?(@.name=='team')].subPath}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(subPath).To(Equal("namespaces/ml"))
+		})
+
+		It("should accept a workspace that adds a volume alongside the locked volumes", func() {
+			createWorkspaceForTest(alongsideWorkspace, group, policySubgroup)
+		})
+
+		It("should reject a workspace that declares its own volumes without the locked volumes", func() {
+			VerifyCreateWorkspaceRejectedByWebhook(
+				"locked-missing-workspace", group, policySubgroup, "locked-missing-workspace", workspaceNamespace)
+		})
+
+		It("should reject removing, changing or shadowing a locked volume", func() {
+			createWorkspaceForTest(alongsideWorkspace, group, policySubgroup)
+
+			By("removing the locked volume")
+			output, err := patchWorkspaceForTest(alongsideWorkspace, workspaceNamespace, volumesPatch(mineVolume))
+			Expect(err).To(HaveOccurred())
+			Expect(output).To(ContainSubstring("spec.volumes[team]: required by template"))
+
+			By("dropping the locked volume's subPath")
+			output, err = patchWorkspaceForTest(alongsideWorkspace, workspaceNamespace, volumesPatch(teamRootVolume))
+			Expect(err).To(HaveOccurred())
+			Expect(output).To(ContainSubstring("spec.volumes[team]: pinned to its definition"))
+
+			By("mounting another volume at the locked volume's mount path")
+			output, err = patchWorkspaceForTest(alongsideWorkspace, workspaceNamespace,
+				volumesPatch(teamVolume, mineAtTeamVolume))
+			Expect(err).To(HaveOccurred())
+			Expect(output).To(ContainSubstring("is used by both volume 'team' and volume 'mine'"))
+		})
+	})
+
 	Context("Template-based", func() {
 		It("should create PVC within template bounds", func() {
 			templateFilename := templateName
@@ -671,4 +789,47 @@ func testPvcForStorageTest(
 		Expect(err).NotTo(HaveOccurred())
 		Expect(output).To(Equal(tc.expected))
 	}
+}
+
+// volumesPatch builds a merge patch that replaces spec.volumes with the given JSON volumes.
+func volumesPatch(volumes ...string) string {
+	return `{"spec":{"volumes":[` + strings.Join(volumes, ",") + `]}}`
+}
+
+// Claims and seed pod of the mount option tests, in test/e2e/static/storage-policy.
+const (
+	policySharedClaim   = "policy-shared-fs"
+	policyDatasetsClaim = "policy-datasets"
+	policySeedPod       = "policy-seed"
+)
+
+// seedPolicyClaims creates the claims the mount option tests use and seeds them the way a deployer
+// would, creating the subPath directory beforehand. The claims bind when the seed pod schedules, since
+// the storage class waits for the first consumer.
+func seedPolicyClaims(subgroup string) {
+	GinkgoHelper()
+	createPvcForTest(policySharedClaim, "storage", subgroup)
+	createPvcForTest(policyDatasetsClaim, "storage", subgroup)
+
+	By("seeding the claims")
+	cmd := exec.Command("kubectl", "apply", "-f", BuildTestResourcePath(policySeedPod, "storage", subgroup))
+	_, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+
+	// The image pull can be slow on a cold CI node; a failed seed stops the wait at once, with its logs.
+	Eventually(func(g Gomega) {
+		phase, err := kubectlGet("pod", policySeedPod, "default", jsonPathStatusPhase)
+		g.Expect(err).NotTo(HaveOccurred())
+		if phase == "Failed" {
+			logs, _ := utils.Run(exec.Command("kubectl", "logs", policySeedPod, "-n", "default"))
+			StopTrying("seed pod failed").Wrap(fmt.Errorf("logs: %s", logs)).Now()
+		}
+		g.Expect(phase).To(Equal("Succeeded"))
+	}, 3*time.Minute, 2*time.Second).Should(Succeed())
+	WaitForPVCBinding(policySharedClaim, "default")
+	WaitForPVCBinding(policyDatasetsClaim, "default")
+
+	cmd = exec.Command("kubectl", "delete", "pod", policySeedPod, "-n", "default", "--wait=true", "--timeout=60s")
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
 }
