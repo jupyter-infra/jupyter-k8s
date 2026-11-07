@@ -3,6 +3,8 @@ set -e
 
 echo "Resetting Jupyter environment (uv)..."
 export UV_PROJECT_ENVIRONMENT="/home/jovyan/.venv"
+# Keep copied entry points valid after moving the image environment into home.
+export UV_PREVIEW_FEATURES="relocatable-envs-default"
 
 if [ -d "$UV_PROJECT_ENVIRONMENT" ]; then
     echo "Removing existing virtual environment..."

@@ -3,6 +3,8 @@ set -e
 
 BASE_URL="${JUPYTER_BASE_URL:-/}"
 export UV_PROJECT_ENVIRONMENT="/home/jovyan/.venv"
+# Keep copied entry points valid after moving the image environment into home.
+export UV_PREVIEW_FEATURES="relocatable-envs-default"
 
 echo "Setting up uv environment..."
 

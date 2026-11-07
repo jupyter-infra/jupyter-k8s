@@ -6,9 +6,11 @@ class RuntimeEnvironmentTest(unittest.TestCase):
     def test_image_build_prepares_seed_environment_without_overriding_runtime(self):
         dockerfile = Path(__file__).with_name("Dockerfile").read_text()
         self.assertIn(
-            "RUN UV_PROJECT_ENVIRONMENT=/opt/uv/jupyter/.venv uv sync --directory /opt/uv/jupyter",
+            "UV_PREVIEW_FEATURES=relocatable-envs-default",
             dockerfile,
         )
+        self.assertIn("UV_PROJECT_ENVIRONMENT=/opt/uv/jupyter/.venv", dockerfile)
+        self.assertIn("uv sync --directory /opt/uv/jupyter", dockerfile)
         self.assertNotIn("ENV UV_PROJECT_ENVIRONMENT=", dockerfile)
 
     def test_runtime_sync_seeds_the_persistent_home_environment(self):
@@ -18,6 +20,7 @@ class RuntimeEnvironmentTest(unittest.TestCase):
 
         for script in (start, reset):
             self.assertIn('export UV_PROJECT_ENVIRONMENT="/home/jovyan/.venv"', script)
+            self.assertIn('export UV_PREVIEW_FEATURES="relocatable-envs-default"', script)
             self.assertIn('cp -R /opt/uv/jupyter/.venv "$UV_PROJECT_ENVIRONMENT"', script)
             self.assertIn("uv sync --locked", script)
 

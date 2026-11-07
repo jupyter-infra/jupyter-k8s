@@ -17,7 +17,9 @@ COPY jupyter_server_config.py /etc/jupyter/
 # 3/ create a dir for UV, copy jupyter toml file, run uv
 RUN mkdir -p /opt/uv/jupyter
 COPY pyproject.jupyter.toml /opt/uv/jupyter/pyproject.toml
-RUN UV_PROJECT_ENVIRONMENT=/opt/uv/jupyter/.venv uv sync --directory /opt/uv/jupyter
+RUN UV_PREVIEW_FEATURES=relocatable-envs-default \
+    UV_PROJECT_ENVIRONMENT=/opt/uv/jupyter/.venv \
+    uv sync --directory /opt/uv/jupyter
 
 # 4/ create the start-up script
 COPY jupyter-start.sh /usr/local/bin/
