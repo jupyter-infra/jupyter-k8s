@@ -6,10 +6,11 @@ The validating webhook enforces constraints on workspace create, update, and del
 
 | Check | Description |
 |-------|-------------|
-| Template constraints | Validates resources, images, storage size, idle shutdown and shared memory bounds, pinned access and ownership types, and locked security contexts against the template's constraint fields |
+| Template constraints | Validates resources, images, storage size, idle shutdown and shared memory bounds, locked default volumes, pinned access and ownership types, and locked security contexts against the template's constraint fields |
 | Storage size shrink | On update, rejects a decrease of `spec.storage.size` below the workspace's provisioned PVC size |
 | Reference namespace scope | Rejects references to templates or access strategies outside the workspace's own namespace or the configured shared namespace |
 | Volume ownership | Rejects references to other workspaces' primary storage PVCs (secondary storage can be shared freely) |
+| Mount paths | Rejects two mounts at one path among primary storage and `spec.volumes`. On update, checked only on a spec change other than a stop |
 
 ## Bypassed for controller/admins
 

@@ -1,0 +1,35 @@
+# Seeds the claims the way a deployer would: the subPath directory must exist before a workspace
+# mounts it, with a file inside it and one outside it to check what the workspace sees.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: policy-seed
+  namespace: default
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsUser: 0
+  containers:
+    - name: seed
+      image: busybox:1.36
+      command:
+        - sh
+        - -c
+        - >-
+          mkdir -p /shared/namespaces/ml &&
+          echo inside > /shared/namespaces/ml/inside.txt &&
+          echo outside > /shared/outside.txt &&
+          chmod -R a+rwX /shared &&
+          echo dataset > /datasets/dataset.txt
+      volumeMounts:
+        - name: shared
+          mountPath: /shared
+        - name: datasets
+          mountPath: /datasets
+  volumes:
+    - name: shared
+      persistentVolumeClaim:
+        claimName: policy-shared-fs
+    - name: datasets
+      persistentVolumeClaim:
+        claimName: policy-datasets

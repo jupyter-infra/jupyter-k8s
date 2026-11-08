@@ -398,6 +398,11 @@ func (v *WorkspaceCustomValidator) ValidateCreate(ctx context.Context, workspace
 		return nil, err
 	}
 
+	// Validate volume name and mount path uniqueness (applies to all users)
+	if violation := validateUniqueVolumes(workspace); violation != nil {
+		return nil, fmt.Errorf("workspace violates volume constraints: %s", violation.Message)
+	}
+
 	// Controller or admin users bypass validation
 	if isControllerOrAdminUser(ctx) {
 		return warnings, nil
@@ -509,7 +514,22 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldWorksp
 		return nil, err
 	}
 
+	// Validate volume name and mount path uniqueness. Like template constraints, only on a spec change other than a stop,
+	// so it never blocks a metadata edit or stopping an existing workspace.
+	if specChanged(&oldWorkspace.Spec, &newWorkspace.Spec) && !isStopOnly(oldWorkspace, newWorkspace) {
+		if violation := validateUniqueVolumes(newWorkspace); violation != nil {
+			return nil, fmt.Errorf("workspace violates volume constraints: %s", violation.Message)
+		}
+	}
+
 	return warnings, nil
+}
+
+// isStopOnly reports whether the update only sets desiredStatus to Stopped.
+func isStopOnly(oldWorkspace, newWorkspace *workspacev1alpha1.Workspace) bool {
+	return newWorkspace.Spec.DesiredStatus == controller.DesiredStateStopped &&
+		oldWorkspace.Spec.DesiredStatus != controller.DesiredStateStopped &&
+		onlyDesiredStatusChanged(&oldWorkspace.Spec, &newWorkspace.Spec)
 }
 
 // ValidateDelete implements admission.Validator so a webhook will be registered for the type Workspace.

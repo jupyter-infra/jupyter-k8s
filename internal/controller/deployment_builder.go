@@ -199,6 +199,7 @@ func (db *DeploymentBuilder) buildPodSpec(workspace *workspacev1alpha1.Workspace
 		volumeSource := corev1.VolumeSource{
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 				ClaimName: vol.PersistentVolumeClaimName,
+				ReadOnly:  vol.ReadOnly,
 			},
 		}
 		if vol.EmptyDir != nil {
@@ -297,6 +298,8 @@ func (db *DeploymentBuilder) buildPrimaryContainer(workspace *workspacev1alpha1.
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 			Name:      vol.Name,
 			MountPath: vol.MountPath,
+			SubPath:   vol.SubPath,
+			ReadOnly:  vol.ReadOnly,
 		})
 	}
 

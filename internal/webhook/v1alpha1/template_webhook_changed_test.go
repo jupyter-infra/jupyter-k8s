@@ -47,6 +47,26 @@ func TestConstraintsChanged(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "volume overrides locked",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{VolumeOverrides: &workspacev1alpha1.VolumeOverridePolicy{Allow: boolPtr(false)}},
+			want: true,
+		},
+		{
+			name: "locked default volumes changed",
+			old: workspacev1alpha1.WorkspaceTemplateSpec{VolumeOverrides: &workspacev1alpha1.VolumeOverridePolicy{Allow: boolPtr(false)},
+				DefaultVolumes: []workspacev1alpha1.VolumeSpec{teamVolume()}},
+			new: workspacev1alpha1.WorkspaceTemplateSpec{VolumeOverrides: &workspacev1alpha1.VolumeOverridePolicy{Allow: boolPtr(false)},
+				DefaultVolumes: []workspacev1alpha1.VolumeSpec{teamVolume(), scratchVolume()}},
+			want: true,
+		},
+		{
+			name: "unlocked default volumes changed",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{DefaultVolumes: []workspacev1alpha1.VolumeSpec{teamVolume()}},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{DefaultVolumes: []workspacev1alpha1.VolumeSpec{scratchVolume()}},
+			want: false,
+		},
+		{
 			name: "allowed images changed",
 			old:  workspacev1alpha1.WorkspaceTemplateSpec{AllowedImages: []string{"a"}},
 			new:  workspacev1alpha1.WorkspaceTemplateSpec{AllowedImages: []string{"a", "b"}},

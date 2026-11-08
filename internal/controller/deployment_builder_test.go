@@ -202,6 +202,47 @@ var _ = Describe("DeploymentBuilder", func() {
 			Expect(deployment.Spec.Template.Spec.Volumes[2].EmptyDir.Medium).To(Equal(corev1.StorageMediumMemory))
 			Expect(*deployment.Spec.Template.Spec.Volumes[2].EmptyDir.SizeLimit).To(Equal(sizeLimit))
 		})
+
+		It("should write subPath and readOnly to the mount and readOnly to the claim", func() {
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-subpath",
+					Namespace: testNamespace,
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					Volumes: []workspacev1alpha1.VolumeSpec{
+						{
+							Name:                      "scratch",
+							PersistentVolumeClaimName: "scratch-pvc",
+							MountPath:                 "/home/jovyan/scratch",
+							SubPath:                   "namespaces/ml",
+						},
+						{
+							Name:                      "datasets",
+							PersistentVolumeClaimName: "datasets-pvc",
+							MountPath:                 "/home/jovyan/datasets",
+							ReadOnly:                  true,
+						},
+					},
+				},
+			}
+
+			deployment, err := deploymentBuilder.BuildDeployment(ctx, workspace)
+			Expect(err).NotTo(HaveOccurred())
+
+			mounts := deployment.Spec.Template.Spec.Containers[0].VolumeMounts
+			Expect(mounts).To(ConsistOf(
+				corev1.VolumeMount{Name: "scratch", MountPath: "/home/jovyan/scratch", SubPath: "namespaces/ml"},
+				corev1.VolumeMount{Name: "datasets", MountPath: "/home/jovyan/datasets", ReadOnly: true},
+			))
+
+			claims := map[string]*corev1.PersistentVolumeClaimVolumeSource{}
+			for _, v := range deployment.Spec.Template.Spec.Volumes {
+				claims[v.Name] = v.PersistentVolumeClaim
+			}
+			Expect(claims["scratch"]).To(Equal(&corev1.PersistentVolumeClaimVolumeSource{ClaimName: "scratch-pvc"}))
+			Expect(claims["datasets"]).To(Equal(&corev1.PersistentVolumeClaimVolumeSource{ClaimName: "datasets-pvc", ReadOnly: true}))
+		})
 	})
 
 	Context("Container Configuration", func() {
