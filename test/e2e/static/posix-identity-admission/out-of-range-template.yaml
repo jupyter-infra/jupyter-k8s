@@ -1,0 +1,13 @@
+# Resolves runAsUser to the reserved id 0
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: posix-out-of-range-template
+  namespace: posix-adm-team
+spec:
+  displayName: "POSIX Out Of Range Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultPodSecurityContext:
+    runAsNonRoot: true
+    supplementalGroupsPolicy: Strict
+    runAsUser: "0"

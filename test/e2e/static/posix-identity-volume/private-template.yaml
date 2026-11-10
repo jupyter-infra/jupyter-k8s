@@ -1,0 +1,40 @@
+# Private template: runs workspaces as their owner, with the team and a volume group
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: posix-private-template
+  namespace: posix-vol-team-a
+spec:
+  displayName: "POSIX Private Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultAccessType: OwnerOnly
+  defaultOwnershipType: OwnerOnly
+  allowCustomAccessType: false
+  allowCustomOwnershipType: false
+  defaultPodSecurityContext:
+    runAsNonRoot: true
+    supplementalGroupsPolicy: Strict
+    fsGroupChangePolicy: OnRootMismatch
+    runAsUser: "{{ .User.Uid }}"
+    runAsGroup: "{{ .User.Gid }}"
+    fsGroup: "{{ .User.Gid }}"
+    supplementalGroups: ["{{ .Namespace.Gid }}", 2147000123]
+  podSecurityContextOverrides:
+    allow: false
+  containerSecurityContextOverrides:
+    allow: false
+  # The test image's home is owned by uid 1000: give arbitrary-uid workspaces a writable home volume
+  # (local-path directories are world-writable) and point HOME at it.
+  primaryStorage:
+    defaultSize: 1Gi
+    defaultMountPath: /home/jovyan
+  baseEnv:
+    - name: HOME
+      value: /home/jovyan
+  defaultResources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

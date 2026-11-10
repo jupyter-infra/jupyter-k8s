@@ -1,0 +1,11 @@
+# Stopped: admission runs in full without scheduling a pod
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: race-1-0
+  namespace: posix-adm-team
+spec:
+  displayName: "race-1-0"
+  desiredStatus: Stopped
+  templateRef:
+    name: posix-private-template

@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: alice-space
+  namespace: posix-vol-team-a
+spec:
+  displayName: "alice-space"
+  desiredStatus: Running
+  templateRef:
+    name: posix-team-space-template

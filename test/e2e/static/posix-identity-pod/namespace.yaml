@@ -1,0 +1,36 @@
+# Team namespace carrying the deployer-supplied gid read by {{ .Namespace.Gid }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: posix-pod-team
+  labels:
+    workspace.jupyter.org/posix-gid: "2130706500"
+    jk8s/e2e: posix-identity-test
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: posix-identity-test-role
+  namespace: posix-pod-team
+  labels:
+    jk8s/e2e: posix-identity-test
+rules:
+- apiGroups: ["workspace.jupyter.org"]
+  resources: ["workspaces"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: posix-identity-test-binding
+  namespace: posix-pod-team
+  labels:
+    jk8s/e2e: posix-identity-test
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: posix-identity-test-role
+subjects:
+- kind: Group
+  name: posix-identity-e2e-users
+  apiGroup: rbac.authorization.k8s.io

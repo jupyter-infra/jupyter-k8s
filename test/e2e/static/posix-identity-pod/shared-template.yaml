@@ -1,0 +1,31 @@
+# Shared template: runs workspaces as the team
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: posix-shared-template
+  namespace: posix-pod-team
+spec:
+  displayName: "POSIX Shared Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultAccessType: Public
+  allowCustomAccessType: false
+  defaultPodSecurityContext:
+    runAsNonRoot: true
+    supplementalGroupsPolicy: Strict
+    runAsUser: "{{ .Namespace.Gid }}"
+    runAsGroup: "{{ .Namespace.Gid }}"
+  # The test image's home is owned by uid 1000: give arbitrary-uid workspaces a writable home volume
+  # (local-path directories are world-writable) and point HOME at it.
+  primaryStorage:
+    defaultSize: 1Gi
+    defaultMountPath: /home/jovyan
+  baseEnv:
+    - name: HOME
+      value: /home/jovyan
+  defaultResources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

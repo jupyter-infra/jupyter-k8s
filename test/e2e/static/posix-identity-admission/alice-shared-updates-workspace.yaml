@@ -1,0 +1,11 @@
+# Stopped: admission runs in full without scheduling a pod
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: alice-shared-updates
+  namespace: posix-adm-team
+spec:
+  displayName: "alice-shared-updates"
+  desiredStatus: Stopped
+  templateRef:
+    name: posix-shared-template

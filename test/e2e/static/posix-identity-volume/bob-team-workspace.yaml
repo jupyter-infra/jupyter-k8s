@@ -1,0 +1,14 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: bob-team
+  namespace: posix-vol-team-a
+spec:
+  displayName: "bob-team"
+  desiredStatus: Running
+  templateRef:
+    name: posix-private-template
+  volumes:
+    - name: shared
+      persistentVolumeClaimName: posix-shared-fs
+      mountPath: /home/jovyan/shared
