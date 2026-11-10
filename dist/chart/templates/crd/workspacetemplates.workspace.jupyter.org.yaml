@@ -3812,9 +3812,10 @@ spec:
                 type: array
               defaultVolumes:
                 description: |-
-                  DefaultVolumes specifies default additional volumes for workspaces using this template
-                  Volumes are applied during defaulting only if the workspace does not specify any volumes
-                  Each volume references either a pre-existing PVC in the workspace namespace or an emptyDir source
+                  DefaultVolumes specifies default additional volumes for workspaces using this template.
+                  Each volume references either a pre-existing PVC in the workspace namespace or an emptyDir source.
+                  The admission webhook copies them onto a workspace that declares no volumes of its own;
+                  VolumeOverrides controls whether a workspace may drop or change them.
                 items:
                   description: VolumeSpec defines a volume to mount from an existing
                     PVC or emptyDir source.
@@ -3856,6 +3857,21 @@ spec:
                         PVC to mount
                       minLength: 1
                       type: string
+                    readOnly:
+                      description: |-
+                        ReadOnly mounts the volume read-only. For a claim, the operator also sets readOnly on the pod
+                        volume's persistentVolumeClaim, so no other container of the pod can mount the claim read-write.
+                      type: boolean
+                    subPath:
+                      description: |-
+                        SubPath is a directory inside the claim that the operator mounts instead of the claim's root,
+                        through the container's volumeMount.subPath. It must be relative, without empty or '..' segments,
+                        and must already exist on the volume: otherwise the kubelet creates it as root, which fails or
+                        yields a root-owned directory on NFS or Lustre file systems that squash root.
+                      maxLength: 4096
+                      minLength: 1
+                      pattern: ^(\.|\.\.[^/]+|\.[^/.][^/]*|[^/.][^/]*)(/(\.|\.\.[^/]+|\.[^/.][^/]*|[^/.][^/]*))*$
+                      type: string
                   required:
                   - mountPath
                   - name
@@ -3865,6 +3881,9 @@ spec:
                       must be specified
                     rule: (has(self.persistentVolumeClaimName) && !has(self.emptyDir))
                       || (!has(self.persistentVolumeClaimName) && has(self.emptyDir))
+                  - message: subPath applies to persistentVolumeClaimName volumes
+                      only, not to emptyDir
+                    rule: '!has(self.subPath) || !has(self.emptyDir)'
                 maxItems: 10
                 type: array
                 x-kubernetes-validations:
@@ -4055,6 +4074,22 @@ spec:
                       Allow controls whether workspaces may set their own sharedMemory or mount their own volume at
                       /dev/shm. When false, workspaces get DefaultSharedMemory and nothing else, so a template that
                       sets it needs a DefaultSharedMemory.
+                    type: boolean
+                type: object
+              volumeOverrides:
+                description: |-
+                  VolumeOverrides controls whether a workspace may drop or change DefaultVolumes. When locked, the
+                  volumes of any workspace referencing the template must include the template's defaults, exactly
+                  as defined.
+                properties:
+                  allow:
+                    default: true
+                    description: |-
+                      Allow controls whether workspaces may drop or change the template's DefaultVolumes. When false, a
+                      workspace must list every DefaultVolumes entry unchanged; a workspace that declares no volumes
+                      receives them from the defaulter, and one that declares its own must include them alongside.
+                      Set AllowSecondaryStorages to false as well to restrict workspaces to DefaultVolumes exactly as
+                      defined; otherwise a workspace can add its own volume on a default volume's claim.
                     type: boolean
                 type: object
             required:

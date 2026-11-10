@@ -76,14 +76,21 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	AllowSecondaryStorages *bool `json:"allowSecondaryStorages,omitempty"`
 
-	// DefaultVolumes specifies default additional volumes for workspaces using this template
-	// Volumes are applied during defaulting only if the workspace does not specify any volumes
-	// Each volume references either a pre-existing PVC in the workspace namespace or an emptyDir source
+	// DefaultVolumes specifies default additional volumes for workspaces using this template.
+	// Each volume references either a pre-existing PVC in the workspace namespace or an emptyDir source.
+	// The admission webhook copies them onto a workspace that declares no volumes of its own;
+	// VolumeOverrides controls whether a workspace may drop or change them.
 	// +kubebuilder:validation:MaxItems=10
 	// +kubebuilder:validation:XValidation:rule="!self.exists(v, v.name == 'workspace-storage')",message="volume name 'workspace-storage' is reserved"
 	// +kubebuilder:validation:XValidation:rule="!self.exists(v, v.name == 'workspace-shm')",message="volume name 'workspace-shm' is reserved"
 	// +optional
 	DefaultVolumes []VolumeSpec `json:"defaultVolumes,omitempty"`
+
+	// VolumeOverrides controls whether a workspace may drop or change DefaultVolumes. When locked, the
+	// volumes of any workspace referencing the template must include the template's defaults, exactly
+	// as defined.
+	// +optional
+	VolumeOverrides *VolumeOverridePolicy `json:"volumeOverrides,omitempty"`
 
 	// DefaultSharedMemory is the /dev/shm setting for workspaces using this template; set it, {} is
 	// enough, to give every workspace of the template the enlarged /dev/shm. Copied in whole onto a
@@ -330,6 +337,24 @@ type SharedMemoryOverridePolicy struct {
 // Locked reports whether the policy holds workspaces to the template's DefaultSharedMemory: only when
 // it is present and allow is false.
 func (p *SharedMemoryOverridePolicy) Locked() bool {
+	return p != nil && p.Allow != nil && !*p.Allow
+}
+
+// VolumeOverridePolicy controls whether a workspace may deviate from the template's DefaultVolumes.
+type VolumeOverridePolicy struct {
+	// Allow controls whether workspaces may drop or change the template's DefaultVolumes. When false, a
+	// workspace must list every DefaultVolumes entry unchanged; a workspace that declares no volumes
+	// receives them from the defaulter, and one that declares its own must include them alongside.
+	// Set AllowSecondaryStorages to false as well to restrict workspaces to DefaultVolumes exactly as
+	// defined; otherwise a workspace can add its own volume on a default volume's claim.
+	// +kubebuilder:default=true
+	// +optional
+	Allow *bool `json:"allow,omitempty"`
+}
+
+// Locked reports whether the policy holds workspaces to the template's DefaultVolumes: only when it is
+// present and allow is false.
+func (p *VolumeOverridePolicy) Locked() bool {
 	return p != nil && p.Allow != nil && !*p.Allow
 }
 

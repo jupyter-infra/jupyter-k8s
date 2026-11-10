@@ -442,6 +442,43 @@ var _ = Describe("WorkspaceTemplate Validator", func() {
 		})
 	})
 
+	Context("Default volumes consistency", func() {
+		templateWithVolumes := func(policy *workspacev1alpha1.VolumeOverridePolicy, volumes ...workspacev1alpha1.VolumeSpec) *workspacev1alpha1.WorkspaceTemplate {
+			return volumeTemplate(testTemplateNameTmpl, testNamespaceTeamA, policy, volumes...)
+		}
+
+		It("rejects two default volumes with one name", func() {
+			second := scratchVolume()
+			second.Name = testVolTeamName
+			_, err := validator.ValidateCreate(ctx, templateWithVolumes(nil, teamVolume(), second))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("defaultVolumes[team] is declared more than once"))
+		})
+
+		It("rejects two default volumes at one mount path", func() {
+			second := scratchVolume()
+			second.MountPath = testVolTeamMount + "/"
+			_, err := validator.ValidateCreate(ctx, templateWithVolumes(nil, teamVolume(), second))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("defaultVolumes[team] and defaultVolumes[scratch] both mount"))
+		})
+
+		It("rejects a locked default volume at the primary storage default mount path", func() {
+			template := templateWithVolumes(lockedVolumePolicy(), teamVolume())
+			template.Spec.PrimaryStorage = &workspacev1alpha1.StorageConfig{DefaultMountPath: testVolTeamMount}
+			_, err := validator.ValidateCreate(ctx, template)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("primaryStorage.defaultMountPath"))
+		})
+
+		It("accepts distinct locked default volumes", func() {
+			template := templateWithVolumes(lockedVolumePolicy(), teamVolume(), scratchVolume())
+			template.Spec.PrimaryStorage = &workspacev1alpha1.StorageConfig{DefaultMountPath: testVolPrimaryMount}
+			_, err := validator.ValidateCreate(ctx, template)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
 	Context("Resource bounds consistency", func() {
 		templateWithResourceBounds := func(min, max string) *workspacev1alpha1.WorkspaceTemplate {
 			return &workspacev1alpha1.WorkspaceTemplate{

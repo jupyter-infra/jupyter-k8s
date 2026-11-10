@@ -92,5 +92,25 @@ var _ = Describe("VolumeDefaulter", func() {
 
 			Expect(workspace.Spec.Volumes).To(BeEmpty())
 		})
+
+		It("should not merge default volumes into a workspace's own volumes when the template locks them", func() {
+			template.Spec.VolumeOverrides = &workspacev1alpha1.VolumeOverridePolicy{Allow: boolPtr(false)}
+			own := workspacev1alpha1.VolumeSpec{Name: "mine", PersistentVolumeClaimName: "mine-pvc", MountPath: "/mine"}
+			workspace.Spec.Volumes = []workspacev1alpha1.VolumeSpec{own}
+
+			applyVolumeDefaults(workspace, template)
+
+			Expect(workspace.Spec.Volumes).To(Equal([]workspacev1alpha1.VolumeSpec{own}))
+		})
+
+		It("should copy subPath and readOnly from default volumes", func() {
+			template.Spec.DefaultVolumes = []workspacev1alpha1.VolumeSpec{
+				{Name: "scratch", PersistentVolumeClaimName: "scratch-pvc", MountPath: "/scratch", SubPath: "namespaces/ml", ReadOnly: true},
+			}
+
+			applyVolumeDefaults(workspace, template)
+
+			Expect(workspace.Spec.Volumes).To(Equal(template.Spec.DefaultVolumes))
+		})
 	})
 })

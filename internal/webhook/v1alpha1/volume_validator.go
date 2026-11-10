@@ -8,12 +8,16 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
+	"path"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 )
 
 // VolumeValidator handles volume validation for webhooks
@@ -36,24 +40,147 @@ func (vv *VolumeValidator) ValidateVolumeOwnership(ctx context.Context, workspac
 	return nil
 }
 
-// validateSecondaryStorages checks if secondary storage volumes are allowed by template
+// findDefaultVolume returns the template's default volume of the given name, or nil.
+func findDefaultVolume(template *workspacev1alpha1.WorkspaceTemplate, name string) *workspacev1alpha1.VolumeSpec {
+	if template == nil {
+		return nil
+	}
+	for i := range template.Spec.DefaultVolumes {
+		if template.Spec.DefaultVolumes[i].Name == name {
+			return &template.Spec.DefaultVolumes[i]
+		}
+	}
+	return nil
+}
+
+// isTemplateDefaultVolume reports whether the volume is one of the template's default volumes, same
+// name and same settings.
+func isTemplateDefaultVolume(volume workspacev1alpha1.VolumeSpec, template *workspacev1alpha1.WorkspaceTemplate) bool {
+	defaultVolume := findDefaultVolume(template, volume.Name)
+	return defaultVolume != nil && equality.Semantic.DeepEqual(*defaultVolume, volume)
+}
+
+// validateSecondaryStorages checks if secondary storage volumes are allowed by template. Only the
+// volumes the workspace adds count: the template's own default volumes are always allowed.
 func validateSecondaryStorages(volumes []workspacev1alpha1.VolumeSpec, template *workspacev1alpha1.WorkspaceTemplate) *TemplateViolation {
-	// Skip validation if no volumes specified
-	if len(volumes) == 0 {
+	// Check AllowSecondaryStorages setting (default is true if not specified)
+	if template.Spec.AllowSecondaryStorages == nil || *template.Spec.AllowSecondaryStorages {
 		return nil
 	}
 
-	// Check AllowSecondaryStorages setting (default is true if not specified)
-	if template.Spec.AllowSecondaryStorages != nil && !*template.Spec.AllowSecondaryStorages {
-		return &TemplateViolation{
-			Type:    ViolationTypeSecondaryStorageNotAllowed,
-			Field:   "spec.volumes",
-			Message: fmt.Sprintf("Template '%s' does not allow secondary storage volumes, but workspace specifies %d volume(s)", template.Name, len(volumes)),
-			Allowed: "no secondary volumes",
-			Actual:  fmt.Sprintf("%d volume(s)", len(volumes)),
+	var added []string
+	for _, volume := range volumes {
+		if !isTemplateDefaultVolume(volume, template) {
+			added = append(added, volume.Name)
+		}
+	}
+	if len(added) == 0 {
+		return nil
+	}
+
+	return &TemplateViolation{
+		Type:    ViolationTypeSecondaryStorageNotAllowed,
+		Field:   "spec.volumes",
+		Message: fmt.Sprintf("Template '%s' does not allow secondary storage volumes, but workspace adds %d volume(s): %s", template.Name, len(added), strings.Join(added, ", ")),
+		Allowed: "no volumes beyond the template's defaultVolumes",
+		Actual:  fmt.Sprintf("%d volume(s)", len(added)),
+	}
+}
+
+// validateLockedVolumes holds a workspace to the template's default volumes when the template's
+// volumeOverrides lock them: every default volume must be present with the template's settings.
+func validateLockedVolumes(workspace *workspacev1alpha1.Workspace, template *workspacev1alpha1.WorkspaceTemplate) []TemplateViolation {
+	if !template.Spec.VolumeOverrides.Locked() {
+		return nil
+	}
+
+	var violations []TemplateViolation
+	for _, defaultVolume := range template.Spec.DefaultVolumes {
+		field := fmt.Sprintf("spec.volumes[%s]", defaultVolume.Name)
+		var found *workspacev1alpha1.VolumeSpec
+		for i := range workspace.Spec.Volumes {
+			if workspace.Spec.Volumes[i].Name == defaultVolume.Name {
+				found = &workspace.Spec.Volumes[i]
+				break
+			}
+		}
+		switch {
+		case found == nil:
+			violations = append(violations, TemplateViolation{
+				Type:    ViolationTypeVolumeOverrideNotAllowed,
+				Field:   field,
+				Message: fmt.Sprintf("%s: required by template %q, which does not allow overriding its defaultVolumes; add it as defined in the template", field, template.Name),
+				Allowed: "the template's defaultVolumes entry",
+				Actual:  "missing",
+			})
+		case !equality.Semantic.DeepEqual(*found, defaultVolume):
+			violations = append(violations, TemplateViolation{
+				Type:    ViolationTypeVolumeOverrideNotAllowed,
+				Field:   field,
+				Message: fmt.Sprintf("%s: pinned to its definition in template %q, which does not allow overriding its defaultVolumes", field, template.Name),
+				Allowed: "the template's defaultVolumes entry",
+				Actual:  "a modified volume",
+			})
 		}
 	}
 
+	return violations
+}
+
+// validateUniqueVolumes rejects two volumes with the same name, and two mounts of the primary container
+// at the same path: the primary storage and the workspace's volumes. The operator's /dev/shm volume is
+// left out, since a volume at /dev/shm replaces it.
+//
+// The CRD does not catch either. Without the check, the workspace passes admission and the API server
+// rejects its Deployment at reconcile time, so the workspace fails to start instead of failing
+// kubectl apply. A CEL rule cannot replace it: a pairwise rule over the unbounded volumes list exceeds
+// the CEL cost budget unless volumes gets a maxItems, which could reject existing workspaces; the
+// primary storage mount path is often unset in the spec, and only the controller resolves it to its
+// default; and CEL cannot clean paths, so /data and /data/ would both pass.
+func validateUniqueVolumes(workspace *workspacev1alpha1.Workspace) *TemplateViolation {
+	names := map[string]bool{}
+	for _, volume := range workspace.Spec.Volumes {
+		if names[volume.Name] {
+			return &TemplateViolation{
+				Type:    ViolationTypeDuplicateVolumeName,
+				Field:   fmt.Sprintf("spec.volumes[%s]", volume.Name),
+				Message: fmt.Sprintf("volume name '%s' is used more than once", volume.Name),
+				Allowed: "one volume per name",
+				Actual:  volume.Name,
+			}
+		}
+		names[volume.Name] = true
+	}
+
+	type mountSource struct {
+		mountPath   string
+		description string
+	}
+	var mounts []mountSource
+	if storage := controller.ResolveStorageConfig(workspace); storage != nil {
+		mounts = append(mounts, mountSource{storage.MountPath, "primary storage"})
+	}
+	for _, volume := range workspace.Spec.Volumes {
+		mounts = append(mounts, mountSource{volume.MountPath, fmt.Sprintf("volume '%s'", volume.Name)})
+	}
+
+	seen := map[string]mountSource{}
+	for _, mount := range mounts {
+		if mount.mountPath == "" {
+			continue
+		}
+		cleaned := path.Clean(mount.mountPath)
+		if first, duplicate := seen[cleaned]; duplicate {
+			return &TemplateViolation{
+				Type:    ViolationTypeDuplicateMountPath,
+				Field:   "spec.volumes",
+				Message: fmt.Sprintf("mount path %s is used by both %s and %s", cleaned, first.description, mount.description),
+				Allowed: "one mount per path",
+				Actual:  cleaned,
+			}
+		}
+		seen[cleaned] = mount
+	}
 	return nil
 }
 
