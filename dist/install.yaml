@@ -15064,7 +15064,10 @@ spec:
                 default: false
                 description: |-
                   AllowCustomInitContainers controls whether workspaces using this template
-                  can specify custom init containers beyond the template defaults
+                  can specify custom init containers beyond the template defaults.
+                  A custom init container carries its own securityContext and volumeMounts, which neither the
+                  security context policies, identity templates included, nor VolumeOverrides apply to: keep it
+                  false on a template that locks either.
                 type: boolean
               allowCustomOwnershipType:
                 default: true
@@ -19119,7 +19122,9 @@ spec:
                       workspace must list every DefaultVolumes entry unchanged; a workspace that declares no volumes
                       receives them from the defaulter, and one that declares its own must include them alongside.
                       Set AllowSecondaryStorages to false as well to restrict workspaces to DefaultVolumes exactly as
-                      defined; otherwise a workspace can add its own volume on a default volume's claim.
+                      defined; otherwise a workspace can add its own volume on a default volume's claim. Keep
+                      AllowCustomInitContainers false as well: an init container mounts any volume of the pod, at any
+                      subPath.
                     type: boolean
                 type: object
             required:

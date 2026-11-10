@@ -253,7 +253,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `allow` _boolean_ | Allow controls whether workspaces may drop or change the template's DefaultVolumes. When false, a<br />workspace must list every DefaultVolumes entry unchanged; a workspace that declares no volumes<br />receives them from the defaulter, and one that declares its own must include them alongside.<br />Set AllowSecondaryStorages to false as well to restrict workspaces to DefaultVolumes exactly as<br />defined; otherwise a workspace can add its own volume on a default volume's claim. | true | Optional: \{\} <br /> |
+| `allow` _boolean_ | Allow controls whether workspaces may drop or change the template's DefaultVolumes. When false, a<br />workspace must list every DefaultVolumes entry unchanged; a workspace that declares no volumes<br />receives them from the defaulter, and one that declares its own must include them alongside.<br />Set AllowSecondaryStorages to false as well to restrict workspaces to DefaultVolumes exactly as<br />defined; otherwise a workspace can add its own volume on a default volume's claim. Keep<br />AllowCustomInitContainers false as well: an init container mounts any volume of the pod, at any<br />subPath. | true | Optional: \{\} <br /> |
 
 
 
@@ -303,7 +303,7 @@ _Appears in:_
 | `podSecurityContextOverrides` _[SecurityContextOverridePolicy](#securitycontextoverridepolicy)_ | PodSecurityContextOverrides controls whether a workspace may set its own podSecurityContext.<br />When locked, workspaces get DefaultPodSecurityContext, or no pod security context if unset. |  | Optional: \{\} <br /> |
 | `containerSecurityContextOverrides` _[SecurityContextOverridePolicy](#securitycontextoverridepolicy)_ | ContainerSecurityContextOverrides controls whether a workspace may set its own<br />containerSecurityContext. When locked, workspaces get DefaultContainerSecurityContext, or no<br />container security context if unset. |  | Optional: \{\} <br /> |
 | `defaultInitContainers` _[Container](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#container-v1-core) array_ | DefaultInitContainers specifies default init containers for workspaces using this template<br />Applied during defaulting if the workspace does not specify any init containers |  | MaxItems: 10 <br />Optional: \{\} <br /> |
-| `allowCustomInitContainers` _boolean_ | AllowCustomInitContainers controls whether workspaces using this template<br />can specify custom init containers beyond the template defaults | false | Optional: \{\} <br /> |
+| `allowCustomInitContainers` _boolean_ | AllowCustomInitContainers controls whether workspaces using this template<br />can specify custom init containers beyond the template defaults.<br />A custom init container carries its own securityContext and volumeMounts, which neither the<br />security context policies, identity templates included, nor VolumeOverrides apply to: keep it<br />false on a template that locks either. | false | Optional: \{\} <br /> |
 | `appType` _string_ | AppType specifies the application type for workspaces using this template |  | Optional: \{\} <br /> |
 
 
