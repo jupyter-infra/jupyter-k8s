@@ -31,6 +31,10 @@ const (
 	// posixUsersGroup is the group the test users impersonate; each test namespace binds it a Role on
 	// workspaces only.
 	posixUsersGroup = "posix-identity-e2e-users"
+	// posixAdminUser and posixWorkspaceAdminGroup are the identity teardown impersonates to delete the
+	// test users' OwnerOnly workspaces. The group is the chart's default CLUSTER_ADMIN_GROUP.
+	posixAdminUser           = "posix-identity-e2e-admin"
+	posixWorkspaceAdminGroup = "cluster-workspace-admin"
 )
 
 // posixApply applies a fixture of the subgroup as the test's admin.
@@ -146,13 +150,27 @@ func posixDeleteIdentity(name string) error {
 // PosixIdentity objects of its users, which nothing garbage-collects. Errors are ignored: a teardown
 // cleans what it can.
 func cleanupPosixIdentityTest(namespaces, users []string) {
+	// The test users own these OwnerOnly workspaces, and the workspace webhook lets only their owner, the
+	// controller or an admin group change or delete them. The kind admin is in no admin group, so
+	// teardown impersonates the group the chart names in CLUSTER_ADMIN_GROUP, which the webhook exempts
+	// from the owner check, with a binding granting it workspace deletion only (workspace-admin-rbac).
+	// A workspace left behind would hold its template's finalizer, and so the namespace, until the
+	// delete timeouts.
 	ginkgo.By("cleaning up workspaces and templates")
+	posixApply("", "workspace-admin-rbac")
 	for _, ns := range namespaces {
-		_, _ = utils.Run(exec.Command("kubectl", "delete", "workspace", "--all", "-n", ns,
-			"--ignore-not-found", "--wait=true", "--timeout=180s"))
-		_, _ = utils.Run(exec.Command("kubectl", "delete", "workspacetemplate", "--all", "-n", ns,
-			"--ignore-not-found", "--wait=true", "--timeout=60s"))
+		if _, err := utils.Run(exec.Command("kubectl", "delete", "workspace", "--all", "-n", ns,
+			"--ignore-not-found", "--wait=true", "--timeout=180s",
+			"--as="+posixAdminUser, "--as-group="+posixWorkspaceAdminGroup)); err != nil {
+			_, _ = fmt.Fprintf(ginkgo.GinkgoWriter, "WARNING: deleting the workspaces of %s: %v\n", ns, err)
+		}
+		if _, err := utils.Run(exec.Command("kubectl", "delete", "workspacetemplate", "--all", "-n", ns,
+			"--ignore-not-found", "--wait=true", "--timeout=60s")); err != nil {
+			_, _ = fmt.Fprintf(ginkgo.GinkgoWriter, "WARNING: deleting the templates of %s: %v\n", ns, err)
+		}
 	}
+	_, _ = utils.Run(exec.Command("kubectl", "delete", "-f",
+		BuildTestResourcePath("workspace-admin-rbac", posixIdentityGroup, ""), "--ignore-not-found"))
 
 	ginkgo.By("cleaning up the PosixIdentity objects of the test users")
 	output, _ := kubectlGetAllNamespaces("posixidentity", `{range .items[*]}{.metadata.name} {.spec.username}{"\n"}{end}`)

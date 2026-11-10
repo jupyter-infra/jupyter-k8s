@@ -115,9 +115,11 @@ var _ = Describe("POSIX Identity", Ordered, func() {
 			By("deleting alice's PosixIdentity")
 			Expect(posixDeleteIdentity("uid-" + uid)).To(Succeed())
 
+			// As alice: only the owner, or an admin group, may change an OwnerOnly workspace.
 			By("triggering a reconcile of alice's workspace")
 			_, err := utils.Run(exec.Command("kubectl", "annotate", "workspace", "alice-private", "-n", namespace,
-				fmt.Sprintf("e2e.jupyter.org/poke=%d", time.Now().UnixNano()), "--overwrite"))
+				fmt.Sprintf("e2e.jupyter.org/poke=%d", time.Now().UnixNano()), "--overwrite",
+				"--as="+alice, "--as-group="+posixUsersGroup))
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func(g Gomega) {
