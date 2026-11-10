@@ -34,6 +34,17 @@ const (
 	// access strategy alive until BOTH are removed.
 	AccessStrategyTemplateFinalizerName = "workspace.jupyter.org/accessstrategy-template-protection"
 
+	// AnnotationCreatedBy is the annotation key recording the workspace's owner (its creator's username)
+	AnnotationCreatedBy = "workspace.jupyter.org/created-by"
+
+	// LabelPosixUID is the reserved Workspace label recording the uid of the owner's PosixIdentity when
+	// its template resolves identity from it; written by the workspace defaulter only. A label so admins
+	// can select the workspaces (and, through label propagation, the pods) running as a uid.
+	LabelPosixUID = "workspace.jupyter.org/posix-uid"
+
+	// LabelPosixGID is the deployer-supplied Namespace label carrying the team's gid ({{ .Namespace.Gid }})
+	LabelPosixGID = "workspace.jupyter.org/posix-gid"
+
 	// ConflictRetryDelayMilliseconds is the base delay in milliseconds before retrying after a conflict
 	ConflictRetryDelayMilliseconds = 100
 
