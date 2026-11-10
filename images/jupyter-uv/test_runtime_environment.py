@@ -6,7 +6,7 @@ class RuntimeEnvironmentTest(unittest.TestCase):
     def test_image_build_prepares_seed_environment_without_overriding_runtime(self):
         dockerfile = Path(__file__).with_name("Dockerfile").read_text()
         self.assertIn(
-            "FROM ghcr.io/astral-sh/uv:0.13.7-python3.12-bookworm-slim",
+            "FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim",
             dockerfile,
         )
         self.assertIn(
