@@ -27,7 +27,8 @@ import (
 
 // templateValidationData is the render context static validation renders each templated field against.
 // Its fields ARE the allowlist of top-level references a template may use: .Parameters.<declared> and
-// .Workspace.Name/.Namespace. Rendered under missingkey=error (see validateTemplateExpression), so an
+// .Workspace.Name/.Namespace and .User.UnixName/.UsernameHash. Rendered under missingkey=error (see
+// validateTemplateExpression), so an
 // undeclared .Parameters.X or an unknown .Workspace field errors. It mirrors the field shape of the
 // controller resolver's live render context; if that context gains a field a template may reference, add
 // it here too or a valid template using it would fail validation.
@@ -39,7 +40,14 @@ import (
 // let the typo through. TestValidateIntegrationTemplate_WorkspaceFieldTypoRejected locks this in.
 type templateValidationData struct {
 	Workspace  templateValidationWorkspace
+	User       templateValidationUser
 	Parameters map[string]string
+}
+
+// templateValidationUser mirrors posixidentity.UserInputs, the controller's {{ .User }} inputs.
+type templateValidationUser struct {
+	UnixName     string
+	UsernameHash string
 }
 
 type templateValidationWorkspace struct {
