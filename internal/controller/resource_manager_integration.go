@@ -152,7 +152,7 @@ func (rm *ResourceManager) captureIntegrationValues(
 		return map[string]string{}, nil
 	}
 
-	data := buildIntegrationTemplateData(workspace, ref)
+	data := buildIntegrationTemplateData(workspace, ref, rm.deploymentBuilder.userInputsFor(workspace))
 
 	// Read every referenced resource (resolving its templated name/namespace first) -- fail-closed on a miss.
 	refResolver := NewIntegrationTemplateResolver(nil)

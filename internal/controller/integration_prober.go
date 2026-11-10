@@ -310,7 +310,7 @@ func (rm *ResourceManager) getIntegrationStatusProbeSpec(
 		return nil, fmt.Errorf("integration %q has no frozen values to resolve its statusProbe command", ref.Name)
 	}
 	resolver := NewIntegrationTemplateResolver(NewFrozenResourceValueProvider(frozen.Values))
-	resolved, err := resolveStatusProbeCommand(resolver, template.Spec.StatusProbe, buildIntegrationTemplateData(workspace, ref))
+	resolved, err := resolveStatusProbeCommand(resolver, template.Spec.StatusProbe, buildIntegrationTemplateData(workspace, ref, rm.deploymentBuilder.userInputsFor(workspace)))
 	if err != nil {
 		return nil, err
 	}

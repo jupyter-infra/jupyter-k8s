@@ -11,6 +11,7 @@ import (
 	"text/template"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/posixidentity"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/util/jsonpath"
@@ -18,7 +19,9 @@ import (
 
 // IntegrationTemplateData provides the context for Go text/template resolution.
 type IntegrationTemplateData struct {
-	Workspace  IntegrationWorkspaceData
+	Workspace IntegrationWorkspaceData
+	// User holds the owner's {{ .User.UnixName }} and {{ .User.UsernameHash }}
+	User       posixidentity.UserInputs
 	Parameters map[string]string
 }
 

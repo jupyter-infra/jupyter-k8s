@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/posixidentity"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -37,13 +38,17 @@ func findResolvedIntegration(status *workspacev1alpha1.WorkspaceStatus, name str
 	return nil
 }
 
-// buildIntegrationTemplateData builds the render context (workspace identity + user parameters).
+// buildIntegrationTemplateData builds the render context (workspace identity, owner inputs, user
+// parameters). The owner never changes (created-by is set on create only), so the .User inputs need no
+// re-resolve trigger.
 func buildIntegrationTemplateData(
 	workspace *workspacev1alpha1.Workspace,
 	ref *workspacev1alpha1.IntegrationTemplateRef,
+	user posixidentity.UserInputs,
 ) IntegrationTemplateData {
 	return IntegrationTemplateData{
 		Workspace:  IntegrationWorkspaceData{Name: workspace.Name, Namespace: workspace.Namespace},
+		User:       user,
 		Parameters: ref.ParametersMap(),
 	}
 }
