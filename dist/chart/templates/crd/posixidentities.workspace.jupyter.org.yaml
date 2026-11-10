@@ -1,0 +1,95 @@
+{{- if .Values.crd.enable }}
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    "helm.sh/resource-policy": keep
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: posixidentities.workspace.jupyter.org
+spec:
+  group: workspace.jupyter.org
+  names:
+    kind: PosixIdentity
+    listKind: PosixIdentityList
+    plural: posixidentities
+    singular: posixidentity
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.username
+      name: Username
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          PosixIdentity records the uid allocated to one user. It is an immutable ledger entry written by the
+          operator: one object per uid, named uid-<uid>, never garbage-collected since files on shared storage
+          keep carrying the uid after the user leaves.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec is immutable once created
+            properties:
+              unixName:
+                description: |-
+                  UnixName is the name of the user's passwd entry: what whoami prints for the uid inside the
+                  workspace, and what ls -l shows as the owner of the user's files. It exists because a Kubernetes
+                  username such as "github:JaneDoe" cannot be a passwd name (':' separates passwd fields).
+
+                  The operator never writes passwd itself: templates read the name as {{ "{{ .User.UnixName }}" }}, e.g. an
+                  access strategy passing it to the image in an env var, and the image writes the passwd entry for
+                  its uid (for instance with nss_wrapper).
+
+                  The operator derives it from Username at allocation ("github:JaneDoe" becomes "github-janedoe");
+                  an admin pre-seeding an object may set the name the user already has elsewhere, e.g. in a
+                  directory. It is stored, so a change to the derivation rule never renames existing users.
+                pattern: ^[a-z0-9_-]{1,32}$
+                type: string
+              username:
+                description: |-
+                  Username is the Kubernetes username the uid belongs to, as in the workspace's created-by annotation.
+                  The user's primary gid equals the uid (user private group).
+                maxLength: 1024
+                minLength: 1
+                type: string
+              usernameHash:
+                description: |-
+                  UsernameHash is the lookup key of Username: the first 32 hex characters of its SHA-256 digest,
+                  exposed to templates as {{ "{{ .User.UsernameHash }}" }}.
+                pattern: ^[0-9a-f]{32}$
+                type: string
+            required:
+            - unixName
+            - username
+            - usernameHash
+            type: object
+            x-kubernetes-validations:
+            - message: spec is immutable
+              rule: self == oldSelf
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources: {}
+{{- end }}
