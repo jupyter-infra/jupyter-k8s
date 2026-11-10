@@ -8,6 +8,7 @@ package v1alpha1
 import (
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
@@ -72,15 +73,36 @@ func pinnedSharingTypeViolation(violationType, field, actual, pinned, templateNa
 // the template's defaults when the template's podSecurityContextOverrides or
 // containerSecurityContextOverrides lock them. A workspace that sets nothing passes only when the
 // template has no default either; otherwise the defaulter gives it the default.
+//
+// It handles templates whose security context defaults hold integers only. A default holding an
+// identity template has no single value to compare against: the caller resolves it for the
+// workspace's owner and namespace and calls validatePinnedSecurityContextsAgainst instead, so this
+// function reports no violation for such a template.
 func validatePinnedSecurityContexts(workspace *workspacev1alpha1.Workspace, template *workspacev1alpha1.WorkspaceTemplate) []TemplateViolation {
+	pod, podErr := template.Spec.DefaultPodSecurityContext.Resolve(workspacev1alpha1.StaticID)
+	container, containerErr := template.Spec.DefaultContainerSecurityContext.Resolve(workspacev1alpha1.StaticID)
+	if podErr != nil || containerErr != nil {
+		// A template default holding identity templates is resolved and checked by the caller.
+		return nil
+	}
+	return validatePinnedSecurityContextsAgainst(workspace, template, pod, container)
+}
+
+// validatePinnedSecurityContextsAgainst is validatePinnedSecurityContexts against the template's
+// defaults already resolved for the workspace (identity templates rendered for its owner and
+// namespace), so a locked context compares with the values the defaulter gave the workspace.
+func validatePinnedSecurityContextsAgainst(
+	workspace *workspacev1alpha1.Workspace, template *workspacev1alpha1.WorkspaceTemplate,
+	pod *corev1.PodSecurityContext, container *corev1.SecurityContext,
+) []TemplateViolation {
 	var violations []TemplateViolation
 	if template.Spec.PodSecurityContextOverrides.Locked() &&
-		!equality.Semantic.DeepEqual(workspace.Spec.PodSecurityContext, template.Spec.DefaultPodSecurityContext) {
+		!equality.Semantic.DeepEqual(workspace.Spec.PodSecurityContext, pod) {
 		violations = append(violations, securityContextViolation("spec.podSecurityContext",
 			template.Spec.DefaultPodSecurityContext != nil, template.Name))
 	}
 	if template.Spec.ContainerSecurityContextOverrides.Locked() &&
-		!equality.Semantic.DeepEqual(workspace.Spec.ContainerSecurityContext, template.Spec.DefaultContainerSecurityContext) {
+		!equality.Semantic.DeepEqual(workspace.Spec.ContainerSecurityContext, container) {
 		violations = append(violations, securityContextViolation("spec.containerSecurityContext",
 			template.Spec.DefaultContainerSecurityContext != nil, template.Name))
 	}

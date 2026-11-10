@@ -102,6 +102,9 @@ var _ = Describe("PinnedFieldsValidator", func() {
 		nonRoot := func() *corev1.PodSecurityContext {
 			return &corev1.PodSecurityContext{RunAsNonRoot: boolPtr(true)}
 		}
+		nonRootDefault := func() *workspacev1alpha1.TemplatedPodSecurityContext {
+			return &workspacev1alpha1.TemplatedPodSecurityContext{RunAsNonRoot: boolPtr(true)}
+		}
 
 		It("accepts any security context when overrides are allowed or unset", func() {
 			template := pinnedTemplate(testPinPrivateTemplate, testOwnershipOwnerOnly)
@@ -115,7 +118,7 @@ var _ = Describe("PinnedFieldsValidator", func() {
 		It("accepts the template's default when locked", func() {
 			template := pinnedTemplate(testPinPrivateTemplate, testOwnershipOwnerOnly)
 			template.Spec.PodSecurityContextOverrides = lockedSecurityContextPolicy()
-			template.Spec.DefaultPodSecurityContext = nonRoot()
+			template.Spec.DefaultPodSecurityContext = nonRootDefault()
 			ws := newWorkspace("", "")
 			ws.Spec.PodSecurityContext = nonRoot()
 			Expect(validatePinnedSecurityContexts(ws, template)).To(BeEmpty())
@@ -142,7 +145,7 @@ var _ = Describe("PinnedFieldsValidator", func() {
 		It("rejects a pod security context that differs from the locked default", func() {
 			template := pinnedTemplate(testPinPrivateTemplate, testOwnershipOwnerOnly)
 			template.Spec.PodSecurityContextOverrides = lockedSecurityContextPolicy()
-			template.Spec.DefaultPodSecurityContext = nonRoot()
+			template.Spec.DefaultPodSecurityContext = nonRootDefault()
 			ws := newWorkspace("", "")
 			ws.Spec.PodSecurityContext = &corev1.PodSecurityContext{RunAsNonRoot: boolPtr(false)}
 			violations := validatePinnedSecurityContexts(ws, template)
@@ -186,7 +189,7 @@ var _ = Describe("Pinned fields through the workspace webhook", func() {
 		Expect(corev1.AddToScheme(scheme)).To(Succeed())
 		privateTpl = pinnedTemplate(testPinPrivateTemplate, testOwnershipOwnerOnly)
 		privateTpl.Spec.ContainerSecurityContextOverrides = lockedSecurityContextPolicy()
-		privateTpl.Spec.DefaultContainerSecurityContext = &corev1.SecurityContext{AllowPrivilegeEscalation: boolPtr(false)}
+		privateTpl.Spec.DefaultContainerSecurityContext = &workspacev1alpha1.TemplatedSecurityContext{AllowPrivilegeEscalation: boolPtr(false)}
 		sharedTpl = pinnedTemplate(testPinSharedTemplate, testOwnershipPublic)
 		k8sClient = fake.NewClientBuilder().WithScheme(scheme).WithObjects(privateTpl, sharedTpl,
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: testDefaultNamespace}},
@@ -240,7 +243,7 @@ var _ = Describe("Pinned fields through the workspace webhook", func() {
 		ws := createWorkspace(testPinPrivateTemplate)
 		Expect(ws.Spec.AccessType).To(Equal(testOwnershipOwnerOnly))
 		Expect(ws.Spec.OwnershipType).To(Equal(testOwnershipOwnerOnly))
-		Expect(ws.Spec.ContainerSecurityContext).To(Equal(privateTpl.Spec.DefaultContainerSecurityContext))
+		Expect(ws.Spec.ContainerSecurityContext).To(Equal(&corev1.SecurityContext{AllowPrivilegeEscalation: boolPtr(false)}))
 		_, err := validator.ValidateCreate(createUserContext(ctx, "CREATE", testPinOwner), ws)
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -280,7 +283,7 @@ var _ = Describe("Pinned fields through the workspace webhook", func() {
 		userCtx := updateContext()
 		Expect(defaulter.Default(userCtx, ws)).To(Succeed())
 		// The shared template does not lock the container security context, so the workspace's own stays
-		Expect(ws.Spec.ContainerSecurityContext).To(Equal(privateTpl.Spec.DefaultContainerSecurityContext))
+		Expect(ws.Spec.ContainerSecurityContext).To(Equal(&corev1.SecurityContext{AllowPrivilegeEscalation: boolPtr(false)}))
 		_, err := validator.ValidateUpdate(userCtx, oldWorkspace, ws)
 		Expect(err).NotTo(HaveOccurred())
 	})
