@@ -18,6 +18,9 @@ import (
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
+// unsetID describes an identity field without a value in a violation.
+const unsetID = "unset"
+
 // ViolationTypeIdentityMismatch reports an identity field that differs from the value its template
 // resolves for the workspace's owner and namespace.
 const ViolationTypeIdentityMismatch = "IdentityMismatch"
@@ -51,8 +54,13 @@ func (tv *TemplateValidator) resolveIdentity(
 	return identity, nil
 }
 
-// validateIdentity holds a workspace's templated identity fields to their resolved values, whatever the
-// template's security context override policies: a user never picks a uid.
+// validateIdentity holds every identity field of a workspace under a template with identity templates
+// to the value the template resolves for its owner and namespace, whatever the template's security
+// context override policies: a user never picks a uid or a group. That covers the fields the template
+// templates, the integers it sets beside them, and the fields it leaves unset, which the workspace must
+// leave unset too: an unlocked context would otherwise let a user set the container's runAsUser to a
+// teammate's uid, or the pod's supplementalGroups to another user's private group. The container may
+// not lift the pod's runAsNonRoot either.
 func validateIdentity(workspace *workspacev1alpha1.Workspace, identity *posixidentity.Identity) []TemplateViolation {
 	var violations []TemplateViolation
 	pod := workspace.Spec.PodSecurityContext
@@ -63,17 +71,17 @@ func validateIdentity(workspace *workspacev1alpha1.Workspace, identity *posixide
 	if resolvedPod == nil {
 		resolvedPod = &corev1.PodSecurityContext{}
 	}
-	check := func(templated bool, field string, want, got *int64) {
-		if templated && want != nil && (got == nil || *got != *want) {
-			violations = append(violations, identityViolation(field, strconv.FormatInt(*want, 10), formatID(got)))
+	check := func(field string, want, got *int64) {
+		if (want == nil) != (got == nil) || (want != nil && *got != *want) {
+			violations = append(violations, identityViolation(field, formatID(want), formatID(got)))
 		}
 	}
-	check(identity.PodTemplated["runAsUser"], "spec.podSecurityContext.runAsUser", resolvedPod.RunAsUser, pod.RunAsUser)
-	check(identity.PodTemplated["runAsGroup"], "spec.podSecurityContext.runAsGroup", resolvedPod.RunAsGroup, pod.RunAsGroup)
-	check(identity.PodTemplated["fsGroup"], "spec.podSecurityContext.fsGroup", resolvedPod.FSGroup, pod.FSGroup)
-	if identity.PodTemplated["supplementalGroups"] && !slices.Equal(resolvedPod.SupplementalGroups, pod.SupplementalGroups) {
+	check("spec.podSecurityContext.runAsUser", resolvedPod.RunAsUser, pod.RunAsUser)
+	check("spec.podSecurityContext.runAsGroup", resolvedPod.RunAsGroup, pod.RunAsGroup)
+	check("spec.podSecurityContext.fsGroup", resolvedPod.FSGroup, pod.FSGroup)
+	if !slices.Equal(resolvedPod.SupplementalGroups, pod.SupplementalGroups) {
 		violations = append(violations, identityViolation("spec.podSecurityContext.supplementalGroups",
-			fmt.Sprint(resolvedPod.SupplementalGroups), fmt.Sprint(pod.SupplementalGroups)))
+			formatIDs(resolvedPod.SupplementalGroups), formatIDs(pod.SupplementalGroups)))
 	}
 	if pod.RunAsNonRoot == nil || !*pod.RunAsNonRoot {
 		violations = append(violations, identityViolation("spec.podSecurityContext.runAsNonRoot", "true", "unset or false"))
@@ -87,9 +95,14 @@ func validateIdentity(workspace *workspacev1alpha1.Workspace, identity *posixide
 	if container == nil {
 		container = &corev1.SecurityContext{}
 	}
-	if resolved := identity.Container; resolved != nil {
-		check(identity.ContainerTemplated["runAsUser"], "spec.containerSecurityContext.runAsUser", resolved.RunAsUser, container.RunAsUser)
-		check(identity.ContainerTemplated["runAsGroup"], "spec.containerSecurityContext.runAsGroup", resolved.RunAsGroup, container.RunAsGroup)
+	resolvedContainer := identity.Container
+	if resolvedContainer == nil {
+		resolvedContainer = &corev1.SecurityContext{}
+	}
+	check("spec.containerSecurityContext.runAsUser", resolvedContainer.RunAsUser, container.RunAsUser)
+	check("spec.containerSecurityContext.runAsGroup", resolvedContainer.RunAsGroup, container.RunAsGroup)
+	if container.RunAsNonRoot != nil && !*container.RunAsNonRoot {
+		violations = append(violations, identityViolation("spec.containerSecurityContext.runAsNonRoot", "unset or true", "false"))
 	}
 
 	if identity.UID != 0 {
@@ -134,7 +147,7 @@ func identityViolation(field, allowed, actual string) TemplateViolation {
 	return TemplateViolation{
 		Type:    ViolationTypeIdentityMismatch,
 		Field:   field,
-		Message: fmt.Sprintf("%s: must be %s, set by the template's identity templates", field, allowed),
+		Message: fmt.Sprintf("%s: must be %s, as the template's identity templates resolve it", field, allowed),
 		Allowed: allowed,
 		Actual:  actual,
 	}
@@ -142,7 +155,14 @@ func identityViolation(field, allowed, actual string) TemplateViolation {
 
 func formatID(id *int64) string {
 	if id == nil {
-		return "unset"
+		return unsetID
 	}
 	return strconv.FormatInt(*id, 10)
+}
+
+func formatIDs(ids []int64) string {
+	if len(ids) == 0 {
+		return unsetID
+	}
+	return fmt.Sprint(ids)
 }

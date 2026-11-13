@@ -8,7 +8,6 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strconv"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -83,6 +82,15 @@ func (d *IdentityDefaulter) ApplyIdentityDefaults(ctx context.Context, workspace
 			template.Name, reqErr)
 	}
 
+	// On update, resolve only when the workspace still lacks an identity field or the posix-uid label.
+	// Resolution reads the owner's PosixIdentity and the namespace's gid, and fails when either is
+	// broken (a conflict, a lost label). Failing here would block every update, a stop and the
+	// operator's own writes (idle shutdown) included, before the validator's exemptions for those apply.
+	// Skipping is safe: the validator still resolves and holds every other update to the resolved values.
+	if req.Operation == "UPDATE" && !needsIdentity(workspace, template) {
+		return nil
+	}
+
 	// A dry run must have no side effects (sideEffects=NoneOnDryRun): it peeks at the uid the owner
 	// would get instead of allocating it.
 	dryRun := req.DryRun != nil && *req.DryRun
@@ -110,47 +118,33 @@ func (d *IdentityDefaulter) ApplyIdentityDefaults(ctx context.Context, workspace
 	return nil
 }
 
-// applyIdentity applies the resolved security context defaults like every template default: in whole
-// to a workspace that sets none, otherwise only to the templated fields it leaves unset. The validator
-// holds set fields to the resolved values.
+// needsIdentity reports whether the defaulter has something to fill on a workspace: a security
+// context the template has a default for and the workspace leaves unset, or the posix-uid label of a
+// template referencing .User. It reads the template only, without resolving any input.
+func needsIdentity(workspace *workspacev1alpha1.Workspace, template *workspacev1alpha1.WorkspaceTemplate) bool {
+	if workspace.Spec.PodSecurityContext == nil && template.Spec.DefaultPodSecurityContext != nil {
+		return true
+	}
+	if workspace.Spec.ContainerSecurityContext == nil && template.Spec.DefaultContainerSecurityContext != nil {
+		return true
+	}
+	if posixidentity.ReferencesUser(&template.Spec) {
+		if _, ok := workspace.Labels[workspaceutil.LabelPosixUID]; !ok {
+			return true
+		}
+	}
+	return false
+}
+
+// applyIdentity applies the resolved security context defaults like every template default: each
+// context in whole, only to a workspace that sets none. A workspace setting a context gets nothing
+// merged into it; the validator holds its identity fields to the resolved values, naming any that
+// differ.
 func applyIdentity(workspace *workspacev1alpha1.Workspace, identity *posixidentity.Identity) {
 	if workspace.Spec.PodSecurityContext == nil {
 		workspace.Spec.PodSecurityContext = identity.Pod.DeepCopy()
-	} else if resolved := identity.Pod; resolved != nil {
-		pod := workspace.Spec.PodSecurityContext
-		if identity.PodTemplated["runAsUser"] {
-			fill(&pod.RunAsUser, resolved.RunAsUser)
-		}
-		if identity.PodTemplated["runAsGroup"] {
-			fill(&pod.RunAsGroup, resolved.RunAsGroup)
-		}
-		if identity.PodTemplated["fsGroup"] {
-			fill(&pod.FSGroup, resolved.FSGroup)
-		}
-		if identity.PodTemplated["supplementalGroups"] && len(pod.SupplementalGroups) == 0 {
-			pod.SupplementalGroups = slices.Clone(resolved.SupplementalGroups)
-		}
-		// The template sets both, as identity templates require; the validator holds the workspace to them.
-		fill(&pod.RunAsNonRoot, resolved.RunAsNonRoot)
-		fill(&pod.SupplementalGroupsPolicy, resolved.SupplementalGroupsPolicy)
 	}
-
 	if workspace.Spec.ContainerSecurityContext == nil {
 		workspace.Spec.ContainerSecurityContext = identity.Container.DeepCopy()
-	} else if resolved := identity.Container; resolved != nil {
-		container := workspace.Spec.ContainerSecurityContext
-		if identity.ContainerTemplated["runAsUser"] {
-			fill(&container.RunAsUser, resolved.RunAsUser)
-		}
-		if identity.ContainerTemplated["runAsGroup"] {
-			fill(&container.RunAsGroup, resolved.RunAsGroup)
-		}
-	}
-}
-
-func fill[T any](field **T, value *T) {
-	if *field == nil && value != nil {
-		v := *value
-		*field = &v
 	}
 }

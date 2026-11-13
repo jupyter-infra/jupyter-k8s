@@ -7,6 +7,7 @@ package v1alpha1
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -243,6 +244,97 @@ var _ = Describe("Identity templates", func() {
 		Expect(identities()).To(BeEmpty())
 	})
 
+	// update runs an update through the defaulter then the validator, as the API server would.
+	update := func(oldWorkspace, ws *workspacev1alpha1.Workspace, user string) error {
+		userCtx := createUserContext(ctx, "UPDATE", user)
+		if err := defaulter.Default(userCtx, ws); err != nil {
+			return err
+		}
+		_, err := validator.ValidateUpdate(userCtx, oldWorkspace, ws)
+		return err
+	}
+
+	Context("identity fields the template leaves to the workspace", func() {
+		// The shared template locks neither security context: identity fields stay held regardless.
+		It("rejects a container running as another uid, or lifting runAsNonRoot", func() {
+			ws := newWorkspace(testIdentitySharedTemplate)
+			ws.Spec.ContainerSecurityContext = &corev1.SecurityContext{RunAsUser: ptr.To(int64(2047113))}
+			Expect(admit(ws, testPinOwner)).To(MatchError(ContainSubstring(
+				"spec.containerSecurityContext.runAsUser: must be unset")))
+
+			ws = newWorkspace(testIdentitySharedTemplate)
+			ws.Spec.ContainerSecurityContext = &corev1.SecurityContext{RunAsNonRoot: ptr.To(false)}
+			Expect(admit(ws, testPinOwner)).To(MatchError(ContainSubstring(
+				"spec.containerSecurityContext.runAsNonRoot: must be unset or true")))
+		})
+
+		It("rejects pod groups the template does not set", func() {
+			ws := newWorkspace(testIdentitySharedTemplate)
+			ws.Spec.PodSecurityContext = &corev1.PodSecurityContext{SupplementalGroups: []int64{2047113}}
+			Expect(admit(ws, testPinOwner)).To(MatchError(ContainSubstring(
+				"spec.podSecurityContext.supplementalGroups: must be unset")))
+
+			ws = newWorkspace(testIdentitySharedTemplate)
+			ws.Spec.PodSecurityContext = &corev1.PodSecurityContext{FSGroup: ptr.To(int64(2047113))}
+			Expect(admit(ws, testPinOwner)).To(MatchError(ContainSubstring(
+				"spec.podSecurityContext.fsGroup: must be unset")))
+		})
+
+		It("merges nothing into a workspace setting part of its pod security context", func() {
+			ws := newWorkspace(testIdentitySharedTemplate)
+			seccomp := &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}
+			ws.Spec.PodSecurityContext = &corev1.PodSecurityContext{SeccompProfile: seccomp}
+			Expect(admit(ws, testPinOwner)).To(MatchError(ContainSubstring(
+				"spec.podSecurityContext.runAsUser: must be " + strconv.FormatInt(testIdentityNamespaceGID, 10))))
+			Expect(ws.Spec.PodSecurityContext.RunAsUser).To(BeNil(), "the defaulter fills only an unset context")
+
+			By("setting the identity fields itself")
+			ws = newWorkspace(testIdentitySharedTemplate)
+			ws.Spec.PodSecurityContext = &corev1.PodSecurityContext{
+				SeccompProfile: seccomp, RunAsUser: ptr.To(testIdentityNamespaceGID), RunAsGroup: ptr.To(testIdentityNamespaceGID),
+				RunAsNonRoot: ptr.To(true), SupplementalGroupsPolicy: ptr.To(corev1.SupplementalGroupsPolicyStrict),
+			}
+			Expect(admit(ws, testPinOwner)).To(Succeed())
+		})
+	})
+
+	Context("updates", func() {
+		It("moves a workspace to the private template when the update clears its pod security context", func() {
+			oldWorkspace := newWorkspace(testIdentitySharedTemplate)
+			Expect(admit(oldWorkspace, testPinOwner)).To(Succeed())
+			ws := oldWorkspace.DeepCopy()
+			ws.Spec.TemplateRef = &workspacev1alpha1.TemplateRef{Name: testIdentityPrivateTemplate}
+			ws.Spec.AccessType, ws.Spec.OwnershipType = testOwnershipOwnerOnly, testOwnershipOwnerOnly
+			ws.Spec.PodSecurityContext = nil
+			Expect(update(oldWorkspace, ws, testPinOwner)).To(Succeed())
+
+			Expect(identities()).To(HaveLen(1))
+			uid, err := posixidentity.UIDOf(&identities()[0])
+			Expect(err).NotTo(HaveOccurred())
+			Expect(*ws.Spec.PodSecurityContext.RunAsUser).To(Equal(uid))
+			Expect(ws.Labels[workspaceutil.LabelPosixUID]).To(Equal(strconv.FormatInt(uid, 10)))
+		})
+
+		It("stops a workspace whose identity no longer resolves, and rejects its other changes", func() {
+			oldWorkspace := newWorkspace(testIdentityPrivateTemplate)
+			Expect(admit(oldWorkspace, testPinOwner)).To(Succeed())
+
+			By("removing the namespace's gid label")
+			ns := &corev1.Namespace{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: testDefaultNamespace}, ns)).To(Succeed())
+			delete(ns.Labels, workspaceutil.LabelPosixGID)
+			Expect(k8sClient.Update(ctx, ns)).To(Succeed())
+
+			stopped := oldWorkspace.DeepCopy()
+			stopped.Spec.DesiredStatus = "Stopped"
+			Expect(update(oldWorkspace, stopped, testPinOwner)).To(Succeed())
+
+			renamed := oldWorkspace.DeepCopy()
+			renamed.Spec.DisplayName = "renamed"
+			Expect(update(oldWorkspace, renamed, testPinOwner)).To(MatchError(ContainSubstring("cannot be resolved")))
+		})
+	})
+
 	Context("template consistency", func() {
 		It("rejects a template with identity templates but without runAsNonRoot and Strict", func() {
 			tpl := privateTpl.DeepCopy()
@@ -256,6 +348,15 @@ var _ = Describe("Identity templates", func() {
 			tpl := privateTpl.DeepCopy()
 			tpl.Spec.DefaultPodSecurityContext.RunAsUser = templated("{{ .User.Name }}")
 			Expect(validateTemplateIdentityConsistency(tpl)).To(HaveOccurred())
+		})
+
+		It("rejects an integer identity value in the operator's ranges or reserved", func() {
+			for _, id := range []int32{0, int32(posixidentity.UserRangeMin) + 24} {
+				tpl := privateTpl.DeepCopy()
+				tpl.Spec.DefaultPodSecurityContext.SupplementalGroups = []intstr.IntOrString{intstr.FromInt32(id)}
+				Expect(validateTemplateIdentityConsistency(tpl)).To(MatchError(
+					ContainSubstring(fmt.Sprintf("supplementalGroups[0]: %d must be an id", id))))
+			}
 		})
 
 		It("accepts the private and shared recipes", func() {
