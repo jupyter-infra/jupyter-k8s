@@ -72,6 +72,11 @@ var _ = Describe("POSIX Identity Admission", Ordered, func() {
 				MatchError(ContainSubstring("spec.podSecurityContext.runAsUser: must be " + namespaceGID)))
 		})
 
+		It("rejects a container picking its own uid, though the template locks no security context", func() {
+			Expect(posixCreateAs(subgroup, "custom-container-uid-workspace", alice)).To(
+				MatchError(ContainSubstring("spec.containerSecurityContext.runAsUser: must be unset")))
+		})
+
 		It("rejects a workspace whose template resolves to a reserved id", func() {
 			Expect(posixCreateAs(subgroup, "out-of-range-workspace", alice)).To(
 				MatchError(ContainSubstring("resolved id 0")))

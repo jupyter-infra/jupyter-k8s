@@ -1,4 +1,5 @@
-# Shared template: runs workspaces as the team
+# Shared template: runs workspaces as the team. Unlike the recipe, it locks neither security context, so
+# the specs check that identity fields stay held to their resolved values whatever the override policies.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:

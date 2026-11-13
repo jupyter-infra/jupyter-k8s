@@ -14,6 +14,10 @@ spec:
     supplementalGroupsPolicy: Strict
     runAsUser: "{{ .Namespace.Gid }}"
     runAsGroup: "{{ .Namespace.Gid }}"
+  podSecurityContextOverrides:
+    allow: false
+  containerSecurityContextOverrides:
+    allow: false
   # The test image's home is owned by uid 1000: give arbitrary-uid workspaces a writable home volume
   # (local-path directories are world-writable) and point HOME at it.
   primaryStorage:
