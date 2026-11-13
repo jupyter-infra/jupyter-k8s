@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: alice-second
+  namespace: posix-pod-team
+spec:
+  displayName: "alice-second"
+  desiredStatus: Running
+  templateRef:
+    name: posix-private-template

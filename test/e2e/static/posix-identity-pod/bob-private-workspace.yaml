@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: bob-private
+  namespace: posix-pod-team
+spec:
+  displayName: "bob-private"
+  desiredStatus: Running
+  templateRef:
+    name: posix-private-template

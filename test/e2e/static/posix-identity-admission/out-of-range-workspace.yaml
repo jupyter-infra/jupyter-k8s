@@ -1,0 +1,9 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: out-of-range
+  namespace: posix-adm-team
+spec:
+  displayName: "out-of-range"
+  templateRef:
+    name: posix-out-of-range-template

@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 )
@@ -38,8 +39,8 @@ var _ = Describe("SecurityDefaulter", func() {
 			Spec: workspacev1alpha1.WorkspaceTemplateSpec{
 				DisplayName:  testTemplateDisplayName,
 				DefaultImage: "test-image",
-				DefaultPodSecurityContext: &corev1.PodSecurityContext{
-					FSGroup: int64Ptr(1000),
+				DefaultPodSecurityContext: &workspacev1alpha1.TemplatedPodSecurityContext{
+					FSGroup: intOrStringPtr(1000),
 				},
 			},
 		}
@@ -77,7 +78,7 @@ var _ = Describe("SecurityDefaulter", func() {
 			workspace.Spec.ContainerSecurityContext = &corev1.SecurityContext{
 				Privileged: &privileged,
 			}
-			template.Spec.DefaultContainerSecurityContext = &corev1.SecurityContext{
+			template.Spec.DefaultContainerSecurityContext = &workspacev1alpha1.TemplatedSecurityContext{
 				RunAsNonRoot: boolPtr(true),
 			}
 
@@ -88,9 +89,9 @@ var _ = Describe("SecurityDefaulter", func() {
 		})
 
 		It("should apply container security context from template when workspace has none", func() {
-			template.Spec.DefaultContainerSecurityContext = &corev1.SecurityContext{
+			template.Spec.DefaultContainerSecurityContext = &workspacev1alpha1.TemplatedSecurityContext{
 				RunAsNonRoot: boolPtr(true),
-				RunAsUser:    int64Ptr(1000),
+				RunAsUser:    intOrStringPtr(1000),
 			}
 
 			applySecurityDefaults(workspace, template)
@@ -104,6 +105,11 @@ var _ = Describe("SecurityDefaulter", func() {
 
 func int64Ptr(i int64) *int64 {
 	return &i
+}
+
+func intOrStringPtr(i int32) *intstr.IntOrString {
+	v := intstr.FromInt32(i)
+	return &v
 }
 
 func boolPtr(b bool) *bool {

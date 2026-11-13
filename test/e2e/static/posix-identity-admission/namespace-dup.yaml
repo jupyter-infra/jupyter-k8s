@@ -1,0 +1,7 @@
+# Namespace that later takes the gid of posix-adm-late, to check the operator rejects a shared gid
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: posix-adm-dup
+  labels:
+    jk8s/e2e: posix-identity-test

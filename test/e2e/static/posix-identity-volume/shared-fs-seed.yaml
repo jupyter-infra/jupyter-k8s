@@ -1,0 +1,35 @@
+# Scaffolds the team directories as the deployer would, as root: root-owned, group-owned by the team
+# gid, setgid so new files inherit the team group, and closed to everyone else (2770). Team A also gets
+# users/, where each user creates a private directory: sticky too, so no teammate removes another's (3770).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: posix-shared-fs-seed
+  namespace: posix-vol-team-a
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsUser: 0
+  containers:
+    - name: seed
+      image: busybox:1.36
+      command:
+        - sh
+        - -c
+        - >-
+          rm -rf /shared/namespaces &&
+          mkdir -p /shared/namespaces/posix-vol-team-a /shared/namespaces/posix-vol-team-b &&
+          chown 0:2130706520 /shared/namespaces/posix-vol-team-a &&
+          chown 0:2130706521 /shared/namespaces/posix-vol-team-b &&
+          chmod 2770 /shared/namespaces/posix-vol-team-a /shared/namespaces/posix-vol-team-b &&
+          mkdir /shared/namespaces/posix-vol-team-a/users &&
+          chown 0:2130706520 /shared/namespaces/posix-vol-team-a/users &&
+          chmod 3770 /shared/namespaces/posix-vol-team-a/users &&
+          chmod 0755 /shared /shared/namespaces
+      volumeMounts:
+        - name: shared
+          mountPath: /shared
+  volumes:
+    - name: shared
+      persistentVolumeClaim:
+        claimName: posix-shared-fs

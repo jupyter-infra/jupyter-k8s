@@ -65,4 +65,5 @@ In this case, any workspace that references this template will inherit the acces
 defaults
 bounds
 shared-namespace
+posix-identity
 ```

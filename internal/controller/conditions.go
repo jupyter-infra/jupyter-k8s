@@ -77,6 +77,10 @@ const (
 	// ConditionTypeDeleting reasons
 	ReasonDeletionInProgress = "DeletionInProgress"
 
+	// ReasonPosixIdentityConflict is the event reason of a workspace whose owner's uid an admin must
+	// reconcile (several uids, or a uid recorded for another user)
+	ReasonPosixIdentityConflict = "PosixIdentityConflict"
+
 	// IntegrationConditionTypeReady reasons on status.integrationStatuses[].conditions (machine-readable, CamelCase).
 	IntegrationReasonReady       = "Ready"
 	IntegrationReasonProbeFailed = "ProbeFailed"

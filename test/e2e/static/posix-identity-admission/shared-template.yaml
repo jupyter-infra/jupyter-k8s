@@ -1,0 +1,17 @@
+# Shared template: runs workspaces as the team. Unlike the recipe, it locks neither security context, so
+# the specs check that identity fields stay held to their resolved values whatever the override policies.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: posix-shared-template
+  namespace: posix-adm-team
+spec:
+  displayName: "POSIX Shared Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultAccessType: Public
+  allowCustomAccessType: false
+  defaultPodSecurityContext:
+    runAsNonRoot: true
+    supplementalGroupsPolicy: Strict
+    runAsUser: "{{ .Namespace.Gid }}"
+    runAsGroup: "{{ .Namespace.Gid }}"

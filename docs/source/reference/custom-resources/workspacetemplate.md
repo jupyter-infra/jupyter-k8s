@@ -35,6 +35,8 @@ _Appears in:_
 
 
 
+
+
 ## IdleShutdownOverridePolicy
 
 
@@ -172,6 +174,74 @@ _Appears in:_
 
 
 
+## TemplatedPodSecurityContext
+
+
+
+TemplatedPodSecurityContext mirrors corev1.PodSecurityContext, field for field, for a
+WorkspaceTemplate's default. Its identity fields (runAsUser, runAsGroup, fsGroup,
+supplementalGroups) also accept a Go template, resolved per workspace at admission:
+{{ .User.Uid }} and {{ .User.Gid }} (the owner's PosixIdentity, allocated on first use), and
+{{ .Namespace.Gid }} (the workspace namespace's workspace.jupyter.org/posix-gid label). A template
+using a Go template in any identity field must also set runAsNonRoot: true and
+supplementalGroupsPolicy: Strict.
+
+Field docstrings are upstream's, verbatim; identity fields add one paragraph. Keep in sync with
+corev1.PodSecurityContext: TestTemplatedSecurityContextsMirrorCore fails on a missing or retyped
+field, TestTemplatedSecurityContextsMirrorCoreDocs on a docstring that differs from upstream's.
+
+_Appears in:_
+- [WorkspaceTemplateSpec](#workspacetemplatespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `seLinuxOptions` _[SELinuxOptions](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#selinuxoptions-v1-core)_ | The SELinux context to be applied to all containers.<br />If unspecified, the container runtime will allocate a random SELinux context for each<br />container.  May also be set in SecurityContext.  If set in<br />both SecurityContext and PodSecurityContext, the value specified in SecurityContext<br />takes precedence for that container.<br />Note that this field cannot be set when spec.os.name is windows. |  | Optional: \{\} <br /> |
+| `windowsOptions` _[WindowsSecurityContextOptions](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#windowssecuritycontextoptions-v1-core)_ | The Windows specific settings applied to all containers.<br />If unspecified, the options within a container's SecurityContext will be used.<br />If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence.<br />Note that this field cannot be set when spec.os.name is linux. |  | Optional: \{\} <br /> |
+| `runAsUser` _[IntOrString](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#intorstring-intstr-util)_ | The UID to run the entrypoint of the container process.<br />Defaults to user specified in image metadata if unspecified.<br />May also be set in SecurityContext.  If set in both SecurityContext and<br />PodSecurityContext, the value specified in SecurityContext takes precedence<br />for that container.<br />Note that this field cannot be set when spec.os.name is windows.<br />An integer, or a Go template resolved for each workspace at admission: \{\{ .User.Uid \}\} (the<br />owner's uid, allocated on first use) or \{\{ .Namespace.Gid \}\} (the workspace namespace's<br />workspace.jupyter.org/posix-gid label). |  | Optional: \{\} <br /> |
+| `runAsGroup` _[IntOrString](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#intorstring-intstr-util)_ | The GID to run the entrypoint of the container process.<br />Uses runtime default if unset.<br />May also be set in SecurityContext.  If set in both SecurityContext and<br />PodSecurityContext, the value specified in SecurityContext takes precedence<br />for that container.<br />Note that this field cannot be set when spec.os.name is windows.<br />An integer, or a Go template resolved for each workspace at admission: \{\{ .User.Gid \}\} (the<br />owner's primary gid, equal to their uid) or \{\{ .Namespace.Gid \}\}. |  | Optional: \{\} <br /> |
+| `runAsNonRoot` _boolean_ | Indicates that the container must run as a non-root user.<br />If true, the Kubelet will validate the image at runtime to ensure that it<br />does not run as UID 0 (root) and fail to start the container if it does.<br />If unset or false, no such validation will be performed.<br />May also be set in SecurityContext.  If set in both SecurityContext and<br />PodSecurityContext, the value specified in SecurityContext takes precedence. |  | Optional: \{\} <br /> |
+| `supplementalGroups` _[IntOrString](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#intorstring-intstr-util) array_ | A list of groups applied to the first process run in each container, in<br />addition to the container's primary GID and fsGroup (if specified).  If<br />the SupplementalGroupsPolicy feature is enabled, the<br />supplementalGroupsPolicy field determines whether these are in addition<br />to or instead of any group memberships defined in the container image.<br />If unspecified, no additional groups are added, though group memberships<br />defined in the container image may still be used, depending on the<br />supplementalGroupsPolicy field.<br />Note that this field cannot be set when spec.os.name is windows.<br />Each entry is an integer, or a Go template resolved for each workspace at admission:<br />\{\{ .User.Gid \}\} or \{\{ .Namespace.Gid \}\}, e.g. ["\{\{ .Namespace.Gid \}\}", 2147000123]. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `supplementalGroupsPolicy` _[SupplementalGroupsPolicy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#supplementalgroupspolicy-v1-core)_ | Defines how supplemental groups of the first container processes are calculated.<br />Valid values are "Merge" and "Strict". If not specified, "Merge" is used.<br />(Alpha) Using the field requires the SupplementalGroupsPolicy feature gate to be enabled<br />and the container runtime must implement support for this feature.<br />Note that this field cannot be set when spec.os.name is windows. |  | Optional: \{\} <br /> |
+| `fsGroup` _[IntOrString](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#intorstring-intstr-util)_ | A special supplemental group that applies to all containers in a pod.<br />Some volume types allow the Kubelet to change the ownership of that volume<br />to be owned by the pod:<br />1. The owning GID will be the FSGroup<br />2. The setgid bit is set (new files created in the volume will be owned by FSGroup)<br />3. The permission bits are OR'd with rw-rw----<br />If unset, the Kubelet will not modify the ownership and permissions of any volume.<br />Note that this field cannot be set when spec.os.name is windows.<br />An integer, or a Go template resolved for each workspace at admission: \{\{ .User.Gid \}\} (the<br />owner's primary gid, equal to their uid) or \{\{ .Namespace.Gid \}\}. |  | Optional: \{\} <br /> |
+| `sysctls` _[Sysctl](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#sysctl-v1-core) array_ | Sysctls hold a list of namespaced sysctls used for the pod. Pods with unsupported<br />sysctls (by the container runtime) might fail to launch.<br />Note that this field cannot be set when spec.os.name is windows. |  | Optional: \{\} <br /> |
+| `fsGroupChangePolicy` _[PodFSGroupChangePolicy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#podfsgroupchangepolicy-v1-core)_ | fsGroupChangePolicy defines behavior of changing ownership and permission of the volume<br />before being exposed inside Pod. This field will only apply to<br />volume types which support fsGroup based ownership(and permissions).<br />It will have no effect on ephemeral volume types such as: secret, configmaps<br />and emptydir.<br />Valid values are "OnRootMismatch" and "Always". If not specified, "Always" is used.<br />Note that this field cannot be set when spec.os.name is windows. |  | Optional: \{\} <br /> |
+| `seccompProfile` _[SeccompProfile](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#seccompprofile-v1-core)_ | The seccomp options to use by the containers in this pod.<br />Note that this field cannot be set when spec.os.name is windows. |  | Optional: \{\} <br /> |
+| `appArmorProfile` _[AppArmorProfile](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#apparmorprofile-v1-core)_ | appArmorProfile is the AppArmor options to use by the containers in this pod.<br />Note that this field cannot be set when spec.os.name is windows. |  | Optional: \{\} <br /> |
+| `seLinuxChangePolicy` _[PodSELinuxChangePolicy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#podselinuxchangepolicy-v1-core)_ | seLinuxChangePolicy defines how the container's SELinux label is applied to all volumes used by the Pod.<br />It has no effect on nodes that do not support SELinux or to volumes does not support SELinux.<br />Valid values are "MountOption" and "Recursive".<br />"Recursive" means relabeling of all files on all Pod volumes by the container runtime.<br />This may be slow for large volumes, but allows mixing privileged and unprivileged Pods sharing the same volume on the same node.<br />"MountOption" mounts all eligible Pod volumes with `-o context` mount option.<br />This requires all Pods that share the same volume to use the same SELinux label.<br />It is not possible to share the same volume among privileged and unprivileged Pods.<br />Eligible volumes are in-tree FibreChannel and iSCSI volumes, and all CSI volumes<br />whose CSI driver announces SELinux support by setting spec.seLinuxMount: true in their<br />CSIDriver instance. Other volumes are always re-labelled recursively.<br />"MountOption" value is allowed only when SELinuxMount feature gate is enabled.<br />If not specified and SELinuxMount feature gate is enabled, "MountOption" is used.<br />If not specified and SELinuxMount feature gate is disabled, "MountOption" is used for ReadWriteOncePod volumes<br />and "Recursive" for all other volumes.<br />This field affects only Pods that have SELinux label set, either in PodSecurityContext or in SecurityContext of all containers.<br />All Pods that use the same volume should use the same seLinuxChangePolicy, otherwise some pods can get stuck in ContainerCreating state.<br />Note that this field cannot be set when spec.os.name is windows. |  | Optional: \{\} <br /> |
+
+
+
+## TemplatedSecurityContext
+
+
+
+TemplatedSecurityContext mirrors corev1.SecurityContext, field for field, for a WorkspaceTemplate's
+default container security context. Its identity fields (runAsUser, runAsGroup) also accept a Go
+template, with the inputs of TemplatedPodSecurityContext.
+
+Field docstrings are upstream's, verbatim; identity fields add one paragraph. Keep in sync with
+corev1.SecurityContext as TemplatedPodSecurityContext is.
+
+_Appears in:_
+- [WorkspaceTemplateSpec](#workspacetemplatespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `capabilities` _[Capabilities](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#capabilities-v1-core)_ | The capabilities to add/drop when running containers.<br />Defaults to the default set of capabilities granted by the container runtime.<br />Note that this field cannot be set when spec.os.name is windows. |  | Optional: \{\} <br /> |
+| `privileged` _boolean_ | Run container in privileged mode.<br />Processes in privileged containers are essentially equivalent to root on the host.<br />Defaults to false.<br />Note that this field cannot be set when spec.os.name is windows. |  | Optional: \{\} <br /> |
+| `seLinuxOptions` _[SELinuxOptions](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#selinuxoptions-v1-core)_ | The SELinux context to be applied to the container.<br />If unspecified, the container runtime will allocate a random SELinux context for each<br />container.  May also be set in PodSecurityContext.  If set in both SecurityContext and<br />PodSecurityContext, the value specified in SecurityContext takes precedence.<br />Note that this field cannot be set when spec.os.name is windows. |  | Optional: \{\} <br /> |
+| `windowsOptions` _[WindowsSecurityContextOptions](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#windowssecuritycontextoptions-v1-core)_ | The Windows specific settings applied to all containers.<br />If unspecified, the options from the PodSecurityContext will be used.<br />If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence.<br />Note that this field cannot be set when spec.os.name is linux. |  | Optional: \{\} <br /> |
+| `runAsUser` _[IntOrString](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#intorstring-intstr-util)_ | The UID to run the entrypoint of the container process.<br />Defaults to user specified in image metadata if unspecified.<br />May also be set in PodSecurityContext.  If set in both SecurityContext and<br />PodSecurityContext, the value specified in SecurityContext takes precedence.<br />Note that this field cannot be set when spec.os.name is windows.<br />An integer, or a Go template resolved for each workspace at admission: \{\{ .User.Uid \}\} (the<br />owner's uid, allocated on first use) or \{\{ .Namespace.Gid \}\} (the workspace namespace's<br />workspace.jupyter.org/posix-gid label). |  | Optional: \{\} <br /> |
+| `runAsGroup` _[IntOrString](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#intorstring-intstr-util)_ | The GID to run the entrypoint of the container process.<br />Uses runtime default if unset.<br />May also be set in PodSecurityContext.  If set in both SecurityContext and<br />PodSecurityContext, the value specified in SecurityContext takes precedence.<br />Note that this field cannot be set when spec.os.name is windows.<br />An integer, or a Go template resolved for each workspace at admission: \{\{ .User.Gid \}\} (the<br />owner's primary gid, equal to their uid) or \{\{ .Namespace.Gid \}\}. |  | Optional: \{\} <br /> |
+| `runAsNonRoot` _boolean_ | Indicates that the container must run as a non-root user.<br />If true, the Kubelet will validate the image at runtime to ensure that it<br />does not run as UID 0 (root) and fail to start the container if it does.<br />If unset or false, no such validation will be performed.<br />May also be set in PodSecurityContext.  If set in both SecurityContext and<br />PodSecurityContext, the value specified in SecurityContext takes precedence. |  | Optional: \{\} <br /> |
+| `readOnlyRootFilesystem` _boolean_ | Whether this container has a read-only root filesystem.<br />Default is false.<br />Note that this field cannot be set when spec.os.name is windows. |  | Optional: \{\} <br /> |
+| `allowPrivilegeEscalation` _boolean_ | AllowPrivilegeEscalation controls whether a process can gain more<br />privileges than its parent process. This bool directly controls if<br />the no_new_privs flag will be set on the container process.<br />AllowPrivilegeEscalation is true always when the container is:<br />1) run as Privileged<br />2) has CAP_SYS_ADMIN<br />Note that this field cannot be set when spec.os.name is windows. |  | Optional: \{\} <br /> |
+| `procMount` _[ProcMountType](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#procmounttype-v1-core)_ | procMount denotes the type of proc mount to use for the containers.<br />The default value is Default which uses the container runtime defaults for<br />readonly paths and masked paths.<br />Note that this field cannot be set when spec.os.name is windows. |  | Optional: \{\} <br /> |
+| `seccompProfile` _[SeccompProfile](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#seccompprofile-v1-core)_ | The seccomp options to use by this container. If seccomp options are<br />provided at both the pod & container level, the container options<br />override the pod options.<br />Note that this field cannot be set when spec.os.name is windows. |  | Optional: \{\} <br /> |
+| `appArmorProfile` _[AppArmorProfile](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#apparmorprofile-v1-core)_ | appArmorProfile is the AppArmor options to use by this container. If set, this profile<br />overrides the pod's appArmorProfile.<br />Note that this field cannot be set when spec.os.name is windows. |  | Optional: \{\} <br /> |
+
+
+
 ## VolumeOverridePolicy
 
 
@@ -183,7 +253,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `allow` _boolean_ | Allow controls whether workspaces may drop or change the template's DefaultVolumes. When false, a<br />workspace must list every DefaultVolumes entry unchanged; a workspace that declares no volumes<br />receives them from the defaulter, and one that declares its own must include them alongside.<br />Set AllowSecondaryStorages to false as well to restrict workspaces to DefaultVolumes exactly as<br />defined; otherwise a workspace can add its own volume on a default volume's claim. | true | Optional: \{\} <br /> |
+| `allow` _boolean_ | Allow controls whether workspaces may drop or change the template's DefaultVolumes. When false, a<br />workspace must list every DefaultVolumes entry unchanged; a workspace that declares no volumes<br />receives them from the defaulter, and one that declares its own must include them alongside.<br />Set AllowSecondaryStorages to false as well to restrict workspaces to DefaultVolumes exactly as<br />defined; otherwise a workspace can add its own volume on a default volume's claim. Keep<br />AllowCustomInitContainers false as well: an init container mounts any volume of the pod, at any<br />subPath. | true | Optional: \{\} <br /> |
 
 
 
@@ -228,12 +298,12 @@ _Appears in:_
 | `defaultAccessStrategy` _[AccessStrategyRef](#accessstrategyref)_ | DefaultAccessStrategy specifies the default access strategy for workspaces using this template |  | Optional: \{\} <br /> |
 | `defaultLifecycle` _[Lifecycle](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#lifecycle-v1-core)_ | DefaultLifecycle specifies default lifecycle hooks for workspaces using this template |  | Optional: \{\} <br /> |
 | `defaultReadinessProbe` _[Probe](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#probe-v1-core)_ | DefaultReadinessProbe specifies the default readiness probe for the main workspace<br />container for workspaces using this template.<br />Applied only if the workspace does not specify its own readiness probe. |  | Optional: \{\} <br /> |
-| `defaultPodSecurityContext` _[PodSecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#podsecuritycontext-v1-core)_ | DefaultPodSecurityContext specifies default pod-level security context |  | Optional: \{\} <br /> |
-| `defaultContainerSecurityContext` _[SecurityContext](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#securitycontext-v1-core)_ | DefaultContainerSecurityContext specifies default container-level security context for the main workspace container |  | Optional: \{\} <br /> |
+| `defaultPodSecurityContext` _[TemplatedPodSecurityContext](#templatedpodsecuritycontext)_ | DefaultPodSecurityContext specifies default pod-level security context. Its identity fields<br />(runAsUser, runAsGroup, fsGroup, supplementalGroups) accept an integer or a Go template resolved<br />per workspace at admission, e.g. "\{\{ .User.Uid \}\}"; see TemplatedPodSecurityContext. |  | Optional: \{\} <br /> |
+| `defaultContainerSecurityContext` _[TemplatedSecurityContext](#templatedsecuritycontext)_ | DefaultContainerSecurityContext specifies default container-level security context for the main<br />workspace container. Its identity fields (runAsUser, runAsGroup) accept an integer or a Go<br />template; see TemplatedSecurityContext. |  | Optional: \{\} <br /> |
 | `podSecurityContextOverrides` _[SecurityContextOverridePolicy](#securitycontextoverridepolicy)_ | PodSecurityContextOverrides controls whether a workspace may set its own podSecurityContext.<br />When locked, workspaces get DefaultPodSecurityContext, or no pod security context if unset. |  | Optional: \{\} <br /> |
 | `containerSecurityContextOverrides` _[SecurityContextOverridePolicy](#securitycontextoverridepolicy)_ | ContainerSecurityContextOverrides controls whether a workspace may set its own<br />containerSecurityContext. When locked, workspaces get DefaultContainerSecurityContext, or no<br />container security context if unset. |  | Optional: \{\} <br /> |
 | `defaultInitContainers` _[Container](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#container-v1-core) array_ | DefaultInitContainers specifies default init containers for workspaces using this template<br />Applied during defaulting if the workspace does not specify any init containers |  | MaxItems: 10 <br />Optional: \{\} <br /> |
-| `allowCustomInitContainers` _boolean_ | AllowCustomInitContainers controls whether workspaces using this template<br />can specify custom init containers beyond the template defaults | false | Optional: \{\} <br /> |
+| `allowCustomInitContainers` _boolean_ | AllowCustomInitContainers controls whether workspaces using this template<br />can specify custom init containers beyond the template defaults.<br />A custom init container carries its own securityContext and volumeMounts, which neither the<br />security context policies, identity templates included, nor VolumeOverrides apply to: keep it<br />false on a template that locks either. | false | Optional: \{\} <br /> |
 | `appType` _string_ | AppType specifies the application type for workspaces using this template |  | Optional: \{\} <br /> |
 
 

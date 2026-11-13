@@ -18,6 +18,7 @@ import (
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
+	"github.com/jupyter-infra/jupyter-k8s/internal/posixidentity"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
@@ -226,6 +227,13 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 		return true
 	}
 
+	// Check templated identity changes
+	if (oldSpec.HasIdentityTemplates() || newSpec.HasIdentityTemplates()) &&
+		(!equality.Semantic.DeepEqual(oldSpec.DefaultPodSecurityContext, newSpec.DefaultPodSecurityContext) ||
+			!equality.Semantic.DeepEqual(oldSpec.DefaultContainerSecurityContext, newSpec.DefaultContainerSecurityContext)) {
+		return true
+	}
+
 	// Check volumeOverrides changes, and default volumes changes while they are locked
 	if !equality.Semantic.DeepEqual(oldSpec.VolumeOverrides, newSpec.VolumeOverrides) {
 		return true
@@ -318,8 +326,23 @@ func validateTemplateConsistency(template *workspacev1alpha1.WorkspaceTemplate) 
 		return err
 	}
 
+	// Identity templates must render to integers.
+	if err := validateTemplateIdentityConsistency(template); err != nil {
+		return err
+	}
+
 	// A locked shared memory policy needs a defaultSharedMemory to hold workspaces to.
 	return validateTemplateSharedMemoryConsistency(template)
+}
+
+// validateTemplateIdentityConsistency rejects identity templates in the security context defaults that
+// do not parse, reference anything but .User.Uid, .User.Gid and .Namespace.Gid, or do not render to an
+// integer.
+func validateTemplateIdentityConsistency(template *workspacev1alpha1.WorkspaceTemplate) error {
+	if err := posixidentity.ValidateTemplates(&template.Spec); err != nil {
+		return fmt.Errorf("template %q: %w", template.Name, err)
+	}
+	return nil
 }
 
 // validateTemplateVolumesConsistency rejects default volumes that share a name or a mount path, which

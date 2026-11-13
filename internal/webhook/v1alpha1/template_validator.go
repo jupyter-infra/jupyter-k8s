@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/posixidentity"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 )
 
@@ -19,6 +20,8 @@ import (
 type TemplateValidator struct {
 	resolver                 *workspaceutil.TemplateResolver
 	defaultTemplateNamespace string
+	// identity resolves templated identities; nil skips identity validation
+	identity *posixidentity.Resolver
 }
 
 // NewTemplateValidator creates a new TemplateValidator
@@ -27,6 +30,12 @@ func NewTemplateValidator(k8sClient client.Client, defaultTemplateNamespace stri
 		resolver:                 workspaceutil.NewTemplateResolver(k8sClient, defaultTemplateNamespace),
 		defaultTemplateNamespace: defaultTemplateNamespace,
 	}
+}
+
+// WithIdentityResolver makes the validator hold workspaces to their template's resolved identity.
+func (tv *TemplateValidator) WithIdentityResolver(identity *posixidentity.Resolver) *TemplateValidator {
+	tv.identity = identity
+	return tv
 }
 
 // fetchTemplate retrieves a template using centralized resolver
@@ -131,7 +140,14 @@ func (tv *TemplateValidator) ValidateCreateWorkspace(ctx context.Context, worksp
 
 	// Validate access type, ownership type and security contexts against the template's pins
 	violations = append(violations, validatePinnedSharingTypes(workspace, template)...)
-	violations = append(violations, validatePinnedSecurityContexts(workspace, template)...)
+	if identity, identityViolations := tv.resolveIdentity(ctx, workspace, template); identity != nil {
+		violations = append(violations, validatePinnedSecurityContextsAgainst(workspace, template, identity.Pod, identity.Container)...)
+		violations = append(violations, validateIdentity(workspace, identity)...)
+	} else if len(identityViolations) > 0 {
+		violations = append(violations, identityViolations...)
+	} else {
+		violations = append(violations, validatePinnedSecurityContexts(workspace, template)...)
+	}
 
 	// Validate init containers
 	if violation := validateInitContainers(workspace.Spec.InitContainers, template); violation != nil {

@@ -47,7 +47,9 @@ const (
 	AppLabelValue = "jupyter"
 
 	// AnnotationCreatedBy is the annotation key for tracking resource creator
-	AnnotationCreatedBy = "workspace.jupyter.org/created-by"
+	AnnotationCreatedBy = workspaceutil.AnnotationCreatedBy
+	// LabelPosixUID is the reserved label recording the owner's PosixIdentity uid
+	LabelPosixUID = workspaceutil.LabelPosixUID
 	// AnnotationLastUpdatedBy is the annotation key for tracking last updater
 	AnnotationLastUpdatedBy = "workspace.jupyter.org/last-updated-by"
 	// AnnotationServiceAccountUsers is the annotation key for service account users
@@ -211,6 +213,7 @@ const (
 // Any new system-managed key with the reserved prefix MUST be added here.
 var SystemManagedMetadataKeys = map[string]MetadataKeyPolicy{
 	AnnotationCreatedBy:             SetOnCreateOnly,
+	LabelPosixUID:                   SetOnCreateOnly,
 	AnnotationLastUpdatedBy:         SetAlways,
 	PreemptionReasonAnnotation:      SetAlways,
 	LabelWorkspaceTemplate:          SetAlways,

@@ -12,6 +12,99 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.21.0
+  name: posixidentities.workspace.jupyter.org
+spec:
+  group: workspace.jupyter.org
+  names:
+    kind: PosixIdentity
+    listKind: PosixIdentityList
+    plural: posixidentities
+    singular: posixidentity
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.username
+      name: Username
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          PosixIdentity records the uid allocated to one user. It is an immutable ledger entry written by the
+          operator: one object per uid, named uid-<uid>, never garbage-collected since files on shared storage
+          keep carrying the uid after the user leaves.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec is immutable once created
+            properties:
+              unixName:
+                description: |-
+                  UnixName is the name of the user's passwd entry: what whoami prints for the uid inside the
+                  workspace, and what ls -l shows as the owner of the user's files. It exists because a Kubernetes
+                  username such as "github:JaneDoe" cannot be a passwd name (':' separates passwd fields).
+
+                  The operator never writes passwd itself: templates read the name as {{ .User.UnixName }}, e.g. an
+                  access strategy passing it to the image in an env var, and the image writes the passwd entry for
+                  its uid (for instance with nss_wrapper).
+
+                  The operator derives it from Username at allocation ("github:JaneDoe" becomes "github-janedoe");
+                  an admin pre-seeding an object may set the name the user already has elsewhere, e.g. in a
+                  directory. It is stored, so a change to the derivation rule never renames existing users.
+                pattern: ^[a-z0-9_-]{1,32}$
+                type: string
+              username:
+                description: |-
+                  Username is the Kubernetes username the uid belongs to, as in the workspace's created-by annotation.
+                  The user's primary gid equals the uid (user private group).
+                maxLength: 1024
+                minLength: 1
+                type: string
+              usernameHash:
+                description: |-
+                  UsernameHash is the lookup key of Username: the first 32 hex characters of its SHA-256 digest,
+                  exposed to templates as {{ .User.UsernameHash }}.
+                pattern: ^[0-9a-f]{32}$
+                type: string
+            required:
+            - unixName
+            - username
+            - usernameHash
+            type: object
+            x-kubernetes-validations:
+            - message: spec is immutable
+              rule: self == oldSelf
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
   name: workspaceaccessstrategies.workspace.jupyter.org
 spec:
   group: workspace.jupyter.org
@@ -14971,7 +15064,10 @@ spec:
                 default: false
                 description: |-
                   AllowCustomInitContainers controls whether workspaces using this template
-                  can specify custom init containers beyond the template defaults
+                  can specify custom init containers beyond the template defaults.
+                  A custom init container carries its own securityContext and volumeMounts, which neither the
+                  security context policies, identity templates included, nor VolumeOverrides apply to: keep it
+                  false on a template that locks either.
                 type: boolean
               allowCustomOwnershipType:
                 default: true
@@ -16147,8 +16243,10 @@ spec:
                     type: array
                 type: object
               defaultContainerSecurityContext:
-                description: DefaultContainerSecurityContext specifies default container-level
-                  security context for the main workspace container
+                description: |-
+                  DefaultContainerSecurityContext specifies default container-level security context for the main
+                  workspace container. Its identity fields (runAsUser, runAsGroup) accept an integer or a Go
+                  template; see TemplatedSecurityContext.
                 properties:
                   allowPrivilegeEscalation:
                     description: |-
@@ -16226,14 +16324,19 @@ spec:
                       Note that this field cannot be set when spec.os.name is windows.
                     type: boolean
                   runAsGroup:
+                    anyOf:
+                    - type: integer
+                    - type: string
                     description: |-
                       The GID to run the entrypoint of the container process.
                       Uses runtime default if unset.
                       May also be set in PodSecurityContext.  If set in both SecurityContext and
                       PodSecurityContext, the value specified in SecurityContext takes precedence.
                       Note that this field cannot be set when spec.os.name is windows.
-                    format: int64
-                    type: integer
+
+                      An integer, or a Go template resolved for each workspace at admission: {{ .User.Gid }} (the
+                      owner's primary gid, equal to their uid) or {{ .Namespace.Gid }}.
+                    x-kubernetes-int-or-string: true
                   runAsNonRoot:
                     description: |-
                       Indicates that the container must run as a non-root user.
@@ -16244,14 +16347,20 @@ spec:
                       PodSecurityContext, the value specified in SecurityContext takes precedence.
                     type: boolean
                   runAsUser:
+                    anyOf:
+                    - type: integer
+                    - type: string
                     description: |-
                       The UID to run the entrypoint of the container process.
                       Defaults to user specified in image metadata if unspecified.
                       May also be set in PodSecurityContext.  If set in both SecurityContext and
                       PodSecurityContext, the value specified in SecurityContext takes precedence.
                       Note that this field cannot be set when spec.os.name is windows.
-                    format: int64
-                    type: integer
+
+                      An integer, or a Go template resolved for each workspace at admission: {{ .User.Uid }} (the
+                      owner's uid, allocated on first use) or {{ .Namespace.Gid }} (the workspace namespace's
+                      workspace.jupyter.org/posix-gid label).
+                    x-kubernetes-int-or-string: true
                   seLinuxOptions:
                     description: |-
                       The SELinux context to be applied to the container.
@@ -18212,8 +18321,10 @@ spec:
                 - OwnerOnly
                 type: string
               defaultPodSecurityContext:
-                description: DefaultPodSecurityContext specifies default pod-level
-                  security context
+                description: |-
+                  DefaultPodSecurityContext specifies default pod-level security context. Its identity fields
+                  (runAsUser, runAsGroup, fsGroup, supplementalGroups) accept an integer or a Go template resolved
+                  per workspace at admission, e.g. "{{ .User.Uid }}"; see TemplatedPodSecurityContext.
                 properties:
                   appArmorProfile:
                     description: |-
@@ -18239,6 +18350,9 @@ spec:
                     - type
                     type: object
                   fsGroup:
+                    anyOf:
+                    - type: integer
+                    - type: string
                     description: |-
                       A special supplemental group that applies to all containers in a pod.
                       Some volume types allow the Kubelet to change the ownership of that volume
@@ -18250,8 +18364,10 @@ spec:
 
                       If unset, the Kubelet will not modify the ownership and permissions of any volume.
                       Note that this field cannot be set when spec.os.name is windows.
-                    format: int64
-                    type: integer
+
+                      An integer, or a Go template resolved for each workspace at admission: {{ .User.Gid }} (the
+                      owner's primary gid, equal to their uid) or {{ .Namespace.Gid }}.
+                    x-kubernetes-int-or-string: true
                   fsGroupChangePolicy:
                     description: |-
                       fsGroupChangePolicy defines behavior of changing ownership and permission of the volume
@@ -18263,6 +18379,9 @@ spec:
                       Note that this field cannot be set when spec.os.name is windows.
                     type: string
                   runAsGroup:
+                    anyOf:
+                    - type: integer
+                    - type: string
                     description: |-
                       The GID to run the entrypoint of the container process.
                       Uses runtime default if unset.
@@ -18270,8 +18389,10 @@ spec:
                       PodSecurityContext, the value specified in SecurityContext takes precedence
                       for that container.
                       Note that this field cannot be set when spec.os.name is windows.
-                    format: int64
-                    type: integer
+
+                      An integer, or a Go template resolved for each workspace at admission: {{ .User.Gid }} (the
+                      owner's primary gid, equal to their uid) or {{ .Namespace.Gid }}.
+                    x-kubernetes-int-or-string: true
                   runAsNonRoot:
                     description: |-
                       Indicates that the container must run as a non-root user.
@@ -18282,6 +18403,9 @@ spec:
                       PodSecurityContext, the value specified in SecurityContext takes precedence.
                     type: boolean
                   runAsUser:
+                    anyOf:
+                    - type: integer
+                    - type: string
                     description: |-
                       The UID to run the entrypoint of the container process.
                       Defaults to user specified in image metadata if unspecified.
@@ -18289,8 +18413,11 @@ spec:
                       PodSecurityContext, the value specified in SecurityContext takes precedence
                       for that container.
                       Note that this field cannot be set when spec.os.name is windows.
-                    format: int64
-                    type: integer
+
+                      An integer, or a Go template resolved for each workspace at admission: {{ .User.Uid }} (the
+                      owner's uid, allocated on first use) or {{ .Namespace.Gid }} (the workspace namespace's
+                      workspace.jupyter.org/posix-gid label).
+                    x-kubernetes-int-or-string: true
                   seLinuxChangePolicy:
                     description: |-
                       seLinuxChangePolicy defines how the container's SELinux label is applied to all volumes used by the Pod.
@@ -18378,9 +18505,15 @@ spec:
                       defined in the container image may still be used, depending on the
                       supplementalGroupsPolicy field.
                       Note that this field cannot be set when spec.os.name is windows.
+
+                      Each entry is an integer, or a Go template resolved for each workspace at admission:
+                      {{ .User.Gid }} or {{ .Namespace.Gid }}, e.g. ["{{ .Namespace.Gid }}", 2147000123].
                     items:
-                      format: int64
-                      type: integer
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      x-kubernetes-int-or-string: true
+                    maxItems: 16
                     type: array
                     x-kubernetes-list-type: atomic
                   supplementalGroupsPolicy:
@@ -18989,7 +19122,9 @@ spec:
                       workspace must list every DefaultVolumes entry unchanged; a workspace that declares no volumes
                       receives them from the defaulter, and one that declares its own must include them alongside.
                       Set AllowSecondaryStorages to false as well to restrict workspaces to DefaultVolumes exactly as
-                      defined; otherwise a workspace can add its own volume on a default volume's claim.
+                      defined; otherwise a workspace can add its own volume on a default volume's claim. Keep
+                      AllowCustomInitContainers false as well: an init container mounts any volume of the pod, at any
+                      subPath.
                     type: boolean
                 type: object
             required:
@@ -19776,7 +19911,7 @@ webhooks:
     - UPDATE
     resources:
     - workspaces
-  sideEffects: None
+  sideEffects: NoneOnDryRun
 - admissionReviewVersions:
   - v1
   clientConfig:

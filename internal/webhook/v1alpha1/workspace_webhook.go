@@ -20,6 +20,7 @@ import (
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
+	"github.com/jupyter-infra/jupyter-k8s/internal/posixidentity"
 	"github.com/jupyter-infra/jupyter-k8s/internal/stringutil"
 	webhookconst "github.com/jupyter-infra/jupyter-k8s/internal/webhook"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
@@ -208,8 +209,13 @@ func validateOwnershipPermission(ctx context.Context, workspace *workspacev1alph
 // SetupWorkspaceWebhookWithManager registers the webhook for Workspace in the manager.
 // RBAC Note: This webhook requires WorkspaceTemplate access (get, update, finalizers/update)
 // which is provided by the workspacetemplate controller RBAC markers.
+//
+// +kubebuilder:rbac:groups=workspace.jupyter.org,resources=posixidentities,verbs=get;list;watch;create
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace string) error {
-	templateValidator := NewTemplateValidator(mgr.GetClient(), defaultTemplateNamespace)
+	identityResolver := posixidentity.NewResolver(
+		posixidentity.NewAllocator(mgr.GetClient(), mgr.GetAPIReader()), mgr.GetClient())
+	templateValidator := NewTemplateValidator(mgr.GetClient(), defaultTemplateNamespace).WithIdentityResolver(identityResolver)
 	accessStrategyValidator := NewAccessStrategyValidator(defaultTemplateNamespace)
 	templateDefaulter := NewTemplateDefaulter(mgr.GetClient(), defaultTemplateNamespace)
 	templateGetter := NewTemplateGetter(mgr.GetClient(), defaultTemplateNamespace)
@@ -230,6 +236,7 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace
 		}).
 		WithDefaulter(&WorkspaceCustomDefaulter{
 			templateDefaulter:       templateDefaulter,
+			identityDefaulter:       NewIdentityDefaulter(mgr.GetClient(), defaultTemplateNamespace, identityResolver),
 			serviceAccountDefaulter: serviceAccountDefaulter,
 			templateGetter:          templateGetter,
 			templateValidator:       templateValidator,
@@ -239,7 +246,7 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace
 		Complete()
 }
 
-// +kubebuilder:webhook:path=/mutate-workspace-jupyter-org-v1alpha1-workspace,mutating=true,failurePolicy=fail,sideEffects=None,groups=workspace.jupyter.org,resources=workspaces,verbs=create;update,versions=v1alpha1,name=mworkspace-v1alpha1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
+// +kubebuilder:webhook:path=/mutate-workspace-jupyter-org-v1alpha1-workspace,mutating=true,failurePolicy=fail,sideEffects=NoneOnDryRun,groups=workspace.jupyter.org,resources=workspaces,verbs=create;update,versions=v1alpha1,name=mworkspace-v1alpha1.kb.io,admissionReviewVersions=v1,serviceName=jupyter-k8s-controller-manager,servicePort=9443
 
 // WorkspaceCustomDefaulter struct is responsible for setting default values on the custom resource of the
 // Kind Workspace when those are created or updated.
@@ -248,6 +255,7 @@ func SetupWorkspaceWebhookWithManager(mgr ctrl.Manager, defaultTemplateNamespace
 // as it is used only for temporary operations and does not need to be deeply copied.
 type WorkspaceCustomDefaulter struct {
 	templateDefaulter       *TemplateDefaulter
+	identityDefaulter       *IdentityDefaulter
 	serviceAccountDefaulter *ServiceAccountDefaulter
 	templateGetter          *TemplateGetter
 	templateValidator       *TemplateValidator
@@ -328,6 +336,20 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, workspace *works
 		return err
 	}
 
+	// Resolve the template's identity templates into the security contexts. Allocating the owner's uid on
+	// first use is a side effect: it runs once the references are in scope, and never on dry-run
+	// (sideEffects=NoneOnDryRun).
+	// applySecurityDefaults leaves an identity-templated template's security contexts to this step, so
+	// skipping it would admit the workspace with none: without an identity defaulter, fail closed.
+	if d.identityDefaulter != nil {
+		if err := d.identityDefaulter.ApplyIdentityDefaults(ctx, workspace); err != nil {
+			workspacelog.Error(err, "Failed to apply identity defaults", "workspace", workspace.GetName())
+			return err
+		}
+	} else if err := d.rejectIdentityTemplates(ctx, workspace); err != nil {
+		return err
+	}
+
 	// Ensure template has finalizer to prevent deletion while in use.
 	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
 		templateNamespace := workspaceutil.GetTemplateRefNamespace(workspace)
@@ -343,6 +365,22 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, workspace *works
 		return fmt.Errorf("failed to add finalizer to AccessStrategy: %w", err)
 	}
 
+	return nil
+}
+
+// rejectIdentityTemplates fails a workspace whose template holds identity templates, for a defaulter
+// configured without an identity defaulter: its security contexts would otherwise be left unset.
+func (d *WorkspaceCustomDefaulter) rejectIdentityTemplates(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
+	if workspace.Spec.TemplateRef == nil || workspace.Spec.TemplateRef.Name == "" {
+		return nil
+	}
+	template, err := d.templateDefaulter.fetchTemplate(ctx, *workspace.Spec.TemplateRef, workspace.Namespace)
+	if err != nil {
+		return err
+	}
+	if template.Spec.HasIdentityTemplates() {
+		return fmt.Errorf("template %q uses identity templates, but no identity defaulter is configured to resolve them", template.Name)
+	}
 	return nil
 }
 
@@ -467,6 +505,9 @@ func (v *WorkspaceCustomValidator) ValidateUpdate(ctx context.Context, oldWorksp
 
 	// Validate no user modifications to reserved prefix labels/annotations
 	if err := validateReservedPrefixOnUpdate(oldWorkspace, newWorkspace); err != nil {
+		return nil, err
+	}
+	if err := v.templateValidator.ValidatePosixUIDAdded(ctx, oldWorkspace, newWorkspace); err != nil {
 		return nil, err
 	}
 
