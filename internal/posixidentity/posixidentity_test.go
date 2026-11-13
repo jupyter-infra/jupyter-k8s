@@ -114,8 +114,8 @@ func TestResolvePrivateAndSharedTemplates(t *testing.T) {
 		*pod.FSGroupChangePolicy != corev1.FSGroupChangeOnRootMismatch {
 		t.Fatalf("static fields and forced fields missing: %+v", pod)
 	}
-	if !id.PodTemplated["runAsUser"] || !id.PodTemplated["supplementalGroups"] || id.Container != nil {
-		t.Fatalf("unexpected templated fields %+v", id)
+	if id.Container != nil {
+		t.Fatalf("a template without a container default resolves none: %+v", id.Container)
 	}
 
 	shared := &workspacev1alpha1.WorkspaceTemplateSpec{
@@ -128,7 +128,7 @@ func TestResolvePrivateAndSharedTemplates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if id.UID != 0 || *id.Pod.RunAsUser != 2130706500 || id.PodTemplated["fsGroup"] {
+	if id.UID != 0 || *id.Pod.RunAsUser != 2130706500 || id.Pod.FSGroup != nil {
 		t.Fatalf("unexpected shared identity %+v", id)
 	}
 	list := &workspacev1alpha1.PosixIdentityList{}

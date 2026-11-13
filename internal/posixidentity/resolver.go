@@ -28,10 +28,6 @@ type Identity struct {
 	// Container is the template's defaultContainerSecurityContext with every identity field resolved;
 	// nil if the template has none
 	Container *corev1.SecurityContext
-	// PodTemplated and ContainerTemplated name the fields that held a template, which the workspace
-	// must match whatever the template's override policies allow
-	PodTemplated       map[string]bool
-	ContainerTemplated map[string]bool
 	// UID is the owner's PosixIdentity uid when a template references .User, 0 otherwise
 	UID int64
 }
@@ -52,7 +48,8 @@ func NewResolver(allocator *Allocator, reader client.Reader) *Resolver {
 // namespace. Inputs are evaluated only when referenced: a template referencing .User allocates the
 // owner's uid on first use (or only peeks at it when dryRun), one referencing .Namespace reads the
 // namespace's gid label. Every value rendered from a template must be the owner's uid or a valid group
-// id outside the operator ranges; integers set by the template author are taken as is.
+// id outside the operator ranges, and every integer the template sets beside them a valid id outside
+// the operator ranges (see CheckIntegerIDs).
 func (r *Resolver) Resolve(
 	ctx context.Context, spec *workspacev1alpha1.WorkspaceTemplateSpec, owner, namespace string, dryRun bool,
 ) (*Identity, error) {
@@ -64,28 +61,25 @@ func (r *Resolver) Resolve(
 		User:      &liveUser{ctx: ctx, allocator: r.allocator, owner: owner, dryRun: dryRun},
 		Namespace: &liveNamespace{ctx: ctx, reader: r.reader, name: namespace},
 	}
-	identity := &Identity{PodTemplated: map[string]bool{}, ContainerTemplated: map[string]bool{}}
+	identity := &Identity{}
 	var rendered []int64
-	resolver := func(templated map[string]bool) workspacev1alpha1.IDResolver {
-		return func(field string, value intstr.IntOrString) (int64, error) {
-			if value.Type == intstr.Int {
-				return int64(value.IntVal), nil
-			}
-			id, err := render(field, value.StrVal, inputs)
-			if err != nil {
-				return 0, err
-			}
-			templated[baseField(field)] = true
-			rendered = append(rendered, id)
-			return id, nil
+	resolver := func(field string, value intstr.IntOrString) (int64, error) {
+		if value.Type == intstr.Int {
+			return checkIntegerID(field, value.IntVal)
 		}
+		id, err := render(field, value.StrVal, inputs)
+		if err != nil {
+			return 0, err
+		}
+		rendered = append(rendered, id)
+		return id, nil
 	}
 
 	var err error
-	if identity.Pod, err = spec.DefaultPodSecurityContext.Resolve(resolver(identity.PodTemplated)); err != nil {
+	if identity.Pod, err = spec.DefaultPodSecurityContext.Resolve(resolver); err != nil {
 		return nil, fmt.Errorf("defaultPodSecurityContext.%w", err)
 	}
-	if identity.Container, err = spec.DefaultContainerSecurityContext.Resolve(resolver(identity.ContainerTemplated)); err != nil {
+	if identity.Container, err = spec.DefaultContainerSecurityContext.Resolve(resolver); err != nil {
 		return nil, fmt.Errorf("defaultContainerSecurityContext.%w", err)
 	}
 	if inputs.User.identity != nil {
@@ -127,11 +121,16 @@ func RequireHardening(spec *workspacev1alpha1.WorkspaceTemplateSpec) error {
 
 // ValidateTemplates checks a WorkspaceTemplate's identity templates at the template author's write:
 // each parses, references only .User.Uid, .User.Gid and .Namespace.Gid, and renders to an integer.
+// A template without identity templates is not checked: its integers keep their meaning from before
+// identity templates existed.
 func ValidateTemplates(spec *workspacev1alpha1.WorkspaceTemplateSpec) error {
+	if !spec.HasIdentityTemplates() {
+		return nil
+	}
 	sample := staticInputs{User: staticUser{Uid: UserRangeMin, Gid: UserRangeMin}, Namespace: staticNamespace{Gid: MaxID}}
 	check := func(field string, value intstr.IntOrString) (int64, error) {
 		if value.Type == intstr.Int {
-			return int64(value.IntVal), nil
+			return checkIntegerID(field, value.IntVal)
 		}
 		return render(field, value.StrVal, sample)
 	}
@@ -144,10 +143,39 @@ func ValidateTemplates(spec *workspacev1alpha1.WorkspaceTemplateSpec) error {
 	return RequireHardening(spec)
 }
 
-// baseField strips a list index: supplementalGroups[1] is the supplementalGroups field.
-func baseField(field string) string {
-	name, _, _ := strings.Cut(field, "[")
-	return name
+// ReferencesUser reports whether a template's identity templates reference .User, so that its
+// workspaces run as their owner's uid and carry the posix-uid label. Templates are rendered against
+// inputs that record what they read, so a reference in an unused branch is not counted. A template
+// that does not render (ValidateTemplates rejects it) counts as referencing .User.
+func ReferencesUser(spec *workspacev1alpha1.WorkspaceTemplateSpec) bool {
+	if !spec.HasIdentityTemplates() {
+		return false
+	}
+	inputs := &recordingInputs{User: &recordingUser{}}
+	references := false
+	probe := func(field string, value intstr.IntOrString) (int64, error) {
+		if value.Type == intstr.String {
+			if _, err := render(field, value.StrVal, inputs); err != nil {
+				references = true
+			}
+		}
+		return 0, nil
+	}
+	_, _ = spec.DefaultPodSecurityContext.Resolve(probe)
+	_, _ = spec.DefaultContainerSecurityContext.Resolve(probe)
+	return references || inputs.User.read
+}
+
+// checkIntegerID checks an integer identity field set beside identity templates, for example the gid
+// of a volume shared by several teams. It must be a valid id outside the operator ranges, as a namespace
+// gid must: in the user range it would be some user's uid, and so their private group, and 0 is root.
+func checkIntegerID(field string, value int32) (int64, error) {
+	id := int64(value)
+	if !ValidGroupID(id) {
+		return 0, fmt.Errorf("%s: %d must be an id in [%d, %d] outside the operator range [%d, %d] (and not %d)",
+			field, id, MinID, MaxID, UserRangeMin, GroupRangeMax, NobodyID)
+	}
+	return id, nil
 }
 
 // render executes one identity template, which must render to a decimal integer.
@@ -180,6 +208,28 @@ type staticUser struct {
 
 type staticNamespace struct {
 	Gid int64
+}
+
+// Recording inputs: like the static ones, recording whether a template read .User.
+type recordingInputs struct {
+	User      *recordingUser
+	Namespace staticNamespace
+}
+
+type recordingUser struct {
+	read bool
+}
+
+// Uid records the read, {{ .User.Uid }}.
+func (u *recordingUser) Uid() int64 { //nolint:revive // template input name {{ .User.Uid }}
+	u.read = true
+	return UserRangeMin
+}
+
+// Gid records the read, {{ .User.Gid }}.
+func (u *recordingUser) Gid() int64 {
+	u.read = true
+	return UserRangeMin
 }
 
 // Live inputs: methods, so an input is read only when a template references it.

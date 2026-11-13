@@ -80,3 +80,62 @@ func TestValidateTemplates(t *testing.T) {
 		}
 	}
 }
+
+func TestIntegerIDsBesideIdentityTemplates(t *testing.T) {
+	ctx := context.Background()
+	c := newFakeClient(t)
+	r := NewResolver(NewAllocator(c, c), c)
+	hardened := func(groups ...intstr.IntOrString) *workspacev1alpha1.WorkspaceTemplateSpec {
+		return &workspacev1alpha1.WorkspaceTemplateSpec{DefaultPodSecurityContext: &workspacev1alpha1.TemplatedPodSecurityContext{
+			RunAsNonRoot: ptr.To(true), SupplementalGroupsPolicy: ptr.To(corev1.SupplementalGroupsPolicyStrict),
+			RunAsUser: tpl(tplNamespaceGID), SupplementalGroups: groups,
+		}}
+	}
+	for _, id := range []int32{0, int32(UserRangeMin) + 24, int32(GroupRangeMin), int32(NobodyID)} {
+		spec := hardened(*tpl(tplNamespaceGID), intstr.FromInt32(id))
+		if err := ValidateTemplates(spec); err == nil {
+			t.Errorf("%d: the template webhook must reject it", id)
+		}
+		if _, err := r.Resolve(ctx, spec, alice, "team-a", false); err == nil {
+			t.Errorf("%d: resolution must reject it", id)
+		}
+	}
+	if err := ValidateTemplates(hardened(*tpl(tplNamespaceGID), intstr.FromInt32(2147000123))); err != nil {
+		t.Errorf("a volume gid outside the operator ranges must pass: %v", err)
+	}
+	// Without identity templates, integers keep their meaning from before: 0 is accepted.
+	plain := &workspacev1alpha1.WorkspaceTemplateSpec{DefaultPodSecurityContext: &workspacev1alpha1.TemplatedPodSecurityContext{
+		SupplementalGroups: []intstr.IntOrString{intstr.FromInt32(0)},
+	}}
+	if err := ValidateTemplates(plain); err != nil {
+		t.Errorf("a template without identity templates must not be checked: %v", err)
+	}
+}
+
+func TestReferencesUser(t *testing.T) {
+	pod := func(user intstr.IntOrString) *workspacev1alpha1.WorkspaceTemplateSpec {
+		return &workspacev1alpha1.WorkspaceTemplateSpec{DefaultPodSecurityContext: &workspacev1alpha1.TemplatedPodSecurityContext{
+			RunAsUser: &user,
+		}}
+	}
+	for text, want := range map[string]bool{
+		tplUserUID:      true,
+		tplUserGID:      true,
+		tplNamespaceGID: false,
+		`{{ if false }}{{ .User.Uid }}{{ else }}{{ .Namespace.Gid }}{{ end }}`: false,
+		`{{ .User.Name }}`: true,
+	} {
+		if got := ReferencesUser(pod(intstr.FromString(text))); got != want {
+			t.Errorf("%s: ReferencesUser = %t, want %t", text, got, want)
+		}
+	}
+	if ReferencesUser(pod(intstr.FromInt32(2147000123))) {
+		t.Error("a template without identity templates references nothing")
+	}
+	container := &workspacev1alpha1.WorkspaceTemplateSpec{DefaultContainerSecurityContext: &workspacev1alpha1.TemplatedSecurityContext{
+		RunAsUser: tpl(tplUserUID),
+	}}
+	if !ReferencesUser(container) {
+		t.Error("a container default referencing .User counts")
+	}
+}
