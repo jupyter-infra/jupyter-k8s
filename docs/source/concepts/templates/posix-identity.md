@@ -12,6 +12,10 @@ By default, every workspace runs as the uid of its image (often `1000`). On a fi
 
 A team is a namespace. The deployer gives each namespace a gid with the `workspace.jupyter.org/posix-gid` label, and keeps it stable. **Jupyter K8s** reads the label and never writes it.
 
+```{warning}
+Never give a deleted namespace's gid to another namespace while files still carry it: its new members would own them.
+```
+
 ### Templates
 
 In a template's `defaultPodSecurityContext` and `defaultContainerSecurityContext`, the identity fields (`runAsUser`, `runAsGroup`, `fsGroup`, `supplementalGroups`) accept a Go template as well as an integer. The admission webhook resolves them on every workspace create and update, and writes the integers into `spec.podSecurityContext` and `spec.containerSecurityContext`.
@@ -23,10 +27,14 @@ In a template's `defaultPodSecurityContext` and `defaultContainerSecurityContext
 
 Any field may also be a literal integer, for example the gid of a volume shared by several teams.
 
+```{warning}
+Beside Go templates, a literal must lie outside the **Jupyter K8s** ranges and the reserved ids (see Id space below): in the user range it would be some user's private group.
+```
+
 ### Rules
 
 - A template that uses a Go template in an identity field must also set `runAsNonRoot: true` and `supplementalGroupsPolicy: Strict` in `defaultPodSecurityContext`, so no workspace runs as root and the image's `/etc/group` cannot add groups. **Jupyter K8s** rejects the template otherwise, and holds its workspaces to both values.
-- A workspace's identity fields must equal the values its template resolves, whatever `podSecurityContextOverrides` allows: users never pick a uid.
+- A workspace's identity fields, in `spec.podSecurityContext` and `spec.containerSecurityContext`, must equal the values its template resolves, whatever `podSecurityContextOverrides` and `containerSecurityContextOverrides` allow: users never pick a uid or a group. A field the template leaves unset must stay unset, and the container may not set `runAsNonRoot: false`. As for every default, a workspace that sets a security context gets nothing merged into it: it sets the identity fields itself, to the resolved values, or leaves the context unset.
 - Templates are the administrator's responsibility: **Jupyter K8s** does not check that a template using `{{ .User.Uid }}` also pins `OwnerOnly`, locks the security contexts and keeps `allowCustomInitContainers: false`.
 
 ### Id space
@@ -50,6 +58,7 @@ Pick team and volume gids outside the **Jupyter K8s** ranges. **Jupyter K8s** re
 - **Kubernetes** 1.33 or later.
 - Nodes whose container runtime supports `supplementalGroupsPolicy`: containerd 2.0 or later, or CRI-O 1.31 or later. Check with `kubectl get node <node> -o jsonpath='{.status.features.supplementalGroupsPolicy}'`. On other nodes, the kubelet rejects the pod with a `SupplementalGroupsPolicyNotSupported` event.
 - An image that runs under an arbitrary uid.
+- Every workspace in a namespace carrying `workspace.jupyter.org/posix-gid` references a template: a workspace without one picks its own security contexts. Give the namespace a default template that uses identity templates, or reject workspaces without a `templateRef` with a ValidatingAdmissionPolicy, as described in [Bounds](bounds.md).
 
 ### Private and shared templates
 
@@ -92,6 +101,8 @@ spec:
     supplementalGroupsPolicy: Strict
     runAsUser: "{{ .Namespace.Gid }}"
     runAsGroup: "{{ .Namespace.Gid }}"
+  podSecurityContextOverrides: {allow: false}
+  containerSecurityContextOverrides: {allow: false}
 ```
 
 For a user with uid `2047113` in a namespace labelled `workspace.jupyter.org/posix-gid: "2130706500"`:
@@ -103,7 +114,7 @@ For a user with uid `2047113` in a namespace labelled `workspace.jupyter.org/pos
 | `fsGroup` | `2047113` | unset |
 | `supplementalGroups` | `2130706500`, `2147000123` | unset |
 
-A workspace moves between the two by changing its `templateRef`. Clear its `spec.podSecurityContext` in the same update, so the new template's values apply.
+A workspace moves between the two by changing its `templateRef`. Clear its `spec.podSecurityContext` and `spec.containerSecurityContext` in the same update, so the new template's values apply.
 
 ### User names in the image
 
@@ -133,6 +144,12 @@ The Kubernetes username is the identity: a reclaimed login inherits the uid of i
 
 Network file systems such as NFS (with `AUTH_SYS`) trust the uid the client asserts. The barrier is admission: locked security contexts, locked volumes, no custom init containers, and no privileged containers.
 
+### Namespace gids
+
+Whoever can set `workspace.jupyter.org/posix-gid` on a namespace controls which files its workspaces can reach: copying a team's gid joins that team, and reusing a deleted namespace's gid inherits its files.
+
+Let only cluster administrators set the label, for example with a ValidatingAdmissionPolicy on namespace labels, especially where users create their own namespaces.
+
 ### Permissions on PosixIdentity
 
 ```{warning}
@@ -147,7 +164,7 @@ Let **Jupyter K8s** manage `PosixIdentity` objects. Do not grant end users any p
 
 ### Recovery
 
-Each workspace records its owner's uid in the `workspace.jupyter.org/posix-uid` label, which its pods inherit: `kubectl get workspaces -A -l workspace.jupyter.org/posix-uid=<uid>` lists the workspaces running as a uid. If `PosixIdentity` objects are lost, **Jupyter K8s** recreates them from these labels as it reconciles the workspaces, and never gives a new user a uid a workspace still claims.
+Each workspace records its owner's uid in the `workspace.jupyter.org/posix-uid` label, which its pods inherit: `kubectl get workspaces -A -l workspace.jupyter.org/posix-uid=<uid>` lists the workspaces assigned a uid at admission; a workspace whose `templateRef` was later removed keeps the label but may run as another uid. If `PosixIdentity` objects are lost, **Jupyter K8s** recreates them from these labels as it reconciles the workspaces, and never gives a new user a uid a workspace still claims.
 
 ### Conflicts
 
