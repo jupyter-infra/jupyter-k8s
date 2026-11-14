@@ -183,14 +183,12 @@ func (b *AccessResourcesBuilder) ResolveApplicationBasePath(
 	return resolved, nil
 }
 
-// ResolveConnectionTypes lists the connection types an access strategy configures explicitly, in the
-// order the Extension API resolves a WorkspaceConnection: web-ui when bearerAuthURLTemplate is set,
-// ssh-over-websocket when webSocketURLTemplate is set, then the other keys of createConnectionHandlerMap
-// sorted. The two built-in names are decided by their templates alone, the Extension API never consults
-// the map for them. Types served only by the default createConnectionHandler are not enumerated: the
-// Extension API accepts any {ide}-remote name through it. Map keys are listed as configured; whether a
-// request for one succeeds is the Extension API's decision, not re-checked here. Returns nil, the decoded
-// form of an absent status field, when the strategy configures none.
+// ResolveConnectionTypes lists the WorkspaceConnection types an access strategy configures, in the order the
+// Extension API resolves a request: web-ui, ssh-over-websocket, then the {ide}-remote keys of
+// createConnectionHandlerMap sorted. Other map keys are dropped, since the Extension API refuses such a name
+// before it reads the strategy. Types the default createConnectionHandler serves are an open set and are not
+// listed. Returns nil when nothing is configured: an absent status field decodes to nil, so the status manager
+// sees no change on the next reconcile.
 func (b *AccessResourcesBuilder) ResolveConnectionTypes(
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 ) []string {
@@ -201,16 +199,14 @@ func (b *AccessResourcesBuilder) ResolveConnectionTypes(
 	if accessStrategy.Spec.WebSocketURLTemplate != "" {
 		connectionTypes = append(connectionTypes, connectionv1alpha1.ConnectionTypeWebSocket)
 	}
-	mapped := make([]string, 0, len(accessStrategy.Spec.CreateConnectionHandlerMap))
+	var remoteTypes []string
 	for connectionType := range accessStrategy.Spec.CreateConnectionHandlerMap {
-		if connectionType == connectionv1alpha1.ConnectionTypeWebUI ||
-			connectionType == connectionv1alpha1.ConnectionTypeWebSocket {
-			continue
+		if connectionv1alpha1.IsRemoteConnectionType(connectionType) {
+			remoteTypes = append(remoteTypes, connectionType)
 		}
-		mapped = append(mapped, connectionType)
 	}
-	sort.Strings(mapped)
-	return append(connectionTypes, mapped...)
+	sort.Strings(remoteTypes)
+	return append(connectionTypes, remoteTypes...)
 }
 
 // ResolveAccessResourceSelector creates a label selector string for finding access resources

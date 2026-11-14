@@ -427,11 +427,26 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeSSHWebSocket}))
 		})
 
-		It("Should list a handler map key the operator does not know as is", func() {
+		It("Should list an {ide}-remote handler map key the operator does not know", func() {
 			strategy := testAccessStrategy.DeepCopy()
-			strategy.Spec.CreateConnectionHandlerMap = map[string]string{"banana": awsCreateSession}
+			strategy.Spec.CreateConnectionHandlerMap = map[string]string{"zed-remote": awsCreateSession}
 
-			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{"banana"}))
+			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{"zed-remote"}))
+		})
+
+		It("Should drop a handler map key no WorkspaceConnection can name", func() {
+			strategy := testAccessStrategy.DeepCopy()
+			strategy.Spec.WebSocketURLTemplate = webSocketURLTemplate
+			strategy.Spec.CreateConnectionHandlerMap = map[string]string{
+				"vscode_remote":      awsCreateSession,
+				"remote":             awsCreateSession,
+				connTypeVSCodeRemote: awsCreateSession,
+			}
+
+			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{
+				connTypeSSHWebSocket,
+				connTypeVSCodeRemote,
+			}))
 		})
 
 		It("Should decide the built-in types by their templates, not by handler map keys", func() {

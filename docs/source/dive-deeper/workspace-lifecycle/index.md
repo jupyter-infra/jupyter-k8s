@@ -108,7 +108,7 @@ Beyond conditions, the workspace status includes:
 | `status.deploymentName` | Name of the managed Deployment |
 | `status.serviceName` | Name of the managed Service |
 | `status.accessURL` | URL at which the workspace can be reached (when routing is configured) |
-| `status.connectionTypes` | Connection types the bound access strategy configures explicitly, as accepted in a `WorkspaceConnection`: `web-ui`, `ssh-over-websocket` and the other types mapped in `createConnectionHandlerMap`; cleared when the workspace stops or drops its access strategy |
+| `status.connectionTypes` | `WorkspaceConnection` types the bound access strategy configures: `web-ui`, `ssh-over-websocket` and the `{ide}-remote` types mapped in `createConnectionHandlerMap`; cleared when the workspace stops or drops its access strategy |
 | `status.accessResources` | Status of each resource created from the access strategy templates |
 | `status.observedAccessStrategyVersion` | Identity and version of the access strategy last evaluated; the controller resets probe state when this changes |
 | `status.accessStartupProbeSucceeded` | Whether the access probe has passed |

@@ -36,7 +36,7 @@ When access should be granted, the **Extension API** responds with a URL. Otherw
 
 If the workspace does not exist, or if its `status.conditions[Available]` is not `True`, **Extension API** also returns an error.
 
-The connection types a workspace accepts depend on its access strategy, which an administrator creates and a workspace user is not necessarily allowed to read. The controller derives the ones the strategy configures explicitly and writes them to the workspace as `status.connectionTypes`: `web-ui` when the strategy sets `bearerAuthURLTemplate`, `ssh-over-websocket` when it sets `webSocketURLTemplate`, and the other types mapped in `createConnectionHandlerMap`. A remote type that only the strategy's default `createConnectionHandler` serves is not listed, since that handler accepts any `{ide}-remote` name. A client picks a type from this list without reading the access strategy:
+The connection types a workspace accepts depend on its access strategy, which an administrator creates and a workspace user is not necessarily allowed to read. The controller derives the types the strategy configures and writes them to the workspace as `status.connectionTypes`: `web-ui` when the strategy sets `bearerAuthURLTemplate`, `ssh-over-websocket` when it sets `webSocketURLTemplate`, and the `{ide}-remote` keys of `createConnectionHandlerMap`. A remote type that only the strategy's default `createConnectionHandler` serves is not listed, since that handler accepts any `{ide}-remote` name. A client picks a type from this list without reading the access strategy:
 
 ```bash
 kubectl get workspace alice-workspace -n alice-team -o jsonpath='{.status.connectionTypes}'
