@@ -12,7 +12,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"text/template"
 
@@ -373,14 +372,6 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	}
 }
 
-// remoteConnectionTypeRegex validates the {ide}-remote pattern: alphanumeric segments separated by single hyphens.
-var remoteConnectionTypeRegex = regexp.MustCompile(`^[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*-remote$`)
-
-// isRemoteConnectionType checks if the connection type matches the {ide}-remote pattern.
-func isRemoteConnectionType(connectionType string) bool {
-	return remoteConnectionTypeRegex.MatchString(connectionType)
-}
-
 // validateWorkspaceConnectionRequest validates the workspace connection request
 func validateWorkspaceConnectionRequest(req *connectionv1alpha1.WorkspaceConnectionRequest) error {
 	if req.Spec.WorkspaceName == "" {
@@ -399,7 +390,7 @@ func validateWorkspaceConnectionRequest(req *connectionv1alpha1.WorkspaceConnect
 		// valid
 	case connectionType == connectionv1alpha1.ConnectionTypeWebSocket:
 		// valid
-	case isRemoteConnectionType(connectionType):
+	case connectionv1alpha1.IsRemoteConnectionType(connectionType):
 		// valid — known or unknown remote types are accepted
 	default:
 		return fmt.Errorf("invalid workspaceConnectionType: '%s'. Must be 'web-ui', 'ssh-over-websocket', or follow the '{ide}-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')", connectionType)

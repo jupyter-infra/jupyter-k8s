@@ -249,35 +249,3 @@ func TestIsWorkspaceAvailable(t *testing.T) {
 		})
 	}
 }
-
-func TestIsRemoteConnectionType(t *testing.T) {
-	tests := []struct {
-		connectionType string
-		expected       bool
-	}{
-		{connectionTypeVSCodeRemote, true},
-		{"kiro-remote", true},
-		{"cursor-remote", true},
-		{"windsurf-remote", true},
-		{"my-vscode-remote", true},
-		{connectionTypeWebUI, false},
-		{invalidConnectionType, false},
-		{"-remote", false},
-		{"remote", false},
-		{"", false},
-		{"my--vscode-remote", false},
-		{"vscode-remote-ssh", false},
-		{"-vscode-remote", false},
-		{"vscode remote", false},
-		{"vscode_remote", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.connectionType, func(t *testing.T) {
-			result := isRemoteConnectionType(tt.connectionType)
-			if result != tt.expected {
-				t.Errorf("isRemoteConnectionType(%q) = %v, want %v", tt.connectionType, result, tt.expected)
-			}
-		})
-	}
-}

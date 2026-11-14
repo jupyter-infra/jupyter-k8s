@@ -6,6 +6,8 @@ Distributed under the terms of the MIT license
 package v1alpha1
 
 import (
+	"regexp"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -21,6 +23,15 @@ const (
 	// ConnectionTypeWebSocket represents WebSocket remote connection type
 	ConnectionTypeWebSocket = "ssh-over-websocket"
 )
+
+// remoteConnectionTypePattern is the "{ide}-remote" grammar: alphanumeric segments separated by single hyphens.
+var remoteConnectionTypePattern = regexp.MustCompile(`^[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*-remote$`)
+
+// IsRemoteConnectionType reports whether connectionType follows the "{ide}-remote" pattern, the open set of
+// editor connection types a WorkspaceConnection may name besides ConnectionTypeWebUI and ConnectionTypeWebSocket.
+func IsRemoteConnectionType(connectionType string) bool {
+	return remoteConnectionTypePattern.MatchString(connectionType)
+}
 
 // WorkspaceConnectionRequestSpec represents the spec of a workspace connection request
 type WorkspaceConnectionRequestSpec struct {
