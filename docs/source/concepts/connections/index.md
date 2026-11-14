@@ -42,7 +42,7 @@ The connection types a workspace accepts depend on its access strategy, which an
 kubectl get workspace alice-workspace -n alice-team -o jsonpath='{.status.connectionTypes}'
 ```
 
-The controller writes the list once the workspace's compute and Service are ready, rewrites it whenever it reconciles the running workspace against its access strategy, and clears it when the workspace stops or drops its access strategy. Whether the workspace is ready to connect is reported by `status.conditions[Available]`, not by this list.
+The controller writes the list once the workspace's compute and Service are ready, rewrites it on each later reconcile while they stay ready, and clears it when the workspace stops or drops its access strategy. Whether the workspace is ready to connect is reported by `status.conditions[Available]`, not by this list.
 
 Unlike a normal Kubernetes resource, a WorkspaceConnection does not persist in ETCD, and a user cannot list connections with `kubectl get WorkspaceConnections`.
 
