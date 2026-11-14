@@ -686,7 +686,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			available := getCondition(workspace, ConditionTypeAvailable)
 			Expect(available.Status).To(Equal(metav1.ConditionFalse))
 			Expect(available.Reason).To(Equal(ReasonAccessNotReady))
-			Expect(workspace.Status.ConnectionTypes).To(Equal([]string{connTypeWebUI}))
+			Expect(connectionTypesOf(workspace)).To(Equal([]string{connTypeWebUI}))
 		})
 
 		It("clears connectionTypes when the access strategy is removed", func() {
