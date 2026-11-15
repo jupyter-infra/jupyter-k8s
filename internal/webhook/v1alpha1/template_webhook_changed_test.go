@@ -256,6 +256,47 @@ func TestConstraintsChanged(t *testing.T) {
 				ContainerSecurityContextOverrides: &workspacev1alpha1.SecurityContextOverridePolicy{Allow: boolPtr(false)},
 				DefaultContainerSecurityContext:   &workspacev1alpha1.TemplatedSecurityContext{Privileged: boolPtr(false)},
 			},
+			want: true,
+		},
+		{
+			name: "default container security context changed while allowed",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{DefaultContainerSecurityContext: &workspacev1alpha1.TemplatedSecurityContext{Privileged: boolPtr(false)}},
+			want: false,
+		},
+		{
+			name: "default pod security context changed while locked",
+			old: workspacev1alpha1.WorkspaceTemplateSpec{
+				PodSecurityContextOverrides: &workspacev1alpha1.SecurityContextOverridePolicy{Allow: boolPtr(false)},
+			},
+			new: workspacev1alpha1.WorkspaceTemplateSpec{
+				PodSecurityContextOverrides: &workspacev1alpha1.SecurityContextOverridePolicy{Allow: boolPtr(false)},
+				DefaultPodSecurityContext:   &workspacev1alpha1.TemplatedPodSecurityContext{RunAsNonRoot: boolPtr(true)},
+			},
+			want: true,
+		},
+		{
+			name: "default access type changed while locked",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{AllowCustomAccessType: boolPtr(false), DefaultAccessType: testOwnershipOwnerOnly},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{AllowCustomAccessType: boolPtr(false), DefaultAccessType: testOwnershipPublic},
+			want: true,
+		},
+		{
+			name: "default access type changed while allowed",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{DefaultAccessType: testOwnershipOwnerOnly},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{DefaultAccessType: testOwnershipPublic},
+			want: false,
+		},
+		{
+			name: "default ownership type changed while locked",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{AllowCustomOwnershipType: boolPtr(false), DefaultOwnershipType: testOwnershipOwnerOnly},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{AllowCustomOwnershipType: boolPtr(false), DefaultOwnershipType: testOwnershipPublic},
+			want: true,
+		},
+		{
+			name: "default ownership type spelled out while locked",
+			old:  workspacev1alpha1.WorkspaceTemplateSpec{AllowCustomOwnershipType: boolPtr(false)},
+			new:  workspacev1alpha1.WorkspaceTemplateSpec{AllowCustomOwnershipType: boolPtr(false), DefaultOwnershipType: testOwnershipPublic},
 			want: false,
 		},
 		{

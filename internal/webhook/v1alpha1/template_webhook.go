@@ -246,6 +246,12 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 		return true
 	}
 
+	// Check the pinned defaults (access type, ownership type, pod and container security context)
+	// while the matching lock holds workspaces to them
+	if pinnedDefaultsChanged(oldSpec, newSpec) {
+		return true
+	}
+
 	// Check volumeOverrides changes, and default volumes changes while they are locked
 	if !equality.Semantic.DeepEqual(oldSpec.VolumeOverrides, newSpec.VolumeOverrides) {
 		return true
@@ -255,6 +261,21 @@ func constraintsChanged(oldTemplate, newTemplate *workspacev1alpha1.WorkspaceTem
 	}
 
 	return false
+}
+
+// pinnedDefaultsChanged reports whether a default that the new spec's lock pins workspaces to has
+// changed. Access and ownership types compare effective values, so spelling out the implicit default
+// is not a change.
+func pinnedDefaultsChanged(oldSpec, newSpec *workspacev1alpha1.WorkspaceTemplateSpec) bool {
+	return (newSpec.AccessTypeLocked() &&
+		effectiveAccessType(oldSpec.DefaultAccessType, oldSpec.DefaultOwnershipType) !=
+			effectiveAccessType(newSpec.DefaultAccessType, newSpec.DefaultOwnershipType)) ||
+		(newSpec.OwnershipTypeLocked() &&
+			effectiveOwnershipType(oldSpec.DefaultOwnershipType) != effectiveOwnershipType(newSpec.DefaultOwnershipType)) ||
+		(newSpec.PodSecurityContextOverrides.Locked() &&
+			!equality.Semantic.DeepEqual(oldSpec.DefaultPodSecurityContext, newSpec.DefaultPodSecurityContext)) ||
+		(newSpec.ContainerSecurityContextOverrides.Locked() &&
+			!equality.Semantic.DeepEqual(oldSpec.DefaultContainerSecurityContext, newSpec.DefaultContainerSecurityContext))
 }
 
 // resourceBoundsChanged checks if resource bounds changed
@@ -435,7 +456,7 @@ func validateIdleShutdownPolicyConsistency(template *workspacev1alpha1.Workspace
 	}
 
 	// A locked policy (allow=false) needs a default for workspaces to match against.
-	if policy.Allow != nil && !*policy.Allow && template.Spec.DefaultIdleShutdown == nil {
+	if policy.Locked() && template.Spec.DefaultIdleShutdown == nil {
 		return fmt.Errorf(
 			"idleShutdownOverrides.allow is false but defaultIdleShutdown is not set: "+
 				"a locked idle shutdown policy requires a defaultIdleShutdown for workspaces to match (template %q)",
