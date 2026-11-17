@@ -93,7 +93,7 @@ func (d *IdentityDefaulter) ApplyIdentityDefaults(ctx context.Context, workspace
 
 	// A dry run must have no side effects (sideEffects=NoneOnDryRun): it peeks at the uid the owner
 	// would get instead of allocating it.
-	dryRun := req.DryRun != nil && *req.DryRun
+	dryRun := isDryRun(ctx)
 	// The owner is the created-by annotation, not the requester: the controller or an admin updating
 	// the workspace must not resolve it for themselves.
 	identity, err := d.identity.Resolve(ctx, &template.Spec, workspace.Annotations[workspaceutil.AnnotationCreatedBy], workspace.Namespace, dryRun)

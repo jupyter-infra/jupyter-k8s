@@ -350,6 +350,12 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, workspace *works
 		return err
 	}
 
+	// The protection finalizers are writes to other objects: a dry run must not make them
+	// (sideEffects=NoneOnDryRun). It admits no workspace, so there is nothing to protect.
+	if isDryRun(ctx) {
+		return nil
+	}
+
 	// Ensure template has finalizer to prevent deletion while in use.
 	if workspace.Spec.TemplateRef != nil && workspace.Spec.TemplateRef.Name != "" {
 		templateNamespace := workspaceutil.GetTemplateRefNamespace(workspace)
@@ -366,6 +372,12 @@ func (d *WorkspaceCustomDefaulter) Default(ctx context.Context, workspace *works
 	}
 
 	return nil
+}
+
+// isDryRun reports whether the admission request in ctx is a dry run. Without a request, it is not.
+func isDryRun(ctx context.Context) bool {
+	req, err := admission.RequestFromContext(ctx)
+	return err == nil && req.DryRun != nil && *req.DryRun
 }
 
 // rejectIdentityTemplates fails a workspace whose template holds identity templates, for a defaulter
