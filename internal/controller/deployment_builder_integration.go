@@ -89,7 +89,8 @@ func (db *DeploymentBuilder) buildIntegrationPodModifications(
 		return &workspacev1alpha1.PodModifications{}, shareProcessNamespace, nil
 	}
 
-	data := buildIntegrationTemplateData(workspace, ref)
+	// Read-only: computing the owner's {{ .User }} inputs never allocates a PosixIdentity.
+	data := buildIntegrationTemplateData(workspace, ref, db.userInputsFor(workspace))
 	resolver := NewIntegrationTemplateResolver(NewFrozenResourceValueProvider(frozen.Values))
 	mods, err := resolver.ResolvePodModifications(template.Spec.DeploymentModifications.PodModifications, data)
 	if err != nil {

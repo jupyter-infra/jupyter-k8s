@@ -62,6 +62,8 @@ spec:
   allowCustomOwnershipType: false
 ```
 
+Identity fields that a template's security context defaults set with a Go template must always equal their resolved values, whatever these policies allow; see [POSIX identity](posix-identity.md).
+
 ```{note}
 The security context pins apply to the main container only. Init containers carry their own `securityContext`, so templates relying on these pins should keep `allowCustomInitContainers: false`.
 ```
@@ -118,7 +120,14 @@ A template's `sharedMemoryOverrides` controls whether workspaces may change the 
 
 ## Volumes
 
-A template's `volumeOverrides` controls whether workspaces may drop or change the volumes that `defaultVolumes` gives them (`allow`). With `allow: false` a workspace must keep every default volume unchanged, alongside any volumes of its own that `allowSecondaryStorages` permits; set `allowSecondaryStorages: false` too to restrict workspaces to the default volumes exactly as defined. See [Storage](../workspaces/storage.md#template-default-volumes).
+A template's `volumeOverrides` controls whether workspaces may drop or change the volumes that `defaultVolumes` gives them (`allow`). With `allow: false` a workspace must keep every default volume unchanged.
+
+To prevent workspace users from bypassing this lock:
+
+- set `allowSecondaryStorages: false`, since otherwise a workspace can add its own volume on a default volume's claim, for example without the `subPath`;
+- keep `allowCustomInitContainers: false`, since an init container mounts any pod volume at any `subPath`.
+
+See [Storage](../workspaces/storage.md#template-default-volumes).
 
 ## Enforcement model
 

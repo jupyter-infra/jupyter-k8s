@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
@@ -963,4 +964,68 @@ var _ = Describe("Lazy Finalizer Logic", func() {
 			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(BeFalse())
 		})
 	})
+})
+
+var _ = Describe("Default protection finalizers on dry run", func() {
+	// A dry run must have no side effects (sideEffects=NoneOnDryRun): the finalizers are writes to the
+	// template and the access strategy, so only a real request makes them.
+	DescribeTable("stamps the template and access strategy finalizers only on a real request",
+		func(dryRun bool) {
+			ctx := context.Background()
+			scheme := runtime.NewScheme()
+			Expect(workspacev1alpha1.AddToScheme(scheme)).To(Succeed())
+			Expect(corev1.AddToScheme(scheme)).To(Succeed())
+
+			template := &workspacev1alpha1.WorkspaceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: testTemplateName, Namespace: testDefaultNamespace},
+				Spec:       workspacev1alpha1.WorkspaceTemplateSpec{DisplayName: testTemplateDisplayName, DefaultImage: testImageTestLatest},
+			}
+			accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
+				ObjectMeta: metav1.ObjectMeta{Name: testStrategyName, Namespace: testDefaultNamespace},
+				Spec:       workspacev1alpha1.WorkspaceAccessStrategySpec{DisplayName: testStrategyDisplayName},
+			}
+			// Stored with the template labels, so the template counts as in use.
+			workspace := &workspacev1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      testWorkspaceName,
+					Namespace: testDefaultNamespace,
+					Labels: map[string]string{
+						controller.LabelWorkspaceTemplate:          testTemplateName,
+						controller.LabelWorkspaceTemplateNamespace: testDefaultNamespace,
+					},
+				},
+				Spec: workspacev1alpha1.WorkspaceSpec{
+					DisplayName:    testWorkspaceDisplayName,
+					Image:          testImageTestLatest,
+					DesiredStatus:  testStatusRunning,
+					TemplateRef:    &workspacev1alpha1.TemplateRef{Name: testTemplateName, Namespace: testDefaultNamespace},
+					AccessStrategy: &workspacev1alpha1.AccessStrategyRef{Name: testStrategyName, Namespace: testDefaultNamespace},
+				},
+			}
+			k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(template, accessStrategy, workspace).Build()
+			defaulter := WorkspaceCustomDefaulter{
+				templateDefaulter:       NewTemplateDefaulter(k8sClient, ""),
+				serviceAccountDefaulter: NewServiceAccountDefaulter(k8sClient),
+				templateGetter:          NewTemplateGetter(k8sClient, ""),
+				templateValidator:       NewTemplateValidator(k8sClient, ""),
+				accessStrategyValidator: NewAccessStrategyValidator(""),
+				client:                  k8sClient,
+			}
+
+			userCtx := createUserContext(ctx, "CREATE", testPinOwner)
+			req, err := admission.RequestFromContext(userCtx)
+			Expect(err).NotTo(HaveOccurred())
+			req.DryRun = &dryRun
+			Expect(defaulter.Default(admission.NewContextWithRequest(ctx, req), workspace.DeepCopy())).To(Succeed())
+
+			updatedTemplate := &workspacev1alpha1.WorkspaceTemplate{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), updatedTemplate)).To(Succeed())
+			Expect(controllerutil.ContainsFinalizer(updatedTemplate, workspaceutil.TemplateFinalizerName)).To(Equal(!dryRun))
+			updatedStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(accessStrategy), updatedStrategy)).To(Succeed())
+			Expect(controllerutil.ContainsFinalizer(updatedStrategy, workspaceutil.AccessStrategyFinalizerName)).To(Equal(!dryRun))
+		},
+		Entry("dry run: no finalizer", true),
+		Entry("real request: both finalizers", false),
+	)
 })

@@ -24,6 +24,7 @@ SOFTWARE.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -50,6 +51,7 @@ import (
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 	"github.com/jupyter-infra/jupyter-k8s/internal/extensionapi"
+	"github.com/jupyter-infra/jupyter-k8s/internal/posixidentity"
 	webhookv1alpha1 "github.com/jupyter-infra/jupyter-k8s/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
@@ -298,6 +300,12 @@ func main() {
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOptions)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	// Field indexes read by the PosixIdentity allocator and the namespace gid lookup
+	if err := posixidentity.SetupIndexes(context.Background(), mgr.GetFieldIndexer()); err != nil {
+		setupLog.Error(err, "unable to set up posix identity indexes")
 		os.Exit(1)
 	}
 

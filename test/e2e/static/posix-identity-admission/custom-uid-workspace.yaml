@@ -1,0 +1,12 @@
+# Invalid: picks its own uid under a template that resolves it
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: custom-uid
+  namespace: posix-adm-team
+spec:
+  displayName: "custom-uid"
+  templateRef:
+    name: posix-shared-template
+  podSecurityContext:
+    runAsUser: 2047113

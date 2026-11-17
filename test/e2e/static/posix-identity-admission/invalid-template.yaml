@@ -1,0 +1,13 @@
+# Invalid: references a template input that does not exist
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: posix-invalid-template
+  namespace: posix-adm-team
+spec:
+  displayName: "POSIX Invalid Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultPodSecurityContext:
+    runAsNonRoot: true
+    supplementalGroupsPolicy: Strict
+    runAsUser: "{{ .User.Name }}"
