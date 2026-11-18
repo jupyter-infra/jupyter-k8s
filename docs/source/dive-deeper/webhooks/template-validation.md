@@ -36,6 +36,8 @@ Changes to any of the following fields trigger the warning:
 - `volumeOverrides` (allow), and `defaultVolumes` while `volumeOverrides.allow` is false
 - `allowCustomAccessType` and `allowCustomOwnershipType`
 - `podSecurityContextOverrides` and `containerSecurityContextOverrides` (allow)
+- `defaultAccessType`, when `allowCustomAccessType` is false, and `defaultOwnershipType`, when `allowCustomOwnershipType` is false
+- `defaultPodSecurityContext`, when `podSecurityContextOverrides.allow` is false, and `defaultContainerSecurityContext`, when `containerSecurityContextOverrides.allow` is false
 
 ## Deletion
 
