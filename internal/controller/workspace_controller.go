@@ -8,12 +8,14 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jupyter-infra/jupyter-k8s-plugin/plugin"
 	"github.com/jupyter-infra/jupyter-k8s-plugin/pluginclient"
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/posixidentity"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -21,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	builderPkg "sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -83,6 +86,9 @@ type WorkspaceReconciler struct {
 	statusManager   *StatusManager
 	podEventHandler *PodEventHandler
 	options         WorkspaceControllerOptions
+	// identities recreates a missing PosixIdentity from a workspace's posix-uid claim; nil disables it
+	identities    *posixidentity.Allocator
+	eventRecorder record.EventRecorder
 }
 
 // SetStateMachine sets the state machine for testing purposes
@@ -128,6 +134,8 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if !workspace.DeletionTimestamp.IsZero() {
 		return r.stateMachine.ReconcileDeletion(ctx, workspace)
 	}
+
+	r.recoverPosixIdentity(ctx, workspace)
 
 	// Consolidated function to ensure labels are set correctly
 	// and perform at most one update
@@ -336,11 +344,14 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	scheme := mgr.GetScheme()
 
 	// Create managers
+	identities := posixidentity.NewAllocator(k8sClient, mgr.GetAPIReader())
+	deploymentBuilder := NewDeploymentBuilder(scheme, options)
+	deploymentBuilder.SetUserInputs(identities.UserInputsFor)
 	statusManager := NewStatusManager(k8sClient)
 	resourceManager := NewResourceManager(
 		k8sClient,
 		scheme,
-		NewDeploymentBuilder(scheme, options),
+		deploymentBuilder,
 		NewServiceBuilder(scheme),
 		NewPVCBuilder(scheme),
 		NewAccessResourcesBuilder(),
@@ -395,9 +406,34 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 		statusManager:   statusManager,
 		podEventHandler: podEventHandler,
 		options:         options,
+		identities:      identities,
+		eventRecorder:   eventRecorder,
 	}
 
 	return reconciler.SetupWithManager(mgr)
+}
+
+// recoverPosixIdentity recreates the PosixIdentity a workspace's posix-uid label claims when it is
+// missing, e.g. after every object was deleted: the workspaces are a distributed backup of the uid
+// ledger. A conflict is reported as an event for an admin and never resolved automatically; the
+// admission webhook rejects the owner's changes to identity-templated workspaces meanwhile.
+func (r *WorkspaceReconciler) recoverPosixIdentity(ctx context.Context, workspace *workspacev1alpha1.Workspace) {
+	if r.identities == nil || workspace.Labels[workspaceutil.LabelPosixUID] == "" {
+		return
+	}
+	owner := workspace.Annotations[workspaceutil.AnnotationCreatedBy]
+	identity, err := r.identities.Ensure(ctx, owner)
+	claimed, parseErr := strconv.ParseInt(workspace.Labels[workspaceutil.LabelPosixUID], 10, 64)
+	if err == nil && (parseErr != nil || identity.Name != posixidentity.ObjectName(claimed)) {
+		err = fmt.Errorf("%w: workspace claims uid %s, the PosixIdentity of %q is %s",
+			posixidentity.ErrConflict, workspace.Labels[workspaceutil.LabelPosixUID], owner, identity.Name)
+	}
+	if err != nil {
+		logf.FromContext(ctx).Error(err, "Failed to recover the PosixIdentity of the workspace owner")
+		if r.eventRecorder != nil {
+			r.eventRecorder.Event(workspace, corev1.EventTypeWarning, ReasonPosixIdentityConflict, err.Error())
+		}
+	}
 }
 
 // getWorkspace retrieves the Workspace resource

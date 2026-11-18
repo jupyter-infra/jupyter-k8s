@@ -11,6 +11,7 @@ import (
 	"text/template"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/posixidentity"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -20,6 +21,8 @@ import (
 type partialAccessResourceData struct {
 	Workspace      *workspacev1alpha1.Workspace
 	AccessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
+	// User holds the owner's {{ .User.UnixName }} and {{ .User.UsernameHash }}
+	User posixidentity.UserInputs
 }
 
 const (
@@ -53,6 +56,8 @@ func (b *DeploymentBuilder) resolveAccessStrategyPrimaryContainerEnv(
 	data := &partialAccessResourceData{
 		Workspace:      workspace,
 		AccessStrategy: accessStrategy,
+		// Read-only: computing the owner's {{ .User }} inputs never allocates a PosixIdentity.
+		User: b.userInputsFor(workspace),
 	}
 
 	var envVars = []map[string]string{}

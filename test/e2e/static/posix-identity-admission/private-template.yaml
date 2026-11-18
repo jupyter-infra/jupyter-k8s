@@ -1,0 +1,25 @@
+# Private template: runs workspaces as their owner, with the team and a volume group
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: posix-private-template
+  namespace: posix-adm-team
+spec:
+  displayName: "POSIX Private Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultAccessType: OwnerOnly
+  defaultOwnershipType: OwnerOnly
+  allowCustomAccessType: false
+  allowCustomOwnershipType: false
+  defaultPodSecurityContext:
+    runAsNonRoot: true
+    supplementalGroupsPolicy: Strict
+    fsGroupChangePolicy: OnRootMismatch
+    runAsUser: "{{ .User.Uid }}"
+    runAsGroup: "{{ .User.Gid }}"
+    fsGroup: "{{ .User.Gid }}"
+    supplementalGroups: ["{{ .Namespace.Gid }}"]
+  podSecurityContextOverrides:
+    allow: false
+  containerSecurityContextOverrides:
+    allow: false

@@ -27,8 +27,8 @@ For example, if a `workspace.spec` specifies a `containerSecurityContext`, the t
 | `defaultIdleShutdown` | `spec.idleShutdown` |
 | `defaultLifecycle` | `spec.lifecycle` |
 | `defaultReadinessProbe` | `spec.readinessProbe` |
-| `defaultPodSecurityContext` | `spec.podSecurityContext` |
-| `defaultContainerSecurityContext` | `spec.containerSecurityContext` |
+| `defaultPodSecurityContext` | `spec.podSecurityContext`, with identity templates resolved (see [POSIX identity](posix-identity.md)) |
+| `defaultContainerSecurityContext` | `spec.containerSecurityContext`, with identity templates resolved |
 | `defaultSharedMemory` | `spec.sharedMemory` |
 
 ## Merge rules

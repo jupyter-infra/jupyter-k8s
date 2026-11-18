@@ -1,0 +1,12 @@
+# Created by the administrator before the user's first workspace, to keep a uid an existing file system uses
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: PosixIdentity
+metadata:
+  name: uid-1052818
+  labels:
+    jk8s/e2e: posix-identity-test
+spec:
+  username: posix-adm-seeded
+  # The first 32 hex characters of the username's SHA-256 digest
+  usernameHash: 94ffd39cf562fa2add3ccc529aca594d
+  unixName: posix-adm-seeded

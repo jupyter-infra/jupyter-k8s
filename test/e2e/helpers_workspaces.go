@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -461,4 +462,25 @@ func deleteTemplateForTest(templateName string) {
 	cmd := exec.Command("kubectl", "delete", "workspacetemplate", templateName,
 		"-n", SharedNamespace, "--ignore-not-found", "--wait=true", "--timeout=60s")
 	_, _ = utils.Run(cmd)
+}
+
+// expectContainerSupplementalGroups waits until the kubelet reports, in the container status, the groups
+// the container process runs with, and asserts they are exactly want (order and duplicates aside). The
+// kubelet fills status.containerStatuses[].user once the container started, from the runtime.
+func expectContainerSupplementalGroups(podName, namespace, container string, want ...int64) {
+	ginkgo.GinkgoHelper()
+	want = slices.Compact(slices.Sorted(slices.Values(want)))
+	gomega.Eventually(func(g gomega.Gomega) {
+		pod := &corev1.Pod{}
+		g.Expect(kubectlGetInto("pod", podName, namespace, pod)).To(gomega.Succeed())
+		var groups []int64
+		for _, status := range pod.Status.ContainerStatuses {
+			if status.Name == container && status.User != nil && status.User.Linux != nil {
+				groups = status.User.Linux.SupplementalGroups
+			}
+		}
+		g.Expect(groups).NotTo(gomega.BeEmpty(), "container %s reports no groups yet", container)
+		slices.Sort(groups)
+		g.Expect(slices.Compact(groups)).To(gomega.Equal(want))
+	}, 30*time.Second, 2*time.Second).Should(gomega.Succeed())
 }

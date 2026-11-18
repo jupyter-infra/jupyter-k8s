@@ -160,7 +160,7 @@ func TestConstraintsChanged(t *testing.T) {
 			},
 			new: workspacev1alpha1.WorkspaceTemplateSpec{
 				ContainerSecurityContextOverrides: &workspacev1alpha1.SecurityContextOverridePolicy{Allow: boolPtr(false)},
-				DefaultContainerSecurityContext:   &corev1.SecurityContext{Privileged: boolPtr(false)},
+				DefaultContainerSecurityContext:   &workspacev1alpha1.TemplatedSecurityContext{Privileged: boolPtr(false)},
 			},
 			want: false,
 		},

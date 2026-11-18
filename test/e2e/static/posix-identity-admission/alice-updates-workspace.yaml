@@ -1,0 +1,11 @@
+# Stopped: admission runs in full without scheduling a pod
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: alice-updates
+  namespace: posix-adm-team
+spec:
+  displayName: "alice-updates"
+  desiredStatus: Stopped
+  templateRef:
+    name: posix-private-template

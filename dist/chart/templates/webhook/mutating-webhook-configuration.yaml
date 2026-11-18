@@ -28,7 +28,7 @@ webhooks:
     - UPDATE
     resources:
     - workspaces
-  sideEffects: None
+  sideEffects: NoneOnDryRun
 - admissionReviewVersions:
   - v1
   clientConfig:

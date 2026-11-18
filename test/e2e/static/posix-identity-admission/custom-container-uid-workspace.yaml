@@ -1,0 +1,13 @@
+# Invalid: runs its container as another uid under a template that locks no security context
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: custom-container-uid
+  namespace: posix-adm-team
+spec:
+  displayName: "custom-container-uid"
+  desiredStatus: Stopped
+  templateRef:
+    name: posix-shared-template
+  containerSecurityContext:
+    runAsUser: 2047113

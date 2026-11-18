@@ -1,0 +1,10 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: Workspace
+metadata:
+  name: alice-shared
+  namespace: posix-pod-team
+spec:
+  displayName: "alice-shared"
+  desiredStatus: Running
+  templateRef:
+    name: posix-shared-template

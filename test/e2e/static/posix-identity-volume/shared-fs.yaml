@@ -1,0 +1,65 @@
+# One file system shared by both teams, the way a deployer exposes a shared network file system: one static
+# PersistentVolume and claim per namespace, all on the same directory of the (single) kind node.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: posix-shared-fs-team-a
+  labels:
+    jk8s/e2e: posix-identity-test
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: /tmp/jk8s-e2e-posix-identity-volume
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: posix-vol-team-a
+    name: posix-shared-fs
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: posix-shared-fs-team-b
+  labels:
+    jk8s/e2e: posix-identity-test
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: /tmp/jk8s-e2e-posix-identity-volume
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: posix-vol-team-b
+    name: posix-shared-fs
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: posix-shared-fs
+  namespace: posix-vol-team-a
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ""
+  volumeName: posix-shared-fs-team-a
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: posix-shared-fs
+  namespace: posix-vol-team-b
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ""
+  volumeName: posix-shared-fs-team-b
+  resources:
+    requests:
+      storage: 1Gi

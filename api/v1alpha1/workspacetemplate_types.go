@@ -177,13 +177,17 @@ type WorkspaceTemplateSpec struct {
 	// +optional
 	DefaultReadinessProbe *corev1.Probe `json:"defaultReadinessProbe,omitempty"`
 
-	// DefaultPodSecurityContext specifies default pod-level security context
+	// DefaultPodSecurityContext specifies default pod-level security context. Its identity fields
+	// (runAsUser, runAsGroup, fsGroup, supplementalGroups) accept an integer or a Go template resolved
+	// per workspace at admission, e.g. "{{ .User.Uid }}"; see TemplatedPodSecurityContext.
 	// +optional
-	DefaultPodSecurityContext *corev1.PodSecurityContext `json:"defaultPodSecurityContext,omitempty"`
+	DefaultPodSecurityContext *TemplatedPodSecurityContext `json:"defaultPodSecurityContext,omitempty"`
 
-	// DefaultContainerSecurityContext specifies default container-level security context for the main workspace container
+	// DefaultContainerSecurityContext specifies default container-level security context for the main
+	// workspace container. Its identity fields (runAsUser, runAsGroup) accept an integer or a Go
+	// template; see TemplatedSecurityContext.
 	// +optional
-	DefaultContainerSecurityContext *corev1.SecurityContext `json:"defaultContainerSecurityContext,omitempty"`
+	DefaultContainerSecurityContext *TemplatedSecurityContext `json:"defaultContainerSecurityContext,omitempty"`
 
 	// PodSecurityContextOverrides controls whether a workspace may set its own podSecurityContext.
 	// When locked, workspaces get DefaultPodSecurityContext, or no pod security context if unset.
@@ -203,7 +207,10 @@ type WorkspaceTemplateSpec struct {
 	DefaultInitContainers []corev1.Container `json:"defaultInitContainers,omitempty"`
 
 	// AllowCustomInitContainers controls whether workspaces using this template
-	// can specify custom init containers beyond the template defaults
+	// can specify custom init containers beyond the template defaults.
+	// A custom init container carries its own securityContext and volumeMounts, which neither the
+	// security context policies, identity templates included, nor VolumeOverrides apply to: keep it
+	// false on a template that locks either.
 	// +kubebuilder:default=false
 	// +optional
 	AllowCustomInitContainers *bool `json:"allowCustomInitContainers,omitempty"`
@@ -346,7 +353,9 @@ type VolumeOverridePolicy struct {
 	// workspace must list every DefaultVolumes entry unchanged; a workspace that declares no volumes
 	// receives them from the defaulter, and one that declares its own must include them alongside.
 	// Set AllowSecondaryStorages to false as well to restrict workspaces to DefaultVolumes exactly as
-	// defined; otherwise a workspace can add its own volume on a default volume's claim.
+	// defined; otherwise a workspace can add its own volume on a default volume's claim. Keep
+	// AllowCustomInitContainers false as well: an init container mounts any volume of the pod, at any
+	// subPath.
 	// +kubebuilder:default=true
 	// +optional
 	Allow *bool `json:"allow,omitempty"`
@@ -372,6 +381,11 @@ type SecurityContextOverridePolicy struct {
 // when it is present and allow is false.
 func (p *SecurityContextOverridePolicy) Locked() bool {
 	return p != nil && p.Allow != nil && !*p.Allow
+}
+
+// HasIdentityTemplates reports whether a security context default holds a template in an identity field.
+func (s *WorkspaceTemplateSpec) HasIdentityTemplates() bool {
+	return s.DefaultPodSecurityContext.HasTemplates() || s.DefaultContainerSecurityContext.HasTemplates()
 }
 
 // AccessTypeLocked reports whether the template pins a workspace's accessType to DefaultAccessType.

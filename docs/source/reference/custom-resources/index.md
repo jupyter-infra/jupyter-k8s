@@ -8,6 +8,7 @@ API reference for **Jupyter K8s** Custom Resource Definitions.
 | [WorkspaceTemplate](workspacetemplate) | `workspace.jupyter.org` | `v1alpha1` |
 | [WorkspaceIntegrationTemplate](workspaceintegrationtemplate) | `workspace.jupyter.org` | `v1alpha1` |
 | [WorkspaceAccessStrategy](workspaceaccessstrategy) | `workspace.jupyter.org` | `v1alpha1` |
+| [PosixIdentity](posixidentity) | `workspace.jupyter.org` | `v1alpha1` |
 
 ```{toctree}
 :hidden:
@@ -16,4 +17,5 @@ workspace
 workspacetemplate
 workspaceintegrationtemplate
 workspaceaccessstrategy
+posixidentity
 ```

@@ -1,0 +1,65 @@
+# Team space template: runs workspaces as their owner, mounts the team directory of the shared file system,
+# and gives each user a private directory in it, users/<uid>. A default init container, which runs as the
+# user through the pod security context, creates that directory 0700 and fails the pod if another user
+# already owns it. The deployer scaffolds users/ sticky and group-writable (3770, see shared-fs-seed), so
+# only teammates create entries there and none removes another's.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: posix-team-space-template
+  namespace: posix-vol-team-a
+spec:
+  displayName: "POSIX Team Space Template"
+  defaultImage: jk8s-application-jupyter-uv:latest
+  defaultAccessType: OwnerOnly
+  defaultOwnershipType: OwnerOnly
+  allowCustomAccessType: false
+  allowCustomOwnershipType: false
+  defaultPodSecurityContext:
+    runAsNonRoot: true
+    supplementalGroupsPolicy: Strict
+    fsGroupChangePolicy: OnRootMismatch
+    runAsUser: "{{ .User.Uid }}"
+    runAsGroup: "{{ .User.Gid }}"
+    fsGroup: "{{ .User.Gid }}"
+    supplementalGroups: ["{{ .Namespace.Gid }}"]
+  podSecurityContextOverrides:
+    allow: false
+  containerSecurityContextOverrides:
+    allow: false
+  defaultVolumes:
+    - name: team
+      persistentVolumeClaimName: posix-shared-fs
+      mountPath: /home/jovyan/team
+      subPath: namespaces/posix-vol-team-a
+  volumeOverrides:
+    allow: false
+  defaultInitContainers:
+    - name: private-dir
+      image: busybox:1.36
+      command:
+        - sh
+        - -c
+        - >-
+          d=/team/users/$(id -u) &&
+          mkdir -p -m 0700 "$d" &&
+          [ "$(stat -c %u "$d")" = "$(id -u)" ]
+      volumeMounts:
+        - name: team
+          mountPath: /team
+          subPath: namespaces/posix-vol-team-a
+  # The test image's home is owned by uid 1000: give arbitrary-uid workspaces a writable home volume
+  # (local-path directories are world-writable) and point HOME at it.
+  primaryStorage:
+    defaultSize: 1Gi
+    defaultMountPath: /home/jovyan
+  baseEnv:
+    - name: HOME
+      value: /home/jovyan
+  defaultResources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

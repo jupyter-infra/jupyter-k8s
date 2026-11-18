@@ -1,0 +1,28 @@
+# Lets the group the chart names in CLUSTER_ADMIN_GROUP (cluster-workspace-admin) delete workspaces, so
+# teardown can remove the OwnerOnly workspaces the test users own. The workspace webhook already exempts
+# the group from the owner check; this grants the RBAC side, and nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: posix-identity-e2e-workspace-admin
+  labels:
+    jk8s/e2e: posix-identity-test
+rules:
+- apiGroups: ["workspace.jupyter.org"]
+  resources: ["workspaces"]
+  verbs: ["get", "list", "watch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: posix-identity-e2e-workspace-admin
+  labels:
+    jk8s/e2e: posix-identity-test
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: posix-identity-e2e-workspace-admin
+subjects:
+- kind: Group
+  name: cluster-workspace-admin
+  apiGroup: rbac.authorization.k8s.io

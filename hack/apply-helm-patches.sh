@@ -371,6 +371,15 @@ AUTHEOF
 echo "Removing connection CRDs from chart..."
 find "${CHART_DIR}/templates/crd/" -name "connection*" -delete 2>/dev/null || true
 
+# --- PosixIdentity CRD: always kept on uninstall ---
+# Deleting the CRD deletes every uid allocation, while files on shared storage keep carrying the uids.
+echo "Forcing helm.sh/resource-policy: keep on the PosixIdentity CRD..."
+POSIX_CRD="${CHART_DIR}/templates/crd/posixidentities.workspace.jupyter.org.yaml"
+if [ -f "$POSIX_CRD" ]; then
+  sed -i.bak '/{{- if .Values.crd.keep }}/{N;N;s/ *{{- if .Values.crd.keep }}\n\(.*\)\n.*{{- end }}/\1/;}' "$POSIX_CRD"
+  rm -f "${POSIX_CRD}.bak"
+fi
+
 # --- Remove webhook port override from manager args ---
 # v2-alpha adds --webhook-cert-path conditionally, which is good.
 # But we need to also handle the case where webhook is disabled but extensionApi is enabled

@@ -10,6 +10,8 @@ import (
 	"fmt"
 
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
+	"github.com/jupyter-infra/jupyter-k8s/internal/posixidentity"
+	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +27,26 @@ type DeploymentBuilder struct {
 	scheme        *runtime.Scheme
 	options       WorkspaceControllerOptions
 	imageResolver *ImageResolver
+	// userInputs returns the {{ .User }} inputs of a workspace owner; nil derives them from the username
+	userInputs func(ctx context.Context, owner string) posixidentity.UserInputs
+}
+
+// SetUserInputs sets the source of the {{ .User }} inputs of access-strategy env templates.
+func (db *DeploymentBuilder) SetUserInputs(source func(ctx context.Context, owner string) posixidentity.UserInputs) {
+	db.userInputs = source
+}
+
+// userInputsFor returns the {{ .User }} inputs of a workspace's owner. It only reads: the owner's
+// PosixIdentity from the cache if they have one, else names derived from the username. It never creates
+// a PosixIdentity; only the workspace admission webhook does, for a template using {{ .User.Uid }} or
+// {{ .User.Gid }} in a security context identity field (and the controller's lazy recovery recreates one
+// for a workspace already carrying a posix-uid label). Without such templates, no PosixIdentity exists.
+func (db *DeploymentBuilder) userInputsFor(workspace *workspacev1alpha1.Workspace) posixidentity.UserInputs {
+	owner := workspace.Annotations[workspaceutil.AnnotationCreatedBy]
+	if db.userInputs == nil {
+		return posixidentity.UserInputs{UnixName: posixidentity.UnixName(owner), UsernameHash: posixidentity.UsernameHash(owner)}
+	}
+	return db.userInputs(context.Background(), owner)
 }
 
 // NewDeploymentBuilder creates a new DeploymentBuilder
