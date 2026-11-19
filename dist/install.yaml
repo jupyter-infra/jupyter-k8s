@@ -19807,7 +19807,6 @@ metadata:
     cert-manager.io/inject-ca-from: jupyter-k8s-system/jupyter-k8s-extension-server-cert
   name: v1alpha1.connection.workspace.jupyter.org
 spec:
-  caBundle: ""
   group: connection.workspace.jupyter.org
   groupPriorityMinimum: 100
   insecureSkipTLSVerify: false
