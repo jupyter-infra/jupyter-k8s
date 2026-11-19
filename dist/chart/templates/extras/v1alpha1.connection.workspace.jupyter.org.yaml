@@ -6,7 +6,6 @@ metadata:
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "jupyter-k8s.resourceName" (dict "suffix" "extension-server-cert" "context" $) }}
   name: v1alpha1.connection.workspace.jupyter.org
 spec:
-  caBundle: ""
   group: connection.workspace.jupyter.org
   groupPriorityMinimum: 100
   insecureSkipTLSVerify: false
