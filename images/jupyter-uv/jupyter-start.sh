@@ -2,17 +2,24 @@
 set -e
 
 BASE_URL="${JUPYTER_BASE_URL:-/}"
+export UV_PROJECT_ENVIRONMENT="/home/jovyan/.venv"
+# Keep copied entry points valid after moving the image environment into home.
+export UV_PREVIEW_FEATURES="relocatable-envs-default"
 
 echo "Setting up uv environment..."
-cp /opt/uv/jupyter/pyproject.toml /home/jovyan/
-cp /opt/uv/jupyter/uv.lock /home/jovyan/
 
 if [ ! -f "/home/jovyan/pyproject.toml" ] || [ ! -f "/home/jovyan/uv.lock" ]; then
     echo "Did not find uv environment files in /home/jovyan."
-    cp /opt/uv/jupyter/pyproject.toml /home/jovyan/
-    cp /opt/uv/jupyter/uv.lock /home/jovyan/
+    cp -n /opt/uv/jupyter/pyproject.toml /home/jovyan/
+    cp -n /opt/uv/jupyter/uv.lock /home/jovyan/
 else
     echo "Found existing uv environment files, syncing..."
+fi
+
+if [ ! -d "$UV_PROJECT_ENVIRONMENT" ]; then
+    echo "Seeding persistent uv environment from the image..."
+    # Copy as jovyan so the persistent environment stays writable at runtime.
+    cp -R /opt/uv/jupyter/.venv "$UV_PROJECT_ENVIRONMENT"
 fi
 
 uv sync --locked

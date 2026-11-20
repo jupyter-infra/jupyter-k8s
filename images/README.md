@@ -63,6 +63,10 @@ To add a new image variant:
 
 Each image can be customized by modifying its Dockerfile to include the packages and configuration you need.
 
+### Updating the `jupyter-uv` environment
+
+The `jupyter-uv` image seeds `pyproject.toml`, `uv.lock`, and `.venv` into the persistent `/home/jovyan` volume on first start. Existing files are preserved on later starts. When an image update changes its bundled dependencies, remove the image-managed `/home/jovyan/.venv`, `/home/jovyan/pyproject.toml`, and `/home/jovyan/uv.lock` from the workspace volume, then restart the server so the new image can seed them. Keep notebooks and other workspace files.
+
 ## Registry Configuration
 
 By default, images are built for the `localhost:5000` registry (for local development with kind). You can override this by setting the `REGISTRY` environment variable:
