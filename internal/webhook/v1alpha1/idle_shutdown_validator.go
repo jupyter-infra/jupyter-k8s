@@ -39,7 +39,6 @@ func validateIdleShutdownOverrides(workspace *workspacev1alpha1.Workspace, templ
 		return nil
 	}
 
-	allowOverride := policy.Allow == nil || *policy.Allow
 	def := template.Spec.DefaultIdleShutdown
 	ws := workspace.Spec.IdleShutdown
 
@@ -47,7 +46,7 @@ func validateIdleShutdownOverrides(workspace *workspacev1alpha1.Workspace, templ
 
 	// Structural lock: when overrides are not allowed, the workspace must match the template
 	// default on every field except the timeout. Requires a default baseline to compare against.
-	if !allowOverride && def != nil {
+	if policy.Locked() && def != nil {
 		if ws == nil {
 			// Overrides are not allowed but the workspace carries no idle shutdown config,
 			// which drops the template's policy entirely.
@@ -80,7 +79,7 @@ func validateIdleShutdownOverrides(workspace *workspacev1alpha1.Workspace, templ
 	// Timeout bounds apply whenever the workspace has idle shutdown enabled: a disabled or absent
 	// idle shutdown has no active timeout to bound.
 	if ws != nil && ws.Enabled {
-		if violation := validateIdleTimeoutBounds(ws.IdleTimeoutInMinutes, policy, def, allowOverride, template.Name); violation != nil {
+		if violation := validateIdleTimeoutBounds(ws.IdleTimeoutInMinutes, policy, def, template.Name); violation != nil {
 			violations = append(violations, *violation)
 		}
 	}
@@ -95,7 +94,6 @@ func validateIdleTimeoutBounds(
 	timeout int,
 	policy *workspacev1alpha1.IdleShutdownOverridePolicy,
 	def *workspacev1alpha1.IdleShutdownSpec,
-	allowOverride bool,
 	templateName string,
 ) *TemplateViolation {
 	minTimeout, hasMin := 0, false
@@ -109,7 +107,7 @@ func validateIdleTimeoutBounds(
 
 	// When overrides are locked, an unset bound falls back to the default timeout, pinning the
 	// unspecified side to the default. When overrides are allowed, an unset bound stays unbounded.
-	if !allowOverride && def != nil {
+	if policy.Locked() && def != nil {
 		if !hasMin {
 			minTimeout, hasMin = def.IdleTimeoutInMinutes, true
 		}
