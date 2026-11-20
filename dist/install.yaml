@@ -19724,7 +19724,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: jupyter-k8s-controller-manager
-      terminationGracePeriodSeconds: 10
+      terminationGracePeriodSeconds: 40
       tolerations: []
       topologySpreadConstraints: []
       volumes:
