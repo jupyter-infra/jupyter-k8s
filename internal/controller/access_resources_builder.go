@@ -12,6 +12,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/jupyter-infra/jupyter-k8s-plugin/plugin"
 	connectionv1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/connection/v1alpha1"
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
@@ -23,12 +24,18 @@ import (
 
 // AccessResourcesBuilder builds resources for WorkspaceAccessStrategy
 type AccessResourcesBuilder struct {
-	// No fields needed currently, may add in future
+	// plugins holds the names of the plugin sidecars the controller is configured with, the same list the
+	// Extension API serves connection requests from.
+	plugins map[string]bool
 }
 
 // NewAccessResourcesBuilder creates a new AccessResourcesBuilder
-func NewAccessResourcesBuilder() *AccessResourcesBuilder {
-	return &AccessResourcesBuilder{}
+func NewAccessResourcesBuilder(plugins ...string) *AccessResourcesBuilder {
+	b := &AccessResourcesBuilder{plugins: map[string]bool{}}
+	for _, name := range plugins {
+		b.plugins[name] = true
+	}
+	return b
 }
 
 // fullAccessResourceData provides values for template substitutions
@@ -183,12 +190,12 @@ func (b *AccessResourcesBuilder) ResolveApplicationBasePath(
 	return resolved, nil
 }
 
-// ResolveConnectionTypes lists the WorkspaceConnection types an access strategy configures, in the order the
-// Extension API resolves a request: web-ui, ssh-over-websocket, then the {ide}-remote keys of
-// createConnectionHandlerMap sorted. Other map keys are dropped, since the Extension API refuses such a name
-// before it reads the strategy. Types the default createConnectionHandler serves are an open set and are not
-// listed. Returns nil when nothing is configured: an absent status field decodes to nil, so the status manager
-// sees no change on the next reconcile.
+// ResolveConnectionTypes lists the WorkspaceConnection types the Extension API accepts for an access strategy,
+// in the order it resolves a request: web-ui, ssh-over-websocket, then the {ide}-remote keys of
+// createConnectionHandlerMap sorted, each kept only when its handler is served (servesHandler). A key outside
+// the {ide}-remote pattern is refused before the strategy is read, and the default createConnectionHandler
+// serves an open set, so neither is listed. Returns nil when nothing is configured: an absent status field
+// decodes to nil, so the status manager sees no change on the next reconcile.
 func (b *AccessResourcesBuilder) ResolveConnectionTypes(
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 ) []string {
@@ -200,13 +207,26 @@ func (b *AccessResourcesBuilder) ResolveConnectionTypes(
 		connectionTypes = append(connectionTypes, connectionv1alpha1.ConnectionTypeWebSocket)
 	}
 	var remoteTypes []string
-	for connectionType := range accessStrategy.Spec.CreateConnectionHandlerMap {
-		if connectionv1alpha1.IsRemoteConnectionType(connectionType) {
+	for connectionType, handlerRef := range accessStrategy.Spec.CreateConnectionHandlerMap {
+		if connectionv1alpha1.IsRemoteConnectionType(connectionType) && b.servesHandler(accessStrategy, handlerRef) {
 			remoteTypes = append(remoteTypes, connectionType)
 		}
 	}
 	sort.Strings(remoteTypes)
 	return append(connectionTypes, remoteTypes...)
+}
+
+// servesHandler reports whether a connection request resolved to the handler reference gets a URL from the
+// Extension API, which refuses k8s-native without the WebSocket route, a plugin it has no client for, and a
+// plugin action other than createSession.
+func (b *AccessResourcesBuilder) servesHandler(
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy, handlerRef string,
+) bool {
+	pluginName, action := plugin.ParseHandlerRef(handlerRef)
+	if pluginName == workspacev1alpha1.CreateConnectionHandlerK8sNative {
+		return accessStrategy.Spec.WebSocketURLTemplate != ""
+	}
+	return b.plugins[pluginName] && (action == "" || action == workspacev1alpha1.CreateConnectionActionCreateSession)
 }
 
 // ResolveAccessResourceSelector creates a label selector string for finding access resources

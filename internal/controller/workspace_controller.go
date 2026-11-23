@@ -8,6 +8,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -348,13 +350,14 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	deploymentBuilder := NewDeploymentBuilder(scheme, options)
 	deploymentBuilder.SetUserInputs(identities.UserInputsFor)
 	statusManager := NewStatusManager(k8sClient)
+	accessResourcesBuilder := NewAccessResourcesBuilder(slices.Collect(maps.Keys(options.PluginEndpoints))...)
 	resourceManager := NewResourceManager(
 		k8sClient,
 		scheme,
 		deploymentBuilder,
 		NewServiceBuilder(scheme),
 		NewPVCBuilder(scheme),
-		NewAccessResourcesBuilder(),
+		accessResourcesBuilder,
 		statusManager,
 	)
 	// The start step reads a starting pod's core/v1 Events, selected by involvedObject.uid, for the messages
@@ -374,7 +377,7 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	// Create state machine
 	eventRecorder := mgr.GetEventRecorderFor("workspace-controller")
 	idleChecker := NewWorkspaceIdleChecker(k8sClient, options.IdleCheckInterval)
-	accessStartupProber := NewAccessStartupProber(NewAccessResourcesBuilder())
+	accessStartupProber := NewAccessStartupProber(accessResourcesBuilder)
 
 	// Integration status prober (report-only). If pod-exec config is unavailable, leave it nil so the
 	// probe step is skipped rather than failing controller setup -- the freeze/overlay path is unaffected.

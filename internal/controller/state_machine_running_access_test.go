@@ -614,7 +614,9 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 
 		It("writes the connection types the strategy provides when the workspace becomes available", func() {
 			accessStrategy.Spec.WebSocketURLTemplate = webSocketURLTemplate
-			accessStrategy.Spec.CreateConnectionHandlerMap = map[string]string{connTypeVSCodeRemote: "aws:createSession"}
+			accessStrategy.Spec.CreateConnectionHandlerMap = map[string]string{
+				connTypeVSCodeRemote: workspacev1alpha1.CreateConnectionHandlerK8sNative,
+			}
 			workspace := newRunningWorkspace("sm-conntypes", true)
 			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
 

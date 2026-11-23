@@ -378,10 +378,12 @@ type WorkspaceStatus struct {
 
 	// ConnectionTypes lists the WorkspaceConnection types the bound access strategy configures:
 	// "web-ui" when it sets bearerAuthURLTemplate, "ssh-over-websocket" when it sets webSocketURLTemplate,
-	// then the "{ide}-remote" keys of createConnectionHandlerMap in lexical order. Types served only by the
-	// strategy's default createConnectionHandler are not listed. Recomputed whenever the running workspace's
-	// Deployment and Service are ready; absent while the workspace is stopped or has no access strategy.
-	// Readiness is reported by the Available condition, not by this field.
+	// then the "{ide}-remote" keys of createConnectionHandlerMap in lexical order whose handler the operator
+	// serves: k8s-native when the strategy sets webSocketURLTemplate, or the createSession action of a plugin
+	// the operator is configured with. Types served only by the strategy's default createConnectionHandler are
+	// not listed.
+	// Recomputed whenever the running workspace's Deployment and Service are ready; absent while the workspace
+	// is stopped or has no access strategy. Readiness is reported by the Available condition, not by this field.
 	// +optional
 	ConnectionTypes []string `json:"connectionTypes,omitempty"`
 
