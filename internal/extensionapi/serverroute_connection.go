@@ -27,9 +27,6 @@ import (
 )
 
 const (
-	// handlerK8sNative is the reserved handler name for core k8s-native functionality.
-	handlerK8sNative = "k8s-native"
-
 	// conditionTypeAvailable is the condition type indicating a workspace is available.
 	conditionTypeAvailable = "Available"
 )
@@ -211,7 +208,7 @@ func (s *ExtensionServer) generatePluginConnectionURL(r *http.Request, ws *works
 	ctx := plugin.ContextWithOriginRequestID(r.Context(), plugin.GenerateRequestID())
 
 	switch action {
-	case "createSession", "":
+	case workspacev1alpha1.CreateConnectionActionCreateSession, "":
 		req := &pluginapi.CreateSessionRequest{
 			PodUID:            resolvedContext["podUid"],
 			WorkspaceName:     ws.Name,
@@ -328,7 +325,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 			WriteKubernetesError(w, http.StatusBadRequest, fmt.Sprintf("connection type %q is not configured for this workspace", connectionType))
 			return
 		}
-		if pluginName == handlerK8sNative {
+		if pluginName == workspacev1alpha1.CreateConnectionHandlerK8sNative {
 			if !hasWebSocketEnabled(accessStrategy) {
 				WriteKubernetesError(w, http.StatusBadRequest, "WebSocket access is not enabled for this workspace")
 				return

@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/jupyter-infra/jupyter-k8s-plugin/pluginclient"
+	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	"github.com/jupyter-infra/jupyter-k8s/internal/jwt"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -291,7 +292,7 @@ func createJWTCompositeSignerFactory(config *ExtensionConfig) (jwt.SignerFactory
 		}
 		signer := jwt.NewStandardSigner(issuer, audience, ttl, newKeyDelay)
 		stdFactory := jwt.NewStandardSignerFactory(signer)
-		factories["k8s-native"] = stdFactory
+		factories[workspacev1alpha1.CreateConnectionHandlerK8sNative] = stdFactory
 		defaultFactory = stdFactory
 	}
 
@@ -334,7 +335,7 @@ func SetupExtensionAPIServerWithManager(mgr ctrl.Manager, config *ExtensionConfi
 	// When using k8s-native signing, register secret watch and initial key loader
 	if config.JwtSecretName != "" {
 		composite := signerFactory.(*jwt.CompositeSignerFactory)
-		nativeFactory, _ := composite.GetFactory("k8s-native")
+		nativeFactory, _ := composite.GetFactory(workspacev1alpha1.CreateConnectionHandlerK8sNative)
 		stdFactory := nativeFactory.(*jwt.StandardSignerFactory)
 
 		namespace := config.ControllerNamespace

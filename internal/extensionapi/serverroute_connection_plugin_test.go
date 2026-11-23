@@ -157,7 +157,7 @@ func TestResolveConnectionHandler(t *testing.T) {
 					CreateConnectionHandlerMap: map[string]string{
 						connectionTypeVSCodeRemote: "aws:createSession",
 					},
-					CreateConnectionHandler: handlerK8sNative,
+					CreateConnectionHandler: workspacev1alpha1.CreateConnectionHandlerK8sNative,
 				},
 			},
 			connectionType: connectionTypeVSCodeRemote,
@@ -172,11 +172,11 @@ func TestResolveConnectionHandler(t *testing.T) {
 					CreateConnectionHandlerMap: map[string]string{
 						connectionTypeVSCodeRemote: "aws:createSession",
 					},
-					CreateConnectionHandler: handlerK8sNative,
+					CreateConnectionHandler: workspacev1alpha1.CreateConnectionHandlerK8sNative,
 				},
 			},
 			connectionType: connectionTypeWebUI,
-			expectedPlugin: handlerK8sNative,
+			expectedPlugin: workspacev1alpha1.CreateConnectionHandlerK8sNative,
 			expectedAction: "",
 			expectedFound:  true,
 		},

@@ -54,7 +54,7 @@ func TestValidateConnection(t *testing.T) {
 			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{Name: "as", Namespace: namespaceDefault},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					CreateConnectionHandler: handlerK8sNative,
+					CreateConnectionHandler: workspacev1alpha1.CreateConnectionHandlerK8sNative,
 					BearerAuthURLTemplate:   "https://example.com",
 				},
 			},
@@ -75,7 +75,7 @@ func TestValidateConnection(t *testing.T) {
 			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{Name: "as", Namespace: namespaceDefault},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					CreateConnectionHandler: handlerK8sNative,
+					CreateConnectionHandler: workspacev1alpha1.CreateConnectionHandlerK8sNative,
 					BearerAuthURLTemplate:   "https://example.com",
 					CreateConnectionContext: map[string]string{
 						"staticKey": "staticValue",

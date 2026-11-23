@@ -128,6 +128,15 @@ type AccessHTTPGetProbe struct {
 	AdditionalSuccessStatusCodes []int `json:"additionalSuccessStatusCodes,omitempty"`
 }
 
+const (
+	// CreateConnectionHandlerK8sNative is the handler value for the operator's built-in connection path: tokens
+	// signed with the operator's own keys and a connection served over the strategy's WebSocketURLTemplate.
+	CreateConnectionHandlerK8sNative = "k8s-native"
+	// CreateConnectionActionCreateSession is the one plugin action a "plugin:action" handler reference can name
+	// for connection creation; a reference without an action means the same.
+	CreateConnectionActionCreateSession = "createSession"
+)
+
 // WorkspaceAccessStrategySpec defines the desired state of WorkspaceAccessStrategy
 type WorkspaceAccessStrategySpec struct {
 	// DisplayName is a human-readable name for this access strategy
