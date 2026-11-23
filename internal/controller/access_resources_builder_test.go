@@ -371,6 +371,9 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			bearerAuthURLTemplate = "https://example.com/{{ .Workspace.Name }}/bearer-auth"
 			webSocketURLTemplate  = "wss://example.com/{{ .Workspace.Name }}/ssh-ws"
 			awsCreateSession      = "aws:createSession"
+			// The podEventsHandler value, a plausible paste into the connection handler map.
+			awsPodEventsHandler = "aws:ssm-remote-access"
+			connTypeKiroRemote  = "kiro-remote"
 		)
 
 		It("Should return nil when the strategy provides no connection type", func() {
@@ -406,7 +409,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			strategy.Spec.WebSocketURLTemplate = webSocketURLTemplate
 			strategy.Spec.CreateConnectionHandlerMap = map[string]string{
 				connTypeVSCodeRemote: awsCreateSession,
-				"kiro-remote":        awsCreateSession,
+				connTypeKiroRemote:   awsCreateSession,
 				"cursor-remote":      awsCreateSession,
 			}
 
@@ -414,7 +417,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 				connTypeWebUI,
 				connTypeSSHWebSocket,
 				"cursor-remote",
-				"kiro-remote",
+				connTypeKiroRemote,
 				connTypeVSCodeRemote,
 			}))
 		})
@@ -472,21 +475,21 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			strategy := testAccessStrategy.DeepCopy()
 			strategy.Spec.CreateConnectionHandlerMap = map[string]string{
 				connTypeVSCodeRemote: "azure:createSession",
-				"kiro-remote":        awsCreateSession,
+				connTypeKiroRemote:   awsCreateSession,
 			}
 
-			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{"kiro-remote"}))
+			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeKiroRemote}))
 			Expect(NewAccessResourcesBuilder().ResolveConnectionTypes(strategy)).To(BeNil())
 		})
 
 		It("Should drop a map key whose plugin action the Extension API does not dispatch", func() {
 			strategy := testAccessStrategy.DeepCopy()
 			strategy.Spec.CreateConnectionHandlerMap = map[string]string{
-				connTypeVSCodeRemote: "aws:ssm-remote-access",
-				"kiro-remote":        "aws",
+				connTypeVSCodeRemote: awsPodEventsHandler,
+				connTypeKiroRemote:   "aws",
 			}
 
-			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{"kiro-remote"}))
+			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeKiroRemote}))
 		})
 
 		It("Should decide the built-in types by their templates, not by handler map keys", func() {
