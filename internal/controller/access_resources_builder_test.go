@@ -26,11 +26,15 @@ var _ = Describe("AccessResourcesBuilder", func() {
 		testService        *corev1.Service
 	)
 
+	awsPluginEndpoints := map[string]string{"aws": "http://localhost:8080"}
+
 	// Setup test objects
 	BeforeEach(func() {
-		// The plugin list decides which handler map keys are listed; only aws is configured here.
+		// The extension API settings decide what is listed: it runs, it signs, and only aws is a plugin.
 		accessBuilder = NewAccessResourcesBuilder(WorkspaceControllerOptions{
-			PluginEndpoints: map[string]string{"aws": "http://localhost:8080"},
+			ExtensionAPIEnabled:    true,
+			K8sNativeSignerEnabled: true,
+			PluginEndpoints:        awsPluginEndpoints,
 		})
 
 		// Define test objects based on config/samples_routing
@@ -378,6 +382,18 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			connTypeZedRemote    = "zed-remote"
 		)
 
+		// fullyConfiguredStrategy offers every type: both built-in routes, a k8s-native map key and an aws one.
+		fullyConfiguredStrategy := func() *workspacev1alpha1.WorkspaceAccessStrategy {
+			strategy := testAccessStrategy.DeepCopy()
+			strategy.Spec.BearerAuthURLTemplate = testBearerAuthURLTemplate
+			strategy.Spec.WebSocketURLTemplate = testWebSocketURLTemplate
+			strategy.Spec.CreateConnectionHandlerMap = map[string]string{
+				connTypeVSCodeRemote: handlerK8sNative,
+				connTypeKiroRemote:   awsCreateSession,
+			}
+			return strategy
+		}
+
 		It("Should return nil when the strategy provides no connection type", func() {
 			strategy := testAccessStrategy.DeepCopy()
 			strategy.Spec.BearerAuthURLTemplate = ""
@@ -482,6 +498,33 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeKiroRemote}))
 			Expect(NewAccessResourcesBuilder(WorkspaceControllerOptions{}).ResolveConnectionTypes(strategy)).To(BeNil())
+		})
+
+		It("Should list nothing while the Extension API is disabled", func() {
+			strategy := fullyConfiguredStrategy()
+			disabled := NewAccessResourcesBuilder(WorkspaceControllerOptions{
+				K8sNativeSignerEnabled: true,
+				PluginEndpoints:        awsPluginEndpoints,
+			})
+
+			Expect(disabled.ResolveConnectionTypes(strategy)).To(BeNil())
+		})
+
+		It("Should list only plugin-served types without the k8s-native signer", func() {
+			strategy := fullyConfiguredStrategy()
+			unsigned := NewAccessResourcesBuilder(WorkspaceControllerOptions{
+				ExtensionAPIEnabled: true,
+				PluginEndpoints:     awsPluginEndpoints,
+			})
+
+			Expect(unsigned.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeKiroRemote}))
+		})
+
+		It("Should list only plugin-served types when a plugin is the default handler", func() {
+			strategy := fullyConfiguredStrategy()
+			strategy.Spec.CreateConnectionHandler = awsCreateSession
+
+			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeKiroRemote}))
 		})
 
 		It("Should drop a map key whose plugin action the Extension API does not dispatch", func() {

@@ -69,6 +69,13 @@ type WorkspaceControllerOptions struct {
 	// When set, remote access operations are delegated to the named plugin.
 	PluginEndpoints map[string]string
 
+	// ExtensionAPIEnabled mirrors --enable-extension-api; without the server no connection type is served.
+	ExtensionAPIEnabled bool
+
+	// K8sNativeSignerEnabled mirrors a set --jwt-secret-name, which registers the signer the built-in
+	// k8s-native handler needs for web-ui, ssh-over-websocket and the map keys it serves.
+	K8sNativeSignerEnabled bool
+
 	// IdleCheckInterval is the interval between idle status checks for running workspaces.
 	// Zero means use the default (5m).
 	IdleCheckInterval time.Duration

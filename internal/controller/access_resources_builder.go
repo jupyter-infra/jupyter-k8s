@@ -24,14 +24,23 @@ import (
 
 // AccessResourcesBuilder builds resources for WorkspaceAccessStrategy
 type AccessResourcesBuilder struct {
+	// extensionAPIEnabled and k8sNativeSigner carry the extension API settings ResolveConnectionTypes mirrors:
+	// without the server nothing is served, without the signer the built-in handler cannot issue a token.
+	extensionAPIEnabled bool
+	k8sNativeSigner     bool
 	// plugins holds the plugin names the extension API has clients for; both read the endpoint list of
 	// cmd/main.go.
 	plugins map[string]bool
 }
 
-// NewAccessResourcesBuilder creates a builder serving the plugins named in options.PluginEndpoints.
+// NewAccessResourcesBuilder creates a builder mirroring the extension API settings of options: whether it runs,
+// whether it holds the k8s-native signing secret, and which plugins it has clients for.
 func NewAccessResourcesBuilder(options WorkspaceControllerOptions) *AccessResourcesBuilder {
-	b := &AccessResourcesBuilder{plugins: map[string]bool{}}
+	b := &AccessResourcesBuilder{
+		extensionAPIEnabled: options.ExtensionAPIEnabled,
+		k8sNativeSigner:     options.K8sNativeSignerEnabled,
+		plugins:             map[string]bool{},
+	}
 	for name := range options.PluginEndpoints {
 		b.plugins[name] = true
 	}
@@ -191,17 +200,21 @@ func (b *AccessResourcesBuilder) ResolveApplicationBasePath(
 }
 
 // ResolveConnectionTypes lists the connection types the access strategy configures, as documented on
-// WorkspaceStatus.ConnectionTypes, mirroring the handler checks of the extension API's HandleConnectionCreate.
-// Nothing configured returns nil rather than an empty slice: the absent status field decodes to nil and the
-// status manager compares with reflect.DeepEqual.
+// WorkspaceStatus.ConnectionTypes, mirroring the checks of the extension API's HandleConnectionCreate and the
+// signer it can create. Nothing served returns nil rather than an empty slice: the absent status field
+// decodes to nil and the status manager compares with reflect.DeepEqual.
 func (b *AccessResourcesBuilder) ResolveConnectionTypes(
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 ) []string {
+	if !b.extensionAPIEnabled {
+		return nil
+	}
 	var connectionTypes []string
-	if accessStrategy.Spec.WebUIEnabled() {
+	signs := b.signsFor(accessStrategy)
+	if signs && accessStrategy.Spec.WebUIEnabled() {
 		connectionTypes = append(connectionTypes, connectionv1alpha1.ConnectionTypeWebUI)
 	}
-	if accessStrategy.Spec.WebSocketEnabled() {
+	if signs && accessStrategy.Spec.WebSocketEnabled() {
 		connectionTypes = append(connectionTypes, connectionv1alpha1.ConnectionTypeWebSocket)
 	}
 	var remoteTypes []string
@@ -214,6 +227,13 @@ func (b *AccessResourcesBuilder) ResolveConnectionTypes(
 	return append(connectionTypes, remoteTypes...)
 }
 
+// signsFor mirrors jwt.CompositeSignerFactory.CreateSigner: the signer is picked by the strategy's default
+// createConnectionHandler, so a plugin default leaves the built-in handler's routes without one.
+func (b *AccessResourcesBuilder) signsFor(accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) bool {
+	handler := accessStrategy.Spec.CreateConnectionHandler
+	return b.k8sNativeSigner && (handler == "" || handler == workspacev1alpha1.CreateConnectionHandlerK8sNative)
+}
+
 // servesHandler mirrors the handler checks of HandleConnectionCreate and generatePluginConnectionURL in
 // extensionapi.
 func (b *AccessResourcesBuilder) servesHandler(
@@ -221,7 +241,7 @@ func (b *AccessResourcesBuilder) servesHandler(
 ) bool {
 	pluginName, action := plugin.ParseHandlerRef(handlerRef)
 	if pluginName == workspacev1alpha1.CreateConnectionHandlerK8sNative {
-		return accessStrategy.Spec.WebSocketEnabled()
+		return b.signsFor(accessStrategy) && accessStrategy.Spec.WebSocketEnabled()
 	}
 	return b.plugins[pluginName] && (action == "" || action == workspacev1alpha1.CreateConnectionActionCreateSession)
 }

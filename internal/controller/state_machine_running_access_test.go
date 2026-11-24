@@ -92,7 +92,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			NewDeploymentBuilder(scheme.Scheme, WorkspaceControllerOptions{}),
 			NewServiceBuilder(scheme.Scheme),
 			NewPVCBuilder(scheme.Scheme),
-			NewAccessResourcesBuilder(WorkspaceControllerOptions{}),
+			NewAccessResourcesBuilder(WorkspaceControllerOptions{ExtensionAPIEnabled: true, K8sNativeSignerEnabled: true}),
 			statusManager,
 		)
 		return &StateMachine{

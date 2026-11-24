@@ -332,6 +332,8 @@ func main() {
 		EnableWorkspacePodWatching:  enableWorkspacePodWatching,
 		DefaultTemplateNamespace:    defaultTemplateNamespace,
 		PluginEndpoints:             pluginEndpoints,
+		ExtensionAPIEnabled:         enableExtensionAPI,
+		K8sNativeSignerEnabled:      jwtSecretName != "",
 		IdleCheckInterval:           idleCheckInterval,
 		IntegrationProbePeriod:      integrationProbePeriod,
 	}
