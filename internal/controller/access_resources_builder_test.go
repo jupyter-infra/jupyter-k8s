@@ -482,6 +482,17 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			Expect(NewAccessResourcesBuilder().ResolveConnectionTypes(strategy)).To(BeNil())
 		})
 
+		It("Should serve the plugins named in the controller options", func() {
+			strategy := testAccessStrategy.DeepCopy()
+			strategy.Spec.CreateConnectionHandlerMap = map[string]string{connTypeVSCodeRemote: awsCreateSession}
+			withAWS := WorkspaceControllerOptions{PluginEndpoints: map[string]string{"aws": "http://localhost:8080"}}
+
+			Expect(newAccessResourcesBuilder(withAWS).ResolveConnectionTypes(strategy)).To(Equal([]string{
+				connTypeVSCodeRemote,
+			}))
+			Expect(newAccessResourcesBuilder(WorkspaceControllerOptions{}).ResolveConnectionTypes(strategy)).To(BeNil())
+		})
+
 		It("Should drop a map key whose plugin action the Extension API does not dispatch", func() {
 			strategy := testAccessStrategy.DeepCopy()
 			strategy.Spec.CreateConnectionHandlerMap = map[string]string{

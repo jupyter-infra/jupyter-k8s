@@ -8,8 +8,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"maps"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -350,7 +348,7 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	deploymentBuilder := NewDeploymentBuilder(scheme, options)
 	deploymentBuilder.SetUserInputs(identities.UserInputsFor)
 	statusManager := NewStatusManager(k8sClient)
-	accessResourcesBuilder := NewAccessResourcesBuilder(slices.Collect(maps.Keys(options.PluginEndpoints))...)
+	accessResourcesBuilder := newAccessResourcesBuilder(options)
 	resourceManager := NewResourceManager(
 		k8sClient,
 		scheme,

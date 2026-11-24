@@ -8,6 +8,8 @@ package controller
 import (
 	"bytes"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"text/template"
@@ -36,6 +38,12 @@ func NewAccessResourcesBuilder(plugins ...string) *AccessResourcesBuilder {
 		b.plugins[name] = true
 	}
 	return b
+}
+
+// newAccessResourcesBuilder configures the builder with the plugin names of options.PluginEndpoints, the same
+// list the Extension API serves connection requests from.
+func newAccessResourcesBuilder(options WorkspaceControllerOptions) *AccessResourcesBuilder {
+	return NewAccessResourcesBuilder(slices.Collect(maps.Keys(options.PluginEndpoints))...)
 }
 
 // fullAccessResourceData provides values for template substitutions
