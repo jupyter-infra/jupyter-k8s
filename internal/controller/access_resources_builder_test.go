@@ -370,12 +370,12 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 	Context("ResolveConnectionTypes", func() {
 		const (
-			bearerAuthURLTemplate = "https://example.com/{{ .Workspace.Name }}/bearer-auth"
-			webSocketURLTemplate  = "wss://example.com/{{ .Workspace.Name }}/ssh-ws"
-			awsCreateSession      = "aws:createSession"
+			awsCreateSession = "aws:createSession"
 			// The podEventsHandler value, a plausible paste into the connection handler map.
-			awsPodEventsHandler = "aws:ssm-remote-access"
-			connTypeKiroRemote  = "kiro-remote"
+			awsPodEventsHandler  = "aws:ssm-remote-access"
+			connTypeKiroRemote   = "kiro-remote"
+			connTypeCursorRemote = "cursor-remote"
+			connTypeZedRemote    = "zed-remote"
 		)
 
 		It("Should return nil when the strategy provides no connection type", func() {
@@ -389,7 +389,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 		It("Should list web-ui for a bearer auth URL template", func() {
 			strategy := testAccessStrategy.DeepCopy()
-			strategy.Spec.BearerAuthURLTemplate = bearerAuthURLTemplate
+			strategy.Spec.BearerAuthURLTemplate = testBearerAuthURLTemplate
 
 			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{
 				connTypeWebUI,
@@ -398,7 +398,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 		It("Should list ssh-over-websocket for a WebSocket URL template", func() {
 			strategy := testAccessStrategy.DeepCopy()
-			strategy.Spec.WebSocketURLTemplate = webSocketURLTemplate
+			strategy.Spec.WebSocketURLTemplate = testWebSocketURLTemplate
 
 			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{
 				connTypeSSHWebSocket,
@@ -407,18 +407,18 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 		It("Should list the built-in types first and the handler map keys sorted", func() {
 			strategy := testAccessStrategy.DeepCopy()
-			strategy.Spec.BearerAuthURLTemplate = bearerAuthURLTemplate
-			strategy.Spec.WebSocketURLTemplate = webSocketURLTemplate
+			strategy.Spec.BearerAuthURLTemplate = testBearerAuthURLTemplate
+			strategy.Spec.WebSocketURLTemplate = testWebSocketURLTemplate
 			strategy.Spec.CreateConnectionHandlerMap = map[string]string{
 				connTypeVSCodeRemote: awsCreateSession,
 				connTypeKiroRemote:   awsCreateSession,
-				"cursor-remote":      awsCreateSession,
+				connTypeCursorRemote: awsCreateSession,
 			}
 
 			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{
 				connTypeWebUI,
 				connTypeSSHWebSocket,
-				"cursor-remote",
+				connTypeCursorRemote,
 				connTypeKiroRemote,
 				connTypeVSCodeRemote,
 			}))
@@ -426,8 +426,8 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 		It("Should not enumerate the open set the default handler serves", func() {
 			strategy := testAccessStrategy.DeepCopy()
-			strategy.Spec.WebSocketURLTemplate = webSocketURLTemplate
-			strategy.Spec.CreateConnectionHandler = "k8s-native"
+			strategy.Spec.WebSocketURLTemplate = testWebSocketURLTemplate
+			strategy.Spec.CreateConnectionHandler = handlerK8sNative
 			strategy.Spec.CreateConnectionHandlerMap = nil
 
 			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeSSHWebSocket}))
@@ -435,14 +435,14 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 		It("Should list an {ide}-remote handler map key the operator does not know", func() {
 			strategy := testAccessStrategy.DeepCopy()
-			strategy.Spec.CreateConnectionHandlerMap = map[string]string{"zed-remote": awsCreateSession}
+			strategy.Spec.CreateConnectionHandlerMap = map[string]string{connTypeZedRemote: awsCreateSession}
 
-			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{"zed-remote"}))
+			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeZedRemote}))
 		})
 
 		It("Should drop a handler map key no WorkspaceConnection can name", func() {
 			strategy := testAccessStrategy.DeepCopy()
-			strategy.Spec.WebSocketURLTemplate = webSocketURLTemplate
+			strategy.Spec.WebSocketURLTemplate = testWebSocketURLTemplate
 			strategy.Spec.CreateConnectionHandlerMap = map[string]string{
 				"vscode_remote":      awsCreateSession,
 				"remote":             awsCreateSession,
@@ -457,15 +457,15 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 		It("Should drop a k8s-native map key while the strategy has no WebSocket route", func() {
 			strategy := testAccessStrategy.DeepCopy()
-			strategy.Spec.BearerAuthURLTemplate = bearerAuthURLTemplate
+			strategy.Spec.BearerAuthURLTemplate = testBearerAuthURLTemplate
 			strategy.Spec.WebSocketURLTemplate = ""
 			strategy.Spec.CreateConnectionHandlerMap = map[string]string{
-				connTypeVSCodeRemote: workspacev1alpha1.CreateConnectionHandlerK8sNative,
+				connTypeVSCodeRemote: handlerK8sNative,
 			}
 
 			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeWebUI}))
 
-			strategy.Spec.WebSocketURLTemplate = webSocketURLTemplate
+			strategy.Spec.WebSocketURLTemplate = testWebSocketURLTemplate
 			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{
 				connTypeWebUI,
 				connTypeSSHWebSocket,
@@ -496,11 +496,11 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 		It("Should decide the built-in types by their templates, not by handler map keys", func() {
 			strategy := testAccessStrategy.DeepCopy()
-			strategy.Spec.BearerAuthURLTemplate = bearerAuthURLTemplate
+			strategy.Spec.BearerAuthURLTemplate = testBearerAuthURLTemplate
 			strategy.Spec.WebSocketURLTemplate = ""
 			strategy.Spec.CreateConnectionHandlerMap = map[string]string{
 				connTypeWebUI:        awsCreateSession,
-				connTypeSSHWebSocket: "k8s-native",
+				connTypeSSHWebSocket: handlerK8sNative,
 				connTypeVSCodeRemote: awsCreateSession,
 			}
 

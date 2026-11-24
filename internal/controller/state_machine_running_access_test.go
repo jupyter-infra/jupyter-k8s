@@ -114,8 +114,6 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 		return nil
 	}
 
-	// newRunningWorkspace creates a Workspace with desiredStatus Running, referencing the test
-	// access strategy when withStrategyRef is set.
 	newRunningWorkspace := func(namePrefix string, withStrategyRef bool) *workspacev1alpha1.Workspace {
 		ws := &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -153,6 +151,23 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 		}}
 		Expect(k8sClient.Status().Update(ctx, dep)).To(Succeed())
 		return dep
+	}
+
+	// The update path only runs once the workspace is Available, which takes an initial
+	// reconcile to create the resources and a second one to observe them ready.
+	reconcileToAvailable := func(
+		sm *StateMachine,
+		ws *workspacev1alpha1.Workspace,
+		strategy *workspacev1alpha1.WorkspaceAccessStrategy,
+	) {
+		_, err := sm.ReconcileDesiredState(ctx, ws, strategy)
+		Expect(err).NotTo(HaveOccurred())
+
+		markOperatorDeploymentReady(ws)
+
+		_, err = sm.ReconcileDesiredState(ctx, ws, strategy)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sm.statusManager.IsWorkspaceAvailable(ws)).To(BeTrue())
 	}
 
 	BeforeEach(func() {
@@ -573,26 +588,11 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 	})
 
 	Context("connectionTypes materialization", func() {
-		const (
-			bearerAuthURLTemplate = "https://example.com/{{ .Workspace.Name }}/bearer-auth"
-			webSocketURLTemplate  = "wss://example.com/{{ .Workspace.Name }}/ssh-ws"
-		)
 		var accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy
 
 		connectionTypesOf := func(ws *workspacev1alpha1.Workspace) []string {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(ws), ws)).To(Succeed())
 			return ws.Status.ConnectionTypes
-		}
-
-		// bringToRunning lets the operator create the Deployment and Service, marks the Deployment
-		// ready and reconciles again, so later reconciles can run over operator-owned resources.
-		bringToRunning := func(sm *StateMachine, ws *workspacev1alpha1.Workspace) {
-			_, err := sm.ReconcileDesiredState(ctx, ws, accessStrategy)
-			Expect(err).NotTo(HaveOccurred())
-			markOperatorDeploymentReady(ws)
-			_, err = sm.ReconcileDesiredState(ctx, ws, accessStrategy)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(getCondition(ws, ConditionTypeAvailable).Status).To(Equal(metav1.ConditionTrue))
 		}
 
 		BeforeEach(func() {
@@ -607,65 +607,53 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 					DisplayName:             testStrategyDisplayName,
 					AccessResourceTemplates: []workspacev1alpha1.AccessResourceTemplate{},
-					BearerAuthURLTemplate:   bearerAuthURLTemplate,
+					BearerAuthURLTemplate:   testBearerAuthURLTemplate,
 				},
 			}
 		})
 
 		It("writes the connection types the strategy provides when the workspace becomes available", func() {
-			accessStrategy.Spec.WebSocketURLTemplate = webSocketURLTemplate
-			accessStrategy.Spec.CreateConnectionHandlerMap = map[string]string{
-				connTypeVSCodeRemote: workspacev1alpha1.CreateConnectionHandlerK8sNative,
-			}
+			accessStrategy.Spec.WebSocketURLTemplate = testWebSocketURLTemplate
+			accessStrategy.Spec.CreateConnectionHandlerMap = map[string]string{connTypeVSCodeRemote: handlerK8sNative}
 			workspace := newRunningWorkspace("sm-conntypes", true)
 			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
 
-			bringToRunning(buildStateMachine(), workspace)
+			reconcileToAvailable(buildStateMachine(), workspace, accessStrategy)
 
 			Expect(connectionTypesOf(workspace)).To(Equal([]string{connTypeWebUI, connTypeSSHWebSocket, connTypeVSCodeRemote}))
 		})
 
-		It("leaves connectionTypes absent for a strategy that provides no connection type", func() {
+		It("leaves connectionTypes absent for a strategy with no connection type and does not rewrite it", func() {
 			accessStrategy.Spec.BearerAuthURLTemplate = ""
 			workspace := newRunningWorkspace("sm-conntypes", true)
 			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
-
-			bringToRunning(buildStateMachine(), workspace)
-
+			counting := newCountingStatusClient(k8sClient)
+			sm := buildStateMachineWith(counting)
+			reconcileToAvailable(sm, workspace, accessStrategy)
 			Expect(connectionTypesOf(workspace)).To(BeNil())
+			updatesBefore := counting.status.updates
+
+			_, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
+			Expect(err).NotTo(HaveOccurred())
+
+			// An empty list instead of nil differs from the decoded status and issues an update every reconcile,
+			// which the API server drops as a no-op, so only the call count can see it.
+			Expect(counting.status.updates).To(Equal(updatesBefore))
 		})
 
 		It("rewrites connectionTypes when the strategy changes under a running workspace", func() {
 			workspace := newRunningWorkspace("sm-conntypes", true)
 			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
 			sm := buildStateMachine()
-			bringToRunning(sm, workspace)
+			reconcileToAvailable(sm, workspace, accessStrategy)
 			Expect(connectionTypesOf(workspace)).To(Equal([]string{connTypeWebUI}))
 
-			accessStrategy.Spec.WebSocketURLTemplate = webSocketURLTemplate
+			accessStrategy.Spec.WebSocketURLTemplate = testWebSocketURLTemplate
 			accessStrategy.Generation = 2
 			_, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(connectionTypesOf(workspace)).To(Equal([]string{connTypeWebUI, connTypeSSHWebSocket}))
-		})
-
-		It("does not call Status().Update again while the connection types are unchanged", func() {
-			workspace := newRunningWorkspace("sm-conntypes", true)
-			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
-			counting := &countingStatusClient{
-				Client: k8sClient,
-				status: &countingStatusWriter{SubResourceWriter: k8sClient.Status()},
-			}
-			sm := buildStateMachineWith(counting)
-			bringToRunning(sm, workspace)
-			Expect(connectionTypesOf(workspace)).To(Equal([]string{connTypeWebUI}))
-			updatesBefore := counting.status.updates
-
-			_, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(counting.status.updates).To(Equal(updatesBefore))
 		})
 
 		It("writes connectionTypes while the access startup probe has not passed", func() {
@@ -680,6 +668,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			sm := buildStateMachine()
 			_, err := sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(connectionTypesOf(workspace)).To(BeNil())
 			markOperatorDeploymentReady(workspace)
 
 			_, err = sm.ReconcileDesiredState(ctx, workspace, accessStrategy)
@@ -810,23 +799,6 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			defer func() { _ = k8sClient.Delete(ctx, svc) }()
 			Expect(portNumbers(svc)).To(ConsistOf(int32(JupyterPort)))
 		})
-
-		// The update path only runs once the workspace is Available, which takes an initial
-		// reconcile to create the resources and a second one to observe them ready.
-		reconcileToAvailable := func(
-			sm *StateMachine,
-			ws *workspacev1alpha1.Workspace,
-			strategy *workspacev1alpha1.WorkspaceAccessStrategy,
-		) {
-			_, err := sm.ReconcileDesiredState(ctx, ws, strategy)
-			Expect(err).NotTo(HaveOccurred())
-
-			markOperatorDeploymentReady(ws)
-
-			_, err = sm.ReconcileDesiredState(ctx, ws, strategy)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(sm.statusManager.IsWorkspaceAvailable(ws)).To(BeTrue())
-		}
 
 		It("adds a sidecar port once the access strategy declares one", func() {
 			workspace := newWorkspaceForPorts(true)

@@ -18,9 +18,8 @@ import (
 	"github.com/jupyter-infra/jupyter-k8s/internal/controller"
 )
 
-// status.connectionTypes tells a client which WorkspaceConnection types a workspace accepts without
-// reading its access strategy. The controller derives it from the bound strategy, so this spec drives
-// the strategy through a real cluster: a browser-only route, the WebSocket route added later, a stop.
+// The controller derives status.connectionTypes from the workspace's access strategy, so this spec changes
+// the strategy in a real cluster and reads the status back.
 var _ = Describe("Workspace Connection Types", Ordered, func() {
 	const (
 		workspaceNamespace = "default"
@@ -44,7 +43,7 @@ var _ = Describe("Workspace Connection Types", Ordered, func() {
 		deleteResourcesForAccessStrategyTest(workspaceNamespace)
 	})
 
-	It("publishes the connection types the bound access strategy provides", func() {
+	It("publishes the connection types its access strategy provides", func() {
 		By("creating an access strategy with a bearer auth URL template and no WebSocket URL template")
 		createAccessStrategyForTest("access-strategy-web-ui-only", groupDir, subGroup)
 
