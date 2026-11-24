@@ -57,7 +57,7 @@ var _ = Describe("ResourceManagerForAccess", func() {
 		mockK8sClient = &MockClient{Client: fakeClient}
 
 		// Create the AccessResourcesBuilder
-		accessResourcesBuilder = NewAccessResourcesBuilder()
+		accessResourcesBuilder = NewAccessResourcesBuilder(WorkspaceControllerOptions{})
 
 		// Create a status manager
 		statusManager := NewStatusManager(mockK8sClient)

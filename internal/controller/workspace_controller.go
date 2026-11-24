@@ -348,7 +348,7 @@ func SetupWorkspaceController(mgr mngr.Manager, options WorkspaceControllerOptio
 	deploymentBuilder := NewDeploymentBuilder(scheme, options)
 	deploymentBuilder.SetUserInputs(identities.UserInputsFor)
 	statusManager := NewStatusManager(k8sClient)
-	accessResourcesBuilder := newAccessResourcesBuilder(options)
+	accessResourcesBuilder := NewAccessResourcesBuilder(options)
 	resourceManager := NewResourceManager(
 		k8sClient,
 		scheme,

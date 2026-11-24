@@ -59,7 +59,7 @@ var _ = Describe("ReconcileDeletion", func() {
 			NewDeploymentBuilder(scheme.Scheme, WorkspaceControllerOptions{}),
 			NewServiceBuilder(scheme.Scheme),
 			NewPVCBuilder(scheme.Scheme),
-			NewAccessResourcesBuilder(),
+			NewAccessResourcesBuilder(WorkspaceControllerOptions{}),
 			statusManager,
 		)
 		return &StateMachine{

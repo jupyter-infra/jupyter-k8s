@@ -28,8 +28,10 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 	// Setup test objects
 	BeforeEach(func() {
-		// Only the aws plugin is configured, so aws:createSession is served and other plugins' handlers are not.
-		accessBuilder = NewAccessResourcesBuilder("aws")
+		// The plugin list decides which handler map keys are listed; only aws is configured here.
+		accessBuilder = NewAccessResourcesBuilder(WorkspaceControllerOptions{
+			PluginEndpoints: map[string]string{"aws": "http://localhost:8080"},
+		})
 
 		// Define test objects based on config/samples_routing
 		testAccessStrategy = &workspacev1alpha1.WorkspaceAccessStrategy{
@@ -479,18 +481,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			}
 
 			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeKiroRemote}))
-			Expect(NewAccessResourcesBuilder().ResolveConnectionTypes(strategy)).To(BeNil())
-		})
-
-		It("Should serve the plugins named in the controller options", func() {
-			strategy := testAccessStrategy.DeepCopy()
-			strategy.Spec.CreateConnectionHandlerMap = map[string]string{connTypeVSCodeRemote: awsCreateSession}
-			withAWS := WorkspaceControllerOptions{PluginEndpoints: map[string]string{"aws": "http://localhost:8080"}}
-
-			Expect(newAccessResourcesBuilder(withAWS).ResolveConnectionTypes(strategy)).To(Equal([]string{
-				connTypeVSCodeRemote,
-			}))
-			Expect(newAccessResourcesBuilder(WorkspaceControllerOptions{}).ResolveConnectionTypes(strategy)).To(BeNil())
+			Expect(NewAccessResourcesBuilder(WorkspaceControllerOptions{}).ResolveConnectionTypes(strategy)).To(BeNil())
 		})
 
 		It("Should drop a map key whose plugin action the Extension API does not dispatch", func() {

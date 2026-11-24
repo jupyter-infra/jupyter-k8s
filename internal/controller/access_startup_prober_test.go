@@ -43,7 +43,7 @@ var _ = Describe("AccessStartupProber", func() {
 	)
 
 	BeforeEach(func() {
-		prober = NewAccessStartupProber(NewAccessResourcesBuilder())
+		prober = NewAccessStartupProber(NewAccessResourcesBuilder(WorkspaceControllerOptions{}))
 
 		workspace = &workspacev1alpha1.Workspace{
 			ObjectMeta: metav1.ObjectMeta{

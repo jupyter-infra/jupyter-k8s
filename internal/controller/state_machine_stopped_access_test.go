@@ -58,7 +58,7 @@ var _ = Describe("reconcileDesiredStoppedStatus access resources", func() {
 			NewDeploymentBuilder(scheme.Scheme, WorkspaceControllerOptions{}),
 			NewServiceBuilder(scheme.Scheme),
 			NewPVCBuilder(scheme.Scheme),
-			NewAccessResourcesBuilder(),
+			NewAccessResourcesBuilder(WorkspaceControllerOptions{}),
 			statusManager,
 		)
 		return &StateMachine{

@@ -8,9 +8,7 @@ package controller
 import (
 	"bytes"
 	"fmt"
-	"maps"
 	"slices"
-	"sort"
 	"strings"
 	"text/template"
 
@@ -26,24 +24,18 @@ import (
 
 // AccessResourcesBuilder builds resources for WorkspaceAccessStrategy
 type AccessResourcesBuilder struct {
-	// plugins holds the names of the plugin sidecars the controller is configured with, the same list the
-	// Extension API serves connection requests from.
+	// plugins holds the plugin names the extension API has clients for; both read the endpoint list of
+	// cmd/main.go.
 	plugins map[string]bool
 }
 
-// NewAccessResourcesBuilder creates a new AccessResourcesBuilder
-func NewAccessResourcesBuilder(plugins ...string) *AccessResourcesBuilder {
+// NewAccessResourcesBuilder creates a builder serving the plugins named in options.PluginEndpoints.
+func NewAccessResourcesBuilder(options WorkspaceControllerOptions) *AccessResourcesBuilder {
 	b := &AccessResourcesBuilder{plugins: map[string]bool{}}
-	for _, name := range plugins {
+	for name := range options.PluginEndpoints {
 		b.plugins[name] = true
 	}
 	return b
-}
-
-// newAccessResourcesBuilder configures the builder with the plugin names of options.PluginEndpoints, the same
-// list the Extension API serves connection requests from.
-func newAccessResourcesBuilder(options WorkspaceControllerOptions) *AccessResourcesBuilder {
-	return NewAccessResourcesBuilder(slices.Collect(maps.Keys(options.PluginEndpoints))...)
 }
 
 // fullAccessResourceData provides values for template substitutions
