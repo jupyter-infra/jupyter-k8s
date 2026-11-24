@@ -129,11 +129,11 @@ type AccessHTTPGetProbe struct {
 }
 
 const (
-	// CreateConnectionHandlerK8sNative is the handler value for the operator's built-in connection path: tokens
-	// signed with the operator's own keys and a connection served over the strategy's WebSocketURLTemplate.
+	// CreateConnectionHandlerK8sNative names the operator's built-in connection handler rather than a
+	// "plugin:action" one.
 	CreateConnectionHandlerK8sNative = "k8s-native"
-	// CreateConnectionActionCreateSession is the one plugin action a "plugin:action" handler reference can name
-	// for connection creation; a reference without an action means the same.
+	// CreateConnectionActionCreateSession is the only plugin action a "plugin:action" handler reference can name
+	// for connection creation. A reference without an action means the same.
 	CreateConnectionActionCreateSession = "createSession"
 )
 

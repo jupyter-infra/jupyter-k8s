@@ -26,10 +26,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	// conditionTypeAvailable is the condition type indicating a workspace is available.
-	conditionTypeAvailable = "Available"
-)
+// conditionTypeAvailable is the condition type indicating a workspace is available.
+const conditionTypeAvailable = "Available"
 
 // isWorkspaceAvailable checks if the workspace has the Available condition set to True.
 func isWorkspaceAvailable(ws *workspacev1alpha1.Workspace) bool {

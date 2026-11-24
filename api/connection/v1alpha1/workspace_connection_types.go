@@ -24,11 +24,10 @@ const (
 	ConnectionTypeWebSocket = "ssh-over-websocket"
 )
 
-// remoteConnectionTypePattern is the "{ide}-remote" grammar: alphanumeric segments separated by single hyphens.
 var remoteConnectionTypePattern = regexp.MustCompile(`^[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*-remote$`)
 
-// IsRemoteConnectionType reports whether connectionType follows the "{ide}-remote" pattern, the open set of
-// editor connection types a WorkspaceConnection may name besides ConnectionTypeWebUI and ConnectionTypeWebSocket.
+// IsRemoteConnectionType reports whether connectionType is hyphen-separated alphanumeric segments ending in
+// "-remote", the "{ide}-remote" pattern of editor connection types.
 func IsRemoteConnectionType(connectionType string) bool {
 	return remoteConnectionTypePattern.MatchString(connectionType)
 }
