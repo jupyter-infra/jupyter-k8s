@@ -14825,14 +14825,15 @@ spec:
                 x-kubernetes-list-type: map
               connectionTypes:
                 description: |-
-                  ConnectionTypes lists the WorkspaceConnection types the bound access strategy configures:
+                  ConnectionTypes lists the WorkspaceConnection types the workspace's access strategy configures:
                   "web-ui" when it sets bearerAuthURLTemplate, "ssh-over-websocket" when it sets webSocketURLTemplate,
-                  then the "{ide}-remote" keys of createConnectionHandlerMap in lexical order whose handler the operator
-                  serves: k8s-native when the strategy sets webSocketURLTemplate, or the createSession action of a plugin
-                  the operator is configured with. Types served only by the strategy's default createConnectionHandler are
-                  not listed.
-                  Recomputed whenever the running workspace's Deployment and Service are ready; absent while the workspace
-                  is stopped or has no access strategy. Readiness is reported by the Available condition, not by this field.
+                  then, in lexical order, the "{ide}-remote" keys of createConnectionHandlerMap whose handler the operator
+                  serves. A handler is served when it is "k8s-native" and the strategy sets webSocketURLTemplate, or when it
+                  is the "createSession" action of a plugin the operator is configured with. The strategy's default
+                  createConnectionHandler serves any "{ide}-remote" name, so the types only it serves are not listed.
+                  Recomputed on every reconcile of a running workspace whose Deployment and Service are ready. Absent while
+                  the workspace is stopped or references no access strategy. Readiness is reported by the Available
+                  condition, not by this field.
                 items:
                   type: string
                 type: array
