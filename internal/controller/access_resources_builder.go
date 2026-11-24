@@ -198,20 +198,18 @@ func (b *AccessResourcesBuilder) ResolveApplicationBasePath(
 	return resolved, nil
 }
 
-// ResolveConnectionTypes lists the WorkspaceConnection types the Extension API accepts for an access strategy,
-// in the order it resolves a request: web-ui, ssh-over-websocket, then the {ide}-remote keys of
-// createConnectionHandlerMap sorted, each kept only when its handler is served (servesHandler). A key outside
-// the {ide}-remote pattern is refused before the strategy is read, and the default createConnectionHandler
-// serves an open set, so neither is listed. Returns nil when nothing is configured: an absent status field
-// decodes to nil, so the status manager sees no change on the next reconcile.
+// ResolveConnectionTypes lists the connection types the access strategy configures, as documented on
+// WorkspaceStatus.ConnectionTypes, mirroring the handler checks of the extension API's HandleConnectionCreate.
+// Nothing configured returns nil rather than an empty slice: the absent status field decodes to nil and the
+// status manager compares with reflect.DeepEqual.
 func (b *AccessResourcesBuilder) ResolveConnectionTypes(
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
 ) []string {
 	var connectionTypes []string
-	if accessStrategy.Spec.BearerAuthURLTemplate != "" {
+	if accessStrategy.Spec.WebUIEnabled() {
 		connectionTypes = append(connectionTypes, connectionv1alpha1.ConnectionTypeWebUI)
 	}
-	if accessStrategy.Spec.WebSocketURLTemplate != "" {
+	if accessStrategy.Spec.WebSocketEnabled() {
 		connectionTypes = append(connectionTypes, connectionv1alpha1.ConnectionTypeWebSocket)
 	}
 	var remoteTypes []string
@@ -220,19 +218,18 @@ func (b *AccessResourcesBuilder) ResolveConnectionTypes(
 			remoteTypes = append(remoteTypes, connectionType)
 		}
 	}
-	sort.Strings(remoteTypes)
+	slices.Sort(remoteTypes)
 	return append(connectionTypes, remoteTypes...)
 }
 
-// servesHandler reports whether a connection request resolved to the handler reference gets a URL from the
-// Extension API, which refuses k8s-native without the WebSocket route, a plugin it has no client for, and a
-// plugin action other than createSession.
+// servesHandler mirrors the handler checks of HandleConnectionCreate and generatePluginConnectionURL in
+// extensionapi.
 func (b *AccessResourcesBuilder) servesHandler(
 	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy, handlerRef string,
 ) bool {
 	pluginName, action := plugin.ParseHandlerRef(handlerRef)
 	if pluginName == workspacev1alpha1.CreateConnectionHandlerK8sNative {
-		return accessStrategy.Spec.WebSocketURLTemplate != ""
+		return accessStrategy.Spec.WebSocketEnabled()
 	}
 	return b.plugins[pluginName] && (action == "" || action == workspacev1alpha1.CreateConnectionActionCreateSession)
 }

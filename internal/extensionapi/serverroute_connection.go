@@ -408,18 +408,12 @@ func (s *ExtensionServer) checkWorkspaceAuthorization(r *http.Request, workspace
 
 // hasWebUIEnabled checks if BearerAuthURLTemplate is defined in the access strategy.
 func hasWebUIEnabled(accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) bool {
-	if accessStrategy == nil {
-		return false
-	}
-	return accessStrategy.Spec.BearerAuthURLTemplate != ""
+	return accessStrategy != nil && accessStrategy.Spec.WebUIEnabled()
 }
 
 // hasWebSocketEnabled checks if WebSocketURLTemplate is defined in the access strategy.
 func hasWebSocketEnabled(accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) bool {
-	if accessStrategy == nil {
-		return false
-	}
-	return accessStrategy.Spec.WebSocketURLTemplate != ""
+	return accessStrategy != nil && accessStrategy.Spec.WebSocketEnabled()
 }
 
 // renderBearerAuthURL renders the BearerAuthURLTemplate with workspace variables

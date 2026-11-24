@@ -206,6 +206,18 @@ type WorkspaceAccessStrategySpec struct {
 	AccessStartupProbe *AccessStartupProbe `json:"accessStartupProbe,omitempty"`
 }
 
+// WebUIEnabled reports whether the strategy serves the "web-ui" connection type, which needs
+// BearerAuthURLTemplate.
+func (s *WorkspaceAccessStrategySpec) WebUIEnabled() bool {
+	return s.BearerAuthURLTemplate != ""
+}
+
+// WebSocketEnabled reports whether the strategy serves the "ssh-over-websocket" connection type and the
+// "k8s-native" handler of its createConnectionHandlerMap, which need WebSocketURLTemplate.
+func (s *WorkspaceAccessStrategySpec) WebSocketEnabled() bool {
+	return s.WebSocketURLTemplate != ""
+}
+
 // WorkspaceAccessStrategyStatus defines the observed state of WorkspaceAccessStrategy
 type WorkspaceAccessStrategyStatus struct {
 	// Conditions represent the latest available observations of the resource's state
