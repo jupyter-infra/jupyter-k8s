@@ -497,7 +497,8 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			}
 
 			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeKiroRemote}))
-			Expect(NewAccessResourcesBuilder(WorkspaceControllerOptions{}).ResolveConnectionTypes(strategy)).To(BeNil())
+			noPlugins := NewAccessResourcesBuilder(WorkspaceControllerOptions{ExtensionAPIEnabled: true})
+			Expect(noPlugins.ResolveConnectionTypes(strategy)).To(BeNil())
 		})
 
 		It("Should list nothing while the Extension API is disabled", func() {
