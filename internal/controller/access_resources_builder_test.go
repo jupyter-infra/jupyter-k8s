@@ -30,7 +30,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 	// Setup test objects
 	BeforeEach(func() {
-		// The extension API settings decide what is listed: it runs, it signs, and only aws is a plugin.
+		// The default builder runs the extension API with the k8s-native signer and the aws plugin.
 		accessBuilder = NewAccessResourcesBuilder(WorkspaceControllerOptions{
 			ExtensionAPIEnabled:    true,
 			K8sNativeSignerEnabled: true,
@@ -501,7 +501,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			Expect(noPlugins.ResolveConnectionTypes(strategy)).To(BeNil())
 		})
 
-		It("Should list nothing while the Extension API is disabled", func() {
+		It("Should list nothing while the extension API is disabled", func() {
 			strategy := fullyConfiguredStrategy()
 			disabled := NewAccessResourcesBuilder(WorkspaceControllerOptions{
 				K8sNativeSignerEnabled: true,
@@ -528,7 +528,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeKiroRemote}))
 		})
 
-		It("Should drop a map key whose plugin action the Extension API does not dispatch", func() {
+		It("Should drop a map key whose plugin action the extension API does not dispatch", func() {
 			strategy := testAccessStrategy.DeepCopy()
 			strategy.Spec.CreateConnectionHandlerMap = map[string]string{
 				connTypeVSCodeRemote: awsPodEventsHandler,
