@@ -14825,18 +14825,16 @@ spec:
                 x-kubernetes-list-type: map
               connectionTypes:
                 description: |-
-                  ConnectionTypes lists the WorkspaceConnection types the operator serves for the workspace's access
-                  strategy: "web-ui" when it sets bearerAuthURLTemplate, "ssh-over-websocket" when it sets
+                  ConnectionTypes lists the WorkspaceConnection types the operator's extension API serves for the workspace's
+                  access strategy: "web-ui" when the strategy sets bearerAuthURLTemplate, "ssh-over-websocket" when it sets
                   webSocketURLTemplate, then, in lexical order, the "{ide}-remote" keys of createConnectionHandlerMap whose
-                  handler is served. A handler is served when it is "k8s-native" and the strategy sets webSocketURLTemplate,
-                  or when it is the "createSession" action of a plugin the operator is configured with. The strategy's
-                  default createConnectionHandler serves any "{ide}-remote" name, so the types only it serves are not
-                  listed. Nothing is listed while the Extension API is disabled, and the built-in handler's types only
-                  while it can sign their tokens: the JWT secret is configured and the strategy's default
-                  createConnectionHandler is empty or "k8s-native".
-                  "ssh-over-websocket" means any desktop editor that speaks SSH connects over the generic WebSocket route;
-                  a listed "{ide}-remote" type means that editor connects through its own handler. Clients check for
-                  "ssh-over-websocket" first and only then look up a specific "{ide}-remote" type.
+                  handler is served. "k8s-native" is served when the strategy sets webSocketURLTemplate; a plugin is served
+                  when the operator is configured with it and the action is "createSession" or omitted. "web-ui",
+                  "ssh-over-websocket" and "k8s-native" also need the operator's JWT signing Secret and a default
+                  createConnectionHandler that is empty or "k8s-native". Nothing is listed while the extension API is
+                  disabled. The default createConnectionHandler serves any "{ide}-remote" name, so the types only it serves
+                  are not listed. Clients check for "ssh-over-websocket", the route any SSH-speaking editor can use, before
+                  their own "{ide}-remote" type.
                   Recomputed on every reconcile of a running workspace whose Deployment and Service are ready. Absent while
                   the workspace is stopped or references no access strategy. Readiness is reported by the Available
                   condition, not by this field.
