@@ -19,7 +19,8 @@ type CompositeSignerFactory struct {
 }
 
 // NewCompositeSignerFactory creates a factory that routes to child factories by handler name.
-// The defaultFactory is used when the access strategy is nil or has an empty handler.
+// The defaultFactory is used when the access strategy is nil or has an empty handler; it is nil when the operator
+// runs without a JWT secret name.
 func NewCompositeSignerFactory(factories map[string]SignerFactory, defaultFactory SignerFactory) *CompositeSignerFactory {
 	return &CompositeSignerFactory{
 		factories:      factories,
@@ -30,6 +31,10 @@ func NewCompositeSignerFactory(factories map[string]SignerFactory, defaultFactor
 // CreateSigner delegates to the child factory matching the access strategy's handler.
 func (c *CompositeSignerFactory) CreateSigner(accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) (Signer, error) {
 	if accessStrategy == nil || accessStrategy.Spec.CreateConnectionHandler == "" {
+		if c.defaultFactory == nil {
+			return nil, fmt.Errorf("no default signer configured: start the operator with --jwt-secret-name, " +
+				"extensionApi.jwtSecret.enable in the operator chart")
+		}
 		return c.defaultFactory.CreateSigner(accessStrategy)
 	}
 

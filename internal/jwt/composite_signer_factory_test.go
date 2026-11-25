@@ -202,3 +202,15 @@ func TestCompositeSignerFactory_GetFactory(t *testing.T) {
 	_, ok = composite.GetFactory("nonexistent")
 	assert.False(t, ok)
 }
+
+func TestCompositeSignerFactory_NoDefaultFactoryReturnsError(t *testing.T) {
+	// An operator started without a JWT secret name registers no default factory.
+	composite := NewCompositeSignerFactory(map[string]SignerFactory{}, nil)
+
+	for _, strategy := range []*workspacev1alpha1.WorkspaceAccessStrategy{nil, {}} {
+		signer, err := composite.CreateSigner(strategy)
+		require.Error(t, err)
+		assert.Nil(t, signer)
+		assert.Contains(t, err.Error(), "--jwt-secret-name")
+	}
+}
