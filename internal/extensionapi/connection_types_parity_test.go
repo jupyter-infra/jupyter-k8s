@@ -28,9 +28,13 @@ import (
 // The controller derives status.connectionTypes from the rules HandleConnectionCreate applies here. This test
 // drives both over the same strategies and server settings, so a change on either side fails until the other
 // follows. Two settings only the controller sees stay in its own unit tests: a disabled extension API runs no
-// server, and a missing JWT secret leaves the server without any signer factory.
+// server, and a missing JWT secret leaves the server without any signer factory. An unmapped {ide}-remote type
+// is the documented divergence: the default handler may serve it, the list never names it.
 func TestConnectionTypesMatchHandleConnectionCreate(t *testing.T) {
-	const webSocketTestURL = "wss://test.com/ssh-ws"
+	const (
+		webSocketTestURL = "wss://test.com/ssh-ws"
+		unmappedRemote   = "unmapped-remote"
+	)
 	handlerMap := map[string]string{
 		connectionTypeVSCodeRemote: workspacev1alpha1.CreateConnectionHandlerK8sNative,
 		"kiro-remote":              awsCreateSession,
@@ -85,12 +89,24 @@ func TestConnectionTypesMatchHandleConnectionCreate(t *testing.T) {
 				for key := range spec.CreateConnectionHandlerMap {
 					candidates = append(candidates, key)
 				}
+				servedByHandler := map[string]bool{}
 				for _, connectionType := range candidates {
 					w := postConnection(t, server, connectionType)
 					served := w.Code == http.StatusCreated
 					assert.Equal(t, served, slices.Contains(listed, connectionType),
 						"%s: served=%t (HTTP %d: %s) but listed=%v", connectionType, served, w.Code, w.Body.String(), listed)
+					// A key outside the {ide}-remote pattern is refused before its handler is consulted.
+					if handlerRef, mapped := spec.CreateConnectionHandlerMap[connectionType]; mapped &&
+						connectionv1alpha1.IsRemoteConnectionType(connectionType) {
+						servedByHandler[handlerRef] = served
+					}
 				}
+
+				// The default handler serves an unmapped type exactly as it serves a mapped one, and the list omits it.
+				assert.NotContains(t, listed, unmappedRemote)
+				w := postConnection(t, server, unmappedRemote)
+				assert.Equal(t, servedByHandler[spec.CreateConnectionHandler], w.Code == http.StatusCreated,
+					"%s through the default handler %q: HTTP %d: %s", unmappedRemote, spec.CreateConnectionHandler, w.Code, w.Body.String())
 			})
 		}
 	}
