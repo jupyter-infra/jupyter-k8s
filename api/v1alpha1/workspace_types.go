@@ -376,19 +376,18 @@ type WorkspaceStatus struct {
 	// +optional
 	AccessURL string `json:"accessURL,omitempty"`
 
-	// ConnectionTypes lists the WorkspaceConnection types the operator's extension API serves for the workspace's
-	// access strategy: "web-ui" when the strategy sets bearerAuthURLTemplate, "ssh-over-websocket" when it sets
-	// webSocketURLTemplate, then, in lexical order, the "{ide}-remote" keys of createConnectionHandlerMap whose
-	// handler is served. "k8s-native" is served when the strategy sets webSocketURLTemplate; a plugin is served
-	// when the operator is configured with it and the action is "createSession" or omitted. "web-ui",
-	// "ssh-over-websocket" and "k8s-native" also need the operator started with a JWT secret name and a default
-	// createConnectionHandler that is empty or "k8s-native". Nothing is listed while the extension API is
-	// disabled. The default createConnectionHandler serves any "{ide}-remote" name, so the types only it serves
-	// are not listed. Clients check for "ssh-over-websocket", the route any SSH-speaking editor can use, before
-	// their own "{ide}-remote" type.
+	// ConnectionTypes lists the WorkspaceConnection types the operator's extension API serves for this workspace,
+	// derived from its access strategy and the operator's configuration:
+	//   - "web-ui": the workspace's web application, opened in the browser.
+	//   - "ssh-over-websocket": any desktop editor that speaks SSH can connect over the generic WebSocket route.
+	//   - "{ide}-remote", for example "vscode-remote": that editor connects through its own handler, typically a
+	//     plugin.
+	// Clients should check for "ssh-over-websocket" first and only then look up a specific "{ide}-remote" type.
+	//
 	// Recomputed on every reconcile of a running workspace whose Deployment and Service are ready. Absent while
 	// the workspace is stopped or references no access strategy. Readiness is reported by the Available
 	// condition, not by this field.
+	// More info: https://jupyter-k8s.readthedocs.io/en/latest/concepts/connections/
 	// +optional
 	// +listType=set
 	ConnectionTypes []string `json:"connectionTypes,omitempty"`

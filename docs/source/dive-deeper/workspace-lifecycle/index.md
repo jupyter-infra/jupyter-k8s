@@ -108,7 +108,7 @@ Beyond conditions, the workspace status includes:
 | `status.deploymentName` | Name of the managed Deployment |
 | `status.serviceName` | Name of the managed Service |
 | `status.accessURL` | URL at which the workspace can be reached (when routing is configured) |
-| `status.connectionTypes` | `WorkspaceConnection` types the workspace accepts, derived from its access strategy, see [Connections](../../concepts/connections/index.md); absent while the workspace is stopped or references no access strategy |
+| `status.connectionTypes` | `WorkspaceConnection` types the workspace accepts, derived from its access strategy and the operator's configuration, see [Connections](../../concepts/connections/index.md); absent while the workspace is stopped or references no access strategy |
 | `status.accessResources` | Status of each resource created from the access strategy templates |
 | `status.observedAccessStrategyVersion` | Identity and version of the access strategy last evaluated; the controller resets probe state when this changes |
 | `status.accessStartupProbeSucceeded` | Whether the access probe has passed |
