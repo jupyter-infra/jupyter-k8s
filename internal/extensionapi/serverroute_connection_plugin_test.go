@@ -155,7 +155,7 @@ func TestResolveConnectionHandler(t *testing.T) {
 			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 					CreateConnectionHandlerMap: map[string]string{
-						connectionTypeVSCodeRemote: "aws:createSession",
+						connectionTypeVSCodeRemote: awsCreateSession,
 					},
 					CreateConnectionHandler: workspacev1alpha1.CreateConnectionHandlerK8sNative,
 				},
@@ -170,7 +170,7 @@ func TestResolveConnectionHandler(t *testing.T) {
 			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
 					CreateConnectionHandlerMap: map[string]string{
-						connectionTypeVSCodeRemote: "aws:createSession",
+						connectionTypeVSCodeRemote: awsCreateSession,
 					},
 					CreateConnectionHandler: workspacev1alpha1.CreateConnectionHandlerK8sNative,
 				},

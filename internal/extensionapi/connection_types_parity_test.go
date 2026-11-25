@@ -31,7 +31,6 @@ import (
 // server, and a missing JWT secret leaves the server without any signer factory.
 func TestConnectionTypesMatchHandleConnectionCreate(t *testing.T) {
 	const webSocketTestURL = "wss://test.com/ssh-ws"
-	const awsCreateSession = "aws:createSession"
 	handlerMap := map[string]string{
 		connectionTypeVSCodeRemote: workspacev1alpha1.CreateConnectionHandlerK8sNative,
 		"kiro-remote":              awsCreateSession,
@@ -42,6 +41,10 @@ func TestConnectionTypesMatchHandleConnectionCreate(t *testing.T) {
 	strategies := map[string]workspacev1alpha1.WorkspaceAccessStrategySpec{
 		"browser route only":   {BearerAuthURLTemplate: bearerAuthTestURL},
 		"websocket route only": {WebSocketURLTemplate: webSocketTestURL},
+		"browser route and a handler map": {
+			BearerAuthURLTemplate:      bearerAuthTestURL,
+			CreateConnectionHandlerMap: handlerMap,
+		},
 		"both routes and a handler map": {
 			BearerAuthURLTemplate:      bearerAuthTestURL,
 			WebSocketURLTemplate:       webSocketTestURL,

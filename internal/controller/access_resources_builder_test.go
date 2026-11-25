@@ -30,7 +30,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 
 	// Setup test objects
 	BeforeEach(func() {
-		// The default builder runs the extension API with the k8s-native signer and the aws plugin.
+		// Serves everything by default, so the ResolveConnectionTypes specs vary only the strategy.
 		accessBuilder = NewAccessResourcesBuilder(WorkspaceControllerOptions{
 			ExtensionAPIEnabled:    true,
 			K8sNativeSignerEnabled: true,
@@ -382,7 +382,7 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			connTypeZedRemote    = "zed-remote"
 		)
 
-		// fullyConfiguredStrategy offers every type: both built-in routes, a k8s-native map key and an aws one.
+		// fullyConfiguredStrategy has one type of each kind, so a gating spec shows which kinds survive.
 		fullyConfiguredStrategy := func() *workspacev1alpha1.WorkspaceAccessStrategy {
 			strategy := testAccessStrategy.DeepCopy()
 			strategy.Spec.BearerAuthURLTemplate = testBearerAuthURLTemplate
@@ -501,6 +501,16 @@ var _ = Describe("AccessResourcesBuilder", func() {
 			Expect(noPlugins.ResolveConnectionTypes(strategy)).To(BeNil())
 		})
 
+		It("Should drop a map key whose plugin action the extension API does not dispatch", func() {
+			strategy := testAccessStrategy.DeepCopy()
+			strategy.Spec.CreateConnectionHandlerMap = map[string]string{
+				connTypeVSCodeRemote: awsPodEventsHandler,
+				connTypeKiroRemote:   "aws",
+			}
+
+			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeKiroRemote}))
+		})
+
 		It("Should list nothing while the extension API is disabled", func() {
 			strategy := fullyConfiguredStrategy()
 			disabled := NewAccessResourcesBuilder(WorkspaceControllerOptions{
@@ -524,18 +534,15 @@ var _ = Describe("AccessResourcesBuilder", func() {
 		It("Should list only plugin-served types when a plugin is the default handler", func() {
 			strategy := fullyConfiguredStrategy()
 			strategy.Spec.CreateConnectionHandler = awsCreateSession
-
 			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeKiroRemote}))
-		})
 
-		It("Should drop a map key whose plugin action the extension API does not dispatch", func() {
-			strategy := testAccessStrategy.DeepCopy()
-			strategy.Spec.CreateConnectionHandlerMap = map[string]string{
-				connTypeVSCodeRemote: awsPodEventsHandler,
-				connTypeKiroRemote:   "aws",
-			}
-
-			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{connTypeKiroRemote}))
+			strategy.Spec.CreateConnectionHandler = handlerK8sNative
+			Expect(accessBuilder.ResolveConnectionTypes(strategy)).To(Equal([]string{
+				connTypeWebUI,
+				connTypeSSHWebSocket,
+				connTypeKiroRemote,
+				connTypeVSCodeRemote,
+			}))
 		})
 
 		It("Should decide the built-in types by their templates, not by handler map keys", func() {

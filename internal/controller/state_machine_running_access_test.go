@@ -92,6 +92,7 @@ var _ = Describe("reconcileDesiredRunningStatus probe integration", func() {
 			NewDeploymentBuilder(scheme.Scheme, WorkspaceControllerOptions{}),
 			NewServiceBuilder(scheme.Scheme),
 			NewPVCBuilder(scheme.Scheme),
+			// The connectionTypes specs list what the extension API serves, so it runs here with its signer.
 			NewAccessResourcesBuilder(WorkspaceControllerOptions{ExtensionAPIEnabled: true, K8sNativeSignerEnabled: true}),
 			statusManager,
 		)
