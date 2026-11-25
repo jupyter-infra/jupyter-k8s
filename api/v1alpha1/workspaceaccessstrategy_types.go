@@ -128,14 +128,15 @@ type AccessHTTPGetProbe struct {
 	AdditionalSuccessStatusCodes []int `json:"additionalSuccessStatusCodes,omitempty"`
 }
 
-const (
-	// CreateConnectionHandlerK8sNative names the operator's built-in connection handler rather than a
-	// "plugin:action" one.
-	CreateConnectionHandlerK8sNative = "k8s-native"
-	// CreateConnectionActionCreateSession is the only plugin action a "plugin:action" handler reference can name
-	// for connection creation. A reference without an action means the same.
-	CreateConnectionActionCreateSession = "createSession"
-)
+// CreateConnectionHandlerK8sNative selects the connection handler built into the operator's extension API
+// (internal/extensionapi), which signs the connection URL itself from the JWT secret instead of calling a plugin.
+const CreateConnectionHandlerK8sNative = "k8s-native"
+
+// CreateConnectionActionCreateSession is the action part of a plugin handler such as "aws:createSession". The
+// handler format is documented on WorkspaceAccessStrategySpec.CreateConnectionHandlerMap. The operator maps this
+// action to the plugin's CreateSession API, and the value is that method name in lower camel case. A handler
+// naming only the plugin, "aws", gets this action by default.
+const CreateConnectionActionCreateSession = "createSession"
 
 // WorkspaceAccessStrategySpec defines the desired state of WorkspaceAccessStrategy
 type WorkspaceAccessStrategySpec struct {
@@ -176,7 +177,9 @@ type WorkspaceAccessStrategySpec struct {
 	// +optional
 	CreateConnectionHandler string `json:"createConnectionHandler,omitempty"`
 
-	// CreateConnectionHandlerMap maps connection types to handler references in "plugin:action" format.
+	// CreateConnectionHandlerMap maps a connection type to the handler that creates its connection. A handler is
+	// either "k8s-native", the handler built into the operator, or a plugin name and the action to call on it
+	// joined by a colon, such as "aws:createSession".
 	// Example: {"vscode-remote": "aws:createSession"}
 	// Falls back to CreateConnectionHandler if the requested connection type is not in this map.
 	// +optional
