@@ -63,6 +63,11 @@ type GVKWatch struct {
 	Kind    string
 }
 
+// gracefulShutdownTimeout is how long the manager waits for in-flight reconciles
+// (e.g. finalizer removal) on SIGTERM. The manager pod's terminationGracePeriodSeconds
+// in config/manager/manager.yaml must be larger than this, or kubelet SIGKILLs mid-drain.
+const gracefulShutdownTimeout = 30 * time.Second
+
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
@@ -270,13 +275,15 @@ func main() {
 		metricsServerOptions.KeyName = metricsCertKey
 	}
 
+	shutdownTimeout := gracefulShutdownTimeout
 	mgrOptions := ctrl.Options{
-		Scheme:                 scheme,
-		Metrics:                metricsServerOptions,
-		WebhookServer:          webhookServer,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "a446807b.jupyter.org",
+		Scheme:                  scheme,
+		Metrics:                 metricsServerOptions,
+		WebhookServer:           webhookServer,
+		HealthProbeBindAddress:  probeAddr,
+		LeaderElection:          enableLeaderElection,
+		LeaderElectionID:        "a446807b.jupyter.org",
+		GracefulShutdownTimeout: &shutdownTimeout,
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly

@@ -197,7 +197,7 @@ spec:
       {{- with .Values.manager.imagePullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
       {{- end }}
-      terminationGracePeriodSeconds: 10
+      terminationGracePeriodSeconds: 40
       {{- with .Values.manager.tolerations }}
       tolerations: {{ toYaml . | nindent 10 }}
       {{- end }}

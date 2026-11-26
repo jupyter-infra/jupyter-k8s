@@ -6,7 +6,11 @@ Distributed under the terms of the MIT license
 package main
 
 import (
+	"os"
+	"regexp"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,6 +22,25 @@ const (
 	pluginNameAWS      = "aws"
 	pullPolicyAlwaysLc = "always"
 )
+
+// The pod's kill deadline must outlast the manager's graceful drain, otherwise kubelet
+// SIGKILLs the manager mid-reconcile (e.g. before finalizers are removed on uninstall).
+func TestManagerGracePeriodOutlastsGracefulShutdownTimeout(t *testing.T) {
+	for _, path := range []string{
+		"../config/manager/manager.yaml",
+		"../dist/chart/templates/manager/manager.yaml",
+	} {
+		t.Run(path, func(t *testing.T) {
+			data, err := os.ReadFile(path)
+			require.NoError(t, err)
+			m := regexp.MustCompile(`terminationGracePeriodSeconds:\s*(\d+)`).FindSubmatch(data)
+			require.NotNil(t, m, "terminationGracePeriodSeconds not found")
+			grace, err := strconv.Atoi(string(m[1]))
+			require.NoError(t, err)
+			assert.Greater(t, time.Duration(grace)*time.Second, gracefulShutdownTimeout)
+		})
+	}
+}
 
 func TestParseGVKWatches(t *testing.T) {
 	tests := []struct {
