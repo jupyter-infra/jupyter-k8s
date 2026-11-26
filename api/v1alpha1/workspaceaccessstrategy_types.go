@@ -128,6 +128,16 @@ type AccessHTTPGetProbe struct {
 	AdditionalSuccessStatusCodes []int `json:"additionalSuccessStatusCodes,omitempty"`
 }
 
+// CreateConnectionHandlerK8sNative selects the connection handler built into the operator's extension API
+// (internal/extensionapi), which signs the connection URL itself from the JWT secret instead of calling a plugin.
+const CreateConnectionHandlerK8sNative = "k8s-native"
+
+// CreateConnectionActionCreateSession is the action part of a plugin handler such as "aws:createSession". The
+// handler format is documented on WorkspaceAccessStrategySpec.CreateConnectionHandlerMap. The operator maps this
+// action to the plugin's CreateSession API, and the value is that method name in lower camel case. A handler
+// naming only the plugin, "aws", gets this action by default.
+const CreateConnectionActionCreateSession = "createSession"
+
 // WorkspaceAccessStrategySpec defines the desired state of WorkspaceAccessStrategy
 type WorkspaceAccessStrategySpec struct {
 	// DisplayName is a human-readable name for this access strategy
@@ -167,7 +177,9 @@ type WorkspaceAccessStrategySpec struct {
 	// +optional
 	CreateConnectionHandler string `json:"createConnectionHandler,omitempty"`
 
-	// CreateConnectionHandlerMap maps connection types to handler references in "plugin:action" format.
+	// CreateConnectionHandlerMap maps a connection type to the handler that creates its connection. A handler is
+	// either "k8s-native", the handler built into the operator, or a plugin name and the action to call on it
+	// joined by a colon, such as "aws:createSession".
 	// Example: {"vscode-remote": "aws:createSession"}
 	// Falls back to CreateConnectionHandler if the requested connection type is not in this map.
 	// +optional
@@ -195,6 +207,18 @@ type WorkspaceAccessStrategySpec struct {
 	// exist in the API server.
 	// +optional
 	AccessStartupProbe *AccessStartupProbe `json:"accessStartupProbe,omitempty"`
+}
+
+// WebUIEnabled reports whether the strategy serves the "web-ui" connection type, which needs
+// BearerAuthURLTemplate.
+func (s *WorkspaceAccessStrategySpec) WebUIEnabled() bool {
+	return s.BearerAuthURLTemplate != ""
+}
+
+// WebSocketEnabled reports whether the strategy serves the "ssh-over-websocket" connection type and the
+// "k8s-native" handler of its createConnectionHandlerMap, which need WebSocketURLTemplate.
+func (s *WorkspaceAccessStrategySpec) WebSocketEnabled() bool {
+	return s.WebSocketURLTemplate != ""
 }
 
 // WorkspaceAccessStrategyStatus defines the observed state of WorkspaceAccessStrategy

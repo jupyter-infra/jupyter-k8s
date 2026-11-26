@@ -41,6 +41,7 @@ func (sm *StateMachine) ReconcileAccessForDesiredRunningStatus(
 			return accessUrlErr
 		}
 		workspace.Status.AccessURL = accessUrl
+		workspace.Status.ConnectionTypes = sm.resourceManager.accessResourcesBuilder.ResolveConnectionTypes(accessStrategy)
 		workspace.Status.AccessResourceSelector = sm.resourceManager.accessResourcesBuilder.ResolveAccessResourceSelector(
 			workspace, accessStrategy)
 
@@ -54,12 +55,7 @@ func (sm *StateMachine) ReconcileAccessForDesiredRunningStatus(
 	// END OF CASE 1
 
 	// CASE 2: there is no AccessStrategy (it may have been removed by an update)
-	workspace.Status.AccessURL = ""
-	workspace.Status.ApplicationBasePath = ""
-	workspace.Status.AccessResourceSelector = ""
-	workspace.Status.AccessStartupProbeSucceeded = false
-	workspace.Status.ObservedAccessStrategyVersion = ""
-	clearProbeState(workspace)
+	clearAccessStatus(workspace)
 
 	err := sm.resourceManager.EnsureAccessResourcesDeleted(ctx, workspace)
 	if err != nil {
@@ -73,12 +69,7 @@ func (sm *StateMachine) ReconcileAccessForDesiredRunningStatus(
 func (sm *StateMachine) ReconcileAccessForDesiredStoppedStatus(ctx context.Context, workspace *workspacev1alpha1.Workspace) error {
 	logger := logf.FromContext(ctx)
 
-	workspace.Status.AccessURL = ""
-	workspace.Status.ApplicationBasePath = ""
-	workspace.Status.AccessResourceSelector = ""
-	workspace.Status.AccessStartupProbeSucceeded = false
-	workspace.Status.ObservedAccessStrategyVersion = ""
-	clearProbeState(workspace)
+	clearAccessStatus(workspace)
 
 	err := sm.resourceManager.EnsureAccessResourcesDeleted(ctx, workspace)
 	if err != nil {
@@ -213,6 +204,18 @@ func (sm *StateMachine) ProbeAccessStartup(
 		Status:       ProbeRetrying,
 		RequeueAfter: delay,
 	}, nil
+}
+
+// clearAccessStatus resets every status field the access strategy fills, for a workspace that is stopped or
+// references no strategy.
+func clearAccessStatus(workspace *workspacev1alpha1.Workspace) {
+	workspace.Status.AccessURL = ""
+	workspace.Status.ConnectionTypes = nil
+	workspace.Status.ApplicationBasePath = ""
+	workspace.Status.AccessResourceSelector = ""
+	workspace.Status.AccessStartupProbeSucceeded = false
+	workspace.Status.ObservedAccessStrategyVersion = ""
+	clearProbeState(workspace)
 }
 
 func clearProbeState(workspace *workspacev1alpha1.Workspace) {

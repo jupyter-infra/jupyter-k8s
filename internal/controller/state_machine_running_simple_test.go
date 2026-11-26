@@ -150,7 +150,7 @@ var _ = Describe("reconcileDesiredRunningStatus without access strategy", func()
 			NewDeploymentBuilder(scheme.Scheme, WorkspaceControllerOptions{}),
 			NewServiceBuilder(scheme.Scheme),
 			NewPVCBuilder(scheme.Scheme),
-			NewAccessResourcesBuilder(),
+			NewAccessResourcesBuilder(WorkspaceControllerOptions{}),
 			statusManager,
 		)
 		rm.SetEventReader(k8sClient)

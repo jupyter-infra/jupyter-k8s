@@ -29,6 +29,17 @@ const (
 	envJupyterBaseURL = "JUPYTER_BASE_URL"
 	envExistingVar    = "EXISTING_VAR"
 
+	// Connection types as clients read them in status.connectionTypes and send them in a
+	// WorkspaceConnection, and the handler name administrators write in a strategy; literal on
+	// purpose so a test fails if the API constants drift.
+	connTypeWebUI        = "web-ui"
+	connTypeSSHWebSocket = "ssh-over-websocket"
+	connTypeVSCodeRemote = "vscode-remote"
+	handlerK8sNative     = "k8s-native"
+
+	testBearerAuthURLTemplate = "https://example.com/{{ .Workspace.Name }}/bearer-auth"
+	testWebSocketURLTemplate  = "wss://example.com/{{ .Workspace.Name }}/ssh-ws"
+
 	deploymentLabelTestWorkspace = "workspace-test-workspace"
 	podNameWorkspaceSuffix       = "workspace-pod"
 

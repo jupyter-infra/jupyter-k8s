@@ -36,11 +36,15 @@ type countingStatusClient struct {
 
 func (c *countingStatusClient) Status() client.SubResourceWriter { return c.status }
 
+func newCountingStatusClient(base client.Client) *countingStatusClient {
+	return &countingStatusClient{Client: base, status: &countingStatusWriter{SubResourceWriter: base.Status()}}
+}
+
 func TestStatusManagerWritesOnlyWhenTheStatusChanged(t *testing.T) {
 	ctx := context.Background()
 	workspace := &workspacev1alpha1.Workspace{ObjectMeta: metav1.ObjectMeta{Name: testWorkspaceName, Namespace: testNamespaceName}}
 	base := fake.NewClientBuilder().WithScheme(crudScheme(t)).WithStatusSubresource(workspace).WithObjects(workspace).Build()
-	c := &countingStatusClient{Client: base, status: &countingStatusWriter{SubResourceWriter: base.Status()}}
+	c := newCountingStatusClient(base)
 	sm := NewStatusManager(c)
 	readiness := WorkspaceRunningReadiness{serviceReady: true, accessResourcesReady: true}
 

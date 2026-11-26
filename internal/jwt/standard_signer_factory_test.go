@@ -59,7 +59,7 @@ func TestStandardSignerFactory_CreateSigner_K8sNativeHandler(t *testing.T) {
 
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			CreateConnectionHandler: handlerK8sNative,
+			CreateConnectionHandler: workspacev1alpha1.CreateConnectionHandlerK8sNative,
 		},
 	}
 
@@ -106,7 +106,7 @@ func TestStandardSignerFactory_CreateSigner_GenerateValidateRoundTrip(t *testing
 
 	accessStrategy := &workspacev1alpha1.WorkspaceAccessStrategy{
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			CreateConnectionHandler: handlerK8sNative,
+			CreateConnectionHandler: workspacev1alpha1.CreateConnectionHandlerK8sNative,
 		},
 	}
 

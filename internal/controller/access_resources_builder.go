@@ -8,9 +8,12 @@ package controller
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strings"
 	"text/template"
 
+	"github.com/jupyter-infra/jupyter-k8s-plugin/plugin"
+	connectionv1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/connection/v1alpha1"
 	workspacev1alpha1 "github.com/jupyter-infra/jupyter-k8s/api/v1alpha1"
 	workspaceutil "github.com/jupyter-infra/jupyter-k8s/internal/workspace"
 	corev1 "k8s.io/api/core/v1"
@@ -21,12 +24,24 @@ import (
 
 // AccessResourcesBuilder builds resources for WorkspaceAccessStrategy
 type AccessResourcesBuilder struct {
-	// No fields needed currently, may add in future
+	extensionAPIEnabled    bool
+	k8sNativeSignerEnabled bool
+	// plugins holds the plugin names the extension API has clients for; both read the endpoint list of
+	// cmd/main.go.
+	plugins map[string]bool
 }
 
-// NewAccessResourcesBuilder creates a new AccessResourcesBuilder
-func NewAccessResourcesBuilder() *AccessResourcesBuilder {
-	return &AccessResourcesBuilder{}
+// NewAccessResourcesBuilder creates a builder from the extension API settings in options.
+func NewAccessResourcesBuilder(options WorkspaceControllerOptions) *AccessResourcesBuilder {
+	b := &AccessResourcesBuilder{
+		extensionAPIEnabled:    options.ExtensionAPIEnabled,
+		k8sNativeSignerEnabled: options.K8sNativeSignerEnabled,
+		plugins:                map[string]bool{},
+	}
+	for name := range options.PluginEndpoints {
+		b.plugins[name] = true
+	}
+	return b
 }
 
 // fullAccessResourceData provides values for template substitutions
@@ -179,6 +194,47 @@ func (b *AccessResourcesBuilder) ResolveApplicationBasePath(
 		return "", err
 	}
 	return resolved, nil
+}
+
+// ResolveConnectionTypes lists the connection types the extension API serves for the access strategy, as
+// documented on WorkspaceStatus.ConnectionTypes; it mirrors HandleConnectionCreate and
+// jwt.CompositeSignerFactory.CreateSigner. Nothing served returns nil rather than an empty slice: the absent
+// status field decodes to nil and the status manager compares with reflect.DeepEqual.
+func (b *AccessResourcesBuilder) ResolveConnectionTypes(
+	accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy,
+) []string {
+	if !b.extensionAPIEnabled {
+		return nil
+	}
+	// jwt.CompositeSignerFactory.CreateSigner picks the signer by the strategy's default handler.
+	handler := accessStrategy.Spec.CreateConnectionHandler
+	signs := b.k8sNativeSignerEnabled && (handler == "" || handler == workspacev1alpha1.CreateConnectionHandlerK8sNative)
+	webSocket := signs && accessStrategy.Spec.WebSocketEnabled()
+	var connectionTypes []string
+	if signs && accessStrategy.Spec.WebUIEnabled() {
+		connectionTypes = append(connectionTypes, connectionv1alpha1.ConnectionTypeWebUI)
+	}
+	if webSocket {
+		connectionTypes = append(connectionTypes, connectionv1alpha1.ConnectionTypeWebSocket)
+	}
+	var remoteTypes []string
+	for connectionType, handlerRef := range accessStrategy.Spec.CreateConnectionHandlerMap {
+		if connectionv1alpha1.IsRemoteConnectionType(connectionType) && b.servesHandler(webSocket, handlerRef) {
+			remoteTypes = append(remoteTypes, connectionType)
+		}
+	}
+	slices.Sort(remoteTypes)
+	return append(connectionTypes, remoteTypes...)
+}
+
+// servesHandler mirrors the handler checks of HandleConnectionCreate and generatePluginConnectionURL in
+// extensionapi; a k8s-native handler is served exactly when ssh-over-websocket is.
+func (b *AccessResourcesBuilder) servesHandler(webSocket bool, handlerRef string) bool {
+	pluginName, action := plugin.ParseHandlerRef(handlerRef)
+	if pluginName == workspacev1alpha1.CreateConnectionHandlerK8sNative {
+		return webSocket
+	}
+	return b.plugins[pluginName] && (action == "" || action == workspacev1alpha1.CreateConnectionActionCreateSession)
 }
 
 // ResolveAccessResourceSelector creates a label selector string for finding access resources

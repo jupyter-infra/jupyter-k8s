@@ -230,7 +230,7 @@ func proberResourceManager(objs ...client.Object) *ResourceManager {
 		NewDeploymentBuilder(c.Scheme(), WorkspaceControllerOptions{}),
 		NewServiceBuilder(c.Scheme()),
 		NewPVCBuilder(c.Scheme()),
-		NewAccessResourcesBuilder(),
+		NewAccessResourcesBuilder(WorkspaceControllerOptions{}),
 		NewStatusManager(c),
 	)
 }

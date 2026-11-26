@@ -163,7 +163,9 @@ spec:
                 additionalProperties:
                   type: string
                 description: |-
-                  CreateConnectionHandlerMap maps connection types to handler references in "plugin:action" format.
+                  CreateConnectionHandlerMap maps a connection type to the handler that creates its connection. A handler is
+                  either "k8s-native", the handler built into the operator, or a plugin name and the action to call on it
+                  joined by a colon, such as "aws:createSession".
                   Example: {"vscode-remote": "aws:createSession"}
                   Falls back to CreateConnectionHandler if the requested connection type is not in this map.
                 type: object

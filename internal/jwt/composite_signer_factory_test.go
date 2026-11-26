@@ -25,7 +25,7 @@ func newTestFactory(label string) *StandardSignerFactory {
 func TestCompositeSignerFactory_NilAccessStrategy(t *testing.T) {
 	defaultFactory := newTestFactory("default")
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		handlerK8sNative: defaultFactory,
+		workspacev1alpha1.CreateConnectionHandlerK8sNative: defaultFactory,
 	}, defaultFactory)
 
 	signer, err := composite.CreateSigner(nil)
@@ -37,7 +37,7 @@ func TestCompositeSignerFactory_NilAccessStrategy(t *testing.T) {
 func TestCompositeSignerFactory_EmptyHandler(t *testing.T) {
 	defaultFactory := newTestFactory("default")
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		handlerK8sNative: defaultFactory,
+		workspacev1alpha1.CreateConnectionHandlerK8sNative: defaultFactory,
 	}, defaultFactory)
 
 	signer, err := composite.CreateSigner(&workspacev1alpha1.WorkspaceAccessStrategy{
@@ -53,12 +53,12 @@ func TestCompositeSignerFactory_EmptyHandler(t *testing.T) {
 func TestCompositeSignerFactory_RoutesToRegisteredFactory(t *testing.T) {
 	nativeFactory := newTestFactory("native")
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		handlerK8sNative: nativeFactory,
+		workspacev1alpha1.CreateConnectionHandlerK8sNative: nativeFactory,
 	}, nativeFactory)
 
 	signer, err := composite.CreateSigner(&workspacev1alpha1.WorkspaceAccessStrategy{
 		Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-			CreateConnectionHandler: handlerK8sNative,
+			CreateConnectionHandler: workspacev1alpha1.CreateConnectionHandlerK8sNative,
 		},
 	})
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestCompositeSignerFactory_DefaultFactoryUsedForEmptyHandler(t *testing.T) 
 	defaultFactory := newTestFactory("default")
 	otherFactory := newTestFactory("other")
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		handlerK8sNative: otherFactory,
+		workspacev1alpha1.CreateConnectionHandlerK8sNative: otherFactory,
 	}, defaultFactory)
 
 	// Empty handler uses defaultFactory, not the map
@@ -84,7 +84,7 @@ func TestCompositeSignerFactory_DefaultFactoryUsedForEmptyHandler(t *testing.T) 
 
 func TestCompositeSignerFactory_UnsupportedHandler(t *testing.T) {
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		handlerK8sNative: newTestFactory("native"),
+		workspacev1alpha1.CreateConnectionHandlerK8sNative: newTestFactory("native"),
 	}, newTestFactory("default"))
 
 	signer, err := composite.CreateSigner(&workspacev1alpha1.WorkspaceAccessStrategy{
@@ -102,7 +102,7 @@ func TestCompositeSignerFactory_UnsupportedHandler(t *testing.T) {
 func TestCompositeSignerFactory_ValidateToken_Success(t *testing.T) {
 	factory := newTestFactory("native")
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		handlerK8sNative: factory,
+		workspacev1alpha1.CreateConnectionHandlerK8sNative: factory,
 	}, factory)
 
 	// Generate a token using the signer
@@ -121,7 +121,7 @@ func TestCompositeSignerFactory_ValidateToken_Success(t *testing.T) {
 func TestCompositeSignerFactory_ValidateToken_InvalidToken(t *testing.T) {
 	factory := newTestFactory("native")
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		handlerK8sNative: factory,
+		workspacev1alpha1.CreateConnectionHandlerK8sNative: factory,
 	}, factory)
 
 	_, err := composite.ValidateToken("invalid.token.string")
@@ -192,13 +192,25 @@ func TestCompositeSignerFactory_ValidateToken_AllCreateSignerError(t *testing.T)
 func TestCompositeSignerFactory_GetFactory(t *testing.T) {
 	nativeFactory := newTestFactory("native")
 	composite := NewCompositeSignerFactory(map[string]SignerFactory{
-		handlerK8sNative: nativeFactory,
+		workspacev1alpha1.CreateConnectionHandlerK8sNative: nativeFactory,
 	}, nativeFactory)
 
-	f, ok := composite.GetFactory(handlerK8sNative)
+	f, ok := composite.GetFactory(workspacev1alpha1.CreateConnectionHandlerK8sNative)
 	assert.True(t, ok)
 	assert.Equal(t, nativeFactory, f)
 
 	_, ok = composite.GetFactory("nonexistent")
 	assert.False(t, ok)
+}
+
+func TestCompositeSignerFactory_NoDefaultFactoryReturnsError(t *testing.T) {
+	// An operator started without a JWT secret name registers no default factory.
+	composite := NewCompositeSignerFactory(map[string]SignerFactory{}, nil)
+
+	for _, strategy := range []*workspacev1alpha1.WorkspaceAccessStrategy{nil, {}} {
+		signer, err := composite.CreateSigner(strategy)
+		require.Error(t, err)
+		assert.Nil(t, signer)
+		assert.Contains(t, err.Error(), "--jwt-secret-name")
+	}
 }

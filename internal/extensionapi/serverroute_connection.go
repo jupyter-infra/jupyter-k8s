@@ -12,7 +12,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"text/template"
 
@@ -27,13 +26,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	// handlerK8sNative is the reserved handler name for core k8s-native functionality.
-	handlerK8sNative = "k8s-native"
-
-	// conditionTypeAvailable is the condition type indicating a workspace is available.
-	conditionTypeAvailable = "Available"
-)
+// conditionTypeAvailable is the condition type indicating a workspace is available.
+const conditionTypeAvailable = "Available"
 
 // isWorkspaceAvailable checks if the workspace has the Available condition set to True.
 func isWorkspaceAvailable(ws *workspacev1alpha1.Workspace) bool {
@@ -212,7 +206,7 @@ func (s *ExtensionServer) generatePluginConnectionURL(r *http.Request, ws *works
 	ctx := plugin.ContextWithOriginRequestID(r.Context(), plugin.GenerateRequestID())
 
 	switch action {
-	case "createSession", "":
+	case workspacev1alpha1.CreateConnectionActionCreateSession, "":
 		req := &pluginapi.CreateSessionRequest{
 			PodUID:            resolvedContext["podUid"],
 			WorkspaceName:     ws.Name,
@@ -329,7 +323,7 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 			WriteKubernetesError(w, http.StatusBadRequest, fmt.Sprintf("connection type %q is not configured for this workspace", connectionType))
 			return
 		}
-		if pluginName == handlerK8sNative {
+		if pluginName == workspacev1alpha1.CreateConnectionHandlerK8sNative {
 			if !hasWebSocketEnabled(accessStrategy) {
 				WriteKubernetesError(w, http.StatusBadRequest, "WebSocket access is not enabled for this workspace")
 				return
@@ -373,14 +367,6 @@ func (s *ExtensionServer) HandleConnectionCreate(w http.ResponseWriter, r *http.
 	}
 }
 
-// remoteConnectionTypeRegex validates the {ide}-remote pattern: alphanumeric segments separated by single hyphens.
-var remoteConnectionTypeRegex = regexp.MustCompile(`^[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*-remote$`)
-
-// isRemoteConnectionType checks if the connection type matches the {ide}-remote pattern.
-func isRemoteConnectionType(connectionType string) bool {
-	return remoteConnectionTypeRegex.MatchString(connectionType)
-}
-
 // validateWorkspaceConnectionRequest validates the workspace connection request
 func validateWorkspaceConnectionRequest(req *connectionv1alpha1.WorkspaceConnectionRequest) error {
 	if req.Spec.WorkspaceName == "" {
@@ -399,7 +385,7 @@ func validateWorkspaceConnectionRequest(req *connectionv1alpha1.WorkspaceConnect
 		// valid
 	case connectionType == connectionv1alpha1.ConnectionTypeWebSocket:
 		// valid
-	case isRemoteConnectionType(connectionType):
+	case connectionv1alpha1.IsRemoteConnectionType(connectionType):
 		// valid — known or unknown remote types are accepted
 	default:
 		return fmt.Errorf("invalid workspaceConnectionType: '%s'. Must be 'web-ui', 'ssh-over-websocket', or follow the '{ide}-remote' pattern (e.g. 'vscode-remote', 'kiro-remote', 'cursor-remote')", connectionType)
@@ -420,18 +406,12 @@ func (s *ExtensionServer) checkWorkspaceAuthorization(r *http.Request, workspace
 
 // hasWebUIEnabled checks if BearerAuthURLTemplate is defined in the access strategy.
 func hasWebUIEnabled(accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) bool {
-	if accessStrategy == nil {
-		return false
-	}
-	return accessStrategy.Spec.BearerAuthURLTemplate != ""
+	return accessStrategy != nil && accessStrategy.Spec.WebUIEnabled()
 }
 
 // hasWebSocketEnabled checks if WebSocketURLTemplate is defined in the access strategy.
 func hasWebSocketEnabled(accessStrategy *workspacev1alpha1.WorkspaceAccessStrategy) bool {
-	if accessStrategy == nil {
-		return false
-	}
-	return accessStrategy.Spec.WebSocketURLTemplate != ""
+	return accessStrategy != nil && accessStrategy.Spec.WebSocketEnabled()
 }
 
 // renderBearerAuthURL renders the BearerAuthURLTemplate with workspace variables

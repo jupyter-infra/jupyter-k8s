@@ -4057,6 +4057,24 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              connectionTypes:
+                description: |-
+                  ConnectionTypes lists the WorkspaceConnection types the operator's extension API serves for this workspace,
+                  derived from its access strategy and the operator's configuration:
+                    - "web-ui": the workspace's web application, opened in the browser.
+                    - "ssh-over-websocket": any desktop editor that speaks SSH can connect over the generic WebSocket route.
+                    - "{ide}-remote", for example "vscode-remote": that editor connects through its own handler, typically a
+                      plugin.
+                  Clients should check for "ssh-over-websocket" first and only then look up a specific "{ide}-remote" type.
+
+                  Recomputed on every reconcile of a running workspace whose Deployment and Service are ready. Absent while
+                  the workspace is stopped or references no access strategy. Readiness is reported by the Available
+                  condition, not by this field.
+                  More info: https://jupyter-k8s.readthedocs.io/en/latest/concepts/connections/
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
               deploymentName:
                 description: DeploymentName is the name of the deployment managing
                   the Workspace pods

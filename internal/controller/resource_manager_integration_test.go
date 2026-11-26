@@ -174,7 +174,7 @@ func freezeResourceManager(c client.Client) *ResourceManager {
 		NewDeploymentBuilder(c.Scheme(), opts),
 		NewServiceBuilder(c.Scheme()),
 		NewPVCBuilder(c.Scheme()),
-		NewAccessResourcesBuilder(),
+		NewAccessResourcesBuilder(WorkspaceControllerOptions{}),
 		NewStatusManager(c),
 	)
 }

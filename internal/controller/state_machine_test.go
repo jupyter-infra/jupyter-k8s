@@ -66,7 +66,7 @@ func newStateMachineWithClient(c client.Client, scheme *runtime.Scheme) *StateMa
 		NewDeploymentBuilder(scheme, WorkspaceControllerOptions{}),
 		NewServiceBuilder(scheme),
 		NewPVCBuilder(scheme),
-		NewAccessResourcesBuilder(),
+		NewAccessResourcesBuilder(WorkspaceControllerOptions{}),
 		statusManager,
 	)
 	return &StateMachine{

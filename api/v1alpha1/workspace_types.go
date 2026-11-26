@@ -376,6 +376,22 @@ type WorkspaceStatus struct {
 	// +optional
 	AccessURL string `json:"accessURL,omitempty"`
 
+	// ConnectionTypes lists the WorkspaceConnection types the operator's extension API serves for this workspace,
+	// derived from its access strategy and the operator's configuration:
+	//   - "web-ui": the workspace's web application, opened in the browser.
+	//   - "ssh-over-websocket": any desktop editor that speaks SSH can connect over the generic WebSocket route.
+	//   - "{ide}-remote", for example "vscode-remote": that editor connects through its own handler, typically a
+	//     plugin.
+	// Clients should check for "ssh-over-websocket" first and only then look up a specific "{ide}-remote" type.
+	//
+	// Recomputed on every reconcile of a running workspace whose Deployment and Service are ready. Absent while
+	// the workspace is stopped or references no access strategy. Readiness is reported by the Available
+	// condition, not by this field.
+	// More info: https://jupyter-k8s.readthedocs.io/en/latest/concepts/connections/
+	// +optional
+	// +listType=set
+	ConnectionTypes []string `json:"connectionTypes,omitempty"`
+
 	// ApplicationBasePath is the resolved routing prefix for the workspace application.
 	// Set during access-resources reconciliation; used by idle detection to construct
 	// the full endpoint path.

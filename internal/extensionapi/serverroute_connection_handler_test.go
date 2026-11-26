@@ -54,7 +54,7 @@ func TestValidateConnection(t *testing.T) {
 			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{Name: "as", Namespace: namespaceDefault},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					CreateConnectionHandler: handlerK8sNative,
+					CreateConnectionHandler: workspacev1alpha1.CreateConnectionHandlerK8sNative,
 					BearerAuthURLTemplate:   "https://example.com",
 				},
 			},
@@ -75,7 +75,7 @@ func TestValidateConnection(t *testing.T) {
 			accessStrategy: &workspacev1alpha1.WorkspaceAccessStrategy{
 				ObjectMeta: metav1.ObjectMeta{Name: "as", Namespace: namespaceDefault},
 				Spec: workspacev1alpha1.WorkspaceAccessStrategySpec{
-					CreateConnectionHandler: handlerK8sNative,
+					CreateConnectionHandler: workspacev1alpha1.CreateConnectionHandlerK8sNative,
 					BearerAuthURLTemplate:   "https://example.com",
 					CreateConnectionContext: map[string]string{
 						"staticKey": "staticValue",
@@ -441,4 +441,20 @@ func TestHandleConnectionCreate_UnknownRemoteTypeNotConfigured(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, w.Body.String(), "is not configured for this workspace")
+}
+
+func TestHandleConnectionCreate_NoJWTSecretReturns500(t *testing.T) {
+	// The operator chart's default, Extension API on without a JWT secret, and a strategy with no default handler.
+	ws, strategy := availableWorkspaceWithStrategy(workspacev1alpha1.WorkspaceAccessStrategySpec{
+		BearerAuthURLTemplate: bearerAuthTestURL,
+	})
+	server := newConnectionServer(t, ws, strategy)
+	factory, err := createJWTCompositeSignerFactory(&ExtensionConfig{})
+	require.NoError(t, err)
+	server.signerFactory = factory
+
+	w := postConnection(t, server, connectionv1alpha1.ConnectionTypeWebUI)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "--jwt-secret-name")
 }

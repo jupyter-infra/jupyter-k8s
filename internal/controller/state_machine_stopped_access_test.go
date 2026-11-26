@@ -58,7 +58,7 @@ var _ = Describe("reconcileDesiredStoppedStatus access resources", func() {
 			NewDeploymentBuilder(scheme.Scheme, WorkspaceControllerOptions{}),
 			NewServiceBuilder(scheme.Scheme),
 			NewPVCBuilder(scheme.Scheme),
-			NewAccessResourcesBuilder(),
+			NewAccessResourcesBuilder(WorkspaceControllerOptions{}),
 			statusManager,
 		)
 		return &StateMachine{
@@ -137,6 +137,24 @@ var _ = Describe("reconcileDesiredStoppedStatus access resources", func() {
 
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
 			Expect(workspace.Status.ApplicationBasePath).To(Equal(""))
+		})
+	})
+
+	Context("connectionTypes cleared on stop", func() {
+		It("should clear connectionTypes when workspace is stopped", func() {
+			workspace := newStoppedWorkspace()
+			defer func() { _ = k8sClient.Delete(ctx, workspace) }()
+
+			workspace.Status.ConnectionTypes = []string{connTypeWebUI, connTypeSSHWebSocket}
+			Expect(k8sClient.Status().Update(ctx, workspace)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+
+			sm := buildStateMachine()
+			_, err := sm.ReconcileDesiredState(ctx, workspace, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(workspace), workspace)).To(Succeed())
+			Expect(workspace.Status.ConnectionTypes).To(BeNil())
 		})
 	})
 

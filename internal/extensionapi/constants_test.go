@@ -44,7 +44,8 @@ const (
 	invalidConnectionType = "invalid-type"
 
 	// pluginNameAWS is the AWS plugin name used in tests.
-	pluginNameAWS = "aws"
+	pluginNameAWS    = "aws"
+	awsCreateSession = "aws:createSession"
 
 	// connectionsPath is the connections API path used in tests.
 	connectionsPath = "/apis/connection.workspaces.jupyter.org/v1alpha1/namespaces/default/connections"
