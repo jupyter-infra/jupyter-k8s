@@ -418,6 +418,9 @@ test-e2e-focus: setup-test-e2e manifests generate fmt vet helm-generate load-ima
 	$(MAKE) cleanup-test-e2e
 
 STAGING_REGISTRY ?= ghcr.io/jupyter-infra/staging
+# Docker 29's containerd image store saves every platform of a pulled image, and Kind refuses an archive that
+# references platforms it does not contain, so staging images are pulled and saved for the node's platform only.
+STAGING_PLATFORM ?= linux/$(shell go env GOARCH)
 STAGING_TAG ?=
 STAGING_CHART_VERSION ?=
 
@@ -429,18 +432,18 @@ test-e2e-staging: setup-test-e2e ## Run e2e tests against staging GHCR images an
 		exit 1; \
 	fi
 	@echo "Pulling staging images..."
-	$(CONTAINER_TOOL) pull $(STAGING_REGISTRY)/jupyter-k8s-controller:$(STAGING_TAG)
-	$(CONTAINER_TOOL) pull $(STAGING_REGISTRY)/jupyter-k8s-rotator:$(STAGING_TAG)
-	$(CONTAINER_TOOL) pull $(STAGING_REGISTRY)/jupyter-k8s-authmiddleware:$(STAGING_TAG)
+	$(CONTAINER_TOOL) pull --platform $(STAGING_PLATFORM) $(STAGING_REGISTRY)/jupyter-k8s-controller:$(STAGING_TAG)
+	$(CONTAINER_TOOL) pull --platform $(STAGING_PLATFORM) $(STAGING_REGISTRY)/jupyter-k8s-rotator:$(STAGING_TAG)
+	$(CONTAINER_TOOL) pull --platform $(STAGING_PLATFORM) $(STAGING_REGISTRY)/jupyter-k8s-authmiddleware:$(STAGING_TAG)
 	@echo "Loading staging images into e2e cluster $(KIND_CLUSTER)..."
 	@mkdir -p /tmp/kind-images
-	$(CONTAINER_TOOL) save $(STAGING_REGISTRY)/jupyter-k8s-controller:$(STAGING_TAG) -o /tmp/kind-images/staging-controller.tar
+	$(CONTAINER_TOOL) save --platform $(STAGING_PLATFORM) $(STAGING_REGISTRY)/jupyter-k8s-controller:$(STAGING_TAG) -o /tmp/kind-images/staging-controller.tar
 	$(KIND) load image-archive /tmp/kind-images/staging-controller.tar --name $(KIND_CLUSTER)
 	rm -f /tmp/kind-images/staging-controller.tar
-	$(CONTAINER_TOOL) save $(STAGING_REGISTRY)/jupyter-k8s-rotator:$(STAGING_TAG) -o /tmp/kind-images/staging-rotator.tar
+	$(CONTAINER_TOOL) save --platform $(STAGING_PLATFORM) $(STAGING_REGISTRY)/jupyter-k8s-rotator:$(STAGING_TAG) -o /tmp/kind-images/staging-rotator.tar
 	$(KIND) load image-archive /tmp/kind-images/staging-rotator.tar --name $(KIND_CLUSTER)
 	rm -f /tmp/kind-images/staging-rotator.tar
-	$(CONTAINER_TOOL) save $(STAGING_REGISTRY)/jupyter-k8s-authmiddleware:$(STAGING_TAG) -o /tmp/kind-images/staging-authmiddleware.tar
+	$(CONTAINER_TOOL) save --platform $(STAGING_PLATFORM) $(STAGING_REGISTRY)/jupyter-k8s-authmiddleware:$(STAGING_TAG) -o /tmp/kind-images/staging-authmiddleware.tar
 	$(KIND) load image-archive /tmp/kind-images/staging-authmiddleware.tar --name $(KIND_CLUSTER)
 	rm -f /tmp/kind-images/staging-authmiddleware.tar
 	@echo "Loading application images into e2e cluster $(KIND_CLUSTER)..."
