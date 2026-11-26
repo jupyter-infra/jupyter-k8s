@@ -2,10 +2,13 @@
 set -e
 
 echo "Resetting Jupyter environment (uv)..."
+export UV_PROJECT_ENVIRONMENT="/home/jovyan/.venv"
+# Keep copied entry points valid after moving the image environment into home.
+export UV_PREVIEW_FEATURES="relocatable-envs-default"
 
-if [ -d "/home/jovyan/.venv" ]; then
+if [ -d "$UV_PROJECT_ENVIRONMENT" ]; then
     echo "Removing existing virtual environment..."
-    rm -rf /home/jovyan/.venv
+    rm -rf "$UV_PROJECT_ENVIRONMENT"
 fi
 
 if [ -f "/home/jovyan/pyproject.toml" ]; then
@@ -26,7 +29,11 @@ fi
 cp /opt/uv/jupyter/pyproject.toml /home/jovyan/
 cp /opt/uv/jupyter/uv.lock /home/jovyan/
 
-echo "Recreating uv environment..."
+echo "Restoring persistent uv environment from the image..."
+# Copy as jovyan so the persistent environment stays writable at runtime.
+cp -R /opt/uv/jupyter/.venv "$UV_PROJECT_ENVIRONMENT"
+
+echo "Syncing uv environment..."
 uv sync --locked
 
 uv run jupyter lab \
